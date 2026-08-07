@@ -11,6 +11,19 @@ export function collaborationCanMutate(group) {
   );
 }
 
+export function collaborationPrincipalName(projection, principalId) {
+  return projection?.members?.[principalId]?.display_name || principalId || '-';
+}
+
+export function collaborationArtifactName(projection, ref) {
+  const value = String(ref || '');
+  const segments = value.split('/').filter(Boolean);
+  const pathArtifactId = segments.length > 1 ? segments.at(-2) : value;
+  const artifact =
+    projection?.artifacts?.[value] || projection?.artifacts?.[pathArtifactId];
+  return artifact?.original_filename || pathArtifactId || value;
+}
+
 export async function stageCollaborationArtifactFiles(input) {
   const files = [...(input.files || [])];
   const artifactIds = input.artifactIds;

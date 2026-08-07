@@ -5,6 +5,7 @@ import {
   parseCollaborationRoute,
 } from './collaboration-workspace.js';
 import {
+  collaborationArtifactName,
   collaborationAuditEventTimeline,
   collaborationCanMutate,
   collaborationCurrentTurn,
@@ -12,6 +13,7 @@ import {
   collaborationIsObserver,
   collaborationOutcomeRoutes,
   collaborationPendingNotifications,
+  collaborationPrincipalName,
   stageCollaborationArtifactFiles,
   collaborationTurnAccess,
   collaborationTurnDeadline,
@@ -49,6 +51,29 @@ describe('Collaboration project-space v3 UI helpers', () => {
         localClientId: 'client_a',
       }),
     ).toBe(true);
+  });
+
+  it('uses human Principal and Artifact labels for operational views', () => {
+    const projection = {
+      members: {
+        principal_alice: { display_name: 'Alice Chen' },
+      },
+      artifacts: {
+        artifact_report: { original_filename: 'release-report.txt' },
+      },
+    };
+    expect(collaborationPrincipalName(projection, 'principal_alice')).toBe(
+      'Alice Chen',
+    );
+    expect(collaborationArtifactName(projection, 'artifact_report')).toBe(
+      'release-report.txt',
+    );
+    expect(
+      collaborationArtifactName(
+        projection,
+        'artifacts/work-items/work_1/artifact_report/metadata.json',
+      ),
+    ).toBe('release-report.txt');
   });
 
   it('scopes Turn actions to the assignee Principal and claimant Client', () => {
