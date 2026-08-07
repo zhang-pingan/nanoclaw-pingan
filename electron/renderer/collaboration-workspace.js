@@ -61,6 +61,11 @@ export function parseCollaborationRoute(pathname) {
   }
 }
 
+export function collaborationRoute(groupId, tab = 'overview') {
+  const base = groupId ? `/groups/${encodeURIComponent(groupId)}` : '/groups';
+  return tab === 'overview' || !groupId ? base : `${base}/${tab}`;
+}
+
 const html = (value) =>
   String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -190,13 +195,7 @@ export function createCollaborationWorkspace(options) {
     null;
 
   const updateRoute = (replace = false) => {
-    const base = state.selectedGroupId
-      ? `/groups/${encodeURIComponent(state.selectedGroupId)}`
-      : '/groups';
-    const path =
-      state.activeTab === 'overview' || !state.selectedGroupId
-        ? base
-        : `${base}/${state.activeTab}`;
+    const path = collaborationRoute(state.selectedGroupId, state.activeTab);
     if (window.location.pathname !== path)
       window.history[replace ? 'replaceState' : 'pushState']({}, '', path);
   };

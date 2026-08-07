@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  collaborationRoute,
+  parseCollaborationRoute,
+} from './collaboration-workspace.js';
+import {
   collaborationAuditEventTimeline,
   collaborationCanMutate,
   collaborationCurrentTurn,
@@ -17,6 +21,16 @@ import {
 } from './collaboration-ui.js';
 
 describe('Collaboration project-space v3 UI helpers', () => {
+  it('round-trips encoded Project Space routes for cold navigation', () => {
+    expect(collaborationRoute('', 'overview')).toBe('/groups');
+    expect(collaborationRoute('group:release/one', 'work-items')).toBe(
+      '/groups/group%3Arelease%2Fone/work-items',
+    );
+    expect(
+      parseCollaborationRoute('/groups/group%3Arelease%2Fone/work-items'),
+    ).toEqual({ groupId: 'group:release/one', tab: 'work-items' });
+  });
+
   it('makes Observer mode explicit and read only', () => {
     expect(collaborationIsObserver({ subscriptionMode: 'observer' })).toBe(
       true,

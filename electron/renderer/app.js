@@ -1,5 +1,6 @@
 // electron/renderer/app.js
 import {
+  collaborationRoute,
   collaborationRouteTabs,
   createCollaborationWorkspace,
   parseCollaborationRoute,
