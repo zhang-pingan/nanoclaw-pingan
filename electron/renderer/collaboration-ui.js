@@ -11,6 +11,36 @@ export function collaborationCanMutate(group) {
   );
 }
 
+export async function stageCollaborationArtifactFiles(input) {
+  const files = [...(input.files || [])];
+  const artifactIds = input.artifactIds;
+  if (!Array.isArray(artifactIds))
+    throw new Error('Artifact staging state is required');
+  if (files.length > 20)
+    throw new Error('At most 20 Artifacts may be attached');
+  if (artifactIds.length > files.length)
+    throw new Error('Artifact staging state does not match selected files');
+  for (let index = artifactIds.length; index < files.length; index += 1) {
+    const file = files[index];
+    const metadata = input.metadata(file);
+    const upload = new FormData();
+    upload.append(
+      'metadata',
+      new Blob([JSON.stringify(metadata)], { type: 'application/json' }),
+    );
+    upload.append('file', file, file.name);
+    const staged = await input.request(input.endpoint, {
+      method: 'POST',
+      body: upload,
+    });
+    const artifactId = staged?.metadata?.artifact_id;
+    if (!artifactId || typeof artifactId !== 'string')
+      throw new Error('Artifact staging response is invalid');
+    artifactIds.push(artifactId);
+  }
+  return artifactIds;
+}
+
 export function collaborationTurnAccess(group, turn) {
   const localPrincipal = Boolean(
     group?.localPrincipalId &&

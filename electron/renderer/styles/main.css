@@ -18797,6 +18797,13 @@ textarea.workflow-wizard-input {
   resize: vertical;
 }
 
+.collaboration-artifact-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
 .collaboration-dialog-error {
   margin: 0 18px 14px;
   padding: 9px 10px;

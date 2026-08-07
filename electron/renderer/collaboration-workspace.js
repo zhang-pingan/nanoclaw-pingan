@@ -20,6 +20,7 @@ import {
   collaborationIsObserver,
   collaborationOutcomeRoutes,
   collaborationPendingNotifications,
+  stageCollaborationArtifactFiles,
   collaborationTurnAccess,
   collaborationTurnDeadline,
   collaborationTurnHistory,
@@ -123,7 +124,7 @@ function field(label, name, value = '', options = {}) {
               `<option value="${attr(id)}" ${String(value) === String(id) ? 'selected' : ''}>${html(text)}</option>`,
           )
           .join('')}</select>`
-      : `<input name="${attr(name)}" value="${attr(value)}" ${options.type ? `type="${attr(options.type)}"` : ''} ${options.required === false ? '' : 'required'}>`;
+      : `<input name="${attr(name)}" value="${attr(value)}" ${options.type ? `type="${attr(options.type)}"` : ''} ${options.multiple ? 'multiple' : ''} ${options.required === false ? '' : 'required'}>`;
   return `<label class="collaboration-field"><span>${html(label)}</span>${control}</label>`;
 }
 
@@ -133,6 +134,17 @@ function metric(label, value, tone = '') {
 
 function empty(label) {
   return `<div class="collaboration-section-empty">${html(label)}</div>`;
+}
+
+function renderArtifactRefs(projection, refs) {
+  if (!refs?.length) return '';
+  return `<div class="collaboration-artifact-refs">${refs
+    .map((ref) => {
+      const artifactId = String(ref).split('/').at(-2);
+      const artifact = projection?.artifacts?.[artifactId];
+      return `<code title="${attr(ref)}">${html(artifact?.original_name || artifactId || ref)}</code>`;
+    })
+    .join('')}</div>`;
 }
 
 function renderTreeNode(node) {
@@ -330,7 +342,7 @@ export function createCollaborationWorkspace(options) {
           .reverse()
           .map(
             (update) =>
-              `<article class="collaboration-record"><div><strong>${html(update.summary)}</strong><small>${html(update.author_principal_id)} · ${html(timestamp(update.created_at))}</small></div></article>`,
+              `<article class="collaboration-record"><div><strong>${html(update.summary)}</strong><small>${html(update.author_principal_id)} · ${html(timestamp(update.created_at))}</small>${renderArtifactRefs(group.projection, update.artifact_refs)}</div></article>`,
           )
           .join('') || empty('No progress')
       }</div></section>`;
@@ -397,7 +409,7 @@ export function createCollaborationWorkspace(options) {
           ),
         });
     });
-    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-instance">Back</button>${collaborationCanMutate(group) ? `<button type="button" class="btn-ghost" data-collaboration-action="instance-command" data-command="${instance.lifecycle === 'draft' || instance.lifecycle === 'ready' ? 'start' : instance.lifecycle === 'paused' ? 'resume' : 'pause'}">${instance.lifecycle === 'paused' ? 'Resume' : instance.lifecycle === 'running' ? 'Pause' : 'Start'}</button>` : ''}</section><section class="collaboration-metrics">${metric('Lifecycle', instance.lifecycle)}${metric('State', instance.business_state)}${metric('Epoch', instance.epoch)}${metric('Turns', turns.length)}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(instance.definition_id)} · ${html(instance.instance_id)}</h3>${status(instance.lifecycle)}</div><div id="collaboration-instance-graph"></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Current Turn</h3>${turn ? status(turn.state) : ''}</div>${turn ? `<dl class="collaboration-definition-list"><div><dt>State</dt><dd>${html(turn.state_id)}</dd></div><div><dt>Assignee</dt><dd>${html(turn.assignee_principal_id)}</dd></div><div><dt>Client</dt><dd>${html(turn.claimant_client_id || '-')}</dd></div><div><dt>Mode</dt><dd>${html(turn.execution_mode)}</dd></div><div><dt>Attempt</dt><dd>${html(turn.attempt)}</dd></div><div><dt>Deadline</dt><dd>${html(collaborationTurnDeadline(turn)?.deadlineAt || '-')}</dd></div></dl><div class="collaboration-record-actions">${access.canStart ? '<button type="button" class="btn-primary" data-collaboration-action="start-turn">Start Turn</button>' : ''}${access.canComplete ? '<button type="button" class="btn-primary" data-collaboration-action="complete-turn">Complete</button>' : ''}${collaborationCanMutate(group) && turn.assignee_principal_id === group.localPrincipalId ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">Execution</button>' : ''}</div><div class="collaboration-outcome-preview">${routes.map((route) => `<span><strong>${html(route.outcome)}</strong> → ${html(route.target_state)}</span>`).join('')}</div>` : empty('No active Turn')}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Turn history</h3><span>${turns.length}</span></div>${turns.map((item) => `<article class="collaboration-record"><strong>${html(item.state_id)}</strong>${status(item.state)}<small>${html(timestamp(item.created_at))}${item.outcome ? ` · ${html(item.outcome)}` : ''}</small></article>`).join('') || empty('No Turns')}</section>`;
+    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-instance">Back</button>${collaborationCanMutate(group) ? `<button type="button" class="btn-ghost" data-collaboration-action="instance-command" data-command="${instance.lifecycle === 'draft' || instance.lifecycle === 'ready' ? 'start' : instance.lifecycle === 'paused' ? 'resume' : 'pause'}">${instance.lifecycle === 'paused' ? 'Resume' : instance.lifecycle === 'running' ? 'Pause' : 'Start'}</button>` : ''}</section><section class="collaboration-metrics">${metric('Lifecycle', instance.lifecycle)}${metric('State', instance.business_state)}${metric('Epoch', instance.epoch)}${metric('Turns', turns.length)}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(instance.definition_id)} · ${html(instance.instance_id)}</h3>${status(instance.lifecycle)}</div><div id="collaboration-instance-graph"></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Current Turn</h3>${turn ? status(turn.state) : ''}</div>${turn ? `<dl class="collaboration-definition-list"><div><dt>State</dt><dd>${html(turn.state_id)}</dd></div><div><dt>Assignee</dt><dd>${html(turn.assignee_principal_id)}</dd></div><div><dt>Client</dt><dd>${html(turn.claimant_client_id || '-')}</dd></div><div><dt>Mode</dt><dd>${html(turn.execution_mode)}</dd></div><div><dt>Attempt</dt><dd>${html(turn.attempt)}</dd></div><div><dt>Deadline</dt><dd>${html(collaborationTurnDeadline(turn)?.deadlineAt || '-')}</dd></div></dl><div class="collaboration-record-actions">${access.canStart ? '<button type="button" class="btn-primary" data-collaboration-action="start-turn">Start Turn</button>' : ''}${access.canComplete ? '<button type="button" class="btn-primary" data-collaboration-action="complete-turn">Complete</button>' : ''}${collaborationCanMutate(group) && turn.assignee_principal_id === group.localPrincipalId ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">Execution</button>' : ''}</div><div class="collaboration-outcome-preview">${routes.map((route) => `<span><strong>${html(route.outcome)}</strong> → ${html(route.target_state)}</span>`).join('')}</div>` : empty('No active Turn')}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Turn history</h3><span>${turns.length}</span></div>${turns.map((item) => `<article class="collaboration-record"><div><strong>${html(item.state_id)}</strong><small>${html(timestamp(item.created_at))}${item.outcome ? ` · ${html(item.outcome)}` : ''}</small>${renderArtifactRefs(projection, item.artifact_refs)}</div>${status(item.state)}</article>`).join('') || empty('No Turns')}</section>`;
   };
 
   const renderWorkflows = () => {
@@ -690,24 +702,51 @@ export function createCollaborationWorkspace(options) {
   const postWorkProgress = () => {
     const group = selectedGroup();
     const item = group.projection.workItems[state.selectedWorkItemId];
+    const artifactIds = [];
+    let selectedFiles = null;
     openDialog({
       title: 'Post progress',
-      body: field('Summary', 'summary', '', { multiline: true }),
+      body: `<div class="collaboration-form-grid">${field('Summary', 'summary', '', { multiline: true })}${field('Artifacts', 'artifacts', '', { type: 'file', required: false, multiple: true })}</div>`,
       onSubmit: async (formData) => {
-        await options.request(
-          `/groups/${encodeURIComponent(group.groupId)}/work-items/${encodeURIComponent(item.work_item_id)}/progress`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              expectedRevision: aggregateRevision(
-                group.projection,
-                'work_item',
-                item.work_item_id,
-              ),
-              summary: formData.get('summary'),
-            }),
-          },
-        );
+        const fileControl = elements.dialogForm.elements.artifacts;
+        if (selectedFiles === null) {
+          selectedFiles = [...(fileControl?.files || [])];
+          if (selectedFiles.length > 20)
+            throw new Error('At most 20 Artifacts may be attached');
+          if (selectedFiles.length) fileControl.disabled = true;
+        }
+        await stageCollaborationArtifactFiles({
+          files: selectedFiles,
+          artifactIds,
+          request: options.request,
+          endpoint: `/groups/${encodeURIComponent(group.groupId)}/work-items/${encodeURIComponent(item.work_item_id)}/artifacts`,
+          metadata: (file) => ({
+            fileName: file.name,
+            mediaType: file.type || 'application/octet-stream',
+          }),
+        });
+        try {
+          const currentGroup = selectedGroup();
+          await options.request(
+            `/groups/${encodeURIComponent(group.groupId)}/work-items/${encodeURIComponent(item.work_item_id)}/progress`,
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                expectedRevision: aggregateRevision(
+                  currentGroup.projection,
+                  'work_item',
+                  item.work_item_id,
+                ),
+                summary: formData.get('summary'),
+                artifactIds,
+              }),
+            },
+          );
+        } catch (error) {
+          if (/revision conflict|stale/iu.test(String(error)))
+            await loadDetail(group.groupId, false);
+          throw error;
+        }
         closeDialog();
         await loadDetail(group.groupId, false);
       },
@@ -838,33 +877,33 @@ export function createCollaborationWorkspace(options) {
       onSubmit: !editable
         ? null
         : async () => {
-        const request = buildCollaborationWorkflowRequest({
-          expectedRevision: entry
-            ? aggregateRevision(
-                group.projection,
-                'workflow_definition',
-                entry.definition.definition_id,
-              )
-            : 0,
-          draft: workflowEditor.getDraft(),
-          launchPolicy: entry?.definition.launch_policy,
-        });
-        const editingDraft = entry && !newVersion;
-        const body = editingDraft
-          ? (({ definitionId: _definitionId, ...rest }) => rest)(request)
-          : request;
-        await options.request(
-          editingDraft
-            ? `/groups/${encodeURIComponent(group.groupId)}/workflow-definitions/${encodeURIComponent(entry.definition.definition_id)}/draft`
-            : `/groups/${encodeURIComponent(group.groupId)}/workflow-definitions`,
-          {
-            method: editingDraft ? 'PUT' : 'POST',
-            body: JSON.stringify(body),
+            const request = buildCollaborationWorkflowRequest({
+              expectedRevision: entry
+                ? aggregateRevision(
+                    group.projection,
+                    'workflow_definition',
+                    entry.definition.definition_id,
+                  )
+                : 0,
+              draft: workflowEditor.getDraft(),
+              launchPolicy: entry?.definition.launch_policy,
+            });
+            const editingDraft = entry && !newVersion;
+            const body = editingDraft
+              ? (({ definitionId: _definitionId, ...rest }) => rest)(request)
+              : request;
+            await options.request(
+              editingDraft
+                ? `/groups/${encodeURIComponent(group.groupId)}/workflow-definitions/${encodeURIComponent(entry.definition.definition_id)}/draft`
+                : `/groups/${encodeURIComponent(group.groupId)}/workflow-definitions`,
+              {
+                method: editingDraft ? 'PUT' : 'POST',
+                body: JSON.stringify(body),
+              },
+            );
+            closeDialog();
+            await loadDetail(group.groupId, false);
           },
-        );
-        closeDialog();
-        await loadDetail(group.groupId, false);
-      },
     });
   };
 
@@ -930,29 +969,58 @@ export function createCollaborationWorkspace(options) {
         entry.definition.version === instance.definition_version,
     );
     const routes = collaborationOutcomeRoutes(definition, turn);
+    const artifactIds = [];
+    let selectedFiles = null;
     openDialog({
       title: `Complete ${turn.state_id}`,
-      body: `<div class="collaboration-form-grid">${field('Outcome', 'outcome', routes[0]?.outcome, { options: routes.map((route) => [route.outcome, `${route.label} → ${route.target_state}`]) })}${field('Summary', 'summary', '', { multiline: true })}${field('Instruction', 'instruction', '', { multiline: true, required: false })}${field('Data JSON', 'data', '{}', { multiline: true })}</div>`,
+      body: `<div class="collaboration-form-grid">${field('Outcome', 'outcome', routes[0]?.outcome, { options: routes.map((route) => [route.outcome, `${route.label} → ${route.target_state}`]) })}${field('Summary', 'summary', '', { multiline: true })}${field('Instruction', 'instruction', '', { multiline: true, required: false })}${field('Data JSON', 'data', '{}', { multiline: true })}${field('Artifacts', 'artifacts', '', { type: 'file', required: false, multiple: true })}</div>`,
       onSubmit: async (formData) => {
-        await options.request(
-          `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/turns/${encodeURIComponent(turn.turn_id)}/complete`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              expectedRevision: aggregateRevision(
-                group.projection,
-                'workflow_instance',
-                instance.instance_id,
-              ),
-              attempt: turn.attempt,
-              fencingToken: turn.fencing_token,
-              outcome: formData.get('outcome'),
-              summary: formData.get('summary'),
-              instruction: formData.get('instruction') || '',
-              data: JSON.parse(String(formData.get('data') || '{}')),
-            }),
-          },
-        );
+        const fileControl = elements.dialogForm.elements.artifacts;
+        if (selectedFiles === null) {
+          selectedFiles = [...(fileControl?.files || [])];
+          if (selectedFiles.length > 20)
+            throw new Error('At most 20 Artifacts may be attached');
+          if (selectedFiles.length) fileControl.disabled = true;
+        }
+        await stageCollaborationArtifactFiles({
+          files: selectedFiles,
+          artifactIds,
+          request: options.request,
+          endpoint: `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/turns/${encodeURIComponent(turn.turn_id)}/artifacts`,
+          metadata: (file) => ({
+            attempt: turn.attempt,
+            fencingToken: turn.fencing_token,
+            fileName: file.name,
+            mediaType: file.type || 'application/octet-stream',
+          }),
+        });
+        try {
+          const currentGroup = selectedGroup();
+          await options.request(
+            `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/turns/${encodeURIComponent(turn.turn_id)}/complete`,
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                expectedRevision: aggregateRevision(
+                  currentGroup.projection,
+                  'workflow_instance',
+                  instance.instance_id,
+                ),
+                attempt: turn.attempt,
+                fencingToken: turn.fencing_token,
+                outcome: formData.get('outcome'),
+                summary: formData.get('summary'),
+                instruction: formData.get('instruction') || '',
+                data: JSON.parse(String(formData.get('data') || '{}')),
+                artifactIds,
+              }),
+            },
+          );
+        } catch (error) {
+          if (/revision conflict|stale/iu.test(String(error)))
+            await loadDetail(group.groupId, false);
+          throw error;
+        }
         closeDialog();
         await loadDetail(group.groupId, false);
       },

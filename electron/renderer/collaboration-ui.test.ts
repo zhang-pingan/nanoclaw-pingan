@@ -8,6 +8,7 @@ import {
   collaborationIsObserver,
   collaborationOutcomeRoutes,
   collaborationPendingNotifications,
+  stageCollaborationArtifactFiles,
   collaborationTurnAccess,
   collaborationTurnDeadline,
   collaborationTurnHistory,
@@ -197,5 +198,52 @@ describe('Collaboration project-space v3 UI helpers', () => {
         { event_id: 'event_1', commit_order: 1 },
       ]).map((event) => event.event_id),
     ).toEqual(['event_1', 'event_2']);
+  });
+
+  it('stages selected Artifact files once and reuses their ids on command retry', async () => {
+    const files = [
+      new File(['evidence'], 'evidence.txt', { type: 'text/plain' }),
+      new File([new Uint8Array([0, 1, 255])], 'result.bin'),
+    ];
+    const requests = [];
+    const request = async (endpoint, options) => {
+      const metadata = JSON.parse(await options.body.get('metadata').text());
+      requests.push({ endpoint, metadata });
+      return {
+        metadata: { artifact_id: `artifact_${requests.length}` },
+      };
+    };
+    const artifactIds = [];
+    await stageCollaborationArtifactFiles({
+      files,
+      artifactIds,
+      request,
+      endpoint: '/work-items/work_1/artifacts',
+      metadata: (file) => ({
+        fileName: file.name,
+        mediaType: file.type || 'application/octet-stream',
+      }),
+    });
+    await stageCollaborationArtifactFiles({
+      files,
+      artifactIds,
+      request,
+      endpoint: '/work-items/work_1/artifacts',
+      metadata: () => ({}),
+    });
+    expect(artifactIds).toEqual(['artifact_1', 'artifact_2']);
+    expect(requests).toEqual([
+      {
+        endpoint: '/work-items/work_1/artifacts',
+        metadata: { fileName: 'evidence.txt', mediaType: 'text/plain' },
+      },
+      {
+        endpoint: '/work-items/work_1/artifacts',
+        metadata: {
+          fileName: 'result.bin',
+          mediaType: 'application/octet-stream',
+        },
+      },
+    ]);
   });
 });
