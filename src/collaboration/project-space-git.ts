@@ -30,8 +30,10 @@ import {
   strictParseJsonBytes,
 } from './protocol/canonical-json.js';
 import {
+  artifactMetadataV3Schema,
   fileMetadataSchema,
   memberDefinitionV3Schema,
+  type ArtifactMetadataV3,
   type CollaborationEventV3,
   type FileMetadata,
 } from './protocol/v3-schema.js';
@@ -292,6 +294,21 @@ function fileDirectory(
     : `workspace/principals/${event.actor.principal_id}/files/${metadata.file_id}`;
 }
 
+function artifactDirectory(metadata: ArtifactMetadataV3): string {
+  return metadata.scope.type === 'work_item'
+    ? `artifacts/work-items/${metadata.scope.work_item_id}/${metadata.artifact_id}`
+    : `artifacts/workflows/${metadata.scope.workflow_instance_id}/${metadata.scope.turn_id}/${metadata.artifact_id}`;
+}
+
+function eventArtifacts(event: CollaborationEventV3): ArtifactMetadataV3[] {
+  if (
+    event.event_type !== 'work_item_progress_posted' &&
+    event.event_type !== 'turn_completed'
+  )
+    return [];
+  return artifactMetadataV3Schema.array().max(20).parse(event.payload.artifacts);
+}
+
 function automaticMaterialization(
   event: CollaborationEventV3,
   projection: CollaborationProjectionV3,
@@ -444,6 +461,11 @@ function automaticMaterialization(
         `work-items/${event.aggregate_id}/item.json`,
         prettyCollaborationJson(projection.workItems[event.aggregate_id]),
       );
+      for (const artifact of eventArtifacts(event))
+        files.set(
+          `${artifactDirectory(artifact)}/metadata.json`,
+          prettyCollaborationJson(artifact),
+        );
       break;
     }
     case 'discussion_created':
@@ -600,6 +622,12 @@ function automaticMaterialization(
           projection.workflowInstances[event.aggregate_id],
         ),
       );
+      if (event.event_type === 'turn_completed')
+        for (const artifact of eventArtifacts(event))
+          files.set(
+            `${artifactDirectory(artifact)}/metadata.json`,
+            prettyCollaborationJson(artifact),
+          );
       {
         const instance = projection.workflowInstances[event.aggregate_id];
         if (instance?.scope.type !== 'work_item') break;
@@ -635,6 +663,8 @@ function allowedExtraMaterializationPaths(
     const action = event.payload.action as { prompt_ref: string };
     allowed.add(action.prompt_ref);
   }
+  for (const artifact of eventArtifacts(event))
+    allowed.add(`${artifactDirectory(artifact)}/${artifact.content_ref}`);
   return allowed;
 }
 
@@ -700,6 +730,15 @@ function validateContentFiles(
       throw new Error('Action Prompt Markdown is missing');
     if (sha256(prompt) !== action.prompt_hash)
       throw new Error('Action Prompt content hash does not match Action JSON');
+  }
+  for (const artifact of eventArtifacts(event)) {
+    const content = files.get(
+      `${artifactDirectory(artifact)}/${artifact.content_ref}`,
+    );
+    if (content == null) throw new Error('Artifact content is missing');
+    const bytes = typeof content === 'string' ? Buffer.from(content) : content;
+    if (bytes.byteLength !== artifact.size || sha256(bytes) !== artifact.sha256)
+      throw new Error('Artifact content does not match its JSON sidecar');
   }
 }
 

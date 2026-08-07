@@ -469,16 +469,41 @@ describe('Collaboration project space v3 Group and identity service', () => {
     ]);
     expect(related.projection?.workItems.wi_test.revision).toBe(1);
 
+    const artifact = await owner.service.stageWorkItemArtifact({
+      groupId: 'group_project',
+      workItemId: 'wi_api',
+      fileName: 'api-contract.json',
+      mediaType: 'application/json',
+      contents: Buffer.from('{"openapi":"3.1.0"}\n'),
+    });
     const progressed = await owner.service.postWorkItemProgress({
       groupId: 'group_project',
       workItemId: 'wi_api',
       expectedRevision: 2,
       summary: 'Route implementation complete',
       completed: ['POST /work-items'],
+      artifactIds: [artifact.metadata.artifact_id],
     });
     expect(progressed.projection?.workItemUpdates.wi_api).toEqual([
-      expect.objectContaining({ summary: 'Route implementation complete' }),
+      expect.objectContaining({
+        summary: 'Route implementation complete',
+        artifact_refs: [artifact.artifactRef],
+      }),
     ]);
+    expect(
+      progressed.projection?.artifacts[artifact.metadata.artifact_id],
+    ).toEqual(artifact.metadata);
+    expect(
+      owner.store.getStagedArtifact(artifact.metadata.artifact_id)?.state,
+    ).toBe('committed');
+    expect(
+      transport.files.get(
+        artifact.artifactRef.replace(
+          /metadata\.json$/u,
+          artifact.metadata.content_ref,
+        ),
+      ),
+    ).toEqual(Buffer.from('{"openapi":"3.1.0"}\n'));
     await owner.service.changeWorkItemStatus({
       groupId: 'group_project',
       workItemId: 'wi_api',
@@ -926,6 +951,16 @@ describe('Collaboration project space v3 Group and identity service', () => {
       claimant_principal_id: ALICE.principalId,
       claimant_client_id: ALICE.clientId,
     });
+    const artifact = await owner.service.stageTurnArtifact({
+      groupId: 'group_project',
+      instanceId: 'wfi_delivery',
+      turnId: 'turn_delivery',
+      attempt: 1,
+      fencingToken: claimedTurn!.fencing_token!,
+      fileName: 'release.txt',
+      mediaType: 'text/plain',
+      contents: Buffer.from('release artifact\n'),
+    });
     await expect(
       second.service.startTurn({
         groupId: 'group_project',
@@ -957,6 +992,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
       outcome: 'complete',
       summary: 'Release delivered.',
       instruction: 'Verify the published artifacts.',
+      artifactIds: [artifact.metadata.artifact_id],
     });
     expect(completed.projection?.workflowInstances.wfi_delivery).toMatchObject({
       lifecycle: 'closed',
@@ -967,6 +1003,12 @@ describe('Collaboration project space v3 Group and identity service', () => {
       status: 'done',
       primary_workflow_instance_id: null,
     });
+    expect(completed.projection?.turns.turn_delivery.handoff?.artifact_refs).toEqual(
+      [artifact.artifactRef],
+    );
+    expect(
+      owner.store.getStagedArtifact(artifact.metadata.artifact_id)?.state,
+    ).toBe('committed');
     owner.store.close();
     second.store.close();
   });

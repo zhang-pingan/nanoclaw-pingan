@@ -18,6 +18,7 @@ import {
   collaborationFencingTokenV3,
   collaborationIdempotencyKeyV3,
   collaborationWorkflowDefinitionHashV3,
+  hasCollaborationPermissionV3,
   reduceCollaborationEventV3,
   workflowDefinitionVersionKey,
   type CollaborationProjectionV3,
@@ -25,6 +26,7 @@ import {
 import { COLLABORATION_CONTROL_BRANCH } from './protocol/version.js';
 import {
   actionDefinitionV3Schema,
+  artifactMetadataV3Schema,
   collaborationBasenameSchema,
   discussionMessageSchema,
   discussionSchema,
@@ -44,6 +46,7 @@ import {
   type CollaborationEventTypeV3,
   type CollaborationEventV3,
   type CollaborationPermission,
+  type ArtifactMetadataV3,
   type Discussion,
   type FileMetadata,
   type MachineDefinitionV3,
@@ -57,6 +60,7 @@ import {
   type WorkItem,
   type WorkItemStatus,
 } from './protocol/v3-schema.js';
+import type { CollaborationStagedArtifactV3 } from './project-space-store.js';
 
 export interface ValidatedProjectSpaceHistory {
   readonly head: string;
@@ -129,6 +133,11 @@ export interface JoinProjectSpaceGroupInput {
   readonly displayName: string;
   readonly clientDisplayName: string;
   readonly pollIntervalMs?: number;
+}
+
+export interface ProjectSpaceStagedArtifactResult {
+  readonly metadata: ArtifactMetadataV3;
+  readonly artifactRef: string;
 }
 
 export const MAX_PROJECT_SPACE_FILE_BYTES = 10 * 1024 * 1024;
@@ -905,6 +914,43 @@ export class CollaborationProjectSpaceService {
     });
   }
 
+  async stageWorkItemArtifact(input: {
+    readonly groupId: string;
+    readonly workItemId: string;
+    readonly fileName: string;
+    readonly mediaType: string;
+    readonly contents: Buffer;
+  }): Promise<ProjectSpaceStagedArtifactResult> {
+    const group = this.requireLocalMember(input.groupId);
+    const history = await this.sync(input.groupId);
+    const item = history.projection.workItems[input.workItemId];
+    if (!item) throw new Error('Work Item does not exist');
+    const canContribute =
+      item.owner_principal_id === group.localPrincipalId ||
+      item.contributors.includes(group.localPrincipalId!) ||
+      hasCollaborationPermissionV3(
+        history.projection,
+        group.localPrincipalId!,
+        'work_item:manage_all',
+      );
+    if (!canContribute)
+      throw new Error('Local Principal cannot contribute to this Work Item');
+    const artifact = this.store.stageArtifact({
+      artifactId: newId('artifact'),
+      groupId: input.groupId,
+      scopeType: 'work_item',
+      scopeId: input.workItemId,
+      principalId: group.localPrincipalId!,
+      clientId: group.localClientId!,
+      originalName: collaborationBasenameSchema.parse(input.fileName),
+      mediaType: input.mediaType,
+      contents: this.artifactContents(input.contents),
+      nowMs: this.now(),
+    });
+    const metadata = this.artifactMetadata(artifact, null);
+    return { metadata, artifactRef: this.artifactRef(metadata) };
+  }
+
   async postWorkItemProgress(input: {
     readonly groupId: string;
     readonly workItemId: string;
@@ -913,11 +959,22 @@ export class CollaborationProjectSpaceService {
     readonly completed?: readonly string[];
     readonly nextSteps?: readonly string[];
     readonly blockers?: readonly string[];
+    readonly artifactIds?: readonly string[];
     readonly artifactRefs?: readonly string[];
     readonly executorId?: string | null;
     readonly origin?: 'human' | 'agent' | 'workflow';
   }): Promise<CollaborationProjectSpaceGroupRecord> {
     const group = this.requireLocalMember(input.groupId);
+    const staged = this.materializeStagedArtifacts({
+      artifactIds: input.artifactIds ?? [],
+      group,
+      scopeType: 'work_item',
+      scopeId: input.workItemId,
+      executorId: input.executorId ?? null,
+    });
+    const artifactRefs = [
+      ...new Set([...(input.artifactRefs ?? []), ...staged.artifactRefs]),
+    ];
     const update = workItemProgressSchema.parse({
       format: 'icarus.collaboration-work-item-progress/1',
       update_id: newId('update'),
@@ -926,21 +983,27 @@ export class CollaborationProjectSpaceService {
       completed: [...(input.completed ?? [])],
       next_steps: [...(input.nextSteps ?? [])],
       blockers: [...(input.blockers ?? [])],
-      artifact_refs: [...(input.artifactRefs ?? [])],
+      artifact_refs: artifactRefs,
       actor_principal_id: group.localPrincipalId,
       actor_client_id: group.localClientId,
       executor_id: input.executorId ?? null,
       origin: input.origin ?? 'human',
       created_at: new Date(this.now()).toISOString(),
     });
-    return this.appendLocal(input.groupId, {
+    const result = await this.appendLocal(input.groupId, {
       aggregateType: 'work_item',
       aggregateId: input.workItemId,
       expectedRevision: input.expectedRevision,
       eventType: 'work_item_progress_posted',
-      payload: { update },
+      payload: { update, artifacts: staged.metadata },
       executorId: input.executorId ?? null,
+      materializedFiles: staged.files.length ? staged.files : undefined,
     });
+    this.store.markStagedArtifactsCommitted(
+      input.artifactIds ?? [],
+      this.now(),
+    );
+    return result;
   }
 
   async changeWorkItemRelations(input: {
@@ -1687,6 +1750,48 @@ export class CollaborationProjectSpaceService {
     });
   }
 
+  async stageTurnArtifact(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly turnId: string;
+    readonly attempt: number;
+    readonly fencingToken: string;
+    readonly fileName: string;
+    readonly mediaType: string;
+    readonly contents: Buffer;
+  }): Promise<ProjectSpaceStagedArtifactResult> {
+    const group = this.requireLocalMember(input.groupId);
+    const history = await this.sync(input.groupId);
+    const turn = history.projection.turns[input.turnId];
+    if (
+      !turn ||
+      turn.workflow_instance_id !== input.instanceId ||
+      turn.attempt !== input.attempt ||
+      turn.fencing_token !== input.fencingToken ||
+      turn.claimant_principal_id !== group.localPrincipalId ||
+      turn.claimant_client_id !== group.localClientId ||
+      !['running', 'waiting_input', 'waiting_approval'].includes(turn.state)
+    )
+      throw new Error('Turn Artifact requires the current fenced claimant Client');
+    const artifact = this.store.stageArtifact({
+      artifactId: newId('artifact'),
+      groupId: input.groupId,
+      scopeType: 'workflow_turn',
+      scopeId: input.instanceId,
+      turnId: input.turnId,
+      attempt: input.attempt,
+      fencingToken: input.fencingToken,
+      principalId: group.localPrincipalId!,
+      clientId: group.localClientId!,
+      originalName: collaborationBasenameSchema.parse(input.fileName),
+      mediaType: input.mediaType,
+      contents: this.artifactContents(input.contents),
+      nowMs: this.now(),
+    });
+    const metadata = this.artifactMetadata(artifact, turn.executor_id);
+    return { metadata, artifactRef: this.artifactRef(metadata) };
+  }
+
   async completeTurn(input: {
     readonly groupId: string;
     readonly instanceId: string;
@@ -1699,11 +1804,26 @@ export class CollaborationProjectSpaceService {
     readonly instruction?: string;
     readonly markers?: readonly string[];
     readonly dataRefs?: readonly string[];
+    readonly artifactIds?: readonly string[];
     readonly artifactRefs?: readonly string[];
     readonly data?: Readonly<Record<string, unknown>>;
     readonly result?: unknown;
     readonly executorId?: string | null;
   }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const staged = this.materializeStagedArtifacts({
+      artifactIds: input.artifactIds ?? [],
+      group,
+      scopeType: 'workflow_turn',
+      scopeId: input.instanceId,
+      turnId: input.turnId,
+      attempt: input.attempt,
+      fencingToken: input.fencingToken,
+      executorId: input.executorId ?? null,
+    });
+    const artifactRefs = [
+      ...new Set([...(input.artifactRefs ?? []), ...staged.artifactRefs]),
+    ];
     const handoff = handoffEnvelopeV3Schema.parse({
       format: 'icarus.collaboration-handoff/1',
       source_turn_id: input.turnId,
@@ -1712,10 +1832,10 @@ export class CollaborationProjectSpaceService {
       instruction: input.instruction ?? '',
       markers: [...(input.markers ?? [])],
       data_refs: [...(input.dataRefs ?? [])],
-      artifact_refs: [...(input.artifactRefs ?? [])],
+      artifact_refs: artifactRefs,
       data: { ...(input.data ?? {}) },
     });
-    return this.appendLocal(input.groupId, {
+    const result = await this.appendLocal(input.groupId, {
       aggregateType: 'workflow_instance',
       aggregateId: input.instanceId,
       expectedRevision: input.expectedRevision,
@@ -1728,10 +1848,17 @@ export class CollaborationProjectSpaceService {
         result_hash: collaborationCanonicalHashV3(input.result ?? handoff.data),
         handoff,
         handoff_hash: collaborationCanonicalHashV3(handoff),
-        artifact_refs: [...(input.artifactRefs ?? [])],
+        artifact_refs: artifactRefs,
+        artifacts: staged.metadata,
       },
       executorId: input.executorId ?? null,
+      materializedFiles: staged.files.length ? staged.files : undefined,
     });
+    this.store.markStagedArtifactsCommitted(
+      input.artifactIds ?? [],
+      this.now(),
+    );
+    return result;
   }
 
   async cancelTurn(input: {
@@ -2295,6 +2422,97 @@ export class CollaborationProjectSpaceService {
         'Observer subscriptions cannot issue collaboration commands',
       );
     return group;
+  }
+
+  private artifactContents(contents: Buffer): Buffer {
+    if (contents.byteLength > MAX_PROJECT_SPACE_FILE_BYTES)
+      throw new Error('Artifact exceeds the 10 MiB local Git limit');
+    return Buffer.from(contents);
+  }
+
+  private artifactMetadata(
+    artifact: CollaborationStagedArtifactV3,
+    executorId: string | null,
+  ): ArtifactMetadataV3 {
+    return artifactMetadataV3Schema.parse({
+      format: 'icarus.collaboration-artifact/1',
+      artifact_id: artifact.artifactId,
+      scope:
+        artifact.scopeType === 'work_item'
+          ? { type: 'work_item', work_item_id: artifact.scopeId }
+          : {
+              type: 'workflow_turn',
+              workflow_instance_id: artifact.scopeId,
+              turn_id: artifact.turnId,
+              attempt: artifact.attempt,
+              fencing_token: artifact.fencingToken,
+            },
+      original_filename: artifact.originalName,
+      content_ref: artifact.originalName,
+      media_type: artifact.mediaType,
+      size: artifact.size,
+      sha256: artifact.sha256,
+      uploader_principal_id: artifact.principalId,
+      uploader_client_id: artifact.clientId,
+      executor_id: executorId,
+      created_at: new Date(artifact.createdAtMs).toISOString(),
+    });
+  }
+
+  private artifactRef(metadata: ArtifactMetadataV3): string {
+    return metadata.scope.type === 'work_item'
+      ? `artifacts/work-items/${metadata.scope.work_item_id}/${metadata.artifact_id}/metadata.json`
+      : `artifacts/workflows/${metadata.scope.workflow_instance_id}/${metadata.scope.turn_id}/${metadata.artifact_id}/metadata.json`;
+  }
+
+  private materializeStagedArtifacts(input: {
+    readonly artifactIds: readonly string[];
+    readonly group: CollaborationProjectSpaceGroupRecord;
+    readonly scopeType: CollaborationStagedArtifactV3['scopeType'];
+    readonly scopeId: string;
+    readonly turnId?: string;
+    readonly attempt?: number;
+    readonly fencingToken?: string;
+    readonly executorId: string | null;
+  }): {
+    readonly metadata: ArtifactMetadataV3[];
+    readonly artifactRefs: string[];
+    readonly files: Array<{ readonly path: string; readonly contents: Buffer }>;
+  } {
+    if (input.artifactIds.length > 20)
+      throw new Error('A command can materialize at most 20 Artifacts');
+    if (new Set(input.artifactIds).size !== input.artifactIds.length)
+      throw new Error('Staged Artifact ids must be unique');
+    const metadata: ArtifactMetadataV3[] = [];
+    const artifactRefs: string[] = [];
+    const files: Array<{ readonly path: string; readonly contents: Buffer }> = [];
+    for (const artifactId of input.artifactIds) {
+      const staged = this.store.readStagedArtifact(artifactId, this.now());
+      const artifact = staged.artifact;
+      if (
+        artifact.groupId !== input.group.groupId ||
+        artifact.scopeType !== input.scopeType ||
+        artifact.scopeId !== input.scopeId ||
+        artifact.principalId !== input.group.localPrincipalId ||
+        artifact.clientId !== input.group.localClientId ||
+        (input.scopeType === 'workflow_turn' &&
+          (artifact.turnId !== input.turnId ||
+            artifact.attempt !== input.attempt ||
+            artifact.fencingToken !== input.fencingToken))
+      )
+        throw new Error(
+          `Staged Artifact does not match the command scope or claimant: ${artifactId}`,
+        );
+      const parsed = this.artifactMetadata(artifact, input.executorId);
+      const directory = this.artifactRef(parsed).replace(/\/metadata\.json$/u, '');
+      metadata.push(parsed);
+      artifactRefs.push(`${directory}/metadata.json`);
+      files.push({
+        path: `${directory}/${parsed.content_ref}`,
+        contents: staged.contents,
+      });
+    }
+    return { metadata, artifactRefs, files };
   }
 
   private fileMetadata(input: {

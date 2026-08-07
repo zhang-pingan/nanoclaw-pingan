@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { canonicalJsonStringify } from './canonical-json.js';
 import {
   actionDefinitionV3Schema,
+  artifactMetadataV3Schema,
   clientDefinitionSchema,
   collaborationEventV3Schema,
   collaborationIdentifierSchema,
@@ -28,6 +29,7 @@ import {
   workItemSchema,
   workItemStatusSchema,
   type ActionDefinitionV3,
+  type ArtifactMetadataV3,
   type ClientDefinition,
   type CollaborationAggregateType,
   type CollaborationEventTypeV3,
@@ -103,7 +105,10 @@ const actionPayloadSchema = z
   .strict();
 const workItemPayloadSchema = z.object({ item: workItemSchema }).strict();
 const workItemProgressPayloadSchema = z
-  .object({ update: workItemProgressSchema })
+  .object({
+    update: workItemProgressSchema,
+    artifacts: z.array(artifactMetadataV3Schema).max(20),
+  })
   .strict();
 const workItemStatusPayloadSchema = z
   .object({
@@ -201,6 +206,7 @@ const turnCompletedPayloadSchema = turnFencePayloadSchema
     handoff: handoffEnvelopeV3Schema,
     handoff_hash: sha256,
     artifact_refs: z.array(z.string()).max(100),
+    artifacts: z.array(artifactMetadataV3Schema).max(20),
   })
   .strict();
 const turnCancelledPayloadSchema = z
@@ -325,6 +331,7 @@ export interface CollaborationProjectionV3 {
   permissionGrants: Record<string, PermissionGrant>;
   progressUpdates: Record<string, ProgressUpdate>;
   files: Record<string, FileMetadata>;
+  artifacts: Record<string, ArtifactMetadataV3>;
   fileLocations: Record<
     string,
     {
@@ -799,6 +806,7 @@ function reduceGenesis(event: CollaborationEventV3): CollaborationProjectionV3 {
     },
     progressUpdates: {},
     files: {},
+    artifacts: {},
     fileLocations: {},
     actions: {},
     workItems: {},
@@ -1232,7 +1240,8 @@ export function reduceCollaborationEventV3(
       break;
     }
     case 'work_item_progress_posted': {
-      const { update } = workItemProgressPayloadSchema.parse(payload);
+      const { update, artifacts } =
+        workItemProgressPayloadSchema.parse(payload);
       const item = next.workItems[event.aggregate_id];
       if (update.work_item_id !== event.aggregate_id || !item)
         conflict('Work Item progress references a missing or different item');
@@ -1242,6 +1251,20 @@ export function reduceCollaborationEventV3(
         !canContributeToWorkItem(next, event.actor.principal_id, item)
       )
         conflict('Actor cannot post progress to this Work Item');
+      for (const artifact of artifacts) {
+        const artifactRef = `artifacts/work-items/${event.aggregate_id}/${artifact.artifact_id}/metadata.json`;
+        if (
+          artifact.scope.type !== 'work_item' ||
+          artifact.scope.work_item_id !== event.aggregate_id ||
+          artifact.uploader_principal_id !== event.actor.principal_id ||
+          artifact.uploader_client_id !== event.actor.client_id ||
+          artifact.executor_id !== event.actor.executor_id ||
+          !update.artifact_refs.includes(artifactRef) ||
+          next.artifacts[artifact.artifact_id]
+        )
+          conflict('Work Item Artifact metadata does not match its event');
+        next.artifacts[artifact.artifact_id] = artifact;
+      }
       (next.workItemUpdates[event.aggregate_id] ??= []).push(update);
       item.revision = event.aggregate_revision;
       item.updated_at = event.occurred_at;
@@ -1899,6 +1922,24 @@ export function reduceCollaborationEventV3(
         conflict('Turn is not completable');
       if (event.actor.executor_id !== turn.executor_id)
         conflict('Turn completion Executor does not match the fenced Turn');
+      for (const artifact of parsed.artifacts) {
+        const artifactRef = `artifacts/workflows/${event.aggregate_id}/${turn.turn_id}/${artifact.artifact_id}/metadata.json`;
+        if (
+          artifact.scope.type !== 'workflow_turn' ||
+          artifact.scope.workflow_instance_id !== event.aggregate_id ||
+          artifact.scope.turn_id !== turn.turn_id ||
+          artifact.scope.attempt !== turn.attempt ||
+          artifact.scope.fencing_token !== turn.fencing_token ||
+          artifact.uploader_principal_id !== event.actor.principal_id ||
+          artifact.uploader_client_id !== event.actor.client_id ||
+          artifact.executor_id !== event.actor.executor_id ||
+          !parsed.artifact_refs.includes(artifactRef) ||
+          !parsed.handoff.artifact_refs.includes(artifactRef) ||
+          next.artifacts[artifact.artifact_id]
+        )
+          conflict('Turn Artifact metadata does not match its fenced event');
+        next.artifacts[artifact.artifact_id] = artifact;
+      }
       const definition = activeDefinition(next, instance);
       const transition = definition.machine.states[
         turn.state_id

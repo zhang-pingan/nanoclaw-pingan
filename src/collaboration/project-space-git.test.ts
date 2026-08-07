@@ -12,8 +12,11 @@ import {
 } from './project-space-git.js';
 import {
   collaborationPrincipalIdFromSshFingerprintV3,
+  CollaborationProjectSpaceIdentityService,
   type CollaborationPrincipalIdentity,
 } from './project-space-identity.js';
+import { CollaborationProjectSpaceService } from './project-space-service.js';
+import { CollaborationProjectSpaceStore } from './project-space-store.js';
 import {
   buildCollaborationEventV3,
   reduceCollaborationEventV3,
@@ -250,6 +253,92 @@ describe('Collaboration project space v3 Git protocol', () => {
     expect(tree.find((node) => node.id === 'shared')?.children).toEqual([
       expect.objectContaining({ name: 'contract.pdf', rawId: 'file_contract' }),
     ]);
+  }, 30_000);
+
+  it('atomically materializes a staged Work Item Artifact with its signed progress event', async () => {
+    const test = fixture();
+    const transport = new CollaborationProjectSpaceGitTransport();
+    const store = new CollaborationProjectSpaceStore(
+      path.join(test.root, 'collaboration.db'),
+    );
+    const identities = {
+      resolveSigningIdentity: async () => test.identity,
+    } as unknown as CollaborationProjectSpaceIdentityService;
+    const service = new CollaborationProjectSpaceService(
+      store,
+      transport,
+      path.join(test.root, 'repositories'),
+      identities,
+      () => Date.parse(NOW),
+    );
+    try {
+      await service.createGroup({
+        remoteUrl: test.remote,
+        name: 'Signed project',
+        signingKeyPath: test.identity.privateKeyPath,
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'open',
+        observerAccess: 'allowed',
+        groupId: 'group_signed',
+      });
+      await service.createWorkItem({
+        groupId: 'group_signed',
+        workItemId: 'wi_release',
+        type: 'task',
+        title: 'Release',
+      });
+      const bytes = Buffer.from('%PDF-1.7\nrelease evidence\n');
+      const staged = await service.stageWorkItemArtifact({
+        groupId: 'group_signed',
+        workItemId: 'wi_release',
+        fileName: 'evidence.pdf',
+        mediaType: 'application/pdf',
+        contents: bytes,
+      });
+      const completed = await service.postWorkItemProgress({
+        groupId: 'group_signed',
+        workItemId: 'wi_release',
+        expectedRevision: 1,
+        summary: 'Evidence attached',
+        artifactIds: [staged.metadata.artifact_id],
+      });
+      const repositoryPath = completed.repositoryPath;
+      const contentPath = staged.artifactRef.replace(
+        /metadata\.json$/u,
+        staged.metadata.content_ref,
+      );
+      expect(
+        await transport.readVerifiedFile({
+          repositoryPath,
+          verifiedHead: completed.lastVerifiedHead!,
+          repositoryFile: contentPath,
+        }),
+      ).toEqual(bytes);
+      const sidecar = JSON.parse(
+        (
+          await transport.readVerifiedFile({
+            repositoryPath,
+            verifiedHead: completed.lastVerifiedHead!,
+            repositoryFile: staged.artifactRef,
+          })
+        ).toString('utf8'),
+      ) as Record<string, unknown>;
+      expect(sidecar).toEqual(staged.metadata);
+      expect(store.listFileIndex('group_signed')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            fileId: `artifact:${staged.metadata.artifact_id}`,
+            repositoryPath: contentPath,
+          }),
+        ]),
+      );
+      expect(
+        store.getStagedArtifact(staged.metadata.artifact_id)?.state,
+      ).toBe('committed');
+    } finally {
+      store.close();
+    }
   }, 30_000);
 
   it('rejects sidecar hash mismatch before writing and keeps the verified head', async () => {

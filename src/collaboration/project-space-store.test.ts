@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -264,6 +264,78 @@ describe('Collaboration project space v3 store', () => {
         clientId: CLIENT,
       }),
     ).toHaveLength(1);
+    store.close();
+  });
+
+  it('keeps staged Artifact bytes local until commit and expires abandoned uploads', () => {
+    const store = new CollaborationProjectSpaceStore(
+      temporaryPath('artifacts.db'),
+    );
+    store.registerGroup({
+      subscription: {
+        format: 'icarus.collaboration-subscription/1',
+        group_id: 'group_test',
+        remote_url: '/tmp/group.git',
+        subscription_mode: 'member',
+        poll_interval_ms: 60_000,
+        last_verified_head: null,
+        notifications_enabled: true,
+        created_at: NOW,
+      },
+      name: 'Test group',
+      lifecycle: 'active',
+      ownerPrincipalId: PRINCIPAL,
+      repositoryPath: '/tmp/cache.git',
+      localPrincipalId: PRINCIPAL,
+      localClientId: CLIENT,
+      signingKeyPath: '/tmp/id_ed25519',
+      signingPublicKey: 'ssh-ed25519 test',
+      signingKeyRef: 'ssh-ed25519:SHA256:alice',
+    });
+    const staged = store.stageArtifact({
+      artifactId: 'artifact_committed',
+      groupId: 'group_test',
+      scopeType: 'work_item',
+      scopeId: 'wi_1',
+      principalId: PRINCIPAL,
+      clientId: CLIENT,
+      originalName: 'report.pdf',
+      mediaType: 'application/pdf',
+      contents: Buffer.from('%PDF artifact'),
+      nowMs: 100,
+      expiresAtMs: 200,
+    });
+    expect(store.readStagedArtifact(staged.artifactId, 150).contents).toEqual(
+      Buffer.from('%PDF artifact'),
+    );
+    store.markStagedArtifactsCommitted([staged.artifactId], 175);
+    expect(store.getStagedArtifact(staged.artifactId)).toMatchObject({
+      state: 'committed',
+      committedAtMs: 175,
+    });
+    expect(existsSync(staged.stagedPath)).toBe(false);
+
+    const abandoned = store.stageArtifact({
+      artifactId: 'artifact_abandoned',
+      groupId: 'group_test',
+      scopeType: 'workflow_turn',
+      scopeId: 'wfi_1',
+      turnId: 'turn_1',
+      attempt: 1,
+      fencingToken: `sha256:${'a'.repeat(64)}`,
+      principalId: PRINCIPAL,
+      clientId: CLIENT,
+      originalName: 'trace.txt',
+      mediaType: 'text/plain',
+      contents: Buffer.from('trace'),
+      nowMs: 100,
+      expiresAtMs: 200,
+    });
+    expect(store.expireStagedArtifacts(200)).toBe(1);
+    expect(store.getStagedArtifact(abandoned.artifactId)?.state).toBe(
+      'expired',
+    );
+    expect(existsSync(abandoned.stagedPath)).toBe(false);
     store.close();
   });
 

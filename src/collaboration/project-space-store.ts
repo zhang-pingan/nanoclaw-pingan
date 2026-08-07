@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import {
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   renameSync,
@@ -630,6 +631,27 @@ export interface CollaborationActionExecutionV3 {
   readonly updatedAtMs: number;
 }
 
+export interface CollaborationStagedArtifactV3 {
+  readonly artifactId: string;
+  readonly groupId: string;
+  readonly scopeType: 'work_item' | 'workflow_turn';
+  readonly scopeId: string;
+  readonly turnId: string | null;
+  readonly attempt: number | null;
+  readonly fencingToken: string | null;
+  readonly principalId: string;
+  readonly clientId: string;
+  readonly originalName: string;
+  readonly stagedPath: string;
+  readonly sha256: string;
+  readonly size: number;
+  readonly mediaType: string;
+  readonly state: 'staged' | 'committed' | 'expired';
+  readonly createdAtMs: number;
+  readonly expiresAtMs: number;
+  readonly committedAtMs: number | null;
+}
+
 export interface CollaborationTimeoutScheduleV3 {
   readonly scheduleId: string;
   readonly groupId: string;
@@ -1078,6 +1100,25 @@ export class CollaborationProjectSpaceStore {
         verifiedHead,
       );
     }
+    for (const metadata of Object.values(projection.artifacts)) {
+      const directory =
+        metadata.scope.type === 'work_item'
+          ? `artifacts/work-items/${metadata.scope.work_item_id}/${metadata.artifact_id}`
+          : `artifacts/workflows/${metadata.scope.workflow_instance_id}/${metadata.scope.turn_id}/${metadata.artifact_id}`;
+      const virtualPath =
+        metadata.scope.type === 'work_item'
+          ? `Artifacts/Work Items/${metadata.scope.work_item_id}/${metadata.original_filename}`
+          : `Artifacts/Workflows/${metadata.scope.workflow_instance_id}/${metadata.scope.turn_id}/${metadata.original_filename}`;
+      fileStatement.run(
+        groupId,
+        `artifact:${metadata.artifact_id}`,
+        virtualPath,
+        `${directory}/${metadata.content_ref}`,
+        metadata.uploader_principal_id,
+        JSON.stringify(metadata),
+        verifiedHead,
+      );
+    }
     const itemStatement = this.database.prepare(
       `INSERT INTO collaboration_work_items
        (group_id, work_item_id, status, owner_principal_id, due_at,
@@ -1454,6 +1495,199 @@ export class CollaborationProjectSpaceStore {
     ).map((row) => this.bindingFromRow(row));
   }
 
+  stageArtifact(input: {
+    readonly artifactId: string;
+    readonly groupId: string;
+    readonly scopeType: 'work_item' | 'workflow_turn';
+    readonly scopeId: string;
+    readonly turnId?: string | null;
+    readonly attempt?: number | null;
+    readonly fencingToken?: string | null;
+    readonly principalId: string;
+    readonly clientId: string;
+    readonly originalName: string;
+    readonly mediaType: string;
+    readonly contents: Buffer;
+    readonly nowMs?: number;
+    readonly expiresAtMs?: number;
+  }): CollaborationStagedArtifactV3 {
+    this.assertOpen();
+    if (
+      !/^[A-Za-z0-9][A-Za-z0-9._:@-]*$/u.test(input.artifactId) ||
+      path.basename(input.originalName) !== input.originalName ||
+      ['.', '..'].includes(input.originalName)
+    )
+      throw new Error('Staged Artifact path components are unsafe');
+    const nowMs = input.nowMs ?? Date.now();
+    const expiresAtMs = input.expiresAtMs ?? nowMs + 24 * 60 * 60 * 1000;
+    if (expiresAtMs <= nowMs)
+      throw new Error('Staged Artifact expiry must be in the future');
+    const stagingRoot = path.join(
+      path.dirname(this.databasePath),
+      'collaboration-staged-artifacts',
+    );
+    const directory = path.join(stagingRoot, input.artifactId);
+    const stagedPath = path.join(directory, input.originalName);
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    const temporaryPath = path.join(
+      directory,
+      `.upload-${crypto.randomUUID()}`,
+    );
+    writeFileSync(temporaryPath, input.contents, { mode: 0o600 });
+    renameSync(temporaryPath, stagedPath);
+    const sha256 = `sha256:${crypto
+      .createHash('sha256')
+      .update(input.contents)
+      .digest('hex')}`;
+    try {
+      this.database
+        .prepare(
+          `INSERT INTO collaboration_staged_artifacts (
+             artifact_id, group_id, scope_type, scope_id, turn_id, attempt,
+             fencing_token, principal_id, client_id, original_name,
+             staged_path, sha256, size, media_type, state, created_at_ms,
+             expires_at_ms, committed_at_ms
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'staged', ?, ?, NULL)`,
+        )
+        .run(
+          input.artifactId,
+          input.groupId,
+          input.scopeType,
+          input.scopeId,
+          input.turnId ?? null,
+          input.attempt ?? null,
+          input.fencingToken ?? null,
+          input.principalId,
+          input.clientId,
+          input.originalName,
+          stagedPath,
+          sha256,
+          input.contents.byteLength,
+          input.mediaType,
+          nowMs,
+          expiresAtMs,
+        );
+    } catch (error) {
+      rmSync(directory, { recursive: true, force: true });
+      throw error;
+    }
+    return this.getStagedArtifact(input.artifactId)!;
+  }
+
+  getStagedArtifact(artifactId: string): CollaborationStagedArtifactV3 | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT * FROM collaboration_staged_artifacts WHERE artifact_id = ?`,
+      )
+      .get(artifactId) as Record<string, unknown> | undefined;
+    return row ? this.stagedArtifactFromRow(row) : null;
+  }
+
+  listStagedArtifacts(input: {
+    readonly groupId: string;
+    readonly state?: CollaborationStagedArtifactV3['state'];
+  }): CollaborationStagedArtifactV3[] {
+    this.assertOpen();
+    const rows = input.state
+      ? this.database
+          .prepare(
+            `SELECT * FROM collaboration_staged_artifacts
+              WHERE group_id = ? AND state = ?
+              ORDER BY created_at_ms, artifact_id`,
+          )
+          .all(input.groupId, input.state)
+      : this.database
+          .prepare(
+            `SELECT * FROM collaboration_staged_artifacts
+              WHERE group_id = ? ORDER BY created_at_ms, artifact_id`,
+          )
+          .all(input.groupId);
+    return (rows as Record<string, unknown>[]).map((row) =>
+      this.stagedArtifactFromRow(row),
+    );
+  }
+
+  readStagedArtifact(
+    artifactId: string,
+    nowMs = Date.now(),
+  ): {
+    readonly artifact: CollaborationStagedArtifactV3;
+    readonly contents: Buffer;
+  } {
+    const artifact = this.getStagedArtifact(artifactId);
+    if (!artifact || artifact.state !== 'staged')
+      throw new Error(`Staged Artifact is unavailable: ${artifactId}`);
+    if (artifact.expiresAtMs <= nowMs) {
+      this.expireStagedArtifacts(nowMs);
+      throw new Error(`Staged Artifact has expired: ${artifactId}`);
+    }
+    const file = lstatSync(artifact.stagedPath);
+    if (!file.isFile() || file.isSymbolicLink())
+      throw new Error(`Staged Artifact is not a regular file: ${artifactId}`);
+    const contents = readFileSync(artifact.stagedPath);
+    const sha256 = `sha256:${crypto
+      .createHash('sha256')
+      .update(contents)
+      .digest('hex')}`;
+    if (contents.byteLength !== artifact.size || sha256 !== artifact.sha256)
+      throw new Error(`Staged Artifact integrity check failed: ${artifactId}`);
+    return { artifact, contents };
+  }
+
+  markStagedArtifactsCommitted(
+    artifactIds: readonly string[],
+    committedAtMs = Date.now(),
+  ): void {
+    this.assertOpen();
+    const uniqueIds = [...new Set(artifactIds)];
+    if (uniqueIds.length !== artifactIds.length)
+      throw new Error('Staged Artifact ids must be unique');
+    const paths = this.database.transaction(() =>
+      uniqueIds.map((artifactId) => {
+        const artifact = this.getStagedArtifact(artifactId);
+        if (!artifact || artifact.state !== 'staged')
+          throw new Error(`Staged Artifact is unavailable: ${artifactId}`);
+        const changed = this.database
+          .prepare(
+            `UPDATE collaboration_staged_artifacts
+                SET state = 'committed', committed_at_ms = ?
+              WHERE artifact_id = ? AND state = 'staged'`,
+          )
+          .run(committedAtMs, artifactId).changes;
+        if (changed !== 1)
+          throw new Error(`Staged Artifact commit raced: ${artifactId}`);
+        return artifact.stagedPath;
+      }),
+    )();
+    for (const stagedPath of paths)
+      rmSync(path.dirname(stagedPath), { recursive: true, force: true });
+  }
+
+  expireStagedArtifacts(nowMs = Date.now()): number {
+    this.assertOpen();
+    const expired = (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_staged_artifacts
+            WHERE state = 'staged' AND expires_at_ms <= ?`,
+        )
+        .all(nowMs) as Record<string, unknown>[]
+    ).map((row) => this.stagedArtifactFromRow(row));
+    this.database
+      .prepare(
+        `UPDATE collaboration_staged_artifacts SET state = 'expired'
+          WHERE state = 'staged' AND expires_at_ms <= ?`,
+      )
+      .run(nowMs);
+    for (const artifact of expired)
+      rmSync(path.dirname(artifact.stagedPath), {
+        recursive: true,
+        force: true,
+      });
+    return expired.length;
+  }
+
   private bindingFromRow(
     row: Record<string, unknown>,
   ): CollaborationExecutorBindingV3 {
@@ -1479,6 +1713,33 @@ export class CollaborationProjectSpaceStore {
       config: JSON.parse(String(row.config_json)) as Record<string, unknown>,
       enabled: Number(row.enabled) === 1,
       updatedAtMs: Number(row.updated_at_ms),
+    };
+  }
+
+  private stagedArtifactFromRow(
+    row: Record<string, unknown>,
+  ): CollaborationStagedArtifactV3 {
+    return {
+      artifactId: String(row.artifact_id),
+      groupId: String(row.group_id),
+      scopeType: String(row.scope_type) as 'work_item' | 'workflow_turn',
+      scopeId: String(row.scope_id),
+      turnId: row.turn_id == null ? null : String(row.turn_id),
+      attempt: row.attempt == null ? null : Number(row.attempt),
+      fencingToken:
+        row.fencing_token == null ? null : String(row.fencing_token),
+      principalId: String(row.principal_id),
+      clientId: String(row.client_id),
+      originalName: String(row.original_name),
+      stagedPath: String(row.staged_path),
+      sha256: String(row.sha256),
+      size: Number(row.size),
+      mediaType: String(row.media_type),
+      state: String(row.state) as CollaborationStagedArtifactV3['state'],
+      createdAtMs: Number(row.created_at_ms),
+      expiresAtMs: Number(row.expires_at_ms),
+      committedAtMs:
+        row.committed_at_ms == null ? null : Number(row.committed_at_ms),
     };
   }
 
