@@ -17,12 +17,15 @@ import {
 } from './protocol/v3-reducer.js';
 import { COLLABORATION_CONTROL_BRANCH } from './protocol/version.js';
 import {
+  actionDefinitionV3Schema,
+  collaborationBasenameSchema,
   memberDefinitionV3Schema,
   permissionGrantSchema,
   type CollaborationAggregateType,
   type CollaborationEventTypeV3,
   type CollaborationEventV3,
   type CollaborationPermission,
+  type FileMetadata,
   type MemberDefinitionV3,
   type ObserverSubscription,
 } from './protocol/v3-schema.js';
@@ -51,10 +54,21 @@ export interface CollaborationProjectSpaceTransport {
     readonly repositoryPath: string;
     readonly previousHead: string | null;
     readonly identity: CollaborationPrincipalIdentity;
-    readonly buildEvent: (
-      history: ValidatedProjectSpaceHistory,
-    ) => CollaborationEventV3;
+    readonly buildEvent: (history: ValidatedProjectSpaceHistory) =>
+      | CollaborationEventV3
+      | {
+          readonly event: CollaborationEventV3;
+          readonly materializedFiles: readonly {
+            readonly path: string;
+            readonly contents: string | Buffer | null;
+          }[];
+        };
   }): Promise<ValidatedProjectSpaceHistory>;
+  readVerifiedFile(input: {
+    readonly repositoryPath: string;
+    readonly verifiedHead: string;
+    readonly repositoryFile: string;
+  }): Promise<Buffer>;
 }
 
 export interface ProjectSpaceInspectResult {
@@ -88,6 +102,8 @@ export interface JoinProjectSpaceGroupInput {
   readonly clientDisplayName: string;
   readonly pollIntervalMs?: number;
 }
+
+export const MAX_PROJECT_SPACE_FILE_BYTES = 10 * 1024 * 1024;
 
 function newId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
@@ -442,6 +458,218 @@ export class CollaborationProjectSpaceService {
     });
   }
 
+  async postProgress(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly summary: string;
+    readonly completed?: readonly string[];
+    readonly inProgress?: readonly string[];
+    readonly nextSteps?: readonly string[];
+    readonly blockers?: readonly string[];
+    readonly workItemRefs?: readonly string[];
+    readonly workflowInstanceRefs?: readonly string[];
+    readonly artifactRefs?: readonly string[];
+    readonly executorId?: string | null;
+    readonly origin?: 'human' | 'agent' | 'workflow';
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workspace',
+      aggregateId: group.localPrincipalId!,
+      expectedRevision: input.expectedRevision,
+      eventType: 'progress_update_posted',
+      payload: {
+        update: {
+          format: 'icarus.collaboration-progress-update/1',
+          update_id: newId('update'),
+          principal_id: group.localPrincipalId,
+          summary: input.summary,
+          completed: input.completed ?? [],
+          in_progress: input.inProgress ?? [],
+          next_steps: input.nextSteps ?? [],
+          blockers: input.blockers ?? [],
+          work_item_refs: input.workItemRefs ?? [],
+          workflow_instance_refs: input.workflowInstanceRefs ?? [],
+          artifact_refs: input.artifactRefs ?? [],
+          origin: input.origin ?? 'human',
+          actor_client_id: group.localClientId,
+          executor_id: input.executorId ?? null,
+          created_at: new Date(this.now()).toISOString(),
+        },
+      },
+      executorId: input.executorId ?? null,
+    });
+  }
+
+  async publishSharedFile(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly fileName: string;
+    readonly mediaType: string;
+    readonly contents?: Buffer | null;
+    readonly externalLocator?: {
+      readonly type: 'https' | 'object_store';
+      readonly locator: string;
+    } | null;
+    readonly externalSize?: number;
+    readonly externalSha256?: string;
+    readonly workItemRefs?: readonly string[];
+    readonly workflowInstanceRefs?: readonly string[];
+    readonly discussionRefs?: readonly string[];
+    readonly fileId?: string;
+    readonly previousRevision?: number | null;
+    readonly executorId?: string | null;
+    readonly origin?: 'human' | 'agent' | 'workflow';
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const fileId = input.fileId ?? newId('file');
+    const metadata = this.fileMetadata({
+      ...input,
+      fileId,
+      principalId: group.localPrincipalId!,
+      clientId: group.localClientId!,
+      revision: (input.previousRevision ?? 0) + 1,
+    });
+    const directory = `workspace/shared/documents/${fileId}`;
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workspace',
+      aggregateId: 'shared',
+      expectedRevision: input.expectedRevision,
+      eventType:
+        input.previousRevision == null
+          ? 'shared_file_published'
+          : 'shared_file_revised',
+      payload: { metadata },
+      executorId: input.executorId ?? null,
+      materializedFiles: metadata.content_ref
+        ? [
+            {
+              path: `${directory}/${metadata.content_ref}`,
+              contents: input.contents!,
+            },
+          ]
+        : [],
+    });
+  }
+
+  async publishPrincipalFile(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly fileName: string;
+    readonly mediaType: string;
+    readonly contents?: Buffer | null;
+    readonly externalLocator?: {
+      readonly type: 'https' | 'object_store';
+      readonly locator: string;
+    } | null;
+    readonly externalSize?: number;
+    readonly externalSha256?: string;
+    readonly workItemRefs?: readonly string[];
+    readonly workflowInstanceRefs?: readonly string[];
+    readonly discussionRefs?: readonly string[];
+    readonly fileId?: string;
+    readonly executorId?: string | null;
+    readonly origin?: 'human' | 'agent' | 'workflow';
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const fileId = input.fileId ?? newId('file');
+    const metadata = this.fileMetadata({
+      ...input,
+      fileId,
+      principalId: group.localPrincipalId!,
+      clientId: group.localClientId!,
+      revision: 1,
+    });
+    const directory = `workspace/principals/${group.localPrincipalId}/files/${fileId}`;
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workspace',
+      aggregateId: group.localPrincipalId!,
+      expectedRevision: input.expectedRevision,
+      eventType: 'principal_file_published',
+      payload: { metadata },
+      executorId: input.executorId ?? null,
+      materializedFiles: metadata.content_ref
+        ? [
+            {
+              path: `${directory}/${metadata.content_ref}`,
+              contents: input.contents!,
+            },
+          ]
+        : [],
+    });
+  }
+
+  async publishAction(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly actionId: string;
+    readonly name: string;
+    readonly version: number;
+    readonly kind: 'run_once' | 'workflow' | 'external';
+    readonly adapter?: string | null;
+    readonly workflowRef?: string | null;
+    readonly prompt: string;
+    readonly filesystemAccess: 'read_only' | 'workspace_write';
+    readonly resultSchema?: {
+      readonly ref: string;
+      readonly schema: Record<string, unknown> | null;
+    };
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const promptRef = `workspace/principals/${group.localPrincipalId}/automations/prompts/${input.actionId}.md`;
+    const promptHash = `sha256:${crypto
+      .createHash('sha256')
+      .update(input.prompt, 'utf8')
+      .digest('hex')}`;
+    const action = actionDefinitionV3Schema.parse({
+      format: 'icarus.collaboration-action/1',
+      action_id: input.actionId,
+      name: input.name,
+      owner_principal_id: group.localPrincipalId,
+      version: input.version,
+      kind: input.kind,
+      adapter: input.adapter ?? null,
+      workflow_ref: input.workflowRef ?? null,
+      prompt_ref: promptRef,
+      prompt_hash: promptHash,
+      executor_policy: 'principal_selected',
+      filesystem_access: input.filesystemAccess,
+      result_schema: input.resultSchema ?? {
+        ref: 'collaboration-state-result@1',
+        schema: null,
+      },
+    });
+    const history = await this.sync(input.groupId);
+    const existing =
+      history.projection.actions[`${group.localPrincipalId}:${input.actionId}`];
+    if (existing && input.version !== existing.version + 1)
+      throw new Error('Action version is stale');
+    if (!existing && input.version !== 1)
+      throw new Error('New Action must start at version 1');
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workspace',
+      aggregateId: group.localPrincipalId!,
+      expectedRevision: input.expectedRevision,
+      eventType: existing ? 'action_revised' : 'action_published',
+      payload: { action },
+      materializedFiles: [{ path: promptRef, contents: input.prompt }],
+    });
+  }
+
+  async readVerifiedFile(input: {
+    readonly groupId: string;
+    readonly repositoryFile: string;
+  }): Promise<Buffer> {
+    const group = this.store.getGroup(input.groupId);
+    if (!group?.lastVerifiedHead)
+      throw new Error('Group has no verified snapshot');
+    return this.transport.readVerifiedFile({
+      repositoryPath: group.repositoryPath,
+      verifiedHead: group.lastVerifiedHead,
+      repositoryFile: input.repositoryFile,
+    });
+  }
+
   async sync(groupId: string): Promise<ValidatedProjectSpaceHistory> {
     const group = this.store.getGroup(groupId);
     if (!group) throw new Error(`Collaboration Group not found: ${groupId}`);
@@ -562,6 +790,11 @@ export class CollaborationProjectSpaceService {
       readonly payload: Record<string, unknown>;
       readonly replaceEventId?: boolean;
       readonly eventId?: string;
+      readonly executorId?: string | null;
+      readonly materializedFiles?: readonly {
+        readonly path: string;
+        readonly contents: string | Buffer | null;
+      }[];
     },
   ): Promise<CollaborationProjectSpaceGroupRecord> {
     const group = this.store.getGroup(groupId);
@@ -615,6 +848,11 @@ export class CollaborationProjectSpaceService {
     readonly payload: Record<string, unknown>;
     readonly replaceEventId?: boolean;
     readonly eventId?: string;
+    readonly executorId?: string | null;
+    readonly materializedFiles?: readonly {
+      readonly path: string;
+      readonly contents: string | Buffer | null;
+    }[];
   }): Promise<ValidatedProjectSpaceHistory> {
     return this.transport.append({
       remoteUrl: input.remoteUrl,
@@ -632,7 +870,7 @@ export class CollaborationProjectSpaceService {
               JSON.stringify(input.payload).replaceAll('__EVENT_ID__', eventId),
             ) as Record<string, unknown>)
           : input.payload;
-        return buildCollaborationEventV3({
+        const event = buildCollaborationEventV3({
           groupId: history.projection.groupId,
           eventId,
           aggregateType: input.aggregateType,
@@ -643,11 +881,14 @@ export class CollaborationProjectSpaceService {
           actor: {
             principal_id: input.identity.principalId,
             client_id: input.identity.clientId,
-            executor_id: null,
+            executor_id: input.executorId ?? null,
           },
           occurredAt: new Date(this.now()).toISOString(),
           payload,
         });
+        return input.materializedFiles
+          ? { event, materializedFiles: input.materializedFiles }
+          : event;
       },
     });
   }
@@ -670,5 +911,82 @@ export class CollaborationProjectSpaceService {
       eventRecords: history.eventRecords,
       nowMs: this.now(),
     });
+  }
+
+  private requireLocalMember(
+    groupId: string,
+  ): CollaborationProjectSpaceGroupRecord {
+    const group = this.store.getGroup(groupId);
+    if (
+      !group ||
+      group.subscriptionMode !== 'member' ||
+      !group.localPrincipalId ||
+      !group.localClientId
+    )
+      throw new Error(
+        'Observer subscriptions cannot issue collaboration commands',
+      );
+    return group;
+  }
+
+  private fileMetadata(input: {
+    readonly fileId: string;
+    readonly principalId: string;
+    readonly clientId: string;
+    readonly fileName: string;
+    readonly mediaType: string;
+    readonly contents?: Buffer | null;
+    readonly externalLocator?: {
+      readonly type: 'https' | 'object_store';
+      readonly locator: string;
+    } | null;
+    readonly externalSize?: number;
+    readonly externalSha256?: string;
+    readonly workItemRefs?: readonly string[];
+    readonly workflowInstanceRefs?: readonly string[];
+    readonly discussionRefs?: readonly string[];
+    readonly executorId?: string | null;
+    readonly origin?: 'human' | 'agent' | 'workflow';
+    readonly revision: number;
+  }): FileMetadata {
+    const fileName = collaborationBasenameSchema.parse(input.fileName);
+    const contents = input.contents ?? null;
+    if ((contents === null) === (input.externalLocator == null))
+      throw new Error(
+        'Provide either business file bytes or an external locator',
+      );
+    if (contents && contents.byteLength > MAX_PROJECT_SPACE_FILE_BYTES)
+      throw new Error('Project space file exceeds the 10 MiB local Git limit');
+    if (
+      contents === null &&
+      (!Number.isSafeInteger(input.externalSize) ||
+        input.externalSize! < 0 ||
+        !input.externalSha256)
+    )
+      throw new Error('External files require their verified size and sha256');
+    const sha256 = contents
+      ? `sha256:${crypto.createHash('sha256').update(contents).digest('hex')}`
+      : input.externalSha256!;
+    return {
+      format: 'icarus.collaboration-file-metadata/1',
+      file_id: input.fileId,
+      original_filename: fileName,
+      content_ref: contents ? fileName : null,
+      external_locator: input.externalLocator ?? null,
+      media_type: input.mediaType,
+      size: contents?.byteLength ?? input.externalSize!,
+      sha256,
+      uploader_principal_id: input.principalId,
+      uploader_client_id: input.clientId,
+      executor_id: input.executorId ?? null,
+      origin: input.origin ?? 'human',
+      refs: {
+        work_item_refs: [...(input.workItemRefs ?? [])],
+        workflow_instance_refs: [...(input.workflowInstanceRefs ?? [])],
+        discussion_refs: [...(input.discussionRefs ?? [])],
+      },
+      created_at: new Date(this.now()).toISOString(),
+      revision: input.revision,
+    };
   }
 }

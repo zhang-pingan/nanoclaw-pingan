@@ -325,6 +325,14 @@ export interface CollaborationProjectionV3 {
   permissionGrants: Record<string, PermissionGrant>;
   progressUpdates: Record<string, ProgressUpdate>;
   files: Record<string, FileMetadata>;
+  fileLocations: Record<
+    string,
+    {
+      readonly scope: 'shared' | 'principal';
+      readonly principalId: string | null;
+      readonly repositoryDirectory: string;
+    }
+  >;
   actions: Record<string, ActionDefinitionV3>;
   workItems: Record<string, WorkItem>;
   workItemUpdates: Record<string, WorkItemProgress[]>;
@@ -675,6 +683,7 @@ function reduceGenesis(event: CollaborationEventV3): CollaborationProjectionV3 {
     },
     progressUpdates: {},
     files: {},
+    fileLocations: {},
     actions: {},
     workItems: {},
     workItemUpdates: {},
@@ -957,7 +966,27 @@ export function reduceCollaborationEventV3(
         event.aggregate_id !== event.actor.principal_id
       )
         conflict('Principal file must use the actor Workspace Aggregate');
+      if (
+        event.event_type.startsWith('shared_') &&
+        event.aggregate_id !== 'shared'
+      )
+        conflict('Shared file must use the shared Workspace Aggregate');
+      const previous = next.files[metadata.file_id];
+      if (event.event_type === 'shared_file_revised') {
+        if (!previous || metadata.revision !== previous.revision + 1)
+          conflict('Shared file revision is stale or missing');
+      } else if (previous) {
+        conflict('Published file id already exists');
+      }
       next.files[metadata.file_id] = metadata;
+      const shared = event.event_type.startsWith('shared_');
+      next.fileLocations[metadata.file_id] = {
+        scope: shared ? 'shared' : 'principal',
+        principalId: shared ? null : event.actor.principal_id,
+        repositoryDirectory: shared
+          ? `workspace/shared/documents/${metadata.file_id}`
+          : `workspace/principals/${event.actor.principal_id}/files/${metadata.file_id}`,
+      };
       break;
     }
     case 'action_published':

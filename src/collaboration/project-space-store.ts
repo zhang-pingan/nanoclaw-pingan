@@ -998,10 +998,16 @@ export class CollaborationProjectSpaceStore {
       const principal = metadata.uploader_principal_id;
       const display = projection.members[principal]?.display_name ?? principal;
       const suffix = principal.slice(-4);
-      const virtualPath = `Members/${display} · ${suffix}/Files/${metadata.original_filename}`;
-      const repositoryPath = metadata.content_ref
-        ? `workspace/principals/${principal}/files/${metadata.file_id}/${metadata.content_ref}`
-        : `workspace/principals/${principal}/files/${metadata.file_id}/metadata.json`;
+      const location = projection.fileLocations[metadata.file_id];
+      if (!location)
+        throw new Error(
+          `Verified file location is missing: ${metadata.file_id}`,
+        );
+      const virtualPath =
+        location.scope === 'shared'
+          ? `Shared space/${metadata.original_filename}`
+          : `Member spaces/${display} · ${suffix}/Files/${metadata.original_filename}`;
+      const repositoryPath = `${location.repositoryDirectory}/${metadata.content_ref ?? 'metadata.json'}`;
       fileStatement.run(
         groupId,
         metadata.file_id,

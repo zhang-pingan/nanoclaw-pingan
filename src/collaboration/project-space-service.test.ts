@@ -36,6 +36,7 @@ function tempDirectory(): string {
 
 class MemoryTransport implements CollaborationProjectSpaceTransport {
   readonly histories = new Map<string, ValidatedProjectSpaceHistory>();
+  readonly files = new Map<string, Buffer>();
   appendCount = 0;
 
   async inspect(input: {
@@ -67,12 +68,30 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
 
   async append(input: {
     remoteUrl: string;
-    buildEvent: (
-      history: ValidatedProjectSpaceHistory,
-    ) => ValidatedProjectSpaceHistory['eventRecords'][number]['event'];
+    buildEvent: (history: ValidatedProjectSpaceHistory) =>
+      | ValidatedProjectSpaceHistory['eventRecords'][number]['event']
+      | {
+          event: ValidatedProjectSpaceHistory['eventRecords'][number]['event'];
+          materializedFiles: readonly {
+            path: string;
+            contents: string | Buffer | null;
+          }[];
+        };
   }): Promise<ValidatedProjectSpaceHistory> {
     const current = await this.inspect({ remoteUrl: input.remoteUrl });
-    const nextEvent = input.buildEvent(current);
+    const built = input.buildEvent(current);
+    const nextEvent = 'event' in built ? built.event : built;
+    if ('event' in built)
+      for (const file of built.materializedFiles) {
+        if (file.contents === null) this.files.delete(file.path);
+        else
+          this.files.set(
+            file.path,
+            Buffer.isBuffer(file.contents)
+              ? Buffer.from(file.contents)
+              : Buffer.from(file.contents, 'utf8'),
+          );
+      }
     const order = current.eventRecords.length + 1;
     const head = order.toString(16).padStart(40, '0');
     const history: ValidatedProjectSpaceHistory = {
@@ -86,6 +105,12 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
     this.appendCount += 1;
     this.histories.set(input.remoteUrl, history);
     return history;
+  }
+
+  async readVerifiedFile(input: { repositoryFile: string }): Promise<Buffer> {
+    const contents = this.files.get(input.repositoryFile);
+    if (!contents) throw new Error('Verified file does not exist');
+    return Buffer.from(contents);
   }
 }
 
@@ -244,5 +269,116 @@ describe('Collaboration project space v3 Group and identity service', () => {
     expect(JSON.stringify(updated.projection)).not.toMatch(/role|claim/iu);
     owner.store.close();
     bob.store.close();
+  });
+
+  it('publishes progress, original business bytes, and Action Markdown into the verified Workspace', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const created = await owner.service.createGroup({
+      remoteUrl: '/tmp/project.git',
+      name: 'Project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_project',
+    });
+    const workspaceRevision =
+      created.projection?.aggregateHeads[`workspace:${ALICE.principalId}`]
+        ?.revision ?? 0;
+    const progressed = await owner.service.postProgress({
+      groupId: 'group_project',
+      expectedRevision: workspaceRevision,
+      summary: 'Contract draft complete',
+      completed: ['Drafted contract'],
+    });
+    expect(Object.values(progressed.projection?.progressUpdates ?? {})).toEqual(
+      [
+        expect.objectContaining({
+          principal_id: ALICE.principalId,
+          actor_client_id: ALICE.clientId,
+          summary: 'Contract draft complete',
+        }),
+      ],
+    );
+
+    const contents = Buffer.from('%PDF-1.7\ncontract\n', 'utf8');
+    const shared = await owner.service.publishSharedFile({
+      groupId: 'group_project',
+      expectedRevision: 0,
+      fileId: 'file_contract',
+      fileName: 'contract.pdf',
+      mediaType: 'application/pdf',
+      contents,
+    });
+    const location = shared.projection?.fileLocations.file_contract;
+    const repositoryFile = `${location!.repositoryDirectory}/contract.pdf`;
+    expect(repositoryFile).toBe(
+      'workspace/shared/documents/file_contract/contract.pdf',
+    );
+    await expect(
+      owner.service.readVerifiedFile({
+        groupId: 'group_project',
+        repositoryFile,
+      }),
+    ).resolves.toEqual(contents);
+
+    const actionRevision =
+      shared.projection?.aggregateHeads[`workspace:${ALICE.principalId}`]
+        ?.revision ?? 0;
+    const action = await owner.service.publishAction({
+      groupId: 'group_project',
+      expectedRevision: actionRevision,
+      actionId: 'draft_contract',
+      name: 'Draft contract',
+      version: 1,
+      kind: 'run_once',
+      prompt: '# Draft contract\n\nUse the approved requirements.\n',
+      filesystemAccess: 'workspace_write',
+    });
+    const definition =
+      action.projection?.actions[`${ALICE.principalId}:draft_contract`];
+    expect(definition?.prompt_hash).toMatch(/^sha256:[0-9a-f]{64}$/u);
+    await expect(
+      owner.service.readVerifiedFile({
+        groupId: 'group_project',
+        repositoryFile: definition!.prompt_ref,
+      }),
+    ).resolves.toEqual(
+      Buffer.from(
+        '# Draft contract\n\nUse the approved requirements.\n',
+        'utf8',
+      ),
+    );
+    owner.store.close();
+  });
+
+  it('requires integrity metadata for an external business file', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/project.git',
+      name: 'Project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_project',
+    });
+    await expect(
+      owner.service.publishSharedFile({
+        groupId: 'group_project',
+        expectedRevision: 0,
+        fileName: 'large.zip',
+        mediaType: 'application/zip',
+        externalLocator: {
+          type: 'object_store',
+          locator: 'objects/project/large.zip',
+        },
+      }),
+    ).rejects.toThrow(/verified size and sha256/u);
+    owner.store.close();
   });
 });
