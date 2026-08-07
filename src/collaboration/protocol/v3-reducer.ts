@@ -720,7 +720,12 @@ export function reduceCollaborationEventV3(
     event.event_type !== 'group_reopened'
   )
     conflict('Archived Groups reject business writes');
-  assertMemberAndClient(current, event);
+  if (
+    event.event_type !== 'membership_requested' &&
+    event.event_type !== 'member_registered' &&
+    event.event_type !== 'client_registered'
+  )
+    assertMemberAndClient(current, event);
 
   const next = structuredClone(current);
   const payload = parseCollaborationEventPayloadV3(event);
