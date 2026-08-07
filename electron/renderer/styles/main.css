@@ -16425,6 +16425,822 @@ textarea.workflow-wizard-input {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+/* Graphical Agent Group FSM editor */
+.collaboration-dialog.collaboration-dialog-wide {
+  width: min(1320px, calc(100vw - 32px));
+}
+
+.collaboration-fsm-editor {
+  min-width: 0;
+  display: grid;
+  gap: 0;
+  margin-top: 18px;
+  border: 1px solid var(--minimal-line, #dfe2e7);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.collaboration-fsm-editor.compact {
+  margin-top: 0;
+}
+
+.collaboration-fsm-roles {
+  min-width: 0;
+  border-bottom: 1px solid var(--minimal-line, #dfe2e7);
+  background: #f8f9fa;
+}
+
+.collaboration-fsm-roles > summary {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.collaboration-fsm-roles > summary::-webkit-details-marker {
+  display: none;
+}
+
+.collaboration-fsm-roles > summary::before {
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid #737b86;
+  border-bottom: 1.5px solid #737b86;
+  transform: rotate(-45deg);
+  content: '';
+}
+
+.collaboration-fsm-roles[open] > summary::before {
+  transform: rotate(45deg) translateY(-2px);
+}
+
+.collaboration-fsm-roles > summary strong {
+  font-size: 12px;
+}
+
+.collaboration-fsm-roles > summary span {
+  color: #737b86;
+  font-size: 10px;
+}
+
+.collaboration-fsm-roles-body {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding: 0 14px 12px;
+}
+
+.collaboration-fsm-roles:not([open]) > .collaboration-fsm-roles-body {
+  display: none;
+}
+
+.collaboration-fsm-roles-head,
+.collaboration-fsm-outcomes-head,
+.collaboration-fsm-inspector-head,
+.collaboration-fsm-toolbar,
+.collaboration-fsm-composer-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.collaboration-fsm-roles-head strong,
+.collaboration-fsm-outcomes-head strong {
+  font-size: 12px;
+}
+
+.collaboration-fsm-roles-head .btn-ghost,
+.collaboration-fsm-outcomes-head .btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.collaboration-fsm-role-list {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.collaboration-fsm-role-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns:
+    minmax(100px, 0.8fr) minmax(120px, 1fr) 118px minmax(150px, 1.4fr)
+    30px;
+  align-items: end;
+  gap: 8px;
+}
+
+.collaboration-fsm-role-row label,
+.collaboration-fsm-initial-role,
+.collaboration-fsm-outcome-row label,
+.collaboration-fsm-composer-grid label,
+.collaboration-fsm-existing-target {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  color: var(--minimal-text-muted, #8a929d);
+  font-size: 10px;
+}
+
+.collaboration-fsm-role-row input,
+.collaboration-fsm-initial-role select,
+.collaboration-fsm-outcome-row input,
+.collaboration-fsm-outcome-row select,
+.collaboration-fsm-composer-grid input,
+.collaboration-fsm-existing-target select {
+  width: 100%;
+  min-width: 0;
+  height: 31px;
+  padding: 5px 7px;
+  border: 1px solid var(--minimal-line, #dfe2e7);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--minimal-text, #202327);
+  font-size: 11px;
+}
+
+.collaboration-fsm-cardinality {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 4px;
+}
+
+.collaboration-fsm-cardinality i {
+  color: var(--minimal-text-muted, #8a929d);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.collaboration-fsm-initial-role {
+  width: min(300px, 100%);
+}
+
+.collaboration-fsm-toolbar {
+  min-height: 46px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--minimal-line, #dfe2e7);
+  background: #fff;
+}
+
+.collaboration-fsm-segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--minimal-line, #dfe2e7);
+  border-radius: 7px;
+  background: #f4f5f6;
+}
+
+.collaboration-fsm-segmented button {
+  min-height: 27px;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--minimal-text-muted, #8a929d);
+  font-size: 11px;
+  box-shadow: none;
+}
+
+.collaboration-fsm-segmented button.active {
+  background: #fff;
+  color: var(--minimal-text, #202327);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+.collaboration-fsm-tools {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.collaboration-fsm-icon-button {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--minimal-text-soft, #575f6a);
+  box-shadow: none;
+}
+
+.collaboration-fsm-icon-button:hover {
+  border-color: var(--minimal-line, #dfe2e7);
+  background: #f4f5f6;
+  transform: none;
+}
+
+.collaboration-fsm-icon-button:disabled {
+  cursor: default;
+  opacity: 0.32;
+}
+
+.collaboration-fsm-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.collaboration-fsm-workspace {
+  min-width: 0;
+  height: min(580px, calc(100vh - 350px));
+  min-height: 430px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 316px;
+}
+
+.collaboration-fsm-editor.compact .collaboration-fsm-workspace {
+  height: 440px;
+  min-height: 360px;
+}
+
+.collaboration-fsm-canvas {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background-color: #f7f8f9;
+  background-image: radial-gradient(#cfd4dc 0.75px, transparent 0.75px);
+  background-size: 18px 18px;
+  outline: none;
+}
+
+.collaboration-fsm-canvas:focus-visible {
+  box-shadow: inset 0 0 0 2px #4574a8;
+}
+
+.collaboration-fsm-zoom {
+  width: max-content;
+  height: max-content;
+  transform-origin: 0 0;
+}
+
+.collaboration-fsm-stage {
+  position: relative;
+  min-width: 880px;
+  min-height: 520px;
+}
+
+.collaboration-fsm-lane {
+  position: absolute;
+  right: 18px;
+  left: 18px;
+  border-top: 1px solid #d6dae0;
+  border-bottom: 1px solid #d6dae0;
+  background: rgba(255, 255, 255, 0.46);
+  pointer-events: none;
+}
+
+.collaboration-fsm-lane > span {
+  position: sticky;
+  left: 10px;
+  display: inline-block;
+  margin: 7px 0 0 9px;
+  padding: 2px 5px;
+  background: #f7f8f9;
+  color: #737b86;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.collaboration-fsm-edges {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.collaboration-fsm-edge > path {
+  fill: none;
+  stroke: #929aa5;
+  stroke-width: 1.6;
+}
+
+.collaboration-fsm-edge.visited > path {
+  stroke: #2e7d5b;
+  stroke-width: 2.3;
+}
+
+.collaboration-fsm-edge.invalid > path {
+  stroke: #c24135;
+  stroke-dasharray: 5 4;
+}
+
+.collaboration-fsm-edge-label {
+  width: fit-content;
+  max-width: 136px;
+  margin: auto;
+  overflow: hidden;
+  padding: 3px 6px;
+  border: 1px solid #d7dbe0;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #4f5762;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collaboration-fsm-node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 192px;
+  height: 94px;
+  display: grid;
+  grid-template-rows: 17px 20px 16px 18px;
+  align-content: center;
+  gap: 1px;
+  padding: 8px 11px;
+  overflow: hidden;
+  border: 1px solid #bfc5cd;
+  border-radius: 7px;
+  background: #fff;
+  color: #202327;
+  text-align: left;
+  box-shadow: 0 2px 5px rgba(16, 24, 40, 0.08);
+  cursor: grab;
+}
+
+.collaboration-fsm-editor.readonly .collaboration-fsm-node {
+  cursor: pointer;
+}
+
+.collaboration-fsm-node:hover {
+  border-color: #7b8490;
+  transform: none;
+}
+
+.collaboration-fsm-node.selected {
+  border-color: #356b9a;
+  box-shadow: 0 0 0 2px rgba(53, 107, 154, 0.18);
+}
+
+.collaboration-fsm-node.initial {
+  border-left: 4px solid #356b9a;
+}
+
+.collaboration-fsm-node.terminal {
+  border-color: #61806f;
+  background: #f1f7f3;
+}
+
+.collaboration-fsm-node.visited {
+  background: #f2f8f5;
+}
+
+.collaboration-fsm-node.current {
+  border-color: #1d7a52;
+  box-shadow: 0 0 0 3px rgba(29, 122, 82, 0.2);
+}
+
+.collaboration-fsm-node.timed-out {
+  border-color: #bd3b31;
+  background: #fff4f2;
+}
+
+.collaboration-fsm-node.invalid {
+  border-bottom-color: #c24135;
+  border-bottom-width: 3px;
+}
+
+.collaboration-fsm-node-flags {
+  min-width: 0;
+  display: flex;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.collaboration-fsm-node-flags i {
+  padding: 1px 4px;
+  border: 1px solid #cad0d7;
+  border-radius: 4px;
+  color: #59616d;
+  font-size: 8px;
+  font-style: normal;
+  line-height: 13px;
+}
+
+.collaboration-fsm-node strong,
+.collaboration-fsm-node code,
+.collaboration-fsm-node-owner {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.collaboration-fsm-node strong {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.collaboration-fsm-node code,
+.collaboration-fsm-node-owner {
+  color: #737b86;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.collaboration-fsm-inspector {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border-left: 1px solid var(--minimal-line, #dfe2e7);
+  background: #fff;
+}
+
+.collaboration-fsm-inspector-head {
+  min-height: 54px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--minimal-line, #dfe2e7);
+}
+
+.collaboration-fsm-inspector-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.collaboration-fsm-inspector-head span {
+  color: #8a929d;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.collaboration-fsm-inspector-head strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collaboration-fsm-inspector-scroll {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.collaboration-fsm-inspector-empty {
+  padding: 22px 14px;
+  color: #8a929d;
+  font-size: 12px;
+}
+
+.collaboration-fsm-field {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.collaboration-fsm-field > span,
+.collaboration-fsm-outcome-row label > span,
+.collaboration-fsm-composer-grid label > span,
+.collaboration-fsm-existing-target > span {
+  color: #737b86;
+  font-size: 10px;
+}
+
+.collaboration-fsm-field input,
+.collaboration-fsm-field select,
+.collaboration-fsm-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid #d7dbe0;
+  border-radius: 6px;
+  background: #fff;
+  color: #202327;
+  font-size: 11px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.collaboration-fsm-field input,
+.collaboration-fsm-field select {
+  height: 33px;
+}
+
+.collaboration-fsm-field input:disabled,
+.collaboration-fsm-field select:disabled,
+.collaboration-fsm-field textarea:disabled {
+  background: #f4f5f6;
+  color: #737b86;
+}
+
+.collaboration-fsm-switch-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid #eceef1;
+  border-bottom: 1px solid #eceef1;
+}
+
+.collaboration-fsm-switch-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #4f5762;
+  font-size: 11px;
+}
+
+.collaboration-fsm-switch-row button {
+  padding: 3px 5px;
+  border: 0;
+  background: transparent;
+  color: #356b9a;
+  font-size: 10px;
+}
+
+.collaboration-fsm-initial-chip {
+  padding: 2px 5px;
+  border: 1px solid #b7cadb;
+  border-radius: 4px;
+  background: #eef5fa;
+  color: #356b9a;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.collaboration-fsm-timeouts {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.collaboration-fsm-outcomes {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.collaboration-fsm-outcome-list {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.collaboration-fsm-outcome-row {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border-left: 3px solid #a9b0ba;
+  background: #f7f8f9;
+}
+
+.collaboration-fsm-outcome-title {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 30px;
+  align-items: center;
+  gap: 6px;
+}
+
+.collaboration-fsm-outcome-title strong,
+.collaboration-fsm-outcome-title code {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collaboration-fsm-outcome-title code {
+  color: #737b86;
+}
+
+.collaboration-fsm-no-outcomes {
+  padding: 12px 0;
+  color: #8a929d;
+  font-size: 11px;
+}
+
+.collaboration-fsm-outcome-composer {
+  min-width: 0;
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid #b9c6d2;
+  border-radius: 7px;
+  background: #f3f7fa;
+}
+
+.collaboration-fsm-composer-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.collaboration-fsm-composer-presets button {
+  min-height: 25px;
+  padding: 3px 6px;
+  border: 1px solid #cbd2d9;
+  border-radius: 5px;
+  background: #fff;
+  color: #4f5762;
+  font-size: 9px;
+}
+
+.collaboration-fsm-composer-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.collaboration-fsm-destination {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid #d7dbe0;
+}
+
+.collaboration-fsm-destination legend {
+  padding: 0 4px;
+  color: #737b86;
+  font-size: 9px;
+}
+
+.collaboration-fsm-destination label {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #4f5762;
+  font-size: 9px;
+}
+
+.collaboration-fsm-composer-actions {
+  justify-content: flex-end;
+}
+
+.collaboration-fsm-validation {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 12px;
+  border-top: 1px solid #dfe2e7;
+  background: #f8f9fa;
+}
+
+.collaboration-fsm-validation > div:first-child {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+}
+
+.collaboration-fsm-validation strong {
+  color: #202327;
+  font-size: 11px;
+}
+
+.collaboration-fsm-validation span {
+  color: #737b86;
+  font-size: 9px;
+}
+
+.collaboration-fsm-validation.success {
+  grid-template-columns: 1fr;
+  border-left: 3px solid #2e7d5b;
+}
+
+.collaboration-fsm-validation.danger {
+  border-left: 3px solid #c24135;
+}
+
+.collaboration-fsm-validation.warning {
+  border-left: 3px solid #a57a1b;
+}
+
+.collaboration-fsm-issue-list {
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.collaboration-fsm-issue-list button {
+  min-width: max-content;
+  max-width: 310px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px;
+  border: 1px solid #d7dbe0;
+  border-radius: 5px;
+  background: #fff;
+  color: #4f5762;
+  font-size: 9px;
+  box-shadow: none;
+}
+
+.collaboration-fsm-issue-list button.error > span {
+  color: #b42318;
+}
+
+.collaboration-fsm-issue-list button.warning > span {
+  color: #856404;
+}
+
+.collaboration-machine-map-section > #collaboration-runtime-fsm-host {
+  min-width: 0;
+}
+
+@media (max-width: 980px) {
+  .collaboration-fsm-role-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) 30px;
+  }
+
+  .collaboration-fsm-role-row > label:nth-child(4) {
+    grid-column: 1 / 3;
+  }
+
+  .collaboration-fsm-workspace {
+    grid-template-columns: minmax(0, 1fr) 286px;
+  }
+}
+
+@media (max-width: 720px) {
+  .collaboration-fsm-editor {
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .collaboration-fsm-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .collaboration-fsm-tools {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .collaboration-fsm-workspace,
+  .collaboration-fsm-editor.compact .collaboration-fsm-workspace {
+    height: auto;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) 250px;
+  }
+
+  .collaboration-fsm-canvas {
+    height: 470px;
+  }
+
+  .collaboration-fsm-inspector {
+    height: 470px;
+  }
+
+  .collaboration-fsm-role-row {
+    grid-template-columns: minmax(0, 1fr) 30px;
+  }
+
+  .collaboration-fsm-role-row > label:nth-child(4) {
+    grid-column: auto;
+  }
+
+  .collaboration-fsm-role-row > label {
+    grid-column: 1;
+  }
+
+  .collaboration-fsm-role-row > .collaboration-fsm-icon-button {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .collaboration-fsm-validation {
+    grid-template-columns: 112px minmax(0, 1fr);
+  }
+}
+
 .collaboration-state-implementation-list,
 .collaboration-upload-list,
 .collaboration-completion-layout {

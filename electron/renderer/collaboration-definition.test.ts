@@ -7,7 +7,59 @@ import {
   defaultCollaborationCreateDraft,
 } from './collaboration-definition.js';
 
-function build(draft = defaultCollaborationCreateDraft()) {
+function completeDraft() {
+  const draft = defaultCollaborationCreateDraft();
+  draft.states[0]!.transitions = [
+    {
+      outcome: 'ready_for_review',
+      label: 'Ready for review',
+      targetState: 'review',
+    },
+    {
+      outcome: 'blocked',
+      label: 'Blocked',
+      targetState: 'development',
+    },
+  ];
+  draft.states.push(
+    {
+      id: 'review',
+      label: 'Review',
+      description: '',
+      ownerRole: 'reviewer',
+      terminal: false,
+      startTimeoutMs: '',
+      executionTimeoutMs: '',
+      reminderIntervalMs: '',
+      transitions: [
+        {
+          outcome: 'approved',
+          label: 'Approved',
+          targetState: 'completed',
+        },
+        {
+          outcome: 'changes_requested',
+          label: 'Changes requested',
+          targetState: 'development',
+        },
+      ],
+    },
+    {
+      id: 'completed',
+      label: 'Completed',
+      description: '',
+      ownerRole: '',
+      terminal: true,
+      startTimeoutMs: '',
+      executionTimeoutMs: '',
+      reminderIntervalMs: '',
+      transitions: [],
+    },
+  );
+  return draft;
+}
+
+function build(draft = completeDraft()) {
   return buildCollaborationCreateRequest({
     remoteUrl: '/tmp/collaboration.git',
     name: 'Multi-role group',
@@ -17,6 +69,13 @@ function build(draft = defaultCollaborationCreateDraft()) {
 }
 
 describe('Collaboration create request builder', () => {
+  it('starts a new graphical draft with one configurable initial State', () => {
+    const draft = defaultCollaborationCreateDraft();
+    expect(draft.states).toHaveLength(1);
+    expect(draft.initialState).toBe('development');
+    expect(draft.states[0]?.transitions).toEqual([]);
+  });
+
   it('builds only roles and the creator-owned FSM skeleton', () => {
     const request = build();
 
@@ -79,7 +138,7 @@ describe('Collaboration create request builder', () => {
   });
 
   it('snapshots optional notify-only timeout policies on non-terminal States', () => {
-    const draft = defaultCollaborationCreateDraft();
+    const draft = completeDraft();
     draft.states[0]!.startTimeoutMs = '60000';
     draft.states[0]!.executionTimeoutMs = 300000;
     draft.states[0]!.reminderIntervalMs = '30000';
@@ -105,11 +164,11 @@ describe('Collaboration create request builder', () => {
   });
 
   it('rejects terminal timeout policies and reminder-only policies', () => {
-    const terminalTimeout = defaultCollaborationCreateDraft();
+    const terminalTimeout = completeDraft();
     terminalTimeout.states[2]!.startTimeoutMs = '1000';
     expect(() => build(terminalTimeout)).toThrow(/终态.*不能配置超时策略/);
 
-    const reminderOnly = defaultCollaborationCreateDraft();
+    const reminderOnly = completeDraft();
     reminderOnly.states[0]!.reminderIntervalMs = '1000';
     expect(() => build(reminderOnly)).toThrow(/必须先配置开始或执行超时/);
   });
@@ -117,14 +176,14 @@ describe('Collaboration create request builder', () => {
   it.each([
     [
       'duplicate IDs',
-      (draft: ReturnType<typeof defaultCollaborationCreateDraft>) => {
+      (draft: ReturnType<typeof completeDraft>) => {
         draft.roles[1]!.id = draft.roles[0]!.id;
       },
       /角色 ID 重复/,
     ],
     [
       'invalid cardinality',
-      (draft: ReturnType<typeof defaultCollaborationCreateDraft>) => {
+      (draft: ReturnType<typeof completeDraft>) => {
         draft.roles[0]!.minMembers = 2;
         draft.roles[0]!.maxMembers = 1;
       },
@@ -132,35 +191,35 @@ describe('Collaboration create request builder', () => {
     ],
     [
       'unknown role references',
-      (draft: ReturnType<typeof defaultCollaborationCreateDraft>) => {
+      (draft: ReturnType<typeof completeDraft>) => {
         draft.states[0]!.ownerRole = 'missing_role';
       },
       /未知角色/,
     ],
     [
       'state-owning role cardinality above one',
-      (draft: ReturnType<typeof defaultCollaborationCreateDraft>) => {
+      (draft: ReturnType<typeof completeDraft>) => {
         draft.roles[0]!.maxMembers = 2;
       },
       /最大人数必须为 1/,
     ],
     [
       'unknown state outcomes',
-      (draft: ReturnType<typeof defaultCollaborationCreateDraft>) => {
+      (draft: ReturnType<typeof completeDraft>) => {
         draft.states[0]!.transitions[0]!.targetState = 'missing_state';
       },
       /未知状态/,
     ],
     [
       'missing transitions',
-      (draft: ReturnType<typeof defaultCollaborationCreateDraft>) => {
+      (draft: ReturnType<typeof completeDraft>) => {
         draft.states[0]!.transitions = [];
       },
       /至少需要一个 Outcome/,
     ],
     [
       'duplicate outcomes',
-      (draft: ReturnType<typeof defaultCollaborationCreateDraft>) => {
+      (draft: ReturnType<typeof completeDraft>) => {
         draft.states[0]!.transitions.push({
           outcome: draft.states[0]!.transitions[0]!.outcome,
           targetState: 'review',
@@ -169,7 +228,7 @@ describe('Collaboration create request builder', () => {
       /Outcome 重复/,
     ],
   ])('rejects %s before creating a request', (_name, mutate, message) => {
-    const draft = defaultCollaborationCreateDraft();
+    const draft = completeDraft();
     mutate(draft);
     expect(() => build(draft)).toThrow(message);
   });

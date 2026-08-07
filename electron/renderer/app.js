@@ -2,11 +2,18 @@
 import {
   buildCollaborationCreateRequest,
   buildCollaborationJoinRequest,
+  collaborationDraftFromDefinition,
   createRoleDraft,
   createStateDraft,
   createTransitionDraft,
   defaultCollaborationCreateDraft,
 } from './collaboration-definition.js';
+import {
+  collaborationMachineEditable,
+  collaborationRuntimeGraphHighlights,
+  validateCollaborationFsmDraft,
+} from './collaboration-fsm.js';
+import { mountCollaborationFsmEditor } from './collaboration-fsm-editor.js';
 import {
   collaborationAuditEventTimeline,
   collaborationDuration,
@@ -1075,12 +1082,17 @@ function renderCollaborationOverview() {
   const { group, definition, executions = [] } = collaborationState.detail;
   const turn = selectedCollaborationTurn();
   const requiredRoles = definition?.group?.required_roles || [];
+  const canEditMachine = collaborationMachineEditable(group);
   return `
     <section class="collaboration-metrics" aria-label="群组状态">
       ${collaborationMetric('生命周期', group.lifecycle, collaborationStatusTone(group.lifecycle))}
       ${collaborationMetric('业务状态', group.businessState || '未开始')}
       ${collaborationMetric('协议', group.protocolStatus, collaborationStatusTone(group.protocolStatus))}
       ${collaborationMetric('本地执行', String(executions.length))}
+    </section>
+    <section class="collaboration-section collaboration-machine-map-section">
+      <div class="collaboration-section-head"><h3>Machine</h3>${canEditMachine ? '<button class="btn-ghost" type="button" data-collaboration-action="edit-machine">编辑流程</button>' : '<span>只读</span>'}</div>
+      <div id="collaboration-runtime-fsm-host"></div>
     </section>
     <section class="collaboration-section">
       <div class="collaboration-section-head"><h3>当前 Turn</h3>${turn ? collaborationStatus(turn.state) : ''}</div>
@@ -1711,6 +1723,29 @@ function renderCollaborationContent() {
   collaborationContent.innerHTML = (
     renderers[collaborationState.activeTab] || renderCollaborationOverview
   )();
+  const graphHost = document.getElementById('collaboration-runtime-fsm-host');
+  const definition = collaborationState.detail?.definition;
+  const group = collaborationState.detail?.group;
+  if (graphHost && definition?.machine && group?.projection) {
+    const highlights = collaborationRuntimeGraphHighlights(
+      definition,
+      group.projection,
+    );
+    const turn = selectedCollaborationTurn();
+    const deadlineAt = turn?.executionDeadlineAt || turn?.startDeadlineAt;
+    if (deadlineAt && Date.parse(deadlineAt) <= Date.now())
+      highlights.timeoutStateId = turn.stateId;
+    mountCollaborationFsmEditor(
+      graphHost,
+      collaborationDraftFromDefinition(definition),
+      {
+        readonly: true,
+        compact: true,
+        selectedStateId: group.businessState,
+        highlights,
+      },
+    );
+  }
 }
 
 async function loadCollaborationTabData(tab) {
@@ -2049,7 +2084,7 @@ function bindCollaborationCreateBuilder(editor, initialDraft) {
 }
 
 function openCreateCollaborationDialog() {
-  let readDraft = null;
+  let fsmEditor = null;
   openCollaborationDialog({
     title: '创建群组',
     submitText: '创建',
@@ -2064,18 +2099,44 @@ function openCreateCollaborationDialog() {
       const editor = document.getElementById(
         'collaboration-create-builder-host',
       );
-      readDraft = bindCollaborationCreateBuilder(
+      fsmEditor = mountCollaborationFsmEditor(
         editor,
         defaultCollaborationCreateDraft(),
+        {
+          confirm: (message) =>
+            openConfirmDialog(message, {
+              title: '确认流程变更',
+              confirmText: '继续',
+            }),
+          onError: (message) => showToast(message, 2800),
+        },
       );
     },
     onSubmit: async (formData) => {
+      const draft = fsmEditor.getDraft();
+      const issues = validateCollaborationFsmDraft(draft);
+      const errors = issues.filter((issue) => issue.severity === 'error');
+      if (errors.length) throw new Error(errors[0].message);
+      const confirmations = issues.filter(
+        (issue) => issue.confirmRequired === true,
+      );
+      if (
+        confirmations.length &&
+        !(await openConfirmDialog(
+          confirmations.map((issue) => issue.message).join('\n'),
+          {
+            title: '确认循环流程',
+            confirmText: '确认发布',
+          },
+        ))
+      )
+        return;
       const values = Object.fromEntries(formData.entries());
       const body = buildCollaborationCreateRequest({
         remoteUrl: values.remoteUrl,
         name: values.name,
         signingKeyPath: values.signingKeyPath,
-        draft: readDraft(),
+        draft,
       });
       const data = await collaborationRequest('/groups', {
         method: 'POST',
@@ -2085,6 +2146,117 @@ function openCreateCollaborationDialog() {
       await loadCollaborationGroups({ preserveSelection: false });
       await selectCollaborationGroup(data.group.groupId);
       showToast('群组已创建');
+    },
+  });
+}
+
+function collaborationMachinePayloadFromDraft(draft) {
+  const built = buildCollaborationCreateRequest({
+    remoteUrl: 'local://machine-editor',
+    name: 'Machine editor',
+    signingKeyPath: '/local/machine-editor-key',
+    draft,
+  });
+  return {
+    machine: built.machine,
+    roles: built.roles,
+    layout: built.layout,
+  };
+}
+
+function openEditCollaborationMachineDialog() {
+  const detail = collaborationState.detail;
+  const group = detail?.group;
+  if (!group || !detail?.definition) return;
+  if (group.localPrincipalId !== group.creatorPrincipalId)
+    throw new Error('只有群组创建者可以编辑 Machine');
+  if (!collaborationMachineEditable(group))
+    throw new Error(`${group.lifecycle} 生命周期只能查看 Machine`);
+  const initialDraft = collaborationDraftFromDefinition(detail.definition);
+  const initialPayload = collaborationMachinePayloadFromDraft(initialDraft);
+  let fsmEditor = null;
+  openCollaborationDialog({
+    title: '编辑 Machine',
+    submitText: '发布变更',
+    wide: true,
+    body: '<div id="collaboration-machine-editor-host"></div>',
+    onOpen: () => {
+      fsmEditor = mountCollaborationFsmEditor(
+        document.getElementById('collaboration-machine-editor-host'),
+        initialDraft,
+        {
+          initialRoleEditable: false,
+          confirm: (message) =>
+            openConfirmDialog(message, {
+              title: '确认流程变更',
+              confirmText: '继续',
+            }),
+          onError: (message) => showToast(message, 2800),
+        },
+      );
+    },
+    onSubmit: async () => {
+      const draft = fsmEditor.getDraft();
+      const issues = validateCollaborationFsmDraft(draft);
+      const errors = issues.filter((issue) => issue.severity === 'error');
+      if (errors.length) throw new Error(errors[0].message);
+      const confirmation = issues.find(
+        (issue) => issue.confirmRequired === true,
+      );
+      if (
+        confirmation &&
+        !(await openConfirmDialog(confirmation.message, {
+          title: '确认循环流程',
+          confirmText: '确认发布',
+        }))
+      )
+        return;
+      const nextPayload = collaborationMachinePayloadFromDraft(draft);
+      const businessChanged =
+        JSON.stringify({
+          machine: initialPayload.machine,
+          roles: initialPayload.roles,
+        }) !==
+        JSON.stringify({
+          machine: nextPayload.machine,
+          roles: nextPayload.roles,
+        });
+      const layoutChanged =
+        JSON.stringify(initialPayload.layout) !==
+        JSON.stringify(nextPayload.layout);
+      let expectedRevision = group.projection.revision;
+      const groupId = encodeURIComponent(group.groupId);
+      if (businessChanged) {
+        const response = await collaborationRequest(
+          `/groups/${groupId}/machine`,
+          {
+            method: 'PUT',
+            body: JSON.stringify({
+              expectedRevision,
+              machine: nextPayload.machine,
+              roles: nextPayload.roles,
+            }),
+          },
+        );
+        expectedRevision = response.group.projection.revision;
+      }
+      if (layoutChanged)
+        await collaborationRequest(`/groups/${groupId}/machine-layout`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            expectedRevision,
+            layout: nextPayload.layout,
+          }),
+        });
+      closeCollaborationDialog();
+      await loadCollaborationDetail(group.groupId, { updateRoute: false });
+      showToast(
+        businessChanged
+          ? 'Machine 业务定义已发布'
+          : layoutChanged
+            ? '画布布局已保存'
+            : '没有需要发布的变更',
+      );
     },
   });
 }
@@ -2688,6 +2860,8 @@ async function handleCollaborationContentAction(button) {
       openCollaborationBindingDialog(
         button.getAttribute('data-state-id') || '',
       );
+    } else if (action === 'edit-machine') {
+      openEditCollaborationMachineDialog();
     } else if (action === 'command') {
       openCollaborationCommandDialog(button.getAttribute('data-command') || '');
     } else if (action === 'start-turn') {

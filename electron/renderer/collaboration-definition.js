@@ -47,7 +47,8 @@ export function createRoleDraft(index = 1) {
 
 export function createTransitionDraft(input = {}) {
   return {
-    outcome: input.outcome || 'completed',
+    outcome: input.outcome || 'succeeded',
+    label: input.label || input.outcome || 'Succeeded',
     targetState: input.targetState || input.stateId || 'state_1',
   };
 }
@@ -57,14 +58,13 @@ export function createStateDraft(index = 1, input = {}) {
   return {
     id,
     label: input.label || `State ${index}`,
-    ownerRole: input.roleId || 'role_1',
+    description: input.description || '',
+    ownerRole: input.terminal ? '' : input.roleId || 'role_1',
     terminal: Boolean(input.terminal),
     startTimeoutMs: input.startTimeoutMs ?? '',
     executionTimeoutMs: input.executionTimeoutMs ?? '',
     reminderIntervalMs: input.reminderIntervalMs ?? '',
-    transitions: input.terminal
-      ? []
-      : [createTransitionDraft({ outcome: 'completed', targetState: id })],
+    transitions: input.terminal ? [] : [...(input.transitions || [])],
   };
 }
 
@@ -89,34 +89,17 @@ export function defaultCollaborationCreateDraft() {
       },
     ],
     states: [
-      {
+      createStateDraft(1, {
         id: 'development',
         label: 'Development',
-        ownerRole: 'developer',
-        terminal: false,
-        transitions: [
-          { outcome: 'ready_for_review', targetState: 'review' },
-          { outcome: 'blocked', targetState: 'development' },
-        ],
-      },
-      {
-        id: 'review',
-        label: 'Review',
-        ownerRole: 'reviewer',
-        terminal: false,
-        transitions: [
-          { outcome: 'approved', targetState: 'completed' },
-          { outcome: 'changes_requested', targetState: 'development' },
-        ],
-      },
-      {
-        id: 'completed',
-        label: 'Completed',
-        ownerRole: '',
-        terminal: true,
-        transitions: [],
-      },
+        roleId: 'developer',
+      }),
     ],
+    layout: {
+      format: 'icarus.agent-group-machine-layout/1',
+      view: 'free',
+      nodes: { development: { x: 96, y: 160 } },
+    },
   };
 }
 
@@ -160,6 +143,7 @@ export function buildCollaborationCreateRequest(input) {
   const states = (draft.states || []).map((candidate, index) => ({
     id: identifier(candidate.id, `状态 ${index + 1} ID`),
     label: requiredString(candidate.label, `状态 ${index + 1} 名称`),
+    description: String(candidate.description ?? '').trim(),
     ownerRole: String(candidate.ownerRole ?? '').trim(),
     terminal: Boolean(candidate.terminal),
     startTimeoutMs: optionalPositiveInteger(
@@ -210,6 +194,7 @@ export function buildCollaborationCreateRequest(input) {
     const outcomes = new Set();
     machineStates[state.id] = {
       label: state.label,
+      ...(state.description ? { description: state.description } : {}),
       ...(ownerRole ? { owner_role: ownerRole } : {}),
       terminal: state.terminal,
       ...(hasDeadline
@@ -236,7 +221,11 @@ export function buildCollaborationCreateRequest(input) {
         );
         if (!stateIds.has(targetState))
           throw new Error(`Outcome ${outcome} 引用了未知状态：${targetState}`);
-        return { outcome, target_state: targetState };
+        const label = requiredString(
+          candidate.label || outcome,
+          `执行结果 ${outcome} 显示名`,
+        );
+        return { outcome, label, target_state: targetState };
       }),
     };
   }
@@ -267,5 +256,64 @@ export function buildCollaborationCreateRequest(input) {
       states: machineStates,
     },
     roles: roleDefinitions,
+    layout: {
+      format: 'icarus.agent-group-machine-layout/1',
+      view: draft.layout?.view === 'roles' ? 'roles' : 'free',
+      nodes: Object.fromEntries(
+        states.map((state, index) => {
+          const position = draft.layout?.nodes?.[state.id];
+          return [
+            state.id,
+            {
+              x: Number.isFinite(Number(position?.x))
+                ? Number(position.x)
+                : 96 + (index % 3) * 260,
+              y: Number.isFinite(Number(position?.y))
+                ? Number(position.y)
+                : 120 + Math.floor(index / 3) * 180,
+            },
+          ];
+        }),
+      ),
+    },
+  };
+}
+
+export function collaborationDraftFromDefinition(definition) {
+  const machine = definition?.machine || { initial_state: '', states: {} };
+  const roles = Object.values(definition?.roles || {}).map((role) => ({
+    id: role.role,
+    displayName: role.display_name,
+    minMembers: role.cardinality.min,
+    maxMembers: role.cardinality.max,
+    capabilities: (role.required_capabilities || []).join(', '),
+  }));
+  const states = Object.entries(machine.states || {}).map(([id, state]) => ({
+    id,
+    label: state.label || id,
+    description: state.description || '',
+    ownerRole: state.owner_role || '',
+    terminal: Boolean(state.terminal),
+    startTimeoutMs: state.timeout_policy?.start_timeout_ms ?? '',
+    executionTimeoutMs: state.timeout_policy?.execution_timeout_ms ?? '',
+    reminderIntervalMs: state.timeout_policy?.reminder_interval_ms ?? '',
+    transitions: (state.transitions || []).map((transition) => ({
+      outcome: transition.outcome,
+      label: transition.label || transition.outcome,
+      targetState: transition.target_state,
+    })),
+  }));
+  const fallbackRole =
+    states.find((state) => !state.terminal)?.ownerRole || roles[0]?.id || '';
+  return {
+    initialRole: fallbackRole,
+    initialState: machine.initial_state || states[0]?.id || '',
+    roles,
+    states,
+    layout: {
+      format: 'icarus.agent-group-machine-layout/1',
+      view: definition?.layout?.view === 'roles' ? 'roles' : 'free',
+      nodes: structuredClone(definition?.layout?.nodes || {}),
+    },
   };
 }
