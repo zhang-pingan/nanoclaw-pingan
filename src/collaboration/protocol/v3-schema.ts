@@ -104,6 +104,49 @@ export const memberDefinitionV3Schema = z
   .strict();
 export type MemberDefinitionV3 = z.infer<typeof memberDefinitionV3Schema>;
 
+export const inviteDefinitionV3Schema = z
+  .object({
+    format: z.literal('icarus.collaboration-invite/1'),
+    invite_id: collaborationIdentifierSchema,
+    principal_id: principalIdSchema,
+    issued_by_principal_id: principalIdSchema,
+    status: z.enum(['active', 'used', 'revoked']),
+    issued_at: collaborationIsoTimeSchema,
+    expires_at: collaborationIsoTimeSchema.nullable(),
+    used_at_event: collaborationIdentifierSchema.nullable(),
+    revoked_at_event: collaborationIdentifierSchema.nullable(),
+    extensions: extensionsSchema,
+  })
+  .strict()
+  .superRefine((invite, context) => {
+    if (
+      invite.expires_at !== null &&
+      Date.parse(invite.expires_at) <= Date.parse(invite.issued_at)
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['expires_at'],
+        message: 'Invite expiry must be after issuance',
+      });
+    const validLifecycle =
+      (invite.status === 'active' &&
+        invite.used_at_event === null &&
+        invite.revoked_at_event === null) ||
+      (invite.status === 'used' &&
+        invite.used_at_event !== null &&
+        invite.revoked_at_event === null) ||
+      (invite.status === 'revoked' &&
+        invite.used_at_event === null &&
+        invite.revoked_at_event !== null);
+    if (!validLifecycle)
+      context.addIssue({
+        code: 'custom',
+        message:
+          'Invite status and lifecycle event references are inconsistent',
+      });
+  });
+export type InviteDefinitionV3 = z.infer<typeof inviteDefinitionV3Schema>;
+
 export const clientDefinitionSchema = z
   .object({
     format: z.literal('icarus.collaboration-client/1'),
@@ -825,6 +868,7 @@ export type CollaborationTurnV3 = z.infer<typeof collaborationTurnV3Schema>;
 
 export const collaborationAggregateTypeSchema = z.enum([
   'group',
+  'invite',
   'membership',
   'workspace',
   'work_item',
@@ -841,6 +885,8 @@ export const collaborationEventTypesV3 = [
   'group_settings_updated',
   'group_archived',
   'group_reopened',
+  'invite_issued',
+  'invite_revoked',
   'membership_requested',
   'membership_rejected',
   'member_registered',

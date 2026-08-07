@@ -46,6 +46,7 @@ function event(input: {
   client?: string;
   executor?: string | null;
   id?: string;
+  occurredAt?: string;
 }): CollaborationEventV3 {
   const head =
     input.projection?.aggregateHeads[
@@ -65,7 +66,7 @@ function event(input: {
       client_id: input.client ?? (actor === ALICE ? ALICE_CLIENT : BOB_CLIENT),
       executor_id: input.executor ?? null,
     },
-    occurredAt: NOW,
+    occurredAt: input.occurredAt ?? NOW,
     payload: input.payload,
   });
 }
@@ -871,5 +872,196 @@ describe('Collaboration v3 reducer invariants', () => {
           payload,
         }),
       ).toThrow(/self|unique|does not exist/u);
+  });
+
+  it('requires an authorized issuer and consumes a targeted Invite once', () => {
+    let projection = apply(withBob(), {
+      aggregateType: 'group',
+      aggregateId: 'group_test',
+      eventType: 'group_settings_updated',
+      payload: { membership_policy: { join: 'invite_only' } },
+    });
+    const invite = {
+      format: 'icarus.collaboration-invite/1',
+      invite_id: 'invite_carol',
+      principal_id: 'principal_sha256_carol',
+      issued_by_principal_id: ALICE,
+      status: 'active',
+      issued_at: NOW,
+      expires_at: null,
+      used_at_event: null,
+      revoked_at_event: null,
+    };
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'invite',
+        aggregateId: invite.invite_id,
+        eventType: 'invite_issued',
+        actor: BOB,
+        payload: {
+          invite: { ...invite, issued_by_principal_id: BOB },
+        },
+      }),
+    ).toThrow(/invite|approve|authorized/iu);
+
+    projection = apply(projection, {
+      aggregateType: 'invite',
+      aggregateId: invite.invite_id,
+      eventType: 'invite_issued',
+      payload: { invite },
+    });
+    const activeMemberInvite = {
+      ...invite,
+      invite_id: 'invite_active_bob',
+      principal_id: BOB,
+    };
+    projection = apply(projection, {
+      aggregateType: 'invite',
+      aggregateId: activeMemberInvite.invite_id,
+      eventType: 'invite_issued',
+      payload: { invite: activeMemberInvite },
+    });
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'membership',
+        aggregateId: BOB,
+        eventType: 'membership_requested',
+        actor: BOB,
+        payload: {
+          member: {
+            ...projection.members[BOB],
+            status: 'requested',
+            joined_at_event: null,
+          },
+          invite_id: activeMemberInvite.invite_id,
+        },
+      }),
+    ).toThrow(/already|existing|active/iu);
+    projection = apply(projection, {
+      aggregateType: 'membership',
+      aggregateId: invite.principal_id,
+      eventType: 'membership_requested',
+      actor: invite.principal_id,
+      client: 'client_carol',
+      id: 'evt_carol_request',
+      payload: {
+        member: {
+          format: 'icarus.collaboration-member/3',
+          principal_id: invite.principal_id,
+          display_name: 'Carol',
+          signing_key_ref: 'ssh-ed25519:SHA256:carol',
+          signing_public_key:
+            'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEcarol',
+          status: 'requested',
+          joined_at_event: null,
+        },
+        invite_id: invite.invite_id,
+      },
+    });
+    expect(
+      (
+        projection as CollaborationProjectionV3 & {
+          invites: Record<string, { status: string; used_at_event: string }>;
+        }
+      ).invites[invite.invite_id],
+    ).toMatchObject({ status: 'used', used_at_event: 'evt_carol_request' });
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'membership',
+        aggregateId: invite.principal_id,
+        eventType: 'membership_requested',
+        actor: invite.principal_id,
+        client: 'client_carol',
+        payload: {
+          member: {
+            ...projection.members[invite.principal_id],
+            status: 'requested',
+            joined_at_event: null,
+          },
+          invite_id: invite.invite_id,
+        },
+      }),
+    ).toThrow(/Invite.*used|active/iu);
+  });
+
+  it('rejects missing, wrong-target, expired, and revoked Invites', () => {
+    const request = (
+      projection: CollaborationProjectionV3,
+      inviteId: string | null,
+      occurredAt = NOW,
+    ) =>
+      apply(projection, {
+        aggregateType: 'membership',
+        aggregateId: BOB,
+        eventType: 'membership_requested',
+        actor: BOB,
+        occurredAt,
+        payload: {
+          member: {
+            format: 'icarus.collaboration-member/3',
+            principal_id: BOB,
+            display_name: 'Bob',
+            signing_key_ref: 'ssh-ed25519:SHA256:bob',
+            signing_public_key: BOB_KEY,
+            status: 'requested',
+            joined_at_event: null,
+          },
+          invite_id: inviteId,
+        },
+      });
+    let base = apply(genesis(), {
+      aggregateType: 'group',
+      aggregateId: 'group_test',
+      eventType: 'group_settings_updated',
+      payload: { membership_policy: { join: 'invite_only' } },
+    });
+    expect(() => request(base, null)).toThrow(/Invite/iu);
+    expect(() => request(base, 'invite_missing')).toThrow(/Invite/iu);
+
+    const issue = (
+      projection: CollaborationProjectionV3,
+      inviteId: string,
+      principalId: string,
+      expiresAt: string | null,
+    ) =>
+      apply(projection, {
+        aggregateType: 'invite',
+        aggregateId: inviteId,
+        eventType: 'invite_issued',
+        payload: {
+          invite: {
+            format: 'icarus.collaboration-invite/1',
+            invite_id: inviteId,
+            principal_id: principalId,
+            issued_by_principal_id: ALICE,
+            status: 'active',
+            issued_at: NOW,
+            expires_at: expiresAt,
+            used_at_event: null,
+            revoked_at_event: null,
+          },
+        },
+      });
+    const wrong = issue(base, 'invite_wrong', ALICE, null);
+    expect(() => request(wrong, 'invite_wrong')).toThrow(/target|Principal/iu);
+
+    const expired = issue(
+      base,
+      'invite_expired',
+      BOB,
+      '2026-08-06T12:01:00.000Z',
+    );
+    expect(() =>
+      request(expired, 'invite_expired', '2026-08-06T12:02:00.000Z'),
+    ).toThrow(/expired/iu);
+
+    base = issue(base, 'invite_revoked', BOB, null);
+    base = apply(base, {
+      aggregateType: 'invite',
+      aggregateId: 'invite_revoked',
+      eventType: 'invite_revoked',
+      payload: { reason: 'No longer needed' },
+    });
+    expect(() => request(base, 'invite_revoked')).toThrow(/revoked|active/iu);
   });
 });

@@ -183,6 +183,7 @@ function deleteRepositoryFile(
 
 const EVENT_DIRECTORIES = {
   group: 'group',
+  invite: 'invites',
   membership: 'members',
   workspace: 'workspace',
   work_item: 'work-items',
@@ -204,6 +205,8 @@ function aggregateProjectionPath(event: CollaborationEventV3): string {
   switch (event.aggregate_type) {
     case 'group':
       return 'projections/group.json';
+    case 'invite':
+      return `projections/invites/${event.aggregate_id}.json`;
     case 'membership':
       return `projections/members/${event.aggregate_id}.json`;
     case 'workspace':
@@ -226,6 +229,8 @@ function aggregateProjectionValue(
   switch (event.aggregate_type) {
     case 'group':
       return projection.group;
+    case 'invite':
+      return projection.invites[event.aggregate_id] ?? null;
     case 'membership':
       return {
         format: 'icarus.collaboration-member-projection/1',
@@ -348,6 +353,16 @@ function automaticMaterialization(
           );
       }
       break;
+    case 'invite_issued':
+    case 'invite_revoked': {
+      const invite = projection.invites[event.aggregate_id];
+      if (invite)
+        files.set(
+          `invites/${event.aggregate_id}.json`,
+          prettyCollaborationJson(invite),
+        );
+      break;
+    }
     case 'membership_requested':
     case 'membership_rejected':
     case 'member_registered':
@@ -360,6 +375,22 @@ function automaticMaterialization(
           `members/${event.aggregate_id}/member.json`,
           prettyCollaborationJson(member),
         );
+      if (event.event_type === 'membership_requested') {
+        const inviteId = event.payload.invite_id;
+        if (typeof inviteId === 'string') {
+          const invite = projection.invites[inviteId];
+          if (invite) {
+            files.set(
+              `invites/${inviteId}.json`,
+              prettyCollaborationJson(invite),
+            );
+            files.set(
+              `projections/invites/${inviteId}.json`,
+              prettyCollaborationJson(invite),
+            );
+          }
+        }
+      }
       break;
     }
     case 'client_registered': {
@@ -901,6 +932,7 @@ async function assertSafeTree(
   const tree = await git(repositoryPath, ['ls-tree', '-r', head]);
   const allowedRoots = [
     'group.json',
+    'invites/',
     'members/',
     'permissions/',
     'workspace/',

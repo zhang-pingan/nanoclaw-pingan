@@ -467,6 +467,7 @@ export class CollaborationWebApi {
             signingKeyPath: z.string().min(1),
             displayName: z.string().min(1),
             clientDisplayName: z.string().min(1),
+            inviteId: identifier.optional(),
             pollIntervalMs: z.number().int().positive().optional(),
           })
           .strict(),
@@ -479,6 +480,57 @@ export class CollaborationWebApi {
           }),
         ),
       });
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/invites$`, 'u'),
+    );
+    if (found && method === 'GET') {
+      send(res, 200, { invites: this.requireProjection(found[1]!).invites });
+      return;
+    }
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            principalId: identifier,
+            expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
+            expectedRevision,
+          })
+          .strict(),
+      );
+      const group = await this.runtime.groups.issueInvite({
+        groupId: found[1]!,
+        principalId: body.principalId,
+        expiresAt: body.expiresAt,
+        expectedRevision: body.expectedRevision,
+      });
+      send(res, 201, { group: publicGroup(group) });
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/invites/([^/]+)/revoke$`, 'u'),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            reason: z.string().min(1).max(4000),
+          })
+          .strict(),
+      );
+      const group = await this.runtime.groups.revokeInvite({
+        groupId: found[1]!,
+        inviteId: found[2]!,
+        expectedRevision: body.expectedRevision,
+        reason: body.reason,
+      });
+      send(res, 200, { group: publicGroup(group) });
       return;
     }
     found = match(

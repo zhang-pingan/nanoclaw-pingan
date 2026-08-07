@@ -163,6 +163,123 @@ function genesis(identity: CollaborationPrincipalIdentity) {
 }
 
 describe('Collaboration project space v3 Git protocol', () => {
+  it('materializes and replays targeted Invite issuance and consumption', async () => {
+    const test = fixture();
+    const bobKey = path.join(test.root, 'bob-signing-key');
+    run(test.root, [
+      'ssh-keygen',
+      '-q',
+      '-t',
+      'ed25519',
+      '-N',
+      '',
+      '-f',
+      bobKey,
+    ]);
+    const bobPublicKey = readFileSync(`${bobKey}.pub`, 'utf8').trim();
+    const bobFingerprint = run(test.root, [
+      'ssh-keygen',
+      '-lf',
+      `${bobKey}.pub`,
+      '-E',
+      'sha256',
+    ]).match(/SHA256:[^\s]+/u)?.[0];
+    if (!bobFingerprint) throw new Error('Bob SSH fingerprint missing');
+    const bobIdentity: CollaborationPrincipalIdentity = {
+      principalId: collaborationPrincipalIdFromSshFingerprintV3(bobFingerprint),
+      clientId: 'client_bob',
+      privateKeyPath: bobKey,
+      publicKey: bobPublicKey,
+      keyRef: `ssh-ed25519:${bobFingerprint}`,
+    };
+    const ownerStore = new CollaborationProjectSpaceStore(
+      path.join(test.root, 'owner.db'),
+    );
+    const bobStore = new CollaborationProjectSpaceStore(
+      path.join(test.root, 'bob.db'),
+    );
+    const owner = new CollaborationProjectSpaceService(
+      ownerStore,
+      new CollaborationProjectSpaceGitTransport(),
+      path.join(test.root, 'owner-repositories'),
+      {
+        resolveSigningIdentity: async () => test.identity,
+      } as unknown as CollaborationProjectSpaceIdentityService,
+      () => Date.parse(NOW),
+    );
+    const bob = new CollaborationProjectSpaceService(
+      bobStore,
+      new CollaborationProjectSpaceGitTransport(),
+      path.join(test.root, 'bob-repositories'),
+      {
+        resolveSigningIdentity: async () => bobIdentity,
+      } as unknown as CollaborationProjectSpaceIdentityService,
+      () => Date.parse(NOW),
+    );
+    try {
+      await owner.createGroup({
+        remoteUrl: test.remote,
+        name: 'Signed invite project',
+        signingKeyPath: test.identity.privateKeyPath,
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'invite_only',
+        observerAccess: 'allowed',
+        groupId: 'group_signed',
+      });
+      await owner.issueInvite({
+        groupId: 'group_signed',
+        inviteId: 'invite_bob',
+        principalId: bobIdentity.principalId,
+        expectedRevision: 0,
+      });
+      await bob.joinGroup({
+        remoteUrl: test.remote,
+        signingKeyPath: bobIdentity.privateKeyPath,
+        displayName: 'Bob',
+        clientDisplayName: 'Bob MacBook',
+        inviteId: 'invite_bob',
+      });
+      const synced = await owner.sync('group_signed');
+      expect(synced.projection.invites.invite_bob).toMatchObject({
+        principal_id: bobIdentity.principalId,
+        status: 'used',
+      });
+      const repositoryPath =
+        ownerStore.getGroup('group_signed')!.repositoryPath;
+      const files = run(repositoryPath, [
+        'git',
+        'ls-tree',
+        '-r',
+        '--name-only',
+        synced.head,
+      ]).split('\n');
+      expect(files).toEqual(
+        expect.arrayContaining([
+          'invites/invite_bob.json',
+          'projections/invites/invite_bob.json',
+        ]),
+      );
+      expect(
+        files.some((file) =>
+          file.startsWith('events/invites/invite_bob/00000001-'),
+        ),
+      ).toBe(true);
+      expect(
+        JSON.parse(
+          run(repositoryPath, [
+            'git',
+            'show',
+            `${synced.head}:invites/invite_bob.json`,
+          ]),
+        ),
+      ).toMatchObject({ status: 'used' });
+    } finally {
+      ownerStore.close();
+      bobStore.close();
+    }
+  }, 30_000);
+
   it('creates and replays a signed JSON-only Aggregate history', async () => {
     const test = fixture();
     const transport = new CollaborationProjectSpaceGitTransport();

@@ -224,6 +224,162 @@ describe('Collaboration project-space v3 Web API', () => {
     );
   });
 
+  it('routes targeted Invite issuance, revocation, and join references', async () => {
+    const joinGroup = vi.fn(async () => group());
+    const issueInvite = vi.fn(async () => group());
+    const revokeInvite = vi.fn(async () => group());
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({ groups: { joinGroup, issueInvite, revokeInvite } }),
+      ),
+      async (baseUrl) => {
+        const headers = { 'content-type': 'application/json' };
+        const issued = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/invites`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              principalId: 'principal_bob',
+              expiresAt: '2026-08-08T12:00:00.000Z',
+              expectedRevision: 0,
+            }),
+          },
+        );
+        expect(issued.status).toBe(201);
+        expect(issueInvite).toHaveBeenCalledWith(
+          expect.objectContaining({
+            groupId: 'group_test',
+            principalId: 'principal_bob',
+          }),
+        );
+
+        const joined = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/join-requests`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              signingKeyPath: '/tmp/bob',
+              displayName: 'Bob',
+              clientDisplayName: 'Bob MacBook',
+              inviteId: 'invite_bob',
+            }),
+          },
+        );
+        expect(joined.status).toBe(201);
+        expect(joinGroup).toHaveBeenCalledWith(
+          expect.objectContaining({ inviteId: 'invite_bob' }),
+        );
+
+        const revoked = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/invites/invite_bob/revoke`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ expectedRevision: 1, reason: 'Expired' }),
+          },
+        );
+        expect(revoked.status).toBe(200);
+        expect(revokeInvite).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          inviteId: 'invite_bob',
+          expectedRevision: 1,
+          reason: 'Expired',
+        });
+      },
+    );
+  });
+
+  it('routes membership decisions and continuous Workflow Turn commands', async () => {
+    const approveMembership = vi.fn(async () => group());
+    const rejectMembership = vi.fn(async () => group());
+    const createTurn = vi.fn(async () => group());
+    const startTurn = vi.fn(async () => group());
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({
+          groups: {
+            approveMembership,
+            rejectMembership,
+            createTurn,
+            startTurn,
+          },
+        }),
+      ),
+      async (baseUrl) => {
+        const post = (path: string, body: Record<string, unknown>) =>
+          fetch(`${baseUrl}/api/collaboration${path}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+        expect(
+          (
+            await post(
+              '/groups/group_test/join-requests/principal_bob/approve',
+              {
+                expectedRevision: 1,
+              },
+            )
+          ).status,
+        ).toBe(200);
+        expect(approveMembership).toHaveBeenCalledWith(
+          'group_test',
+          'principal_bob',
+          1,
+        );
+        expect(
+          (
+            await post(
+              '/groups/group_test/join-requests/principal_bob/reject',
+              {
+                expectedRevision: 2,
+                reason: 'Identity not verified',
+              },
+            )
+          ).status,
+        ).toBe(200);
+        expect(rejectMembership).toHaveBeenCalledWith(
+          'group_test',
+          'principal_bob',
+          'Identity not verified',
+          2,
+        );
+
+        expect(
+          (
+            await post(
+              '/groups/group_test/workflow-instances/instance_1/commands',
+              { expectedRevision: 3, command: 'create_turn' },
+            )
+          ).status,
+        ).toBe(200);
+        expect(createTurn).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          instanceId: 'instance_1',
+          expectedRevision: 3,
+          turnId: undefined,
+        });
+        expect(
+          (
+            await post(
+              '/groups/group_test/workflow-instances/instance_1/turns/turn_1/start',
+              { expectedRevision: 4, executorId: 'executor_codex' },
+            )
+          ).status,
+        ).toBe(200);
+        expect(startTurn).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          instanceId: 'instance_1',
+          turnId: 'turn_1',
+          expectedRevision: 4,
+          executorId: 'executor_codex',
+        });
+      },
+    );
+  });
+
   it('keeps Observer reads available while mutation authorization fails closed', async () => {
     const createWorkItem = vi.fn(async () => {
       throw new Error('Observer subscription is read-only');

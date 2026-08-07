@@ -22,6 +22,13 @@ const ALICE: CollaborationPrincipalIdentity = {
   publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice',
   keyRef: 'ssh-ed25519:SHA256:alice',
 };
+const BOB: CollaborationPrincipalIdentity = {
+  principalId: 'principal_sha256_bob',
+  clientId: 'client_bob_mac',
+  privateKeyPath: '/tmp/bob',
+  publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXQfKE4hE1m3sXEXAMPLEreview',
+  keyRef: 'ssh-ed25519:SHA256:bob',
+};
 
 const DELIVERY_MACHINE = {
   format: 'icarus.collaboration-machine/3' as const,
@@ -207,6 +214,63 @@ function service(
 }
 
 describe('Collaboration project space v3 Group and identity service', () => {
+  it('issues and consumes a one-time Invite before membership approval', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/invite-project.git',
+      name: 'Invite project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'invite_only',
+      observerAccess: 'allowed',
+      groupId: 'group_invite',
+    });
+    await owner.service.issueInvite({
+      groupId: 'group_invite',
+      inviteId: 'invite_bob',
+      principalId: BOB.principalId,
+      expiresAt: '2026-08-07T12:00:00.000Z',
+      expectedRevision: 0,
+    });
+
+    const bob = service(tempDirectory(), transport, BOB);
+    await expect(
+      bob.service.joinGroup({
+        remoteUrl: '/tmp/invite-project.git',
+        signingKeyPath: BOB.privateKeyPath,
+        displayName: 'Bob',
+        clientDisplayName: 'Bob MacBook',
+      }),
+    ).rejects.toThrow(/Invite/iu);
+    const requested = await bob.service.joinGroup({
+      remoteUrl: '/tmp/invite-project.git',
+      signingKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+      inviteId: 'invite_bob',
+    });
+    expect(requested.projection?.members[BOB.principalId]?.status).toBe(
+      'requested',
+    );
+    expect(requested.projection?.invites.invite_bob).toMatchObject({
+      status: 'used',
+      used_at_event: expect.stringMatching(/^evt_/u),
+    });
+
+    const approved = await owner.service.approveMembership(
+      'group_invite',
+      BOB.principalId,
+      1,
+    );
+    expect(approved.projection?.members[BOB.principalId]?.status).toBe(
+      'active',
+    );
+    owner.store.close();
+    bob.store.close();
+  });
+
   it('creates an immediately active Group without Roles, Claims, or Workflow', async () => {
     const transport = new MemoryTransport();
     const local = service(tempDirectory(), transport, ALICE);

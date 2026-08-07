@@ -133,6 +133,7 @@ export interface JoinProjectSpaceGroupInput {
   readonly signingKeyPath: string;
   readonly displayName: string;
   readonly clientDisplayName: string;
+  readonly inviteId?: string;
   readonly pollIntervalMs?: number;
 }
 
@@ -346,7 +347,24 @@ export class CollaborationProjectSpaceService {
       return this.store.getGroup(registered.projection.groupId)!;
     }
 
-    const open = inspected.projection.group.membership_policy.join === 'open';
+    const joinPolicy = inspected.projection.group.membership_policy.join;
+    const open = joinPolicy === 'open';
+    if (joinPolicy === 'invite_only') {
+      if (!input.inviteId)
+        throw new Error('Invite-only membership requires an Invite');
+      const invite = inspected.projection.invites[input.inviteId];
+      if (!invite) throw new Error('Invite does not exist');
+      if (invite.principal_id !== identity.principalId)
+        throw new Error('Invite targets a different Principal');
+      if (invite.status !== 'active') throw new Error('Invite is not active');
+      if (
+        invite.expires_at !== null &&
+        Date.parse(invite.expires_at) <= this.now()
+      )
+        throw new Error('Invite has expired');
+    } else if (input.inviteId) {
+      throw new Error('This Group membership policy does not accept Invites');
+    }
     const memberEventType = open ? 'member_registered' : 'membership_requested';
     const joinedAtEvent = open ? '__EVENT_ID__' : null;
     let history = await this.appendWithIdentity({
@@ -367,6 +385,9 @@ export class CollaborationProjectSpaceService {
           status: open ? 'active' : 'requested',
           joined_at_event: joinedAtEvent,
         },
+        ...(!open
+          ? { invite_id: joinPolicy === 'invite_only' ? input.inviteId : null }
+          : {}),
       },
       replaceEventId: open,
     });
@@ -400,6 +421,53 @@ export class CollaborationProjectSpaceService {
       pollIntervalMs: input.pollIntervalMs,
     });
     return this.store.getGroup(history.projection.groupId)!;
+  }
+
+  async issueInvite(input: {
+    readonly groupId: string;
+    readonly principalId: string;
+    readonly expiresAt?: string | null;
+    readonly expectedRevision?: number;
+    readonly inviteId?: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.store.getGroup(input.groupId);
+    if (!group?.localPrincipalId)
+      throw new Error('Observer subscriptions cannot issue Invites');
+    const inviteId = input.inviteId ?? newId('invite');
+    const invite = {
+      format: 'icarus.collaboration-invite/1',
+      invite_id: inviteId,
+      principal_id: input.principalId,
+      issued_by_principal_id: group.localPrincipalId,
+      status: 'active',
+      issued_at: '__OCCURRED_AT__',
+      expires_at: input.expiresAt ?? null,
+      used_at_event: null,
+      revoked_at_event: null,
+    };
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'invite',
+      aggregateId: inviteId,
+      expectedRevision: input.expectedRevision ?? 0,
+      eventType: 'invite_issued',
+      payload: { invite },
+      replaceEventId: true,
+    });
+  }
+
+  async revokeInvite(input: {
+    readonly groupId: string;
+    readonly inviteId: string;
+    readonly reason: string;
+    readonly expectedRevision: number;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'invite',
+      aggregateId: input.inviteId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'invite_revoked',
+      payload: { reason: input.reason },
+    });
   }
 
   async approveMembership(
@@ -2388,9 +2456,12 @@ export class CollaborationProjectSpaceService {
             `${input.aggregateType}:${input.aggregateId}`
           ];
         const eventId = input.eventId ?? newId('evt');
+        const occurredAt = new Date(this.now()).toISOString();
         const payload = input.replaceEventId
           ? (JSON.parse(
-              JSON.stringify(input.payload).replaceAll('__EVENT_ID__', eventId),
+              JSON.stringify(input.payload)
+                .replaceAll('__EVENT_ID__', eventId)
+                .replaceAll('__OCCURRED_AT__', occurredAt),
             ) as Record<string, unknown>)
           : input.payload;
         const event = buildCollaborationEventV3({
@@ -2406,7 +2477,7 @@ export class CollaborationProjectSpaceService {
             client_id: input.identity.clientId,
             executor_id: input.executorId ?? null,
           },
-          occurredAt: new Date(this.now()).toISOString(),
+          occurredAt,
           payload,
         });
         reduceCollaborationEventV3(history.projection, event);

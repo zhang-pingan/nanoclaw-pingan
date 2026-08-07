@@ -17,6 +17,7 @@ import {
   fileMetadataSchema,
   groupDefinitionV3Schema,
   handoffEnvelopeV3Schema,
+  inviteDefinitionV3Schema,
   machineDefinitionV3Schema,
   memberDefinitionV3Schema,
   permissionGrantSchema,
@@ -41,6 +42,7 @@ import {
   type FileMetadata,
   type GroupDefinitionV3,
   type HandoffEnvelopeV3,
+  type InviteDefinitionV3,
   type MachineDefinitionV3,
   type MemberDefinitionV3,
   type PermissionGrant,
@@ -62,6 +64,15 @@ const reasonPayloadSchema = z
   .strict();
 const memberPayloadSchema = z
   .object({ member: memberDefinitionV3Schema })
+  .strict();
+const membershipRequestPayloadSchema = z
+  .object({
+    member: memberDefinitionV3Schema,
+    invite_id: collaborationIdentifierSchema.nullable(),
+  })
+  .strict();
+const invitePayloadSchema = z
+  .object({ invite: inviteDefinitionV3Schema })
   .strict();
 const clientPayloadSchema = z
   .object({ client: clientDefinitionSchema })
@@ -242,7 +253,9 @@ const payloadSchemas: Record<CollaborationEventTypeV3, z.ZodType> = {
   group_settings_updated: groupSettingsPayloadSchema,
   group_archived: reasonPayloadSchema,
   group_reopened: reasonPayloadSchema,
-  membership_requested: memberPayloadSchema,
+  invite_issued: invitePayloadSchema,
+  invite_revoked: reasonPayloadSchema,
+  membership_requested: membershipRequestPayloadSchema,
   membership_rejected: principalPayloadSchema,
   member_registered: memberPayloadSchema,
   member_suspended: principalPayloadSchema,
@@ -326,6 +339,7 @@ export interface CollaborationProjectionV3 {
   readonly groupId: string;
   group: GroupDefinitionV3;
   aggregateHeads: Record<string, CollaborationAggregateHeadV3>;
+  invites: Record<string, InviteDefinitionV3>;
   members: Record<string, MemberDefinitionV3>;
   clients: Record<string, Record<string, ClientDefinition>>;
   executors: Record<string, Record<string, ExecutorDescriptor>>;
@@ -810,6 +824,7 @@ function reduceGenesis(event: CollaborationEventV3): CollaborationProjectionV3 {
         eventId: event.event_id,
       },
     },
+    invites: {},
     members: { [payload.member.principal_id]: payload.member },
     clients: {
       [payload.member.principal_id]: {
@@ -925,8 +940,59 @@ export function reduceCollaborationEventV3(
       });
       break;
     }
+    case 'invite_issued': {
+      const { invite } = invitePayloadSchema.parse(payload);
+      if (
+        event.aggregate_type !== 'invite' ||
+        event.aggregate_id !== invite.invite_id
+      )
+        conflict('Invite event Aggregate does not match Invite id');
+      if (
+        !hasCollaborationPermissionV3(
+          next,
+          event.actor.principal_id,
+          'member:approve',
+        )
+      )
+        conflict('Actor is not authorized to issue Invites');
+      if (
+        invite.issued_by_principal_id !== event.actor.principal_id ||
+        invite.issued_at !== event.occurred_at ||
+        invite.status !== 'active' ||
+        invite.used_at_event !== null ||
+        invite.revoked_at_event !== null
+      )
+        conflict('Invite issuance provenance or lifecycle is invalid');
+      if (next.invites[invite.invite_id]) conflict('Invite already exists');
+      next.invites[invite.invite_id] = invite;
+      break;
+    }
+    case 'invite_revoked': {
+      reasonPayloadSchema.parse(payload);
+      if (event.aggregate_type !== 'invite')
+        conflict('Invite revocation must use the Invite Aggregate');
+      if (
+        !hasCollaborationPermissionV3(
+          next,
+          event.actor.principal_id,
+          'member:approve',
+        )
+      )
+        conflict('Actor is not authorized to revoke Invites');
+      const invite = next.invites[event.aggregate_id];
+      if (!invite) conflict('Invite does not exist');
+      if (invite.status !== 'active')
+        conflict('Only an active Invite may be revoked');
+      next.invites[event.aggregate_id] = inviteDefinitionV3Schema.parse({
+        ...invite,
+        status: 'revoked',
+        revoked_at_event: event.event_id,
+      });
+      break;
+    }
     case 'membership_requested': {
-      const { member } = memberPayloadSchema.parse(payload);
+      const { member, invite_id: inviteId } =
+        membershipRequestPayloadSchema.parse(payload);
       if (
         event.aggregate_type !== 'membership' ||
         event.aggregate_id !== member.principal_id
@@ -940,6 +1006,32 @@ export function reduceCollaborationEventV3(
         conflict('Membership request must be self-signed and pending');
       if (next.group.membership_policy.join === 'open')
         conflict('Open Groups register members directly');
+      if (next.group.membership_policy.join === 'approval') {
+        if (inviteId !== null)
+          conflict('Approval membership requests cannot reference an Invite');
+      } else {
+        if (inviteId === null)
+          conflict('Invite-only membership requires an Invite');
+        const invite = next.invites[inviteId];
+        if (!invite) conflict('Invite does not exist');
+        if (invite.principal_id !== member.principal_id)
+          conflict('Invite targets a different Principal');
+        if (invite.status !== 'active')
+          conflict('Invite is not active and cannot be reused');
+        if (
+          invite.expires_at !== null &&
+          Date.parse(invite.expires_at) <= Date.parse(event.occurred_at)
+        )
+          conflict('Invite has expired');
+        next.invites[inviteId] = inviteDefinitionV3Schema.parse({
+          ...invite,
+          status: 'used',
+          used_at_event: event.event_id,
+        });
+      }
+      const existingMember = next.members[member.principal_id];
+      if (existingMember && existingMember.status !== 'rejected')
+        conflict('Principal already has an existing Membership');
       next.members[member.principal_id] = member;
       break;
     }
