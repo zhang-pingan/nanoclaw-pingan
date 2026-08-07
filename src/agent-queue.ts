@@ -8,8 +8,8 @@ import {
   ONE_SHOT_AGENT_MAX_QUEUE_LENGTH,
   ONE_SHOT_AGENT_SLOT_TIMEOUT_MS,
 } from './config.js';
-import { AgentStatusInfo, StopAgentResult } from './types.js';
-export { AgentStatusInfo, StopAgentResult } from './types.js';
+import type { AgentStatusInfo, StopAgentResult } from './types.js';
+export type { AgentStatusInfo, StopAgentResult } from './types.js';
 import { updateTask } from './db.js';
 import { stopContainer } from './container-runtime.js';
 import { logger } from './logger.js';
