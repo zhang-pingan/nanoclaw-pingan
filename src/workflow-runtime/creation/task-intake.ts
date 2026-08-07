@@ -25,9 +25,32 @@ export interface T0CreationInput {
   readonly requestId: string;
   readonly creationDomain: string;
   readonly creationKey: string;
-  readonly source: 'global_assistant' | 'feature_ui' | 'schedule' | 'api';
+  readonly source:
+    | 'global_assistant'
+    | 'feature_ui'
+    | 'schedule'
+    | 'api'
+    | 'task_workspace';
+  readonly actor: 'human' | 'feature_service' | 'automation' | 'system';
+  readonly launchPolicy: 'auto' | 'confirm' | 'manual_only';
+  readonly launchAuthorization:
+    | {
+        readonly kind: 'human_explicit';
+        readonly principalRef: string;
+        readonly authorizationRef: string;
+      }
+    | {
+        readonly kind: 'automation_policy';
+        readonly automationRef: string;
+        readonly authorizationRef: string;
+      }
+    | {
+        readonly kind: 'trusted_system';
+        readonly authorizationRef: string;
+      };
   readonly principalRef: string;
   readonly recipe: RuntimeRegistryRef;
+  readonly entryPoint: string;
   readonly definition: RuntimeRegistryRef;
   readonly executionPolicy: RuntimeRegistryRef;
   readonly commandPolicy: RuntimeRegistryRef;
@@ -51,6 +74,12 @@ export interface T0CreationInput {
     keyHash: Sha256Hash;
     mode: 'shared' | 'exclusive';
   }[];
+  readonly launchConfirmation?: {
+    readonly actorRef: string;
+    readonly idempotencyKey: string;
+    readonly expiresAtMs: number;
+    readonly evidence: JsonObject;
+  };
   readonly initialActivation: Omit<
     T1ActivationInput,
     'workflowId' | 'expectedWorkflowRowVersion'
@@ -102,6 +131,49 @@ export function createWorkflowT0(
       'integrity_violation',
       'T0 requires the current Schema version',
     );
+  const entryPoint = input.entryPoint;
+  const actor = input.actor;
+  const launchPolicy = input.launchPolicy;
+  const authorization = input.launchAuthorization;
+  const humanAuthorized =
+    actor === 'human' &&
+    authorization.kind === 'human_explicit' &&
+    authorization.principalRef === input.principalRef &&
+    authorization.authorizationRef.length > 0;
+  const automationAuthorized =
+    actor === 'automation' &&
+    input.source === 'schedule' &&
+    launchPolicy === 'auto' &&
+    authorization.kind === 'automation_policy' &&
+    authorization.automationRef.length > 0 &&
+    authorization.authorizationRef.length > 0;
+  const systemAuthorized =
+    actor === 'system' &&
+    authorization.kind === 'trusted_system' &&
+    authorization.authorizationRef.length > 0;
+  const featureAuthorized =
+    actor === 'feature_service' &&
+    input.source === 'feature_ui' &&
+    launchPolicy !== 'manual_only' &&
+    authorization.kind === 'trusted_system' &&
+    authorization.authorizationRef.length > 0;
+  if (
+    entryPoint.length === 0 ||
+    !(
+      humanAuthorized ||
+      automationAuthorized ||
+      systemAuthorized ||
+      featureAuthorized
+    ) ||
+    ((launchPolicy === 'confirm' || launchPolicy === 'manual_only') &&
+      !humanAuthorized) ||
+    (input.source === 'task_workspace' && !humanAuthorized)
+  ) {
+    throw new G5RuntimeError(
+      'forbidden_surface',
+      'T0 launch source, actor, policy, and authorization are incompatible',
+    );
+  }
   const observedCreationIntentHash = calculateCreationIntentHash({
     creationDomain: input.creationDomain,
     creationKey: input.creationKey,
@@ -109,7 +181,7 @@ export function createWorkflowT0(
     ownershipHash: input.ownershipHash,
     routingScope: input.routingScope,
     recipe: input.recipe,
-    entryPoint: 'default',
+    entryPoint,
     inputHash: input.input.hash,
     attachmentManifestHash: input.attachments.hash,
   });
@@ -158,6 +230,29 @@ export function createWorkflowT0(
     workflow_id: workflowId,
     graph_run_no: 1,
   });
+  const confirmationId = input.launchConfirmation
+    ? stableRuntimeId('launch-confirmation', {
+        intake_id: intakeId,
+        idempotency_key: input.launchConfirmation.idempotencyKey,
+      })
+    : null;
+  const confirmationHash = input.launchConfirmation
+    ? domainSeparatedSha256('icarus:workflow-launch-confirmation:1\n', {
+        intake_id: intakeId,
+        intake_revision_id: revisionId,
+        input_hash: input.input.hash,
+        routing_decision_id: routingId,
+        routing_decision_hash: input.routingDecision.hash,
+        recipe_resource_id: input.recipe.rowId,
+        recipe_hash: input.recipe.hash,
+        creation_intent_hash: input.creationIntentHash,
+        actor_ref: input.launchConfirmation.actorRef,
+        action: 'approve',
+        expires_at_ms: input.launchConfirmation.expiresAtMs,
+        idempotency_key: input.launchConfirmation.idempotencyKey,
+        evidence: input.launchConfirmation.evidence,
+      })
+    : null;
   const replayActivation: T1ActivationReceipt = {
     activationId,
     graphRunId,
@@ -192,15 +287,19 @@ export function createWorkflowT0(
       const existing = transaction.queryOne<{
         id: string;
         creation_intent_hash: string;
+        launch_confirmation_id: string | null;
+        launch_confirmation_hash: string | null;
         workflow_id: string | null;
         status: string;
       }>(
-        'SELECT id, creation_intent_hash, workflow_id, status FROM workflow_creation_requests WHERE creation_domain = ? AND creation_key = ?',
+        'SELECT id, creation_intent_hash, launch_confirmation_id, launch_confirmation_hash, workflow_id, status FROM workflow_creation_requests WHERE creation_domain = ? AND creation_key = ?',
         [input.creationDomain, input.creationKey],
       );
       if (existing) {
         if (
           existing.creation_intent_hash !== input.creationIntentHash ||
+          existing.launch_confirmation_id !== confirmationId ||
+          existing.launch_confirmation_hash !== confirmationHash ||
           existing.workflow_id !== workflowId ||
           existing.status !== 'created'
         ) {
@@ -302,6 +401,43 @@ export function createWorkflowT0(
           input.nowMs,
         ],
       );
+      if (input.launchConfirmation && confirmationId && confirmationHash) {
+        if (
+          input.launchConfirmation.actorRef !== input.principalRef ||
+          !input.launchConfirmation.idempotencyKey ||
+          input.launchConfirmation.expiresAtMs <= input.nowMs
+        ) {
+          throw new G5RuntimeError(
+            'forbidden_surface',
+            'Launch confirmation must be an unexpired exact Human authorization',
+          );
+        }
+        transaction.execute(
+          `INSERT INTO workflow_launch_confirmations (
+             id, intake_id, intake_revision_id, input_hash,
+             routing_decision_id, routing_decision_hash,
+             recipe_resource_id, recipe_resource_hash, creation_intent_hash,
+             actor_ref, action, expires_at_ms, idempotency_key, request_hash,
+             created_at_ms
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approve', ?, ?, ?, ?)`,
+          [
+            confirmationId,
+            intakeId,
+            revisionId,
+            input.input.hash,
+            routingId,
+            input.routingDecision.hash,
+            input.recipe.rowId,
+            input.recipe.hash,
+            input.creationIntentHash,
+            input.launchConfirmation.actorRef,
+            input.launchConfirmation.expiresAtMs,
+            input.launchConfirmation.idempotencyKey,
+            confirmationHash,
+            input.nowMs,
+          ],
+        );
+      }
       transaction.execute(
         `INSERT INTO workflow_creation_requests (
        id, intake_id, creation_mode, creation_domain, creation_key,
@@ -311,7 +447,7 @@ export function createWorkflowT0(
        attachment_manifest_value_id, attachment_manifest_hash, creation_intent_hash,
        runtime_safety_hash, launch_confirmation_id, launch_confirmation_hash,
        status, workflow_id, error_code, created_at_ms, updated_at_ms
-     ) VALUES (?, ?, 'direct', ?, ?, ?, ?, ?, ?, 'default', ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'created', ?, NULL, ?, ?)`,
+     ) VALUES (?, ?, 'direct', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'created', ?, NULL, ?, ?)`,
         [
           creationRequestId,
           intakeId,
@@ -321,6 +457,7 @@ export function createWorkflowT0(
           input.recipe.hash,
           input.definition.rowId,
           input.definition.hash,
+          entryPoint,
           input.executionPolicy.rowId,
           input.executionPolicy.hash,
           input.input.id,
@@ -329,6 +466,8 @@ export function createWorkflowT0(
           input.attachments.hash,
           input.creationIntentHash,
           input.runtimeSafetyHash,
+          confirmationId,
+          confirmationHash,
           workflowId,
           input.nowMs,
           input.nowMs,

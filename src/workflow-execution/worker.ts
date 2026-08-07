@@ -86,6 +86,10 @@ export interface WorkflowExecutionWorkerOptions {
   readonly leaseOwner: string;
   readonly now?: () => number;
   readonly logger?: WorkflowExecutionWorkerLogger;
+  readonly onRuntimeCommit?: (hint: {
+    readonly workflowId: string;
+    readonly graphRunId: string;
+  }) => void;
 }
 
 const NOOP_LOGGER: WorkflowExecutionWorkerLogger = {
@@ -406,6 +410,7 @@ export class WorkflowExecutionWorker {
       startedAtMs,
       finishedAtMs,
     });
+    this.notifyRuntimeCommitForOutbox(lease.outboxId);
   }
 
   private recordNotApplied(lease: OutboxLease, startedAtMs: number): void {
@@ -428,6 +433,7 @@ export class WorkflowExecutionWorker {
       startedAtMs,
       finishedAtMs,
     });
+    this.notifyRuntimeCommitForOutbox(lease.outboxId);
   }
 
   private recordReceiptLost(
@@ -459,6 +465,7 @@ export class WorkflowExecutionWorker {
       startedAtMs,
       finishedAtMs,
     });
+    this.notifyRuntimeCommitForOutbox(lease.outboxId);
   }
 
   private monitor(
@@ -600,6 +607,10 @@ export class WorkflowExecutionWorker {
       expectedScopeWorkFenceEpoch: record.context.scopeWorkFenceEpoch,
       nowMs: this.now(),
     });
+    this.options.onRuntimeCommit?.({
+      workflowId: this.workflowIdForRun(record.context.graphRunId),
+      graphRunId: record.context.graphRunId,
+    });
     this.options.executionStore.markCallbackDelivered(
       record.executionId,
       this.now(),
@@ -608,6 +619,34 @@ export class WorkflowExecutionWorker {
       { executionId: record.executionId, disposition },
       'Workflow execution callback delivered',
     );
+  }
+
+  private workflowIdForRun(graphRunId: string): string {
+    const row = this.options.runtimeStore.queryOne<{ workflow_id: string }>(
+      'SELECT workflow_id FROM workflow_graph_runs WHERE id = ?',
+      [graphRunId],
+    );
+    if (!row) throw new Error(`Workflow Run is missing: ${graphRunId}`);
+    return row.workflow_id;
+  }
+
+  private notifyRuntimeCommitForOutbox(outboxId: string): void {
+    if (!this.options.onRuntimeCommit) return;
+    const row = this.options.runtimeStore.queryOne<{
+      workflow_id: string | null;
+      graph_run_id: string | null;
+    }>(
+      `SELECT o.workflow_id, attempt.graph_run_id
+         FROM workflow_outbox o
+         LEFT JOIN workflow_graph_node_attempts attempt ON attempt.id = o.attempt_id
+        WHERE o.id = ?`,
+      [outboxId],
+    );
+    if (!row?.graph_run_id) return;
+    this.options.onRuntimeCommit({
+      workflowId: row.workflow_id ?? this.workflowIdForRun(row.graph_run_id),
+      graphRunId: row.graph_run_id,
+    });
   }
 
   private persistResultValue(

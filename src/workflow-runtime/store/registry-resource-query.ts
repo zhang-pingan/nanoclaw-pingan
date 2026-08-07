@@ -36,6 +36,7 @@ interface ResourceRow extends Record<string, unknown> {
   resource_version: string;
   owner_core_ref: string | null;
   owner_feature_id: string | null;
+  owner_principal_ref: string | null;
   canonical_value_id: string;
   content_hash: string;
   publication_state: string;
@@ -84,7 +85,7 @@ function queryResourceByExactRef(
 ): ResourceRow | undefined {
   return connection.queryOne<ResourceRow>(
     `SELECT id, resource_type, resource_id, resource_version, owner_core_ref,
-            owner_feature_id, canonical_value_id, content_hash, publication_state
+            owner_feature_id, owner_principal_ref, canonical_value_id, content_hash, publication_state
        FROM workflow_registry_resources
       WHERE resource_type = ? AND resource_id = ? AND resource_version = ?`,
     [resourceType, resourceId, resourceVersion],
@@ -97,7 +98,7 @@ function queryResourceById(
 ): ResourceRow | undefined {
   return connection.queryOne<ResourceRow>(
     `SELECT id, resource_type, resource_id, resource_version, owner_core_ref,
-            owner_feature_id, canonical_value_id, content_hash, publication_state
+            owner_feature_id, owner_principal_ref, canonical_value_id, content_hash, publication_state
        FROM workflow_registry_resources WHERE id = ?`,
     [resourceId],
   );
@@ -171,13 +172,27 @@ function readCanonicalValue(
 function expectedOwnerColumns(owner: G3RegistryResourceOwner): {
   ownerCoreRef: string | null;
   ownerFeatureId: string | null;
+  ownerPrincipalRef: string | null;
 } {
-  return owner.kind === 'core'
-    ? {
-        ownerCoreRef: `${owner.ref.id}@${owner.ref.version}`,
-        ownerFeatureId: null,
-      }
-    : { ownerCoreRef: null, ownerFeatureId: owner.feature_id };
+  if (owner.kind === 'core') {
+    return {
+      ownerCoreRef: `${owner.ref.id}@${owner.ref.version}`,
+      ownerFeatureId: null,
+      ownerPrincipalRef: null,
+    };
+  }
+  if (owner.kind === 'feature') {
+    return {
+      ownerCoreRef: null,
+      ownerFeatureId: owner.feature_id,
+      ownerPrincipalRef: null,
+    };
+  }
+  return {
+    ownerCoreRef: null,
+    ownerFeatureId: null,
+    ownerPrincipalRef: owner.principal_ref,
+  };
 }
 
 function rejected(
@@ -301,7 +316,8 @@ export function queryExactRegistryResource(
   const expectedOwner = expectedOwnerColumns(input.owner);
   if (
     resource.owner_core_ref !== expectedOwner.ownerCoreRef ||
-    resource.owner_feature_id !== expectedOwner.ownerFeatureId
+    resource.owner_feature_id !== expectedOwner.ownerFeatureId ||
+    resource.owner_principal_ref !== expectedOwner.ownerPrincipalRef
   ) {
     return rejected(input, 'resource_owner_mismatch');
   }

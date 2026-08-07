@@ -16,6 +16,8 @@ export interface WorkflowCompilerRequest {
   sourceKind: WorkflowCompilerSourceKind;
   rawSourceBytes: Uint8Array;
   inputSnapshot: JsonObject;
+  /** Exact Recipe-bound Definition entrypoint. */
+  entryPoint?: string;
 }
 
 export interface WorkflowCompilerSuccess {

@@ -63,7 +63,7 @@ export function resolveFiniteWorkflowCreationInput(
       ownershipHash: request.template.ownershipHash,
       routingScope: request.template.routingScope,
       recipe: request.template.recipe,
-      entryPoint: 'default',
+      entryPoint: request.template.entryPoint,
       inputHash: request.template.input.hash,
       attachmentManifestHash: request.template.attachments.hash,
     }),

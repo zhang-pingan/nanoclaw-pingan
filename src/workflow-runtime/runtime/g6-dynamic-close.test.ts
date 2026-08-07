@@ -1633,6 +1633,115 @@ describe('G6 dynamic materialization and close', () => {
     });
   });
 
+  it('rejects an untrusted temporary-replan route without mutating the frozen Plan', () => {
+    const fixture = createG6MapFixture('root-t8-untrusted-replan', {
+      temporaryReplanRoute: true,
+    });
+    fixtures.push(fixture);
+    const frozenPlanBytes = canonicalJson(
+      fixture.instance.store.queryAll<SqlSnapshotRow>(
+        `SELECT id, plan_hash, compiled_plan_json
+           FROM workflow_graph_scope_plans WHERE graph_run_id = ?
+          ORDER BY id COLLATE BINARY`,
+        [fixture.graphRunId],
+      ),
+    );
+    const runBeforeClose = currentRun(fixture);
+    const rootBeforeClose = currentScope(fixture, fixture.rootScopeId);
+    const close = requestScopeCloseT7a(fixture.instance.store, {
+      graphRunId: fixture.graphRunId,
+      scopeId: fixture.rootScopeId,
+      expectedRunRowVersion: runBeforeClose.row_version,
+      expectedScopeRowVersion: rootBeforeClose.row_version,
+      expectedRunWorkFenceEpoch: runBeforeClose.work_fence_epoch,
+      expectedScopeWorkFenceEpoch: rootBeforeClose.work_fence_epoch,
+      cause: {
+        reason: 'local_cancel',
+        cancelPayload: {
+          command_id: 'g6:untrusted-replan',
+          request_hash: g6Hash('untrusted-replan-request'),
+          reason_code: 'superseded',
+        },
+      },
+      manifestSchema: fixture.seed.refs.fenceManifestSchema!,
+      nowMs: 850,
+    });
+    fixture.instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        `UPDATE workflow_graph_runs
+            SET control = 'cancelling', root_cancel_scope = 'local_graph',
+                row_version = row_version + 1
+          WHERE id = ?`,
+        [fixture.graphRunId],
+      );
+    });
+    const authority = fixture.instance.store.queryOne<{
+      activation_id: string;
+      workflow_row_version: number;
+      activation_row_version: number;
+      run_row_version: number;
+      root_row_version: number;
+    }>(
+      `SELECT w.state_instance_id AS activation_id,
+              w.row_version AS workflow_row_version,
+              a.row_version AS activation_row_version,
+              r.row_version AS run_row_version,
+              root.row_version AS root_row_version
+         FROM workflows w
+         JOIN workflow_state_activations a ON a.id = w.state_instance_id
+         JOIN workflow_graph_runs r ON r.id = w.current_graph_run_id
+         JOIN workflow_graph_scopes root ON root.id = r.root_scope_id
+        WHERE w.id = ?`,
+      [fixture.workflowId],
+    )!;
+    expect(() =>
+      commitRootT8(fixture.instance.store, {
+        workflowId: fixture.workflowId,
+        sourceActivationId: authority.activation_id,
+        sourceRunId: fixture.graphRunId,
+        rootScopeId: fixture.rootScopeId,
+        closeRequestId: close.closeRequestId,
+        expectedWorkflowRowVersion: authority.workflow_row_version,
+        expectedSourceActivationRowVersion: authority.activation_row_version,
+        expectedSourceRunRowVersion: authority.run_row_version,
+        expectedRootScopeRowVersion: authority.root_row_version,
+        routeSource: 'on_temporary_replan',
+        target: {
+          kind: 'terminal',
+          stateKey: 'cancelled',
+          definition: fixture.seed.refs.definition!,
+          definitionVersion: '1.0.0',
+          stateConfig: fixture.seed.values.stateConfig!,
+          terminalKind: 'errored',
+          output: null,
+          outputSchemaHash: null,
+          errorCode: 'cancelled',
+          errorDetail: null,
+        },
+        contextValueSchema: fixture.seed.refs.schema!,
+        requiredChildren: [],
+        bestEffortOutbox: [],
+        nowMs: 851,
+      }),
+    ).toThrow(/trusted command authority/);
+    expect(
+      fixture.instance.store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM workflow_graph_completion_cuts WHERE graph_run_id = ?',
+        [fixture.graphRunId],
+      )!.count,
+    ).toBe(0);
+    expect(
+      canonicalJson(
+        fixture.instance.store.queryAll<SqlSnapshotRow>(
+          `SELECT id, plan_hash, compiled_plan_json
+             FROM workflow_graph_scope_plans WHERE graph_run_id = ?
+            ORDER BY id COLLATE BINARY`,
+          [fixture.graphRunId],
+        ),
+      ),
+    ).toBe(frozenPlanBytes);
+  });
+
   it('reuses T1 core for a nonterminal T8 with one combined checkpoint', () => {
     const fixture = createG6MapFixture('root-t8-nonterminal', {
       errorTargetKind: 'graph',

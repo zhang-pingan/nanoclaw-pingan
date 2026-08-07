@@ -53,7 +53,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-registry-exact-resource-query-input-schema:1\n",
-        "hash": "sha256:9d0f7928bf55fee1183d04e3bee7538d461f18cf35fc23affafecef0dbfebb2a"
+        "hash": "sha256:890468057a5e39303ed75c3df136f9dc92f150b86109bc75d24d030f83e3e387"
       },
       {
         "path": "registry/workflow-registry-exact-resource-query-result-schema@1.json",
@@ -64,7 +64,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-registry-exact-resource-query-result-schema:1\n",
-        "hash": "sha256:95c21a7eed656604586601e4a29b2f25c31e45462a374383487a80c0bc8e8620"
+        "hash": "sha256:8f4e31e804b9498c7f0eff223321367f48fb3b98baba1e36ba223142a2fd8f63"
       },
       {
         "path": "conformance/g3-registry-exact-resource-query/positive-cases.json",
@@ -104,5 +104,5 @@
     "negative_case_count": 5,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:65de99a40824b26b69849d38422a8f1c79d16c33bef013655d4ea51228f09184"
+  "hash": "sha256:5dfb07dcfe3399e9bdf81923315f10acc0e7bfaf5628af88d2cc5d078f2f13de"
 }

@@ -21,13 +21,18 @@ import {
   type RuntimeCommandGatewayInput,
 } from './commands.js';
 import { openOperationalBlocker } from './operational-blockers.js';
-import { insertGraphEvent, stableRuntimeId } from './graph-store.js';
+import {
+  insertGraphEvent,
+  insertInlineValue,
+  stableRuntimeId,
+} from './graph-store.js';
 import { reserveLedgerResources } from './ledger.js';
 import {
   recordRootFinalizationAttempt,
   type T8RootCommitInput,
 } from './root-finalizer.js';
 import { createG7Fixture, g7Hash, type G7Fixture } from './g7-test-support.js';
+import { WorkflowRuntimeTransactionAuthority } from '../service.js';
 
 const fixtures: G7Fixture[] = [];
 
@@ -1026,6 +1031,243 @@ describe('G7 command, recovery, and resolution', () => {
       control: 'cancelling',
       root_cancel_scope: 'local_graph',
     });
+    expect(
+      new WorkflowRuntimeTransactionAuthority(
+        cancelTarget.instance.store,
+      ).advance('close', 4, 353).processed,
+    ).toBe(1);
+    expect(
+      cancelTarget.instance.store.queryOne<{
+        status: string;
+        current_graph_run_id: string | null;
+        state_key: string;
+      }>(
+        `SELECT workflow.status, workflow.current_graph_run_id,
+                activation.state_key
+           FROM workflows workflow
+           JOIN workflow_state_activations activation
+             ON activation.id = workflow.state_instance_id
+          WHERE workflow.id = ?`,
+        [cancelTarget.workflowId],
+      ),
+    ).toEqual({
+      status: 'errored',
+      current_graph_run_id: null,
+      state_key: 'cancelled',
+    });
+  });
+
+  it('replans only from trusted supersession evidence after the T7a compensation barrier', () => {
+    const oldConfirmation = {
+      format: 'icarus.temporary-workflow-confirmation/1',
+      source_json: { scope_key: 'old-child' },
+      source_hash: g7Hash('temporary-replan:old-source'),
+      plan_hash: g7Hash('temporary-replan:old-plan'),
+    };
+    const stateInvariant = { fixed_outer: 'g7-temporary-replan' };
+    const target = createG7Fixture('temporary-replan', {
+      temporaryReplanRoute: true,
+      stateConfigContent: {
+        ...stateInvariant,
+        temporary_confirmation: oldConfirmation,
+      },
+    });
+    fixtures.push(target);
+    const sourceActivationId = target.instance.store.queryOne<{
+      state_instance_id: string;
+    }>('SELECT state_instance_id FROM workflows WHERE id = ?', [
+      target.workflowId,
+    ])!.state_instance_id;
+    const targetConfigId = stableRuntimeId('value', {
+      kind: 'temporary-replan-state-config',
+      workflow_id: target.workflowId,
+      creation_key: 'replan:g7:1',
+    });
+    const targetConfigHash = g7Hash('temporary-replan:target-state-config');
+    const targetConfig: JsonObject = {
+      ...stateInvariant,
+      temporary_confirmation: {
+        format: 'icarus.temporary-workflow-confirmation/1',
+        source_json: { scope_key: 'new-child' },
+        source_hash: g7Hash('temporary-replan:new-source'),
+        plan_hash: g7Hash('temporary-replan:new-plan'),
+      },
+      temporary_replan: {
+        format: 'icarus.temporary-replan-target/1',
+        source_workflow_id: target.workflowId,
+        source_activation_id: sourceActivationId,
+        source_run_id: target.graphRunId,
+        source_state_config_hash: target.seed.values.stateConfig!.hash,
+        creation_key: 'replan:g7:1',
+        confirmation_ref: 'confirmation:g7:temporary-replan',
+      },
+    };
+    target.instance.store.withImmediateTransaction((transaction) => {
+      insertInlineValue(transaction, {
+        id: targetConfigId,
+        content: targetConfig,
+        contentHash: targetConfigHash,
+        schemaResourceId: target.seed.refs.schema!.rowId,
+        schemaResourceHash: target.seed.refs.schema!.hash,
+        provenanceRef: 'task-workspace:replan:g7:1:state-config',
+        retentionClass: 'run_recovery',
+        ownerGraphRunId: target.graphRunId,
+        createdAtMs: 1_000,
+      });
+    });
+    const effect = seedTerminalAttemptAndEffect(target, 'temporary-replan');
+    const recoveryValue = target.seed.values.context!;
+    target.instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        `UPDATE workflow_graph_effect_operations
+            SET status = 'succeeded', receipt_value_id = ?, receipt_hash = ?,
+                after_state_value_id = ?, after_state_hash = ?,
+                immutable_output_snapshot_value_id = ?,
+                immutable_output_snapshot_hash = ?, row_version = row_version + 1
+          WHERE id = ? AND status = 'action_required'`,
+        [
+          recoveryValue.id,
+          recoveryValue.hash,
+          recoveryValue.id,
+          recoveryValue.hash,
+          recoveryValue.id,
+          recoveryValue.hash,
+          effect.effectId,
+        ],
+      );
+    });
+    const frozenPlanBytes = canonicalJson(
+      target.instance.store.queryAll<Record<string, unknown>>(
+        `SELECT id, plan_hash, compiled_plan_json
+           FROM workflow_graph_scope_plans WHERE graph_run_id = ?
+          ORDER BY id COLLATE BINARY`,
+        [target.graphRunId],
+      ) as unknown as JsonObject[],
+    );
+    const cancelled = submitRuntimeCommand(
+      target.instance.store,
+      commandInput(
+        target,
+        {
+          command_id: 'g7:temporary-replan',
+          command_type: 'cancel_run',
+          target: { run_id: target.graphRunId },
+          idempotency_key: 'temporary-replan',
+          expected_row_version: runVersion(target),
+          reason_code: 'superseded',
+          evidence_refs: [targetConfigId, targetConfigHash],
+        },
+        1_001,
+        {
+          actor: {
+            ...target.actor,
+            authSessionRef: 'task-workspace:temporary-replan',
+            entrypoint: 'task_workspace',
+          },
+        },
+      ),
+    );
+    expect(cancelled).toMatchObject({
+      executionResult: 'applied',
+      denialCode: null,
+    });
+    expect(
+      target.instance.store.queryOne<{
+        status: string;
+        execution_lane: string;
+      }>(
+        'SELECT status, execution_lane FROM workflow_graph_effect_operations WHERE id = ?',
+        [effect.effectId],
+      ),
+    ).toEqual({
+      status: 'compensation_pending',
+      execution_lane: 'close_cleanup',
+    });
+    expect(
+      target.instance.store.queryOne<{ count: number }>(
+        `SELECT count(*) AS count FROM workflow_graph_events
+          WHERE graph_run_id = ? AND event_type = 'subtree_fenced'`,
+        [target.graphRunId],
+      )!.count,
+    ).toBe(1);
+
+    const authority = new WorkflowRuntimeTransactionAuthority(
+      target.instance.store,
+    );
+    expect(() => authority.advance('close', 8, 1_002)).toThrow(
+      /successful compensation/,
+    );
+    expect(
+      target.instance.store.queryOne<{ current_graph_run_id: string }>(
+        'SELECT current_graph_run_id FROM workflows WHERE id = ?',
+        [target.workflowId],
+      )!.current_graph_run_id,
+    ).toBe(target.graphRunId);
+
+    target.instance.store.withImmediateTransaction((transaction) => {
+      transaction.execute(
+        `UPDATE workflow_graph_effect_operations
+            SET status = 'compensated', compensation_value_id = ?,
+                compensation_hash = ?, row_version = row_version + 1,
+                updated_at_ms = ?
+          WHERE id = ? AND status = 'compensation_pending'`,
+        [recoveryValue.id, recoveryValue.hash, 1_003, effect.effectId],
+      );
+    });
+    expect(authority.advance('close', 8, 1_004).processed).toBe(1);
+    const workflow = target.instance.store.queryOne<{
+      status: string;
+      state_instance_id: string;
+      current_graph_run_id: string;
+      state_activation_count: number;
+      graph_run_count: number;
+    }>(
+      `SELECT status, state_instance_id, current_graph_run_id,
+              state_activation_count, graph_run_count
+         FROM workflows WHERE id = ?`,
+      [target.workflowId],
+    )!;
+    expect(workflow).toMatchObject({
+      status: 'active',
+      state_activation_count: 2,
+      graph_run_count: 2,
+    });
+    expect(workflow.current_graph_run_id).not.toBe(target.graphRunId);
+    expect(workflow.state_instance_id).not.toBe(sourceActivationId);
+    expect(
+      target.instance.store.queryOne<{
+        workflow_id: string;
+        state_key: string;
+        state_config_value_id: string;
+      }>(
+        'SELECT workflow_id, state_key, state_config_value_id FROM workflow_graph_runs WHERE id = ?',
+        [workflow.current_graph_run_id],
+      ),
+    ).toEqual({
+      workflow_id: target.workflowId,
+      state_key: 'run',
+      state_config_value_id: targetConfigId,
+    });
+    expect(
+      target.instance.store.queryOne<{
+        lifecycle: string;
+        outcome_kind: string;
+        completion_cut_id: string;
+      }>(
+        'SELECT lifecycle, outcome_kind, completion_cut_id FROM workflow_graph_runs WHERE id = ?',
+        [target.graphRunId],
+      ),
+    ).toMatchObject({ lifecycle: 'closed', outcome_kind: 'cancelled' });
+    expect(
+      canonicalJson(
+        target.instance.store.queryAll<Record<string, unknown>>(
+          `SELECT id, plan_hash, compiled_plan_json
+             FROM workflow_graph_scope_plans WHERE graph_run_id = ?
+            ORDER BY id COLLATE BINARY`,
+          [target.graphRunId],
+        ) as unknown as JsonObject[],
+      ),
+    ).toBe(frozenPlanBytes);
   });
 
   it('authorizes manual retry before consuming the existing T6d schedule early', () => {

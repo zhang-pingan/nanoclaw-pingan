@@ -25,7 +25,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-registry-resource-schema:1\n",
-        "hash": "sha256:4bff327f06db7d10f87c3ec66711c8ec6b0fae284b6fcb01343ec6cdb8d96c17"
+        "hash": "sha256:6b7db81e8e980c923c4b4377c1f76303242e3d13e16b897f547f97bed8218bed"
       },
       {
         "path": "registry/workflow-registry-dependency-closure-manifest-schema@1.json",
@@ -109,5 +109,5 @@
     "negative_case_count": 4,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:fd017325268b716020dffff7dbe7f2dbc94a8de6d7e953aec1291bb4d48872ea"
+  "hash": "sha256:08e6104a6f24688f8304237654a5f89b0de5e4102850980599a0b19b1f6f8797"
 }

@@ -398,6 +398,25 @@
                 "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
               }
             }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "principal_ref"
+            ],
+            "properties": {
+              "kind": {
+                "const": "principal"
+              },
+              "principal_ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+              }
+            }
           }
         ]
       },
@@ -537,5 +556,5 @@
       }
     }
   },
-  "hash": "sha256:97757b7851d0f1cda48d8d7ff9296d15d17efb44675d882603929dfbbb0141e7"
+  "hash": "sha256:f82f65e48ea6358b672ab89ad7996e598fa1f6dcd0ed2904d6d239e46121a33c"
 }

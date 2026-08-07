@@ -27,6 +27,21 @@ import {
   collaborationTurnHistory,
   collaborationTurnLifecycle,
 } from './collaboration-ui.js';
+import {
+  createTaskWorkspaceHost,
+  handleTaskWorkspaceWebSocketMessage,
+  mountTaskWorkspace,
+  navigateTaskWorkspace,
+  notifyTaskWorkspaceWebSocketReconnect,
+  unmountTaskWorkspace,
+} from './task-workspace/index.ts';
+import {
+  isRuntimeCenterRunLink,
+  isTaskWorkspaceSessionLink,
+  runtimeCenterLinkHref,
+  taskWorkspaceLinkHref,
+  taskWorkspaceSessionLink,
+} from './task-workspace/navigation.ts';
 
 var ws = null;
 var reconnectTimer = null;
@@ -34,6 +49,22 @@ var currentAgentJid = '';
 var launchParams = new URLSearchParams(window.location.search);
 var initialAssistantTarget = launchParams.get('assistantTarget') || '';
 var initialRoutePath = window.location.pathname || '/';
+var initialTaskWorkspaceLink = taskWorkspaceSessionLink(
+  launchParams.get('session_id') || '',
+);
+var initialRuntimeCenterLink = isRuntimeCenterRunLink({
+  format: 'icarus.runtime-link/1',
+  target: launchParams.get('runtime_target') || '',
+  workflow_id: launchParams.get('workflow_id') || '',
+  run_id: launchParams.get('run_id') || '',
+})
+  ? {
+      format: 'icarus.runtime-link/1',
+      target: 'run',
+      workflow_id: launchParams.get('workflow_id'),
+      run_id: launchParams.get('run_id'),
+    }
+  : null;
 var collaborationRouteTabs = new Set([
   'overview',
   'roles',
@@ -334,6 +365,17 @@ var componentManagementNavToggle = document.getElementById(
 var componentManagementNavChildren = document.getElementById(
   'component-management-nav-children',
 );
+var taskWorkspaceHost =
+  primaryNav && mainScreen
+    ? createTaskWorkspaceHost({
+        navigation: primaryNav,
+        screenParent: mainScreen,
+        navInsertBefore: componentManagementNavGroup,
+        screenInsertBefore: featureRuntimeScreen,
+      })
+    : null;
+var taskWorkspaceScreen = taskWorkspaceHost?.screen || null;
+var taskWorkspaceMounted = false;
 var primaryNavItems = Array.from(
   document.querySelectorAll('.primary-nav-item'),
 );
@@ -487,15 +529,17 @@ var cancelSelectBtn = document.getElementById('cancel-select-btn');
 var agentStatusInterval = null;
 var agentStatusData = [];
 var agentRunTraceByAgent = {};
-var activePrimaryNavKey = initialRoutePath.startsWith('/groups')
-  ? 'groups'
-  : initialRoutePath.startsWith('/sessions')
-    ? 'sessions'
-    : initialAssistantTarget === 'assistant'
-      ? 'assistant'
-      : initialAssistantTarget === 'trace-monitor'
-        ? 'trace-monitor'
-        : 'sessions';
+var activePrimaryNavKey = initialRoutePath.startsWith('/tasks')
+  ? 'task-workspace'
+  : initialRoutePath.startsWith('/groups')
+    ? 'groups'
+    : initialRoutePath.startsWith('/sessions')
+      ? 'sessions'
+      : initialAssistantTarget === 'assistant'
+        ? 'assistant'
+        : initialAssistantTarget === 'trace-monitor'
+          ? 'trace-monitor'
+          : 'sessions';
 var todayPlanVisible = initialAssistantTarget === 'today-plan';
 var todayPlanOverview = null;
 var currentTodayPlan = null;
@@ -509,6 +553,8 @@ var todayPlanMailSenderName = '';
 var todayPlanMailToText = '';
 var todayPlanMailCcText = '';
 var activeTraceMonitorScope = 'active';
+var runtimeCenterTargetLink = initialRuntimeCenterLink;
+var runtimeCenterTaskWorkspaceLink = null;
 var enabledFeatureRuntimeItems = [];
 var featureRendererModules = new Map();
 var featureRendererCleanups = new Map();
@@ -4588,6 +4634,8 @@ function applyScreenVisibility() {
     !showTodayPlan && getFeatureRuntimeItem(activePrimaryNavKey);
   const showAssistant = !showTodayPlan && activePrimaryNavKey === 'assistant';
   const showWorkspace = !showTodayPlan && activePrimaryNavKey === 'sessions';
+  const showTaskWorkspace =
+    !showTodayPlan && activePrimaryNavKey === 'task-workspace';
   const showCollaboration = !showTodayPlan && activePrimaryNavKey === 'groups';
   const showConfiguration =
     !showTodayPlan && activePrimaryNavKey === 'configuration';
@@ -4606,6 +4654,30 @@ function applyScreenVisibility() {
   }
   if (workspace) {
     workspace.classList.toggle('active', showWorkspace);
+  }
+  if (taskWorkspaceScreen) {
+    taskWorkspaceScreen.classList.toggle('active', showTaskWorkspace);
+  }
+  if (showTaskWorkspace && taskWorkspaceHost && !taskWorkspaceMounted) {
+    mountTaskWorkspace({
+      root: taskWorkspaceHost.root,
+      apiFetch,
+      showToast,
+      initialSessionId: initialTaskWorkspaceLink?.session_id,
+      onSessionSelected: (link) => {
+        initialTaskWorkspaceLink = link;
+        if (activePrimaryNavKey !== 'task-workspace') return;
+        const href = taskWorkspaceLinkHref(link);
+        if (`${window.location.pathname}${window.location.search}` !== href) {
+          window.history.replaceState({ task_workspace_link: link }, '', href);
+        }
+      },
+      openRuntimeCenter: (link) => navigateToRuntimeCenterLink(link),
+    });
+    taskWorkspaceMounted = true;
+  } else if (!showTaskWorkspace && taskWorkspaceMounted) {
+    unmountTaskWorkspace();
+    taskWorkspaceMounted = false;
   }
   if (collaborationScreen) {
     collaborationScreen.classList.toggle('active', showCollaboration);
@@ -4671,7 +4743,112 @@ function syncPrimaryNavActiveState() {
   }
 }
 
+function renderRuntimeCenterTargetBanner() {
+  const main = traceMonitorScreen?.querySelector('.trace-monitor-main');
+  if (!main) return;
+  let banner = main.querySelector('[data-runtime-center-target]');
+  if (!runtimeCenterTargetLink) {
+    banner?.remove();
+    return;
+  }
+  if (!banner) {
+    banner = document.createElement('section');
+    banner.setAttribute('data-runtime-center-target', '');
+    banner.className = 'runtime-center-target-banner';
+    main.prepend(banner);
+  }
+  const workflowId = runtimeCenterTargetLink.workflow_id;
+  const runId = runtimeCenterTargetLink.run_id;
+  banner.innerHTML = `
+    <div class="runtime-center-target-copy">
+      <span>Workflow Runtime target</span>
+      <strong>Exact Run</strong>
+      <code title="${escapeHtml(`${workflowId} / ${runId}`)}">${escapeHtml(`${workflowId} / ${runId}`)}</code>
+    </div>
+    ${runtimeCenterTaskWorkspaceLink ? '<button type="button" class="tw-btn tw-btn-quiet" data-runtime-center-open-task>Open Task Workspace</button>' : '<span class="runtime-center-target-generic">No linked TaskSession</span>'}`;
+  const openTask = banner.querySelector('[data-runtime-center-open-task]');
+  openTask?.addEventListener('click', () => {
+    navigateToTaskWorkspaceLink(runtimeCenterTaskWorkspaceLink);
+  });
+}
+
+async function resolveRuntimeCenterTaskWorkspaceLink(link) {
+  runtimeCenterTaskWorkspaceLink = null;
+  renderRuntimeCenterTargetBanner();
+  try {
+    const response = await apiFetch(
+      `/api/task-workspace/runtime-links/workflows/${encodeURIComponent(link.workflow_id)}`,
+    );
+    if (!response.ok) return;
+    const body = await response.json();
+    if (
+      runtimeCenterTargetLink?.workflow_id === link.workflow_id &&
+      runtimeCenterTargetLink?.run_id === link.run_id &&
+      isTaskWorkspaceSessionLink(body.link)
+    ) {
+      runtimeCenterTaskWorkspaceLink = body.link;
+      renderRuntimeCenterTargetBanner();
+    }
+  } catch {
+    // An unlinked Runtime target remains a valid generic target.
+  }
+}
+
+function navigateToRuntimeCenterLink(link, options = {}) {
+  if (!isRuntimeCenterRunLink(link)) return false;
+  runtimeCenterTargetLink = link;
+  runtimeCenterTaskWorkspaceLink = null;
+  setPrimaryNav('trace-monitor', {
+    updateRoute: false,
+    preserveRuntimeTarget: true,
+  });
+  renderRuntimeCenterTargetBanner();
+  if (options.updateRoute !== false) {
+    window.history.pushState(
+      { runtime_center_link: link },
+      '',
+      runtimeCenterLinkHref(link),
+    );
+  }
+  void resolveRuntimeCenterTaskWorkspaceLink(link);
+  window.dispatchEvent(
+    new CustomEvent('icarus:runtime-center:navigate', { detail: link }),
+  );
+  return true;
+}
+
+function navigateToTaskWorkspaceLink(link, options = {}) {
+  if (!isTaskWorkspaceSessionLink(link)) return false;
+  navigateTaskWorkspace(link);
+  setPrimaryNav('task-workspace', { updateRoute: false });
+  if (options.updateRoute !== false) {
+    window.history.pushState(
+      { task_workspace_link: link },
+      '',
+      taskWorkspaceLinkHref(link),
+    );
+  }
+  return true;
+}
+
+function runtimeCenterLinkFromLocation() {
+  const params = new URLSearchParams(window.location.search);
+  const link = {
+    format: 'icarus.runtime-link/1',
+    target: params.get('runtime_target') || '',
+    workflow_id: params.get('workflow_id') || '',
+    run_id: params.get('run_id') || '',
+  };
+  return isRuntimeCenterRunLink(link) ? link : null;
+}
+
+function taskWorkspaceLinkFromLocation() {
+  const params = new URLSearchParams(window.location.search);
+  return taskWorkspaceSessionLink(params.get('session_id') || '');
+}
+
 function routeForPrimaryNav(navKey) {
+  if (navKey === 'task-workspace') return '/tasks';
   if (navKey === 'sessions') return '/sessions';
   if (navKey === 'groups')
     return collaborationRoute(
@@ -4685,6 +4862,11 @@ function setPrimaryNav(navKey, options = {}) {
   if (navKey === null || navKey === void 0) return;
   activePrimaryNavKey = navKey;
   todayPlanVisible = false;
+  if (navKey === 'trace-monitor' && options.preserveRuntimeTarget !== true) {
+    runtimeCenterTargetLink = null;
+    runtimeCenterTaskWorkspaceLink = null;
+    renderRuntimeCenterTargetBanner();
+  }
   if (isComponentManagementNavKey(navKey)) {
     setComponentManagementNavExpanded(true);
   }
@@ -10066,6 +10248,7 @@ function connectWS() {
       reconnectTimer = null;
     }
     sendDesktopCaptureCapabilities();
+    notifyTaskWorkspaceWebSocketReconnect();
     if (currentAgentJid) {
       sendWs({ type: 'select_agent', chatJid: currentAgentJid });
     }
@@ -10184,6 +10367,7 @@ function clearCurrentAgentUnreadIfForeground() {
 }
 
 function handleWsMessage(msg) {
+  if (handleTaskWorkspaceWebSocketMessage(msg)) return;
   switch (msg.type) {
     case 'connected':
       console.log('WS connected:', msg.message);
@@ -14182,8 +14366,24 @@ function openWorkstationTargetUrl(targetUrl) {
         showEmptyWhenNoToday: true,
       });
     } else if (target === 'trace-monitor') {
-      setPrimaryNav('trace-monitor');
-      loadTraceMonitorData({ force: true });
+      const runtimeLink = {
+        format: 'icarus.runtime-link/1',
+        target: url.searchParams.get('runtime_target') || '',
+        workflow_id: url.searchParams.get('workflow_id') || '',
+        run_id: url.searchParams.get('run_id') || '',
+      };
+      if (isRuntimeCenterRunLink(runtimeLink)) {
+        navigateToRuntimeCenterLink(runtimeLink);
+      } else {
+        setPrimaryNav('trace-monitor');
+        loadTraceMonitorData({ force: true });
+      }
+    } else if (target === 'task-workspace') {
+      const workspaceLink = taskWorkspaceSessionLink(
+        url.searchParams.get('session_id') || '',
+      );
+      if (!workspaceLink) return false;
+      navigateToTaskWorkspaceLink(workspaceLink);
     } else if (target === 'assistant') {
       setPrimaryNav('assistant');
     } else if (target === 'configuration') {
@@ -15186,6 +15386,10 @@ if (primaryNav) {
     syncPrimaryNavActiveState();
     applyScreenVisibility();
     loadTodayPlanOverview({ forceOpenToday: true, showEmptyWhenNoToday: true });
+  } else if (initialRuntimeCenterLink) {
+    navigateToRuntimeCenterLink(initialRuntimeCenterLink, {
+      updateRoute: false,
+    });
   } else {
     setPrimaryNav(activePrimaryNavKey, { replaceRoute: true });
   }
@@ -15308,10 +15512,25 @@ collaborationDialog?.addEventListener('cancel', (event) => {
 });
 window.addEventListener('popstate', async () => {
   if (await restoreCollaborationRoute(window.location.pathname)) return;
-  const navKey = window.location.pathname.startsWith('/sessions')
-    ? 'sessions'
-    : 'sessions';
-  setPrimaryNav(navKey, { updateRoute: false });
+  const runtimeLink = runtimeCenterLinkFromLocation();
+  if (runtimeLink) {
+    navigateToRuntimeCenterLink(runtimeLink, { updateRoute: false });
+    return;
+  }
+  if (window.location.pathname.startsWith('/tasks')) {
+    const workspaceLink = taskWorkspaceLinkFromLocation();
+    if (workspaceLink) {
+      navigateToTaskWorkspaceLink(workspaceLink, { updateRoute: false });
+    } else {
+      setPrimaryNav('task-workspace', { updateRoute: false });
+    }
+    return;
+  }
+  setPrimaryNav('sessions', { updateRoute: false });
+});
+window.addEventListener('icarus:task-workspace:navigate', (event) => {
+  if (!(event instanceof CustomEvent)) return;
+  navigateToTaskWorkspaceLink(event.detail);
 });
 if (assistantRefreshBtn) {
   assistantRefreshBtn.addEventListener('click', () => {

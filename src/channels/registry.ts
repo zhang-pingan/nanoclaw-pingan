@@ -8,6 +8,7 @@ import {
   StopAgentResult,
 } from '../types.js';
 import type { CollaborationWebApi } from '../collaboration/web-api.js';
+import type { TaskWorkspaceWebApi } from '../task-workspace/web-api.js';
 
 export interface ChannelOpts {
   onMessage: OnInboundMessage;
@@ -23,6 +24,7 @@ export interface ChannelOpts {
   }) => Promise<{ resetCount: number }>;
   registerAgent?: (jid: string, agent: RegisteredAgent) => void;
   collaborationApi?: CollaborationWebApi;
+  taskWorkspaceApi?: TaskWorkspaceWebApi;
 }
 
 export type ChannelFactory = (opts: ChannelOpts) => Channel | null;

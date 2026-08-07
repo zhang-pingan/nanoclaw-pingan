@@ -523,6 +523,376 @@ export type RootTransitionTarget =
     }
   | { readonly kind: 'global_cancel' };
 
+export interface TemporaryReplanTransitionAuthority {
+  readonly routeSource: 'on_temporary_replan';
+  readonly commandId: string;
+  readonly creationKey: string;
+  readonly confirmationRef: string;
+  readonly target: Extract<
+    RootTransitionTarget,
+    { readonly kind: 'nonterminal' }
+  >;
+}
+
+type RuntimeAuthorityReader = Pick<
+  WorkflowRuntimeStore,
+  'queryOne' | 'queryAll'
+>;
+
+interface TemporaryReplanSourceRow extends Record<string, unknown> {
+  workflow_definition_resource_id: string;
+  workflow_definition_resource_hash: Sha256Hash;
+  definition_resource_type: string;
+  definition_id: string;
+  definition_version: string;
+  state_config_value_id: string;
+  state_config_hash: Sha256Hash;
+  state_config_json: string;
+  registry_snapshot_id: string;
+  registry_snapshot_hash: Sha256Hash;
+  closure_manifest_id: string;
+  closure_hash: Sha256Hash;
+  runtime_safety_snapshot_value_id: string;
+  runtime_safety_snapshot_hash: Sha256Hash;
+  runtime_supported_limits_resource_id: string;
+  runtime_supported_limits_resource_hash: Sha256Hash;
+  supported_limits_resource_type: string;
+  supported_limits_id: string;
+  supported_limits_version: string;
+  sqlite_execution_profile_resource_id: string;
+  sqlite_execution_profile_resource_hash: Sha256Hash;
+  sqlite_profile_resource_type: string;
+  sqlite_profile_id: string;
+  sqlite_profile_version: string;
+  source_seed_hash: Sha256Hash;
+  compiler_snapshot_hash: Sha256Hash;
+  input_snapshot_value_id: string;
+  input_snapshot_hash: Sha256Hash;
+}
+
+function parseJsonObjectOrNull(value: string | null): JsonObject | null {
+  if (value === null) return null;
+  try {
+    const parsed = JSON.parse(value) as JsonValue;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as JsonObject)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function replanInvariantStateConfig(value: JsonObject): JsonObject {
+  const invariant = { ...value };
+  delete invariant.temporary_confirmation;
+  delete invariant.temporary_replan;
+  return invariant;
+}
+
+/**
+ * Resolves the exact T8/T1 intent sealed by an applied Task Workspace
+ * supersession command. Untrusted or ordinary local-cancel evidence is not a
+ * replan authority and returns null.
+ */
+export function deriveTemporaryReplanTransitionAuthority(
+  reader: RuntimeAuthorityReader,
+  input: {
+    readonly workflowId: string;
+    readonly sourceActivationId: string;
+    readonly sourceRunId: string;
+    readonly rootScopeId: string;
+    readonly closeRequestId: string;
+    readonly nowMs: number;
+  },
+): TemporaryReplanTransitionAuthority | null {
+  const close = reader.queryOne<{
+    reason: string;
+    cancel_payload_json: string | null;
+  }>(
+    `SELECT reason, cancel_payload_json
+       FROM workflow_graph_scope_close_requests
+      WHERE id = ? AND graph_run_id = ? AND scope_id = ?`,
+    [input.closeRequestId, input.sourceRunId, input.rootScopeId],
+  );
+  const cancelPayload = parseJsonObjectOrNull(
+    close?.cancel_payload_json ?? null,
+  );
+  if (
+    close?.reason !== 'local_cancel' ||
+    cancelPayload?.reason_code !== 'superseded' ||
+    typeof cancelPayload.command_id !== 'string' ||
+    typeof cancelPayload.request_hash !== 'string'
+  ) {
+    return null;
+  }
+  const command = reader.queryOne<{
+    command_id: string;
+    evidence_manifest_value_id: string;
+    evidence_manifest_hash: Sha256Hash;
+  }>(
+    `SELECT command.command_id, command.evidence_manifest_value_id,
+            command.evidence_manifest_hash
+       FROM workflow_runtime_commands command
+       JOIN workflow_runtime_command_invocations invocation
+         ON invocation.command_id = command.command_id
+        AND invocation.execution_result = 'applied'
+        AND invocation.authorization_result = 'allowed'
+        AND invocation.entrypoint = 'task_workspace'
+        AND invocation.actor_kind = 'human'
+        AND invocation.close_request_id = ?
+      WHERE command.command_id = ? AND command.command_type = 'cancel_run'
+        AND command.run_id = ? AND command.reason_code = 'superseded'
+        AND command.request_hash = ?
+        AND command.canonical_result_value_id IS NOT NULL
+        AND command.canonical_result_hash IS NOT NULL
+        AND command.finalized_at_ms IS NOT NULL
+      ORDER BY invocation.invocation_no LIMIT 1`,
+    [
+      input.closeRequestId,
+      cancelPayload.command_id,
+      input.sourceRunId,
+      cancelPayload.request_hash,
+    ],
+  );
+  if (!command) return null;
+  const evidenceRow = reader.queryOne<{
+    inline_canonical_json: string | null;
+    content_hash: Sha256Hash;
+    payload_state: string;
+  }>(
+    `SELECT inline_canonical_json, content_hash, payload_state
+       FROM workflow_values WHERE id = ? AND content_hash = ?`,
+    [command.evidence_manifest_value_id, command.evidence_manifest_hash],
+  );
+  const evidence = parseJsonObjectOrNull(
+    evidenceRow?.inline_canonical_json ?? null,
+  );
+  const evidenceRefs = evidence?.evidence_refs;
+  if (
+    evidenceRow?.payload_state !== 'live' ||
+    !evidence ||
+    runtimeObjectHash('g7-command-evidence', evidence) !==
+      command.evidence_manifest_hash ||
+    !Array.isArray(evidenceRefs) ||
+    evidenceRefs.length !== 2 ||
+    typeof evidenceRefs[0] !== 'string' ||
+    typeof evidenceRefs[1] !== 'string'
+  ) {
+    return null;
+  }
+  const targetStateConfig = reader.queryOne<{
+    inline_canonical_json: string | null;
+    content_hash: Sha256Hash;
+    payload_state: string;
+  }>(
+    `SELECT inline_canonical_json, content_hash, payload_state
+       FROM workflow_values WHERE id = ? AND content_hash = ?`,
+    [evidenceRefs[0], evidenceRefs[1]],
+  );
+  const targetConfig = parseJsonObjectOrNull(
+    targetStateConfig?.inline_canonical_json ?? null,
+  );
+  const marker = targetConfig
+    ? parseJsonObjectOrNull(
+        canonicalJson(targetConfig.temporary_replan ?? null),
+      )
+    : null;
+  const nextConfirmation = targetConfig
+    ? parseJsonObjectOrNull(
+        canonicalJson(targetConfig.temporary_confirmation ?? null),
+      )
+    : null;
+  if (
+    targetStateConfig?.payload_state !== 'live' ||
+    !targetConfig ||
+    !marker ||
+    marker.format !== 'icarus.temporary-replan-target/1' ||
+    marker.source_workflow_id !== input.workflowId ||
+    marker.source_activation_id !== input.sourceActivationId ||
+    marker.source_run_id !== input.sourceRunId ||
+    typeof marker.source_state_config_hash !== 'string' ||
+    typeof marker.creation_key !== 'string' ||
+    marker.creation_key.length === 0 ||
+    typeof marker.confirmation_ref !== 'string' ||
+    marker.confirmation_ref.length === 0 ||
+    !nextConfirmation ||
+    nextConfirmation.format !== 'icarus.temporary-workflow-confirmation/1' ||
+    typeof nextConfirmation.source_hash !== 'string' ||
+    typeof nextConfirmation.plan_hash !== 'string' ||
+    !nextConfirmation.source_json ||
+    typeof nextConfirmation.source_json !== 'object' ||
+    Array.isArray(nextConfirmation.source_json)
+  ) {
+    return null;
+  }
+  const source = reader.queryOne<TemporaryReplanSourceRow>(
+    `SELECT activation.workflow_definition_resource_id,
+            activation.workflow_definition_resource_hash,
+            definition.resource_type AS definition_resource_type,
+            definition.resource_id AS definition_id,
+            definition.resource_version AS definition_version,
+            run.state_config_value_id, run.state_config_hash,
+            source_config.inline_canonical_json AS state_config_json,
+            run.registry_snapshot_id, run.registry_snapshot_hash,
+            retention.closure_manifest_id, retention.closure_hash,
+            run.runtime_safety_snapshot_value_id,
+            run.runtime_safety_snapshot_hash,
+            run.runtime_supported_limits_resource_id,
+            run.runtime_supported_limits_resource_hash,
+            supported.resource_type AS supported_limits_resource_type,
+            supported.resource_id AS supported_limits_id,
+            supported.resource_version AS supported_limits_version,
+            run.sqlite_execution_profile_resource_id,
+            run.sqlite_execution_profile_resource_hash,
+            sqlite.resource_type AS sqlite_profile_resource_type,
+            sqlite.resource_id AS sqlite_profile_id,
+            sqlite.resource_version AS sqlite_profile_version,
+            run.source_seed_hash, root_build.compiler_snapshot_hash,
+            root.input_snapshot_value_id, root.input_snapshot_hash
+       FROM workflows workflow
+       JOIN workflow_state_activations activation
+         ON activation.id = workflow.state_instance_id
+        AND activation.id = ? AND activation.workflow_id = workflow.id
+       JOIN workflow_graph_runs run
+         ON run.id = workflow.current_graph_run_id
+        AND run.id = ? AND run.state_instance_id = activation.id
+       JOIN workflow_graph_scopes root
+         ON root.id = run.root_scope_id AND root.id = ?
+       JOIN workflow_graph_scope_builds root_build
+         ON root_build.id = run.root_build_id AND root_build.graph_run_id = run.id
+       JOIN workflow_registry_retention_handles retention
+         ON retention.id = run.registry_retention_handle_id
+        AND retention.graph_run_id = run.id AND retention.status = 'held'
+       JOIN workflow_values source_config
+         ON source_config.id = run.state_config_value_id
+        AND source_config.content_hash = run.state_config_hash
+        AND source_config.payload_state = 'live'
+       JOIN workflow_registry_resources definition
+         ON definition.id = activation.workflow_definition_resource_id
+        AND definition.content_hash = activation.workflow_definition_resource_hash
+        AND definition.publication_state = 'published'
+       JOIN workflow_registry_resources supported
+         ON supported.id = run.runtime_supported_limits_resource_id
+        AND supported.content_hash = run.runtime_supported_limits_resource_hash
+        AND supported.publication_state = 'published'
+       JOIN workflow_registry_resources sqlite
+         ON sqlite.id = run.sqlite_execution_profile_resource_id
+        AND sqlite.content_hash = run.sqlite_execution_profile_resource_hash
+        AND sqlite.publication_state = 'published'
+      WHERE workflow.id = ? AND workflow.status = 'active'
+        AND workflow.operational_state = 'healthy'`,
+    [
+      input.sourceActivationId,
+      input.sourceRunId,
+      input.rootScopeId,
+      input.workflowId,
+    ],
+  );
+  const sourceConfig = source
+    ? parseJsonObjectOrNull(source.state_config_json)
+    : null;
+  const sourceConfirmation = sourceConfig
+    ? parseJsonObjectOrNull(
+        canonicalJson(sourceConfig.temporary_confirmation ?? null),
+      )
+    : null;
+  if (
+    !source ||
+    !sourceConfig ||
+    !sourceConfirmation ||
+    sourceConfirmation.format !== 'icarus.temporary-workflow-confirmation/1' ||
+    marker.source_state_config_hash !== source.state_config_hash ||
+    canonicalJson(replanInvariantStateConfig(sourceConfig)) !==
+      canonicalJson(replanInvariantStateConfig(targetConfig)) ||
+    (sourceConfirmation.source_hash === nextConfirmation.source_hash &&
+      sourceConfirmation.plan_hash === nextConfirmation.plan_hash)
+  ) {
+    return null;
+  }
+  const limits = reader.queryAll<{
+    resource_type: string;
+    hard_limit: number;
+  }>(
+    `SELECT resource_type, hard_limit
+       FROM workflow_graph_resource_accounts
+      WHERE graph_run_id = ? AND workflow_id IS NULL
+      ORDER BY resource_type COLLATE BINARY`,
+    [input.sourceRunId],
+  );
+  const runResourceLimits = Object.fromEntries(
+    limits.map((limit) => [limit.resource_type, limit.hard_limit]),
+  );
+  return {
+    routeSource: 'on_temporary_replan',
+    commandId: command.command_id,
+    creationKey: String(marker.creation_key),
+    confirmationRef: String(marker.confirmation_ref),
+    target: {
+      kind: 'nonterminal',
+      stateKey: 'run',
+      activation: {
+        stateType: 'graph',
+        definition: {
+          rowId: source.workflow_definition_resource_id,
+          resourceType: source.definition_resource_type,
+          ref: {
+            id: source.definition_id,
+            version: source.definition_version,
+          },
+          hash: source.workflow_definition_resource_hash,
+        },
+        definitionVersion: source.definition_version,
+        stateConfig: {
+          id: String(evidenceRefs[0]),
+          hash: targetStateConfig.content_hash,
+        },
+        registrySnapshotId: source.registry_snapshot_id,
+        registrySnapshotHash: source.registry_snapshot_hash,
+        closureManifestId: source.closure_manifest_id,
+        closureHash: source.closure_hash,
+        runtimeSafetySnapshot: {
+          id: source.runtime_safety_snapshot_value_id,
+          hash: source.runtime_safety_snapshot_hash,
+        },
+        runtimeSupportedLimits: {
+          rowId: source.runtime_supported_limits_resource_id,
+          resourceType: source.supported_limits_resource_type,
+          ref: {
+            id: source.supported_limits_id,
+            version: source.supported_limits_version,
+          },
+          hash: source.runtime_supported_limits_resource_hash,
+        },
+        sqliteExecutionProfile: {
+          rowId: source.sqlite_execution_profile_resource_id,
+          resourceType: source.sqlite_profile_resource_type,
+          ref: {
+            id: source.sqlite_profile_id,
+            version: source.sqlite_profile_version,
+          },
+          hash: source.sqlite_execution_profile_resource_hash,
+        },
+        sourceSeedHash: source.source_seed_hash,
+        compilerSnapshotHash: source.compiler_snapshot_hash,
+        inputSnapshot: {
+          id: source.input_snapshot_value_id,
+          hash: source.input_snapshot_hash,
+        },
+        runResourceLimits,
+        checkpoint: {
+          status: 'temporary_replan',
+          creation_key: marker.creation_key,
+          confirmation_ref: marker.confirmation_ref,
+          source_activation_id: input.sourceActivationId,
+          source_run_id: input.sourceRunId,
+          command_id: command.command_id,
+        },
+        nowMs: input.nowMs,
+      },
+    },
+  };
+}
+
 export interface T8RootCommitInput {
   readonly workflowId: string;
   readonly sourceActivationId: string;
@@ -699,6 +1069,28 @@ function loadTransitionAuthority(
       'contract_invalid',
       'Only workflow_cancel may omit the target transition',
     );
+  if (input.routeSource === 'on_temporary_replan') {
+    const replan = deriveTemporaryReplanTransitionAuthority(transaction, {
+      workflowId: input.workflowId,
+      sourceActivationId: input.sourceActivationId,
+      sourceRunId: input.sourceRunId,
+      rootScopeId: input.rootScopeId,
+      closeRequestId: input.closeRequestId,
+      nowMs: input.nowMs,
+    });
+    if (
+      authority.outcomeKind !== 'cancelled' ||
+      authority.cancelReason !== 'local_cancel' ||
+      !replan ||
+      canonicalJson(input.target as unknown as JsonValue) !==
+        canonicalJson(replan.target as unknown as JsonValue)
+    ) {
+      throw new G5RuntimeError(
+        'integrity_violation',
+        'T8 Temporary Replan target lacks exact trusted command authority',
+      );
+    }
+  }
   const source = transaction.queryOne<{
     state_key: string;
     workflow_definition_resource_id: string;
@@ -742,6 +1134,9 @@ function loadTransitionAuthority(
   } else if (authority.outcomeKind === 'errored') {
     expectedRouteSource = 'on_error';
     route = state.on_error;
+  } else if (input.routeSource === 'on_temporary_replan') {
+    expectedRouteSource = 'on_temporary_replan';
+    route = state.on_temporary_replan;
   } else {
     expectedRouteSource = 'on_local_cancel';
     route = state.on_local_cancel;
@@ -2173,7 +2568,13 @@ export function commitRootT8InTransaction(
       [
         cut.outcomeKind,
         cut.exitName,
-        cut.candidateId,
+        cut.candidateId
+          ? transaction.queryOne<{ terminal_node_id: string }>(
+              `SELECT terminal_node_id
+                 FROM workflow_graph_terminal_candidates WHERE id = ?`,
+              [cut.candidateId],
+            )!.terminal_node_id
+          : null,
         cut.output?.id ?? null,
         cut.output?.hash ?? null,
         cut.errorCode,

@@ -120,6 +120,7 @@ interface ImmutableResourceRow extends Record<string, unknown> {
   resource_version: string;
   owner_core_ref: string | null;
   owner_feature_id: string | null;
+  owner_principal_ref: string | null;
   canonical_value_id: string;
   content_hash: string;
   publication_state: string;
@@ -228,7 +229,7 @@ function resourceNeedsInsert(
   const id = registryResourceId(resource);
   const rows = transaction.queryAll<ImmutableResourceRow>(
     `SELECT id, resource_type, resource_id, resource_version, owner_core_ref,
-            owner_feature_id, canonical_value_id, content_hash, publication_state,
+            owner_feature_id, owner_principal_ref, canonical_value_id, content_hash, publication_state,
             published_at_ms, retired_at_ms, row_version
        FROM workflow_registry_resources
       WHERE id = ? OR (resource_type = ? AND resource_id = ? AND resource_version = ?)`,
@@ -241,6 +242,8 @@ function resourceNeedsInsert(
       : null;
   const ownerFeatureId =
     resource.owner.kind === 'feature' ? resource.owner.feature_id : null;
+  const ownerPrincipalRef =
+    resource.owner.kind === 'principal' ? resource.owner.principal_ref : null;
   if (
     rows.length !== 1 ||
     rows[0].id !== id ||
@@ -249,6 +252,7 @@ function resourceNeedsInsert(
     rows[0].resource_version !== resource.ref.version ||
     rows[0].owner_core_ref !== ownerCoreRef ||
     rows[0].owner_feature_id !== ownerFeatureId ||
+    rows[0].owner_principal_ref !== ownerPrincipalRef ||
     rows[0].canonical_value_id !== registryValueId(resource) ||
     rows[0].content_hash !== resource.content_hash ||
     rows[0].publication_state !== 'staged' ||
@@ -480,12 +484,14 @@ function insertResource(
       : null;
   const ownerFeatureId =
     resource.owner.kind === 'feature' ? resource.owner.feature_id : null;
+  const ownerPrincipalRef =
+    resource.owner.kind === 'principal' ? resource.owner.principal_ref : null;
   transaction.execute(
     `INSERT INTO workflow_registry_resources (
-      id, resource_type, resource_id, resource_version, owner_core_ref, owner_feature_id,
+      id, resource_type, resource_id, resource_version, owner_core_ref, owner_feature_id, owner_principal_ref,
       canonical_value_id, content_hash, publication_state, created_at_ms,
       published_at_ms, retired_at_ms, row_version
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'staged', ?, NULL, NULL, 1)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'staged', ?, NULL, NULL, 1)`,
     [
       id,
       resource.resource_type,
@@ -493,6 +499,7 @@ function insertResource(
       resource.ref.version,
       ownerCoreRef,
       ownerFeatureId,
+      ownerPrincipalRef,
       registryValueId(resource),
       resource.content_hash,
       createdAtMs,
@@ -500,10 +507,7 @@ function insertResource(
   );
 }
 
-export function persistRegistryPersistenceBatch(
-  store: RegistryPersistenceStore | WorkflowRuntimeStore,
-  batch: G3RegistryPersistenceBatch,
-): RegistryPersistenceReceipt {
+function validatePersistenceBatch(batch: G3RegistryPersistenceBatch): void {
   try {
     validateRegistryPersistenceBatch(batch);
   } catch (error) {
@@ -516,111 +520,126 @@ export function persistRegistryPersistenceBatch(
     }
     throw error;
   }
-  return store.withImmediateTransaction((transaction) => {
-    const plan = buildInsertPlan(transaction, batch);
-    for (const resource of batch.resources) {
-      if (!plan.valueIds.has(registryValueId(resource))) continue;
-      insertValue(
-        transaction,
-        registryValueId(resource),
-        resource.content,
-        resource.content_hash,
-        resource.schema_ref,
-        resource.schema_hash,
-        batch.created_at_ms,
-      );
-    }
-    for (const resource of batch.resources) {
-      if (plan.resourceIds.has(registryResourceId(resource)))
-        insertResource(transaction, resource, batch.created_at_ms);
-    }
-    for (const resource of batch.resources) {
-      if (!plan.resourceIds.has(registryResourceId(resource))) continue;
-      for (const dependency of resource.dependencies) {
-        transaction.execute(
-          `INSERT INTO workflow_registry_resource_dependencies (
+}
+
+export function persistRegistryPersistenceBatchInTransaction(
+  transaction: WorkflowRuntimeWriteTransaction,
+  batch: G3RegistryPersistenceBatch,
+): RegistryPersistenceReceipt {
+  validatePersistenceBatch(batch);
+  const plan = buildInsertPlan(transaction, batch);
+  for (const resource of batch.resources) {
+    if (!plan.valueIds.has(registryValueId(resource))) continue;
+    insertValue(
+      transaction,
+      registryValueId(resource),
+      resource.content,
+      resource.content_hash,
+      resource.schema_ref,
+      resource.schema_hash,
+      batch.created_at_ms,
+    );
+  }
+  for (const resource of batch.resources) {
+    if (plan.resourceIds.has(registryResourceId(resource)))
+      insertResource(transaction, resource, batch.created_at_ms);
+  }
+  for (const resource of batch.resources) {
+    if (!plan.resourceIds.has(registryResourceId(resource))) continue;
+    for (const dependency of resource.dependencies) {
+      transaction.execute(
+        `INSERT INTO workflow_registry_resource_dependencies (
             resource_id, dependency_resource_id, dependency_kind, expected_content_hash, created_at_ms
           ) VALUES (?, ?, ?, ?, ?)`,
-          [
-            registryResourceId(resource),
-            registryResourceId(dependency),
-            dependency.dependency_kind,
-            dependency.content_hash,
-            batch.created_at_ms,
-          ],
-        );
-      }
-    }
-    if (plan.closureValue) {
-      insertValue(
-        transaction,
-        registryClosureValueId(batch.closure.ref),
-        batch.closure,
-        batch.closure.manifest_hash,
-        batch.closure.schema_ref,
-        batch.closure.schema_hash,
-        batch.created_at_ms,
-      );
-    }
-    if (plan.closure) {
-      transaction.execute(
-        `INSERT INTO workflow_registry_closure_manifests (
-          id, closure_hash, manifest_value_id, manifest_hash, created_at_ms
-        ) VALUES (?, ?, ?, ?, ?)`,
         [
-          registryClosureId(batch.closure.ref),
-          batch.closure.closure_hash,
-          registryClosureValueId(batch.closure.ref),
-          batch.closure.manifest_hash,
+          registryResourceId(resource),
+          registryResourceId(dependency),
+          dependency.dependency_kind,
+          dependency.content_hash,
           batch.created_at_ms,
         ],
       );
-      batch.closure.members.forEach((member, memberIndex) => {
-        transaction.execute(
-          `INSERT INTO workflow_registry_closure_members (
+    }
+  }
+  if (plan.closureValue) {
+    insertValue(
+      transaction,
+      registryClosureValueId(batch.closure.ref),
+      batch.closure,
+      batch.closure.manifest_hash,
+      batch.closure.schema_ref,
+      batch.closure.schema_hash,
+      batch.created_at_ms,
+    );
+  }
+  if (plan.closure) {
+    transaction.execute(
+      `INSERT INTO workflow_registry_closure_manifests (
+          id, closure_hash, manifest_value_id, manifest_hash, created_at_ms
+        ) VALUES (?, ?, ?, ?, ?)`,
+      [
+        registryClosureId(batch.closure.ref),
+        batch.closure.closure_hash,
+        registryClosureValueId(batch.closure.ref),
+        batch.closure.manifest_hash,
+        batch.created_at_ms,
+      ],
+    );
+    batch.closure.members.forEach((member, memberIndex) => {
+      transaction.execute(
+        `INSERT INTO workflow_registry_closure_members (
             closure_manifest_id, resource_id, resource_type, content_hash, member_index
           ) VALUES (?, ?, ?, ?, ?)`,
-          [
-            registryClosureId(batch.closure.ref),
-            registryResourceId(member),
-            member.resource_type,
-            member.content_hash,
-            memberIndex,
-          ],
-        );
-      });
-    }
-    if (plan.snapshot) {
-      transaction.execute(
-        `INSERT INTO workflow_registry_snapshots (
+        [
+          registryClosureId(batch.closure.ref),
+          registryResourceId(member),
+          member.resource_type,
+          member.content_hash,
+          memberIndex,
+        ],
+      );
+    });
+  }
+  if (plan.snapshot) {
+    transaction.execute(
+      `INSERT INTO workflow_registry_snapshots (
           id, snapshot_hash, closure_manifest_id, closure_hash, compiler_version,
           created_at_ms
         ) VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          registrySnapshotId(batch.snapshot.ref),
-          batch.snapshot.snapshot_hash,
-          registryClosureId(batch.snapshot.closure_ref),
-          batch.snapshot.closure_hash,
-          batch.snapshot.compiler_version,
-          batch.created_at_ms,
-        ],
-      );
-    }
-    const inserted =
-      plan.valueIds.size > 0 ||
-      plan.resourceIds.size > 0 ||
-      plan.closureValue ||
-      plan.closure ||
-      plan.snapshot;
-    return {
-      disposition: inserted ? 'inserted' : 'exact_replay',
-      resource_ids: batch.resources.map(registryResourceId),
-      closure_id: registryClosureId(batch.closure.ref),
-      snapshot_id: registrySnapshotId(batch.snapshot.ref),
-      resource_count: batch.resources.length,
-      member_count: batch.closure.member_count,
-    };
-  });
+      [
+        registrySnapshotId(batch.snapshot.ref),
+        batch.snapshot.snapshot_hash,
+        registryClosureId(batch.snapshot.closure_ref),
+        batch.snapshot.closure_hash,
+        batch.snapshot.compiler_version,
+        batch.created_at_ms,
+      ],
+    );
+  }
+  const inserted =
+    plan.valueIds.size > 0 ||
+    plan.resourceIds.size > 0 ||
+    plan.closureValue ||
+    plan.closure ||
+    plan.snapshot;
+  return {
+    disposition: inserted ? 'inserted' : 'exact_replay',
+    resource_ids: batch.resources.map(registryResourceId),
+    closure_id: registryClosureId(batch.closure.ref),
+    snapshot_id: registrySnapshotId(batch.snapshot.ref),
+    resource_count: batch.resources.length,
+    member_count: batch.closure.member_count,
+  };
+}
+
+export function persistRegistryPersistenceBatch(
+  store: RegistryPersistenceStore | WorkflowRuntimeStore,
+  batch: G3RegistryPersistenceBatch,
+): RegistryPersistenceReceipt {
+  validatePersistenceBatch(batch);
+  return store.withImmediateTransaction((transaction) =>
+    persistRegistryPersistenceBatchInTransaction(transaction, batch),
+  );
 }
 
 interface SnapshotRow extends Record<string, unknown> {

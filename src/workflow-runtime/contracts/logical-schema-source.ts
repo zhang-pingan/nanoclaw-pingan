@@ -1068,6 +1068,12 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
       text('resource_version'),
       ext('owner_core_ref', 'core_release_registry', 'core_release', true),
       ext('owner_feature_id', 'feature_registry', 'feature', true),
+      ext(
+        'owner_principal_ref',
+        'principal_identity_resolver',
+        'principal',
+        true,
+      ),
       id('canonical_value_id'),
       hash('content_hash'),
       text('publication_state', false, ['staged', 'published', 'retired']),
@@ -1093,7 +1099,7 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
       ]),
       uk('uk:registry_resources:id_hash', ['id', 'content_hash']),
     ],
-    exactlyOne: [['owner_core_ref', 'owner_feature_id']],
+    exactlyOne: [['owner_core_ref', 'owner_feature_id', 'owner_principal_ref']],
     checks: [
       check(
         'ck:registry_resources:publication_time',
@@ -1290,6 +1296,192 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
     ],
   },
   {
+    name: 'workflow_personal_releases',
+    sourceSection: 'Registry, Release, Retention and Backup',
+    columns: [
+      id('id'),
+      ext('owner_principal_ref', 'principal_identity_resolver', 'principal'),
+      text('personal_workflow_id'),
+      ext(
+        'release_ref',
+        'personal_workflow_registry',
+        'personal_workflow_release',
+      ),
+      text('release_version'),
+      hash('release_hash'),
+      ...registryPair('recipe'),
+      ...registryPair('graph_template'),
+      id('registry_snapshot_id'),
+      hash('registry_snapshot_hash'),
+      hash('compiled_plan_hash'),
+      text('compiler_version'),
+      json('policy_effect_envelope_json'),
+      hash('policy_effect_envelope_hash'),
+      text('status', false, ['inactive', 'active']),
+      at('published_at_ms'),
+      at('activated_at_ms', true),
+      rowVersion(),
+    ],
+    primaryKey: ['id'],
+    foreignKeys: [
+      registryFk('fk:personal_releases:recipe', 'recipe'),
+      registryFk('fk:personal_releases:graph_template', 'graph_template'),
+      fk(
+        'fk:personal_releases:snapshot',
+        ['registry_snapshot_id', 'registry_snapshot_hash'],
+        'workflow_registry_snapshots',
+        ['id', 'snapshot_hash'],
+      ),
+    ],
+    uniqueKeys: [
+      uk('uk:personal_releases:owner_version', [
+        'owner_principal_ref',
+        'personal_workflow_id',
+        'release_ref',
+        'release_version',
+      ]),
+      uk('uk:personal_releases:id_hash', ['id', 'release_hash']),
+      uk('uk:personal_releases:owner_identity', [
+        'owner_principal_ref',
+        'personal_workflow_id',
+        'id',
+        'release_hash',
+      ]),
+      uk(
+        'uk:personal_releases:single_active',
+        ['owner_principal_ref', 'personal_workflow_id'],
+        "status = 'active'",
+      ),
+    ],
+    checks: [
+      check(
+        'ck:personal_releases:status_time',
+        'state_field_consistency',
+        ['status', 'published_at_ms', 'activated_at_ms'],
+        'active releases have an activation time after publication',
+      ),
+    ],
+    indexes: [
+      index('idx:personal_releases:principal_status', 'lookup', [
+        'owner_principal_ref',
+        'status',
+        'personal_workflow_id',
+        'published_at_ms',
+      ]),
+    ],
+  },
+  {
+    name: 'workflow_personal_release_resources',
+    sourceSection: 'Registry, Release, Retention and Backup',
+    columns: [
+      id('release_id'),
+      id('resource_id'),
+      hash('content_hash'),
+      text('resource_role', false, [
+        'recipe',
+        'graph_template',
+        'closure_member',
+      ]),
+    ],
+    primaryKey: ['release_id', 'resource_id'],
+    foreignKeys: [
+      fk(
+        'fk:personal_release_resources:release',
+        'release_id',
+        'workflow_personal_releases',
+      ),
+      fk(
+        'fk:personal_release_resources:resource',
+        ['resource_id', 'content_hash'],
+        'workflow_registry_resources',
+        ['id', 'content_hash'],
+      ),
+    ],
+    uniqueKeys: [
+      uk(
+        'uk:personal_release_resources:role',
+        ['release_id', 'resource_role'],
+        "resource_role in ('recipe','graph_template')",
+      ),
+    ],
+  },
+  {
+    name: 'workflow_personal_active_releases',
+    sourceSection: 'Registry, Release, Retention and Backup',
+    columns: [
+      ext('owner_principal_ref', 'principal_identity_resolver', 'principal'),
+      text('personal_workflow_id'),
+      id('release_id'),
+      hash('release_hash'),
+      rowVersion(),
+      at('activated_at_ms'),
+    ],
+    primaryKey: ['owner_principal_ref', 'personal_workflow_id'],
+    foreignKeys: [
+      fk(
+        'fk:personal_active_releases:release',
+        ['release_id', 'release_hash'],
+        'workflow_personal_releases',
+        ['id', 'release_hash'],
+      ),
+      fk(
+        'fk:personal_active_releases:owner_release',
+        [
+          'owner_principal_ref',
+          'personal_workflow_id',
+          'release_id',
+          'release_hash',
+        ],
+        'workflow_personal_releases',
+        ['owner_principal_ref', 'personal_workflow_id', 'id', 'release_hash'],
+      ),
+    ],
+  },
+  {
+    name: 'workflow_personal_release_operations',
+    sourceSection: 'Registry, Release, Retention and Backup',
+    columns: [
+      id('operation_id'),
+      text('idempotency_domain'),
+      text('idempotency_key'),
+      text('operation_type', false, ['publish', 'activate']),
+      ext('owner_principal_ref', 'principal_identity_resolver', 'principal'),
+      text('personal_workflow_id'),
+      id('target_release_id'),
+      hash('target_release_hash'),
+      hash('request_hash'),
+      text('disposition', false, ['applied', 'failed']),
+      json('result_json'),
+      text('failure_code', true),
+      at('requested_at_ms'),
+      at('completed_at_ms'),
+      rowVersion(),
+    ],
+    primaryKey: ['operation_id'],
+    foreignKeys: [
+      fk(
+        'fk:personal_release_operations:target_release',
+        ['target_release_id', 'target_release_hash'],
+        'workflow_personal_releases',
+        ['id', 'release_hash'],
+      ),
+    ],
+    uniqueKeys: [
+      uk('uk:personal_release_operations:idempotency', [
+        'idempotency_domain',
+        'idempotency_key',
+      ]),
+    ],
+    checks: [
+      check(
+        'ck:personal_release_operations:result',
+        'state_field_consistency',
+        ['disposition', 'failure_code', 'requested_at_ms', 'completed_at_ms'],
+        'terminal operation result and failure code are consistent',
+      ),
+    ],
+  },
+  {
     name: 'workflow_registry_retention_handles',
     sourceSection:
       'Registry, Release, Retention and Backup and SQLite relation expansion rules',
@@ -1481,6 +1673,7 @@ const CREATION_WORKFLOW_CONTEXT_TABLES: readonly TableSeed[] = [
         'feature_ui',
         'schedule',
         'api',
+        'task_workspace',
         'workflow_transition',
       ]),
       ext('principal_ref', 'principal_identity_resolver', 'principal'),

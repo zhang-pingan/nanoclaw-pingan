@@ -10,6 +10,7 @@ const ALLOWED_RUNTIME_TARGETS = new Set([
   'gateway/connection',
   'gateway/execution',
   'gateway/host-core',
+  'gateway/workspace',
   'contracts/hash',
   'contracts/strict-json',
   'contracts/types',
@@ -28,7 +29,10 @@ function sourceFiles(directory: string): string[] {
       throw new Error(`Source symlink is forbidden: ${absolute}`);
     }
     if (entry.isDirectory()) {
-      if (!absolute.startsWith(`${RUNTIME_ROOT}${path.sep}`)) {
+      if (
+        absolute !== RUNTIME_ROOT &&
+        !absolute.startsWith(`${RUNTIME_ROOT}${path.sep}`)
+      ) {
         files.push(...sourceFiles(absolute));
       }
     } else if (entry.isFile() && entry.name.endsWith('.ts')) {

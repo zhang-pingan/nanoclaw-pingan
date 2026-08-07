@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-definition-schema:1\n",
-  "hash": "sha256:a23f3ce0ebb562bed94e7736651ee8f9f87e659a7fd4640d2802603dae7df804",
+  "hash": "sha256:baf4d792429ff5f3a6241e0c4d2fdf80b703bc78da0a0aebaba070cc1e5948a1",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-definition/1",
@@ -530,6 +530,9 @@
                     "$ref": "#/$defs/transition"
                   },
                   "on_local_cancel": {
+                    "$ref": "#/$defs/transition"
+                  },
+                  "on_temporary_replan": {
                     "$ref": "#/$defs/transition"
                   }
                 }

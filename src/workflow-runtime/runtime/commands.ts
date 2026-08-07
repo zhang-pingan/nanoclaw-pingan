@@ -88,6 +88,7 @@ export interface AuthenticatedRuntimeCommandActor {
     | 'feature_host_api'
     | 'external_api'
     | 'automation'
+    | 'task_workspace'
     | 'card_action'
     | 'deadline_watchdog';
   readonly sourceFeatureId: string | null;

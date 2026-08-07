@@ -107,6 +107,20 @@ const ownerSchema: JsonObject = {
         },
       },
     },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['kind', 'principal_ref'],
+      properties: {
+        kind: { const: 'principal' },
+        principal_ref: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 255,
+          pattern: VERSIONED_REF_ID_PATTERN,
+        },
+      },
+    },
   ],
 };
 const dependencySchema: JsonObject = {

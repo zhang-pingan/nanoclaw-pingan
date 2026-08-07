@@ -1297,7 +1297,7 @@ function definitionTransitions(
         });
     }
   }
-  for (const name of ['on_error', 'on_local_cancel']) {
+  for (const name of ['on_error', 'on_local_cancel', 'on_temporary_replan']) {
     const transition = objectRef(state[name]);
     if (transition)
       output.push({ pointer: `/states/${stateKey}/${name}`, transition });
@@ -2853,11 +2853,12 @@ function compileGraphPlan(
 function compileDefinitionPlan(
   source: JsonObject,
   state: CompilationState,
+  entryPoint: string,
 ): CompiledScopePlanV2Document {
   assertJsonObject(source.ref);
   assertJsonObject(source.entry_points);
   assertJsonObject(source.states);
-  const entry = source.entry_points.default;
+  const entry = source.entry_points[entryPoint];
   assertJsonObject(entry);
   const stateKey = String(entry.state_key);
   const definitionState = source.states[stateKey];
@@ -3020,7 +3021,8 @@ function compileSuccess(
   if (request.sourceKind === 'workflow_definition') {
     assertJsonObject(source.entry_points);
     assertJsonObject(source.states);
-    const entry = source.entry_points.default;
+    const entryPoint = request.entryPoint ?? 'default';
+    const entry = source.entry_points[entryPoint];
     assertJsonObject(entry);
     const definitionState = source.states[String(entry.state_key)];
     assertJsonObject(definitionState);
@@ -3031,7 +3033,7 @@ function compileSuccess(
       state.policy,
     );
     validateDefinitionBindings(source, state);
-    plan = compileDefinitionPlan(source, state);
+    plan = compileDefinitionPlan(source, state, entryPoint);
   } else if (request.sourceKind === 'graph_scope') {
     validateGraphBindings(source, state);
     validateGraphStructure(source, state);

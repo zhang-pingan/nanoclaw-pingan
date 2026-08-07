@@ -80,6 +80,8 @@ export interface G6MapFixtureOptions {
   readonly dynamicMode?: 'subgraph' | 'expand' | 'map';
   readonly errorTransitionEffects?: readonly JsonObject[];
   readonly errorTargetKind?: 'terminal' | 'graph';
+  readonly temporaryReplanRoute?: boolean;
+  readonly stateConfigContent?: JsonObject;
   readonly mapCompletionPolicy?: JsonObject;
   readonly domainClaims?: readonly {
     namespace: string;
@@ -296,14 +298,25 @@ function seedG6Runtime(
                       : {}),
                   },
                   on_local_cancel: { target: 'cancelled' },
+                  ...(options.temporaryReplanRoute
+                    ? { on_temporary_replan: { target: 'run' } }
+                    : {}),
                 },
-                failed: { type: 'terminal' },
+                failed: {
+                  type: 'terminal',
+                  terminal_kind: 'errored',
+                  error_code: 'g6_fixture_failed',
+                },
                 next: {
                   type: 'graph',
                   on_error: { target: 'failed' },
                   on_local_cancel: { target: 'cancelled' },
                 },
-                cancelled: { type: 'terminal' },
+                cancelled: {
+                  type: 'terminal',
+                  terminal_kind: 'errored',
+                  error_code: 'g6_fixture_cancelled',
+                },
               },
             }
           : spec.content,
@@ -349,7 +362,7 @@ function seedG6Runtime(
       attachments: {},
       context: {},
       routing: { reason_codes: ['explicit_recipe'] },
-      stateConfig: {},
+      stateConfig: options.stateConfigContent ?? {},
       safety: compiled.plan.runtime_safety_snapshot as JsonObject,
       source: compiled.source,
       childInput: { item: 'accepted' },
@@ -426,6 +439,13 @@ export function createG6MapFixture(
     creationDomain: 'assistant',
     creationKey,
     source: 'api',
+    actor: 'system',
+    launchPolicy: 'auto',
+    launchAuthorization: {
+      kind: 'trusted_system',
+      authorizationRef: `test:${creationKey}`,
+    },
+    entryPoint: 'default',
     principalRef: 'human:local-owner',
     recipe: seed.refs.recipe!,
     definition: seed.refs.definition!,

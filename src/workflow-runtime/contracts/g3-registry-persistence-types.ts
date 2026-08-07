@@ -27,9 +27,15 @@ export interface G3RegistryResourceOwnerFeature extends JsonObject {
   feature_id: string;
 }
 
+export interface G3RegistryResourceOwnerPrincipal extends JsonObject {
+  kind: 'principal';
+  principal_ref: string;
+}
+
 export type G3RegistryResourceOwner =
   | G3RegistryResourceOwnerCore
-  | G3RegistryResourceOwnerFeature;
+  | G3RegistryResourceOwnerFeature
+  | G3RegistryResourceOwnerPrincipal;
 
 export interface G3RegistryResourceDependency extends JsonObject {
   resource_type: G3RegistryResourceType;

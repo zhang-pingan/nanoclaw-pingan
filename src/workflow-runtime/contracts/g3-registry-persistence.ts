@@ -144,6 +144,20 @@ export const G3_REGISTRY_RESOURCE_SCHEMA: JsonObject = {
             },
           },
         },
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['kind', 'principal_ref'],
+          properties: {
+            kind: { const: 'principal' },
+            principal_ref: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 255,
+              pattern: REF_ID_PATTERN,
+            },
+          },
+        },
       ],
     },
     schema_ref: { $ref: '#/$defs/versioned_ref' },

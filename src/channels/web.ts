@@ -15,6 +15,7 @@ import {
 } from '../assistant/assistant-api.js';
 import { resolveTodayPlanInboxItemsForDate } from '../assistant/today-plan-inbox.js';
 import type { AssistantRealtimeEvent } from '../assistant/assistant-events.js';
+import type { TaskWorkspaceTimelineDeltaV1 } from '../task-workspace/contracts.js';
 import { buildAgentQueryTraceDetail } from '../agent-query-trace-detail.js';
 import {
   AgentStatusInfo,
@@ -365,6 +366,7 @@ interface OutgoingMsg {
     | 'file'
     | 'assistant_state'
     | 'assistant_event'
+    | 'task_workspace_timeline_delta'
     | 'config_event'
     | 'desktop_capture_request'
     | 'card_action_result';
@@ -896,6 +898,13 @@ class WebChannel {
           }),
         );
         return;
+      }
+      if (
+        (pathname.startsWith('/api/task-workspace/') ||
+          pathname.startsWith('/api/personal-workflows')) &&
+        this.opts.taskWorkspaceApi
+      ) {
+        if (await this.opts.taskWorkspaceApi.handle(req, res, reqUrl)) return;
       }
       if (pathname === '/api/features/config' && req.method === 'GET') {
         return this.apiGetFeatureConfig(res);
@@ -2489,6 +2498,19 @@ class WebChannel {
         if (client.ws.readyState === WebSocket.OPEN) {
           client.ws.send(payload);
         }
+      }
+    }
+  }
+
+  broadcastTaskWorkspaceTimelineDelta(
+    delta: TaskWorkspaceTimelineDeltaV1,
+  ): void {
+    const payload = JSON.stringify(
+      delta satisfies TaskWorkspaceTimelineDeltaV1,
+    );
+    for (const clients of this.clients.values()) {
+      for (const client of clients) {
+        if (client.ws.readyState === WebSocket.OPEN) client.ws.send(payload);
       }
     }
   }

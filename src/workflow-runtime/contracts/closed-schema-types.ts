@@ -192,6 +192,7 @@ export type WorkflowDefinitionState = WorkflowDefinitionStateBase &
         exit_routes: Record<string, WorkflowTransitionDocument>;
         on_error: WorkflowTransitionDocument;
         on_local_cancel: WorkflowTransitionDocument;
+        on_temporary_replan?: WorkflowTransitionDocument;
       }
     | {
         type: 'terminal';

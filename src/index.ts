@@ -159,6 +159,12 @@ import { InternalAgentRunOnceService } from './internal-agent-run-once/service.j
 import { InternalAgentChatService } from './internal-agent-run-once/chat-service.js';
 import { startInternalAgentRunOnceServer } from './internal-agent-run-once/server.js';
 import { WorkflowRuntimeConnectionFactory } from './workflow-runtime/gateway/connection.js';
+import { RuntimeWorkspaceGateway } from './workflow-runtime/gateway/workspace.js';
+import {
+  ensureTaskWorkspaceCore,
+  WorkflowRuntimeService,
+  WorkflowRuntimeTransactionAuthority,
+} from './workflow-runtime/gateway/host-core.js';
 import { WorkflowExecutionAdapterRegistry } from './workflow-execution/adapter-registry.js';
 import { ContainerAgentAdapter } from './workflow-execution/container-agent-adapter.js';
 import { CodexTaskAdapter } from './workflow-execution/codex-task-adapter.js';
@@ -167,6 +173,11 @@ import { WorkflowExecutionWorker } from './workflow-execution/worker.js';
 import { WorkflowExecutionHostService } from './workflow-execution/host-service.js';
 import { CollaborationRuntime } from './collaboration/runtime.js';
 import { CollaborationWebApi } from './collaboration/web-api.js';
+import { RuntimeEventHub } from './task-workspace/runtime-event-hub.js';
+import { TaskWorkspaceStore } from './task-workspace/store.js';
+import { TaskWorkspaceService } from './task-workspace/service.js';
+import { TaskWorkspaceWebApi } from './task-workspace/web-api.js';
+import type { TaskWorkspaceTimelineDeltaV1 } from './task-workspace/contracts.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -2769,7 +2780,13 @@ async function main(): Promise<void> {
     chatService: internalAgentChatService,
   });
 
+  const runtimeEventHub = new RuntimeEventHub();
+  const taskWorkspaceStore = new TaskWorkspaceStore(
+    path.join(STORE_DIR, 'task-workspace.db'),
+  );
   let workflowExecutionWorker: WorkflowExecutionWorker | null = null;
+  let workflowRuntimeService: WorkflowRuntimeService | null = null;
+  let runtimeWorkspaceGateway: RuntimeWorkspaceGateway | null = null;
   let workflowRuntimeStore: ReturnType<
     typeof WorkflowRuntimeConnectionFactory.openStore
   > | null = null;
@@ -2783,6 +2800,26 @@ async function main(): Promise<void> {
         ? 'open_existing'
         : 'create',
     });
+    ensureTaskWorkspaceCore(workflowRuntimeStore);
+    workflowRuntimeService = new WorkflowRuntimeService({
+      authority: new WorkflowRuntimeTransactionAuthority(workflowRuntimeStore),
+      logger,
+      on_commit: () => runtimeEventHub.notify({ reason: 'runtime_service' }),
+    });
+    runtimeWorkspaceGateway = new RuntimeWorkspaceGateway(
+      workflowRuntimeStore,
+      crypto.randomBytes(32),
+      {
+        on_runtime_commit: (hint) => {
+          workflowRuntimeService?.wake('workspace_gateway_commit');
+          runtimeEventHub.notify({
+            workflow_id: hint.workflow_id,
+            run_id: hint.run_id,
+            reason: 'workspace_gateway_commit',
+          });
+        },
+      },
+    );
     workflowAdapterExecutionStore = new WorkflowAdapterExecutionStore(
       path.join(STORE_DIR, 'workflow-adapter-executions.db'),
     );
@@ -2813,7 +2850,16 @@ async function main(): Promise<void> {
       pollIntervalMs: WORKFLOW_EXECUTION_POLL_MS,
       leaseOwner: `icarus-host:${process.pid}`,
       logger,
+      onRuntimeCommit: (hint) => {
+        workflowRuntimeService?.wake('execution_result_commit');
+        runtimeEventHub.notify({
+          workflow_id: hint.workflowId,
+          run_id: hint.graphRunId,
+          reason: 'execution_result_commit',
+        });
+      },
     });
+    await workflowRuntimeService.start();
     await workflowExecutionWorker.start();
     logger.info(
       {
@@ -2825,6 +2871,35 @@ async function main(): Promise<void> {
       'Experimental Workflow execution Adapters started',
     );
   }
+
+  const broadcastTaskWorkspaceDelta = (
+    delta: TaskWorkspaceTimelineDeltaV1,
+  ): void => {
+    for (const channel of channels) {
+      if (
+        channel.name === 'web' &&
+        'broadcastTaskWorkspaceTimelineDelta' in channel
+      ) {
+        (
+          channel as typeof channel & {
+            broadcastTaskWorkspaceTimelineDelta: (
+              value: TaskWorkspaceTimelineDeltaV1,
+            ) => void;
+          }
+        ).broadcastTaskWorkspaceTimelineDelta(delta);
+      }
+    }
+  };
+  const taskWorkspaceService = new TaskWorkspaceService({
+    store: taskWorkspaceStore,
+    runtimeGateway: runtimeWorkspaceGateway,
+    runtimeEventHub,
+    coordinator: internalAgentChatService,
+    coordinatorAgentJid: () => resolveAssistantActionJid(),
+    onTimelineDelta: broadcastTaskWorkspaceDelta,
+  });
+  await taskWorkspaceService.start();
+  const taskWorkspaceApi = new TaskWorkspaceWebApi(taskWorkspaceService);
 
   const collaborationRuntime = new CollaborationRuntime({
     storeDir: STORE_DIR,
@@ -2850,11 +2925,14 @@ async function main(): Promise<void> {
     proxyServer.close();
     mysqlProxyServer.close();
     internalRunOnceServer?.close();
+    await taskWorkspaceService.stop();
     await collaborationRuntime.stop();
+    await workflowRuntimeService?.stop();
     await workflowExecutionWorker?.stop();
     await queue.shutdown(10000);
     workflowAdapterExecutionStore?.close();
     workflowRuntimeStore?.close();
+    taskWorkspaceStore.close();
     for (const ch of channels) await ch.disconnect();
     process.exit(0);
   };
@@ -2925,6 +3003,7 @@ async function main(): Promise<void> {
     }) => Promise<{ resetCount: number }>;
     registerAgent?: (jid: string, agent: RegisteredAgent) => void;
     collaborationApi?: CollaborationWebApi;
+    taskWorkspaceApi?: TaskWorkspaceWebApi;
     onAgentStatusChange?: () => void;
     onAgentQueryTraceChange?: () => void;
   } = {
@@ -2957,6 +3036,7 @@ async function main(): Promise<void> {
       storeMessage(msg);
     },
     collaborationApi,
+    taskWorkspaceApi,
     onChatMetadata: (
       chatJid: string,
       timestamp: string,

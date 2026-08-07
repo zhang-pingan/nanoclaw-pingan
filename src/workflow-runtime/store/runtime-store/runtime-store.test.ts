@@ -678,6 +678,196 @@ describe('Workflow Runtime Store schema compatibility', () => {
     ).toBe(0);
   });
 
+  it('migrates Schema 13 intake state and enables task_workspace intake source', () => {
+    const { databasePath } = temporaryDatabase();
+    createVersionDatabase(databasePath, 13);
+    const legacy = new Database(databasePath);
+    const contentHash = `sha256:${'d'.repeat(64)}`;
+    const revisionHash = `sha256:${'e'.repeat(64)}`;
+    try {
+      legacy.pragma('foreign_keys = ON');
+      legacy.transaction(() => {
+        legacy
+          .prepare(
+            `INSERT INTO workflow_registry_resources (
+               id, resource_type, resource_id, resource_version,
+               owner_core_ref, owner_feature_id, canonical_value_id,
+               content_hash, publication_state, created_at_ms,
+               published_at_ms, retired_at_ms, row_version
+             ) VALUES (?, 'schema', 'migration.intake', '1.0.0',
+                       'icarus.core@migration', NULL, ?, ?, 'published',
+                       100, 100, NULL, 1)`,
+          )
+          .run(
+            'registry-resource:migration-intake',
+            'value:migration-intake',
+            contentHash,
+          );
+        legacy
+          .prepare(
+            `INSERT INTO workflow_values (
+               id, storage_kind, inline_canonical_json, blob_hash,
+               immutable_external_locator, expected_hash, content_hash,
+               byte_length, media_type, schema_resource_id,
+               schema_resource_hash, provenance_ref, retention_class,
+               payload_state, payload_pruned_at_ms, created_at_ms, row_version
+             ) VALUES (?, 'inline', '{}', NULL, NULL, NULL, ?, 2,
+                       'application/json', ?, ?, 'migration-test', 'pinned',
+                       'live', NULL, 100, 1)`,
+          )
+          .run(
+            'value:migration-intake',
+            contentHash,
+            'registry-resource:migration-intake',
+            contentHash,
+          );
+        legacy
+          .prepare(
+            `INSERT INTO workflow_task_intakes (
+               id, request_id, creation_domain, creation_key, source,
+               principal_ref, routing_scope_resource_id,
+               routing_scope_resource_hash, raw_request_value_id,
+               raw_request_hash, initial_input_value_id, initial_input_hash,
+               attachment_manifest_value_id, attachment_manifest_hash,
+               explicit_task_kind, explicit_recipe_resource_id, status,
+               selected_recipe_resource_id, selected_recipe_hash,
+               current_revision_id, current_revision_no, current_revision_hash,
+               workflow_id, next_attempt_no, row_version, created_at_ms,
+               updated_at_ms
+             ) VALUES (?, ?, ?, ?, 'api', 'human:local-owner', ?, ?, NULL,
+                       NULL, ?, ?, ?, ?, NULL, NULL, 'routing', NULL, NULL, ?,
+                       0, ?, NULL, 1, 1, 101, 101)`,
+          )
+          .run(
+            'intake:migration-13',
+            'request:migration-13',
+            'migration-test',
+            'intake-13',
+            'registry-resource:migration-intake',
+            contentHash,
+            'value:migration-intake',
+            contentHash,
+            'value:migration-intake',
+            contentHash,
+            'revision:migration-13',
+            revisionHash,
+          );
+        legacy
+          .prepare(
+            `INSERT INTO workflow_task_intake_revisions (
+               id, intake_id, revision_no, parent_revision_id,
+               amendment_value_id, amendment_hash, effective_input_value_id,
+               effective_input_hash, attachment_manifest_value_id,
+               attachment_manifest_hash, clarification_contract_resource_id,
+               clarification_contract_resource_hash, source_routing_attempt_id,
+               actor_kind, principal_ref, idempotency_key, revision_hash,
+               created_at_ms
+             ) VALUES (?, ?, 0, NULL, NULL, NULL, ?, ?, ?, ?, NULL, NULL,
+                       NULL, 'human', 'human:local-owner', 'migration-13', ?, 101)`,
+          )
+          .run(
+            'revision:migration-13',
+            'intake:migration-13',
+            'value:migration-intake',
+            contentHash,
+            'value:migration-intake',
+            contentHash,
+            revisionHash,
+          );
+      })();
+    } finally {
+      legacy.close();
+    }
+
+    const store = WorkflowRuntimeConnectionFactory.openStore({
+      databasePath,
+      databaseMode: 'open_existing',
+    });
+    stores.push(store);
+    expect(store.schemaVersion).toBe(CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION);
+    expect(
+      store.queryOne<Record<string, unknown>>(
+        `SELECT id, request_id, creation_domain, creation_key, source,
+                principal_ref, current_revision_id, current_revision_no,
+                current_revision_hash, next_attempt_no, row_version,
+                created_at_ms, updated_at_ms
+           FROM workflow_task_intakes WHERE id = ?`,
+        ['intake:migration-13'],
+      ),
+    ).toEqual({
+      id: 'intake:migration-13',
+      request_id: 'request:migration-13',
+      creation_domain: 'migration-test',
+      creation_key: 'intake-13',
+      source: 'api',
+      principal_ref: 'human:local-owner',
+      current_revision_id: 'revision:migration-13',
+      current_revision_no: 0,
+      current_revision_hash: revisionHash,
+      next_attempt_no: 1,
+      row_version: 1,
+      created_at_ms: 101,
+      updated_at_ms: 101,
+    });
+    expect(() =>
+      store.withImmediateTransaction((transaction) => {
+        transaction.execute(
+          `UPDATE workflow_task_intakes SET source = 'task_workspace',
+                  row_version = row_version + 1, updated_at_ms = 102
+            WHERE id = ?`,
+          ['intake:migration-13'],
+        );
+      }),
+    ).not.toThrow();
+    expect(
+      store.queryOne<{ source: string }>(
+        'SELECT source FROM workflow_task_intakes WHERE id = ?',
+        ['intake:migration-13'],
+      ),
+    ).toEqual({ source: 'task_workspace' });
+    expect(() =>
+      store.withImmediateTransaction((transaction) => {
+        transaction.execute(
+          `INSERT INTO workflow_runtime_command_ingress_invocations (
+            id, idempotency_domain, idempotency_key, ingress_no,
+            submitted_command_id, canonical_request_json,
+            submitted_request_hash, command_type, claimed_target_kind,
+            claimed_workflow_id, claimed_run_id, claimed_node_id,
+            claimed_retry_schedule_id, claimed_effect_operation_id,
+            claimed_operational_blocker_id, actor_ref, actor_kind,
+            auth_session_ref, entrypoint, source_feature_id,
+            delegation_chain_ref, resolution_result, authorization_result,
+            execution_result, denial_code, canonical_result_json,
+            canonical_result_hash, resolved_command_id,
+            resolved_invocation_id, requested_at_ms, decided_at_ms,
+            applied_at_ms, terminal_binding_hash
+          ) VALUES (?, ?, ?, 1, ?, ?, ?, 'pause_run', 'run', NULL, ?, NULL,
+                    NULL, NULL, NULL, ?, 'human', ?, 'task_workspace', NULL,
+                    NULL, 'prepared', 'pending', 'prepared', NULL, NULL, NULL,
+                    NULL, NULL, ?, NULL, NULL, NULL)`,
+          [
+            'ingress:migrated-task-workspace',
+            'task-workspace:migration-test',
+            'pause-run',
+            'command:migrated-task-workspace',
+            '{"command":"pause"}',
+            MIGRATION_HASH,
+            'run:migrated-task-workspace',
+            'human:local-owner',
+            'auth:migration-test',
+            103,
+          ],
+        );
+      }),
+    ).not.toThrow();
+    expect(
+      store.queryOne<{ entrypoint: string }>(
+        'SELECT entrypoint FROM workflow_runtime_command_ingress_invocations WHERE id = ?',
+        ['ingress:migrated-task-workspace'],
+      ),
+    ).toEqual({ entrypoint: 'task_workspace' });
+  });
+
   it('creates Schema 13 without obsolete governance columns', () => {
     const store = openFresh();
     const columns = (table: string) =>

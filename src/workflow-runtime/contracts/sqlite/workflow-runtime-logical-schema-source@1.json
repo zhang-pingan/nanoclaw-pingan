@@ -13,8 +13,8 @@
     "executable_status": "non_executable",
     "ddl_generation_status": "forbidden_in_g0_6",
     "sqlite_open_status": "forbidden_in_g0_6",
-    "table_count": 74,
-    "column_count": 1208,
+    "table_count": 78,
+    "column_count": 1254,
     "tables": [
       {
         "ordinal": 1,
@@ -3460,6 +3460,24 @@
           },
           {
             "ordinal": 7,
+            "name": "owner_principal_ref",
+            "logical_type": "external_reference",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "ext:workflow_registry_resources:owner_principal_ref"
+            ],
+            "external_reference": {
+              "validator_owner": "principal_identity_resolver",
+              "reference_domain": "principal",
+              "immutable": true
+            }
+          },
+          {
+            "ordinal": 8,
             "name": "canonical_value_id",
             "logical_type": "identifier",
             "sqlite_type_intent": "TEXT",
@@ -3473,7 +3491,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 8,
+            "ordinal": 9,
             "name": "content_hash",
             "logical_type": "hash",
             "sqlite_type_intent": "TEXT",
@@ -3487,7 +3505,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 9,
+            "ordinal": 10,
             "name": "publication_state",
             "logical_type": "text",
             "sqlite_type_intent": "TEXT",
@@ -3503,7 +3521,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 10,
+            "ordinal": 11,
             "name": "created_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -3515,7 +3533,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 11,
+            "ordinal": 12,
             "name": "published_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -3527,7 +3545,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 12,
+            "ordinal": 13,
             "name": "retired_at_ms",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -3539,7 +3557,7 @@
             "external_reference": null
           },
           {
-            "ordinal": 13,
+            "ordinal": 14,
             "name": "row_version",
             "logical_type": "integer",
             "sqlite_type_intent": "INTEGER",
@@ -3642,11 +3660,12 @@
             "expression_intent": "non-negative JavaScript safe integer"
           },
           {
-            "check_id": "ck:workflow_registry_resources:owner_core_ref:owner_feature_id:exactly_one",
+            "check_id": "ck:workflow_registry_resources:owner_core_ref:owner_feature_id:owner_principal_ref:exactly_one",
             "kind": "exactly_one",
             "columns": [
               "owner_core_ref",
-              "owner_feature_id"
+              "owner_feature_id",
+              "owner_principal_ref"
             ],
             "expression_intent": "exactly one typed relation column is non-null"
           },
@@ -4743,6 +4762,1071 @@
       },
       {
         "ordinal": 21,
+        "name": "workflow_personal_releases",
+        "source_section": "Registry, Release, Retention and Backup",
+        "columns": [
+          {
+            "ordinal": 1,
+            "name": "id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 2,
+            "name": "owner_principal_ref",
+            "logical_type": "external_reference",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "ext:workflow_personal_releases:owner_principal_ref"
+            ],
+            "external_reference": {
+              "validator_owner": "principal_identity_resolver",
+              "reference_domain": "principal",
+              "immutable": true
+            }
+          },
+          {
+            "ordinal": 3,
+            "name": "personal_workflow_id",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 4,
+            "name": "release_ref",
+            "logical_type": "external_reference",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "ext:workflow_personal_releases:release_ref"
+            ],
+            "external_reference": {
+              "validator_owner": "personal_workflow_registry",
+              "reference_domain": "personal_workflow_release",
+              "immutable": true
+            }
+          },
+          {
+            "ordinal": 5,
+            "name": "release_version",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 6,
+            "name": "release_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 7,
+            "name": "recipe_resource_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_releases:recipe"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 8,
+            "name": "recipe_resource_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_releases:recipe"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 9,
+            "name": "graph_template_resource_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_releases:graph_template"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 10,
+            "name": "graph_template_resource_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_releases:graph_template"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 11,
+            "name": "registry_snapshot_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_releases:snapshot"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 12,
+            "name": "registry_snapshot_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_releases:snapshot"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 13,
+            "name": "compiled_plan_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 14,
+            "name": "compiler_version",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 15,
+            "name": "policy_effect_envelope_json",
+            "logical_type": "canonical_json",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 16,
+            "name": "policy_effect_envelope_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 17,
+            "name": "status",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "inactive",
+              "active"
+            ],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 18,
+            "name": "published_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 19,
+            "name": "activated_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 20,
+            "name": "row_version",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "id"
+          ],
+          "auto_increment_intent": false
+        },
+        "foreign_keys": [
+          {
+            "relation_id": "fk:personal_releases:recipe",
+            "source_columns": [
+              "recipe_resource_id",
+              "recipe_resource_hash"
+            ],
+            "target_table": "workflow_registry_resources",
+            "target_columns": [
+              "id",
+              "content_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:personal_releases:graph_template",
+            "source_columns": [
+              "graph_template_resource_id",
+              "graph_template_resource_hash"
+            ],
+            "target_table": "workflow_registry_resources",
+            "target_columns": [
+              "id",
+              "content_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:personal_releases:snapshot",
+            "source_columns": [
+              "registry_snapshot_id",
+              "registry_snapshot_hash"
+            ],
+            "target_table": "workflow_registry_snapshots",
+            "target_columns": [
+              "id",
+              "snapshot_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          }
+        ],
+        "unique_keys": [
+          {
+            "key_id": "uk:personal_releases:owner_version",
+            "columns": [
+              "owner_principal_ref",
+              "personal_workflow_id",
+              "release_ref",
+              "release_version"
+            ],
+            "predicate_intent": null
+          },
+          {
+            "key_id": "uk:personal_releases:id_hash",
+            "columns": [
+              "id",
+              "release_hash"
+            ],
+            "predicate_intent": null
+          },
+          {
+            "key_id": "uk:personal_releases:owner_identity",
+            "columns": [
+              "owner_principal_ref",
+              "personal_workflow_id",
+              "id",
+              "release_hash"
+            ],
+            "predicate_intent": null
+          },
+          {
+            "key_id": "uk:personal_releases:single_active",
+            "columns": [
+              "owner_principal_ref",
+              "personal_workflow_id"
+            ],
+            "predicate_intent": "status = 'active'"
+          }
+        ],
+        "checks": [
+          {
+            "check_id": "ck:workflow_personal_releases:release_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "release_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:workflow_personal_releases:recipe_resource_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "recipe_resource_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:workflow_personal_releases:graph_template_resource_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "graph_template_resource_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:workflow_personal_releases:registry_snapshot_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "registry_snapshot_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:workflow_personal_releases:compiled_plan_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "compiled_plan_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:workflow_personal_releases:policy_effect_envelope_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "policy_effect_envelope_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:workflow_personal_releases:status:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "status"
+            ],
+            "expression_intent": "value belongs to the closed status catalog"
+          },
+          {
+            "check_id": "ck:workflow_personal_releases:published_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "published_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:workflow_personal_releases:activated_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "activated_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:workflow_personal_releases:row_version:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "row_version"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:personal_releases:status_time",
+            "kind": "state_field_consistency",
+            "columns": [
+              "status",
+              "published_at_ms",
+              "activated_at_ms"
+            ],
+            "expression_intent": "active releases have an activation time after publication"
+          }
+        ],
+        "indexes": [
+          {
+            "index_id": "idx:personal_releases:principal_status",
+            "kind": "lookup",
+            "columns": [
+              "owner_principal_ref",
+              "status",
+              "personal_workflow_id",
+              "published_at_ms"
+            ],
+            "predicate_intent": null,
+            "supports_query_ids": []
+          }
+        ]
+      },
+      {
+        "ordinal": 22,
+        "name": "workflow_personal_release_resources",
+        "source_section": "Registry, Release, Retention and Backup",
+        "columns": [
+          {
+            "ordinal": 1,
+            "name": "release_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_release_resources:release"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 2,
+            "name": "resource_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_release_resources:resource"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 3,
+            "name": "content_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_release_resources:resource"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 4,
+            "name": "resource_role",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "recipe",
+              "graph_template",
+              "closure_member"
+            ],
+            "relation_ids": [],
+            "external_reference": null
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "release_id",
+            "resource_id"
+          ],
+          "auto_increment_intent": false
+        },
+        "foreign_keys": [
+          {
+            "relation_id": "fk:personal_release_resources:release",
+            "source_columns": [
+              "release_id"
+            ],
+            "target_table": "workflow_personal_releases",
+            "target_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:personal_release_resources:resource",
+            "source_columns": [
+              "resource_id",
+              "content_hash"
+            ],
+            "target_table": "workflow_registry_resources",
+            "target_columns": [
+              "id",
+              "content_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          }
+        ],
+        "unique_keys": [
+          {
+            "key_id": "uk:personal_release_resources:role",
+            "columns": [
+              "release_id",
+              "resource_role"
+            ],
+            "predicate_intent": "resource_role in ('recipe','graph_template')"
+          }
+        ],
+        "checks": [
+          {
+            "check_id": "ck:workflow_personal_release_resources:content_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "content_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:workflow_personal_release_resources:resource_role:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "resource_role"
+            ],
+            "expression_intent": "value belongs to the closed resource_role catalog"
+          }
+        ],
+        "indexes": []
+      },
+      {
+        "ordinal": 23,
+        "name": "workflow_personal_active_releases",
+        "source_section": "Registry, Release, Retention and Backup",
+        "columns": [
+          {
+            "ordinal": 1,
+            "name": "owner_principal_ref",
+            "logical_type": "external_reference",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "ext:workflow_personal_active_releases:owner_principal_ref",
+              "fk:personal_active_releases:owner_release"
+            ],
+            "external_reference": {
+              "validator_owner": "principal_identity_resolver",
+              "reference_domain": "principal",
+              "immutable": true
+            }
+          },
+          {
+            "ordinal": 2,
+            "name": "personal_workflow_id",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_active_releases:owner_release"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 3,
+            "name": "release_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_active_releases:owner_release",
+              "fk:personal_active_releases:release"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 4,
+            "name": "release_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_active_releases:owner_release",
+              "fk:personal_active_releases:release"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 5,
+            "name": "row_version",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 6,
+            "name": "activated_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "owner_principal_ref",
+            "personal_workflow_id"
+          ],
+          "auto_increment_intent": false
+        },
+        "foreign_keys": [
+          {
+            "relation_id": "fk:personal_active_releases:release",
+            "source_columns": [
+              "release_id",
+              "release_hash"
+            ],
+            "target_table": "workflow_personal_releases",
+            "target_columns": [
+              "id",
+              "release_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:personal_active_releases:owner_release",
+            "source_columns": [
+              "owner_principal_ref",
+              "personal_workflow_id",
+              "release_id",
+              "release_hash"
+            ],
+            "target_table": "workflow_personal_releases",
+            "target_columns": [
+              "owner_principal_ref",
+              "personal_workflow_id",
+              "id",
+              "release_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          }
+        ],
+        "unique_keys": [],
+        "checks": [
+          {
+            "check_id": "ck:workflow_personal_active_releases:release_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "release_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:workflow_personal_active_releases:row_version:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "row_version"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:workflow_personal_active_releases:activated_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "activated_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          }
+        ],
+        "indexes": []
+      },
+      {
+        "ordinal": 24,
+        "name": "workflow_personal_release_operations",
+        "source_section": "Registry, Release, Retention and Backup",
+        "columns": [
+          {
+            "ordinal": 1,
+            "name": "operation_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 2,
+            "name": "idempotency_domain",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 3,
+            "name": "idempotency_key",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 4,
+            "name": "operation_type",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "publish",
+              "activate"
+            ],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 5,
+            "name": "owner_principal_ref",
+            "logical_type": "external_reference",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "ext:workflow_personal_release_operations:owner_principal_ref"
+            ],
+            "external_reference": {
+              "validator_owner": "principal_identity_resolver",
+              "reference_domain": "principal",
+              "immutable": true
+            }
+          },
+          {
+            "ordinal": 6,
+            "name": "personal_workflow_id",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 7,
+            "name": "target_release_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_release_operations:target_release"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 8,
+            "name": "target_release_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:personal_release_operations:target_release"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 9,
+            "name": "request_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 10,
+            "name": "disposition",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "applied",
+              "failed"
+            ],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 11,
+            "name": "result_json",
+            "logical_type": "canonical_json",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 12,
+            "name": "failure_code",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 13,
+            "name": "requested_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 14,
+            "name": "completed_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 15,
+            "name": "row_version",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "operation_id"
+          ],
+          "auto_increment_intent": false
+        },
+        "foreign_keys": [
+          {
+            "relation_id": "fk:personal_release_operations:target_release",
+            "source_columns": [
+              "target_release_id",
+              "target_release_hash"
+            ],
+            "target_table": "workflow_personal_releases",
+            "target_columns": [
+              "id",
+              "release_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          }
+        ],
+        "unique_keys": [
+          {
+            "key_id": "uk:personal_release_operations:idempotency",
+            "columns": [
+              "idempotency_domain",
+              "idempotency_key"
+            ],
+            "predicate_intent": null
+          }
+        ],
+        "checks": [
+          {
+            "check_id": "ck:workflow_personal_release_operations:operation_type:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "operation_type"
+            ],
+            "expression_intent": "value belongs to the closed operation_type catalog"
+          },
+          {
+            "check_id": "ck:workflow_personal_release_operations:target_release_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "target_release_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:workflow_personal_release_operations:request_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "request_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:workflow_personal_release_operations:disposition:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "disposition"
+            ],
+            "expression_intent": "value belongs to the closed disposition catalog"
+          },
+          {
+            "check_id": "ck:workflow_personal_release_operations:requested_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "requested_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:workflow_personal_release_operations:completed_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "completed_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:workflow_personal_release_operations:row_version:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "row_version"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:personal_release_operations:result",
+            "kind": "state_field_consistency",
+            "columns": [
+              "disposition",
+              "failure_code",
+              "requested_at_ms",
+              "completed_at_ms"
+            ],
+            "expression_intent": "terminal operation result and failure code are consistent"
+          }
+        ],
+        "indexes": []
+      },
+      {
+        "ordinal": 25,
         "name": "workflow_registry_retention_handles",
         "source_section": "Registry, Release, Retention and Backup and SQLite relation expansion rules",
         "columns": [
@@ -5096,7 +6180,7 @@
         "indexes": []
       },
       {
-        "ordinal": 22,
+        "ordinal": 26,
         "name": "workflow_registry_retention_handle_members",
         "source_section": "Registry, Release, Retention and Backup",
         "columns": [
@@ -5192,7 +6276,7 @@
         "indexes": []
       },
       {
-        "ordinal": 23,
+        "ordinal": 27,
         "name": "workflow_backups",
         "source_section": "Registry, Release, Retention and Backup",
         "columns": [
@@ -5435,7 +6519,7 @@
         "indexes": []
       },
       {
-        "ordinal": 24,
+        "ordinal": 28,
         "name": "workflow_backup_blob_pins",
         "source_section": "Registry, Release, Retention and Backup",
         "columns": [
@@ -5649,7 +6733,7 @@
         "indexes": []
       },
       {
-        "ordinal": 25,
+        "ordinal": 29,
         "name": "workflow_task_intakes",
         "source_section": "Intake, Routing and Creation",
         "columns": [
@@ -5716,6 +6800,7 @@
               "feature_ui",
               "schedule",
               "api",
+              "task_workspace",
               "workflow_transition"
             ],
             "relation_ids": [],
@@ -6309,7 +7394,7 @@
         "indexes": []
       },
       {
-        "ordinal": 26,
+        "ordinal": 30,
         "name": "workflow_task_intake_revisions",
         "source_section": "Intake, Routing and Creation",
         "columns": [
@@ -6797,7 +7882,7 @@
         "indexes": []
       },
       {
-        "ordinal": 27,
+        "ordinal": 31,
         "name": "workflow_routing_attempts",
         "source_section": "Intake, Routing and Creation",
         "columns": [
@@ -7348,7 +8433,7 @@
         "indexes": []
       },
       {
-        "ordinal": 28,
+        "ordinal": 32,
         "name": "workflow_creation_requests",
         "source_section": "Intake, Routing and Creation",
         "columns": [
@@ -7945,7 +9030,7 @@
         "indexes": []
       },
       {
-        "ordinal": 29,
+        "ordinal": 33,
         "name": "workflow_launch_confirmations",
         "source_section": "Intake, Routing and Creation",
         "columns": [
@@ -8297,7 +9382,7 @@
         "indexes": []
       },
       {
-        "ordinal": 30,
+        "ordinal": 34,
         "name": "workflow_creation_attempts",
         "source_section": "Intake, Routing and Creation",
         "columns": [
@@ -8470,7 +9555,7 @@
         "indexes": []
       },
       {
-        "ordinal": 31,
+        "ordinal": 35,
         "name": "workflows",
         "source_section": "Workflow and Run",
         "columns": [
@@ -9704,7 +10789,7 @@
         ]
       },
       {
-        "ordinal": 32,
+        "ordinal": 36,
         "name": "workflow_state_activations",
         "source_section": "Workflow and Run",
         "columns": [
@@ -10307,7 +11392,7 @@
         "indexes": []
       },
       {
-        "ordinal": 33,
+        "ordinal": 37,
         "name": "workflow_graph_runs",
         "source_section": "Workflow and Run",
         "columns": [
@@ -11420,7 +12505,7 @@
         "indexes": []
       },
       {
-        "ordinal": 34,
+        "ordinal": 38,
         "name": "workflow_operational_blockers",
         "source_section": "Workflow and Run Operational Blockers",
         "columns": [
@@ -12204,7 +13289,7 @@
         ]
       },
       {
-        "ordinal": 35,
+        "ordinal": 39,
         "name": "workflow_operational_blocker_remediation_attempts",
         "source_section": "Workflow and Run Operational Blockers",
         "columns": [
@@ -12628,7 +13713,7 @@
         "indexes": []
       },
       {
-        "ordinal": 36,
+        "ordinal": 40,
         "name": "workflow_state_transition_history",
         "source_section": "Workflow and Run",
         "columns": [
@@ -12924,7 +14009,7 @@
         "indexes": []
       },
       {
-        "ordinal": 37,
+        "ordinal": 41,
         "name": "workflow_relations",
         "source_section": "Workflow and Run",
         "columns": [
@@ -13292,7 +14377,7 @@
         "indexes": []
       },
       {
-        "ordinal": 38,
+        "ordinal": 42,
         "name": "workflow_root_finalization_schedules",
         "source_section": "Workflow and Run Root Finalization",
         "columns": [
@@ -14184,7 +15269,7 @@
         ]
       },
       {
-        "ordinal": 39,
+        "ordinal": 43,
         "name": "workflow_root_finalization_attempts",
         "source_section": "Workflow and Run Root Finalization",
         "columns": [
@@ -14516,7 +15601,7 @@
         "indexes": []
       },
       {
-        "ordinal": 40,
+        "ordinal": 44,
         "name": "workflow_context_snapshots",
         "source_section": "Workflow and Run Context",
         "columns": [
@@ -14813,7 +15898,7 @@
         "indexes": []
       },
       {
-        "ordinal": 41,
+        "ordinal": 45,
         "name": "workflow_context_slot_values",
         "source_section": "Workflow and Run Context",
         "columns": [
@@ -15009,7 +16094,7 @@
         "indexes": []
       },
       {
-        "ordinal": 42,
+        "ordinal": 46,
         "name": "workflow_context_patches",
         "source_section": "Workflow and Run Context",
         "columns": [
@@ -15219,7 +16304,7 @@
         "indexes": []
       },
       {
-        "ordinal": 43,
+        "ordinal": 47,
         "name": "workflow_context_patch_operations",
         "source_section": "Workflow and Run Context",
         "columns": [
@@ -15489,7 +16574,7 @@
         "indexes": []
       },
       {
-        "ordinal": 44,
+        "ordinal": 48,
         "name": "workflow_graph_scope_plans",
         "source_section": "Scope Plan, Instance and Run Manifest",
         "columns": [
@@ -15834,7 +16919,7 @@
         "indexes": []
       },
       {
-        "ordinal": 45,
+        "ordinal": 49,
         "name": "workflow_graph_scopes",
         "source_section": "Scope Plan, Instance and Run Manifest",
         "columns": [
@@ -16698,7 +17783,7 @@
         ]
       },
       {
-        "ordinal": 46,
+        "ordinal": 50,
         "name": "workflow_graph_run_manifest",
         "source_section": "Scope Plan, Instance and Run Manifest",
         "columns": [
@@ -17154,7 +18239,7 @@
         "indexes": []
       },
       {
-        "ordinal": 47,
+        "ordinal": 51,
         "name": "workflow_graph_scope_builds",
         "source_section": "Scope Build and Expansion Manifest",
         "columns": [
@@ -18055,7 +19140,7 @@
         "indexes": []
       },
       {
-        "ordinal": 48,
+        "ordinal": 52,
         "name": "workflow_graph_expansion_manifests",
         "source_section": "Scope Build and Expansion Manifest",
         "columns": [
@@ -18431,7 +19516,7 @@
         "indexes": []
       },
       {
-        "ordinal": 49,
+        "ordinal": 53,
         "name": "workflow_graph_map_item_results",
         "source_section": "Scope Build and Expansion Manifest",
         "columns": [
@@ -18917,7 +20002,7 @@
         "indexes": []
       },
       {
-        "ordinal": 50,
+        "ordinal": 54,
         "name": "workflow_graph_nodes",
         "source_section": "Node, Attempt and Wait",
         "columns": [
@@ -19871,7 +20956,7 @@
         ]
       },
       {
-        "ordinal": 51,
+        "ordinal": 55,
         "name": "workflow_graph_node_attempts",
         "source_section": "Node, Attempt and Wait",
         "columns": [
@@ -21292,7 +22377,7 @@
         ]
       },
       {
-        "ordinal": 52,
+        "ordinal": 56,
         "name": "workflow_graph_retry_schedules",
         "source_section": "Node, Attempt and Wait",
         "columns": [
@@ -21772,7 +22857,7 @@
         ]
       },
       {
-        "ordinal": 53,
+        "ordinal": 57,
         "name": "workflow_graph_waits",
         "source_section": "Node, Attempt and Wait",
         "columns": [
@@ -22363,7 +23448,7 @@
         ]
       },
       {
-        "ordinal": 54,
+        "ordinal": 58,
         "name": "workflow_graph_edges",
         "source_section": "Edge Resolution, Candidate and Cut",
         "columns": [
@@ -22535,7 +23620,7 @@
         ]
       },
       {
-        "ordinal": 55,
+        "ordinal": 59,
         "name": "workflow_graph_control_edge_resolutions",
         "source_section": "Edge Resolution, Candidate and Cut",
         "columns": [
@@ -22722,7 +23807,7 @@
         "indexes": []
       },
       {
-        "ordinal": 56,
+        "ordinal": 60,
         "name": "workflow_graph_data_edge_resolutions",
         "source_section": "Edge Resolution, Candidate and Cut",
         "columns": [
@@ -22983,7 +24068,7 @@
         "indexes": []
       },
       {
-        "ordinal": 57,
+        "ordinal": 61,
         "name": "workflow_graph_terminal_candidates",
         "source_section": "Edge Resolution, Candidate and Cut",
         "columns": [
@@ -23191,7 +24276,7 @@
         "indexes": []
       },
       {
-        "ordinal": 58,
+        "ordinal": 62,
         "name": "workflow_graph_completion_eligibilities",
         "source_section": "Edge Resolution, Candidate and Cut",
         "columns": [
@@ -23441,7 +24526,7 @@
         ]
       },
       {
-        "ordinal": 59,
+        "ordinal": 63,
         "name": "workflow_graph_scope_close_requests",
         "source_section": "Edge Resolution, Candidate and Cut",
         "columns": [
@@ -23971,7 +25056,7 @@
         "indexes": []
       },
       {
-        "ordinal": 60,
+        "ordinal": 64,
         "name": "workflow_graph_completion_cuts",
         "source_section": "Edge Resolution, Candidate and Cut",
         "columns": [
@@ -24336,7 +25421,7 @@
         "indexes": []
       },
       {
-        "ordinal": 61,
+        "ordinal": 65,
         "name": "workflow_graph_child_completion_consumptions",
         "source_section": "Edge Resolution, Candidate and Cut",
         "columns": [
@@ -24603,7 +25688,7 @@
         "indexes": []
       },
       {
-        "ordinal": 62,
+        "ordinal": 66,
         "name": "workflow_graph_subtree_fence_manifests",
         "source_section": "Edge Resolution, Candidate and Cut",
         "columns": [
@@ -24884,7 +25969,7 @@
         "indexes": []
       },
       {
-        "ordinal": 63,
+        "ordinal": 67,
         "name": "workflow_graph_inbox_events",
         "source_section": "Inbox, Late Result, Event and Effect Journal",
         "columns": [
@@ -25449,7 +26534,7 @@
         ]
       },
       {
-        "ordinal": 64,
+        "ordinal": 68,
         "name": "workflow_graph_late_results",
         "source_section": "Inbox, Late Result, Event and Effect Journal",
         "columns": [
@@ -25713,7 +26798,7 @@
         "indexes": []
       },
       {
-        "ordinal": 65,
+        "ordinal": 69,
         "name": "workflow_graph_effect_operations",
         "source_section": "Inbox, Late Result, Event and Effect Journal",
         "columns": [
@@ -26410,7 +27495,7 @@
         "indexes": []
       },
       {
-        "ordinal": 66,
+        "ordinal": 70,
         "name": "workflow_graph_effect_operation_claims",
         "source_section": "Inbox, Late Result, Event and Effect Journal",
         "columns": [
@@ -26546,7 +27631,7 @@
         "indexes": []
       },
       {
-        "ordinal": 67,
+        "ordinal": 71,
         "name": "workflow_graph_facts",
         "source_section": "Inbox, Late Result, Event and Effect Journal",
         "columns": [
@@ -26881,7 +27966,7 @@
         ]
       },
       {
-        "ordinal": 68,
+        "ordinal": 72,
         "name": "workflow_graph_events",
         "source_section": "Inbox, Late Result, Event and Effect Journal",
         "columns": [
@@ -27228,7 +28313,7 @@
         "indexes": []
       },
       {
-        "ordinal": 69,
+        "ordinal": 73,
         "name": "workflow_outbox",
         "source_section": "Outbox, Lease and Recovery",
         "columns": [
@@ -28023,7 +29108,7 @@
         ]
       },
       {
-        "ordinal": 70,
+        "ordinal": 74,
         "name": "workflow_outbox_attempts",
         "source_section": "Outbox, Lease and Recovery",
         "columns": [
@@ -28472,7 +29557,7 @@
         "indexes": []
       },
       {
-        "ordinal": 71,
+        "ordinal": 75,
         "name": "workflow_runtime_commands",
         "source_section": "Workflow Runtime Command authorization and audit",
         "columns": [
@@ -29069,7 +30154,7 @@
         ]
       },
       {
-        "ordinal": 72,
+        "ordinal": 76,
         "name": "workflow_runtime_command_invocations",
         "source_section": "Workflow Runtime Command authorization and audit",
         "columns": [
@@ -29600,7 +30685,7 @@
         "indexes": []
       },
       {
-        "ordinal": 73,
+        "ordinal": 77,
         "name": "workflow_runtime_command_confirmations",
         "source_section": "Workflow Runtime Command authorization and audit",
         "columns": [
@@ -29919,7 +31004,7 @@
         "indexes": []
       },
       {
-        "ordinal": 74,
+        "ordinal": 78,
         "name": "workflow_checkpoints",
         "source_section": "Snapshot and Checkpoint",
         "columns": [
@@ -30237,5 +31322,5 @@
       "generic_error_fields": "forbidden"
     }
   },
-  "hash": "sha256:7d45ec0315f5f68033c6c07da8fe36df1b471607d16ae9ce371b90c56ea9aec3"
+  "hash": "sha256:e904eb77eda048c6594da0cdf138e0e10a7dd035669e574a3613600643a600bf"
 }

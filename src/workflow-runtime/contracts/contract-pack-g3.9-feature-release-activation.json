@@ -12,11 +12,11 @@
     "status": "DONE",
     "g3_status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_G3_REGRESSION",
     "schema_resource_hashes": {
-      "request": "sha256:edc7b8f5c80c0963424e566529813bb7a1148257e9605874a9db4ef85e1ba4cd",
+      "request": "sha256:8a8436ae3680196227af77bf6ad8074f7917b2c286f102eaf5cbd18b5e37fe89",
       "receipt": "sha256:86a4f70cda88555480defb5f44301570132600cf7e7a7d8e3d4c28f88d5c8903",
       "result": "sha256:8cf9f71dec80898b6cf96d736852c55ff6f5d951170b0d65ad1bde247ed4039b"
     },
-    "fixture_digest": "sha256:9e9cbb2d08ddf0f9f78690c3610730f6ab246cfd9876dc266ea11649bfa2e57e",
+    "fixture_digest": "sha256:88e8eb198ebc8f719afafeaeb37347e9a028f367d8dbb0e1a394642615a21143",
     "error_precedence": [
       "activation_request_strict_parse_invalid",
       "activation_request_removed_field",
@@ -71,7 +71,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-feature-release-activation-request-schema:1\n",
-        "hash": "sha256:97757b7851d0f1cda48d8d7ff9296d15d17efb44675d882603929dfbbb0141e7"
+        "hash": "sha256:f82f65e48ea6358b672ab89ad7996e598fa1f6dcd0ed2904d6d239e46121a33c"
       },
       {
         "path": "registry/workflow-feature-release-activation-receipt-schema@1.json",
@@ -146,5 +146,5 @@
     "authoring_stages_implemented": false,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:ccf6d14aeaee46215d40de05474fbf16ce8481cc09241b5ab0713adb2b849810"
+  "hash": "sha256:01ac6fde047a57e3b13b3e25cd75f4bcd7bf5a6abdfa01a6bdae7560d65044d2"
 }

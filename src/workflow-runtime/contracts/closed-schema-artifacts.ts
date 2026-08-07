@@ -477,8 +477,9 @@ const workflowDefinitionSchema = object({
           exit_routes: strictRecord(ref('transition')),
           on_error: ref('transition'),
           on_local_cancel: ref('transition'),
+          on_temporary_replan: ref('transition'),
         },
-        ['label', 'description', 'input_bindings'],
+        ['label', 'description', 'input_bindings', 'on_temporary_replan'],
       ),
       object(
         {
