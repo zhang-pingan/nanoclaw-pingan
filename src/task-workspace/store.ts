@@ -674,6 +674,87 @@ export interface AppendMessageInput {
   readonly nowMs?: number;
 }
 
+export interface CreateRunLaunchIntentInput {
+  readonly sessionId: string;
+  readonly messageText: string;
+  readonly mode: TaskLaunchMode;
+  readonly selectionToken?: string | null;
+  readonly selectedRecipeRef?: JsonObject | null;
+  readonly selectedRecipeHash?: Sha256Hash | null;
+  readonly effectiveInput: JsonValue;
+  readonly attachmentManifestHash: Sha256Hash;
+  readonly idempotencyKey: string;
+  readonly nowMs?: number;
+}
+
+export interface CreateRunLaunchIntentResult {
+  readonly launch: TaskLaunchIntentV1;
+  readonly message: TaskConversationMessageV1;
+  readonly timeline: TaskTimelineEntryV1;
+  readonly created: boolean;
+}
+
+export interface TaskArtifactLinkV1 {
+  readonly artifact_link_id: string;
+  readonly session_id: string;
+  readonly workflow_id: string;
+  readonly artifact_ref: string;
+  readonly artifact_hash: Sha256Hash;
+  readonly display_json: JsonObject;
+  readonly created_at_ms: number;
+}
+
+function runtimeTimelineKind(eventType: string): TaskTimelineEntryKind {
+  switch (eventType) {
+    case 'runtime_command_decided':
+      return 'command_result';
+    case 'workflow_terminal_committed':
+      return 'workflow_completed';
+    case 'wait_armed':
+      return 'pending_interaction';
+    case 'node_output_published':
+      return 'artifact_published';
+    case 'attempt_created':
+    case 'attempt_phase_changed':
+    case 'control_edge_resolved':
+    case 'data_edge_resolved':
+    case 'input_sealed':
+    case 'node_ready':
+    case 'node_skipped':
+    case 'node_terminal':
+    case 'orchestration_error':
+    case 'retry_schedule_created':
+    case 'retry_schedule_consumed':
+    case 'scheduler_admitted':
+    case 'terminal_candidate':
+    case 'trigger_decided':
+    case 'wait_resolved':
+      return 'node_progress';
+    case 'build_failed':
+    case 'child_completion_consumed':
+    case 'completion_eligibility':
+    case 'completion_cut_committed':
+    case 'compensation_changed':
+    case 'domain_claim_changed':
+    case 'effect_operation_changed':
+    case 'expansion_sealed':
+    case 'ledger_posting_committed':
+    case 'operational_blocker_changed':
+    case 'recovery_decision_recorded':
+    case 'root_finalization_changed':
+    case 'run_control_changed':
+    case 'run_created':
+    case 'scope_close_requested':
+    case 'scope_materialized':
+    case 'state_activation_created':
+    case 'subtree_fenced':
+    case 'workflow_created':
+    case 'workflow_transition_committed':
+    default:
+      return 'workflow_progress';
+  }
+}
+
 export class TaskWorkspaceStore {
   private readonly database: Database.Database;
 
@@ -779,6 +860,38 @@ export class TaskWorkspaceStore {
         entry.created_at_ms,
       );
     return entry;
+  }
+
+  private mapTimelineEntry(row: Record<string, unknown>): TaskTimelineEntryV1 {
+    return {
+      entry_id: String(row.entry_id),
+      session_id: String(row.session_id),
+      session_seq: Number(row.session_seq),
+      kind: row.kind as TaskTimelineEntryKind,
+      source_kind: row.source_kind as 'workspace' | 'runtime',
+      source_id: String(row.source_id),
+      source_event_seq:
+        row.source_event_seq === null ? null : Number(row.source_event_seq),
+      payload_json: parseJson(String(row.payload_json)),
+      payload_hash: row.payload_hash as Sha256Hash,
+      occurred_at_ms: Number(row.occurred_at_ms),
+      created_at_ms: Number(row.created_at_ms),
+    };
+  }
+
+  private getTimelineEntry(entryId: string): TaskTimelineEntryV1 {
+    const row = this.database
+      .prepare(
+        'SELECT * FROM task_workspace_timeline_entries WHERE entry_id = ?',
+      )
+      .get(entryId) as Record<string, unknown> | undefined;
+    if (!row) {
+      throw new TaskWorkspaceStoreError(
+        'integrity_error',
+        'Run idempotency response references a missing Timeline entry',
+      );
+    }
+    return this.mapTimelineEntry(row);
   }
 
   createSession(input: CreateSessionInput): TaskSessionV1 {
@@ -1087,6 +1200,27 @@ export class TaskWorkspaceStore {
     }));
   }
 
+  getMessage(messageId: string): TaskConversationMessageV1 {
+    const row = this.database
+      .prepare(
+        'SELECT session_id FROM task_workspace_messages WHERE message_id = ?',
+      )
+      .get(messageId) as { session_id: string } | undefined;
+    if (!row) {
+      throw new TaskWorkspaceStoreError('not_found', 'Message not found');
+    }
+    const message = this.listMessages(row.session_id).find(
+      (candidate) => candidate.message_id === messageId,
+    );
+    if (!message) {
+      throw new TaskWorkspaceStoreError(
+        'integrity_error',
+        'Message index is inconsistent',
+      );
+    }
+    return message;
+  }
+
   getCoordinatorTurn(turnId: string): CoordinatorTurnV1 {
     const row = this.database
       .prepare(
@@ -1139,6 +1273,100 @@ export class TaskWorkspaceStore {
         .run(nowMs, next.turn_id, next.row_version).changes;
       return changed === 1 ? this.getCoordinatorTurn(next.turn_id) : null;
     });
+  }
+
+  ensureCoordinatorTurn(input: {
+    sessionId: string;
+    sourceMessageId: string;
+    nowMs?: number;
+  }): CoordinatorTurnV1 {
+    const source = this.getMessage(input.sourceMessageId);
+    if (source.session_id !== input.sessionId || source.role !== 'human') {
+      throw new TaskWorkspaceStoreError(
+        'conflict',
+        'Coordinator turn source must be a Human message in the same TaskSession',
+      );
+    }
+    return this.transaction(() => {
+      const existing = this.database
+        .prepare(
+          `SELECT turn_id FROM task_workspace_coordinator_turns
+            WHERE source_message_id = ?
+            ORDER BY attempt_no DESC LIMIT 1`,
+        )
+        .get(input.sourceMessageId) as { turn_id: string } | undefined;
+      if (existing) return this.getCoordinatorTurn(existing.turn_id);
+      const turnId = id('turn');
+      this.database
+        .prepare(
+          `INSERT INTO task_workspace_coordinator_turns (
+            turn_id, session_id, source_message_id, status, attempt_no, query_id,
+            error_code, created_at_ms, started_at_ms, finished_at_ms, row_version
+          ) VALUES (?, ?, ?, 'pending', 1, NULL, NULL, ?, NULL, NULL, 1)`,
+        )
+        .run(
+          turnId,
+          input.sessionId,
+          input.sourceMessageId,
+          input.nowMs ?? Date.now(),
+        );
+      return this.getCoordinatorTurn(turnId);
+    });
+  }
+
+  claimCoordinatorTurn(
+    turnId: string,
+    nowMs = Date.now(),
+  ): CoordinatorTurnV1 | null {
+    return this.transaction(() => {
+      const turn = this.getCoordinatorTurn(turnId);
+      if (turn.status !== 'pending') return null;
+      const running = this.database
+        .prepare(
+          `SELECT turn_id FROM task_workspace_coordinator_turns
+            WHERE session_id = ? AND status = 'running' AND turn_id <> ?`,
+        )
+        .get(turn.session_id, turnId);
+      if (running) return null;
+      const changed = this.database
+        .prepare(
+          `UPDATE task_workspace_coordinator_turns
+              SET status = 'running', started_at_ms = ?, row_version = row_version + 1
+            WHERE turn_id = ? AND row_version = ? AND status = 'pending'`,
+        )
+        .run(nowMs, turn.turn_id, turn.row_version).changes;
+      return changed === 1 ? this.getCoordinatorTurn(turnId) : null;
+    });
+  }
+
+  replaceCoordinatorAgentSession(input: {
+    sessionId: string;
+    expectedAgentSessionId: string | null;
+    agentSessionId: string | null;
+    nowMs?: number;
+  }): TaskSessionV1 {
+    const nowMs = input.nowMs ?? Date.now();
+    const changed = this.database
+      .prepare(
+        `UPDATE task_workspace_sessions
+            SET coordinator_agent_session_id = ?, updated_at_ms = ?,
+                row_version = row_version + 1
+          WHERE session_id = ?
+            AND coordinator_agent_session_id IS ?`,
+      )
+      .run(
+        input.agentSessionId,
+        nowMs,
+        input.sessionId,
+        input.expectedAgentSessionId,
+      ).changes;
+    if (changed !== 1) {
+      throw new TaskWorkspaceStoreError(
+        'conflict',
+        'Coordinator Agent session changed concurrently',
+      );
+    }
+    return this.getSession(input.sessionId);
   }
 
   finishCoordinatorTurn(input: {
@@ -1207,6 +1435,250 @@ export class TaskWorkspaceStore {
         nowMs,
       );
     return this.getCoordinatorTurn(newId);
+  }
+
+  createRunLaunchIntent(
+    input: CreateRunLaunchIntentInput,
+  ): CreateRunLaunchIntentResult {
+    assertText(input.messageText, 'message body');
+    assertText(input.idempotencyKey, 'idempotency key', 512);
+    this.getSession(input.sessionId);
+    const effectiveInputHash = hash('launch-input', input.effectiveInput);
+    const messageBodyHash = hash('message-body', input.messageText);
+    const requestHash = hash('run-request', {
+      session_id: input.sessionId,
+      mode: input.mode,
+      selected_recipe_ref: input.selectedRecipeRef ?? null,
+      selected_recipe_hash: input.selectedRecipeHash ?? null,
+      message_body_hash: messageBodyHash,
+      effective_input_json: input.effectiveInput,
+      effective_input_hash: effectiveInputHash,
+      attachment_manifest_hash: input.attachmentManifestHash,
+    });
+    const domain = 'task-workspace-run';
+    const nowMs = input.nowMs ?? Date.now();
+    return this.transaction(() => {
+      const prior = this.database
+        .prepare(
+          `SELECT request_hash, response_json
+             FROM task_workspace_idempotency_records
+            WHERE domain = ? AND idempotency_key = ?`,
+        )
+        .get(domain, input.idempotencyKey) as
+        | { request_hash: Sha256Hash; response_json: string }
+        | undefined;
+      if (prior) {
+        if (prior.request_hash !== requestHash) {
+          throw new TaskWorkspaceStoreError(
+            'conflict',
+            'Run idempotency key binds a different Session, selection, input, or attachment manifest',
+          );
+        }
+        const response = parseJson<{
+          launch_intent_id: string;
+          source_message_id: string;
+          timeline_entry_id: string;
+        }>(prior.response_json);
+        const launch = this.getLaunchIntent(response.launch_intent_id);
+        const message = this.getMessage(response.source_message_id);
+        if (
+          launch.session_id !== input.sessionId ||
+          launch.source_message_id !== message.message_id
+        ) {
+          throw new TaskWorkspaceStoreError(
+            'integrity_error',
+            'Run idempotency response identity is inconsistent',
+          );
+        }
+        return {
+          launch,
+          message,
+          timeline: this.getTimelineEntry(response.timeline_entry_id),
+          created: false,
+        };
+      }
+
+      const session = this.getSession(input.sessionId);
+      if (session.status !== 'open') {
+        throw new TaskWorkspaceStoreError(
+          'conflict',
+          'Run requires an open TaskSession',
+        );
+      }
+      if (input.mode === 'published_recipe') {
+        if (
+          session.current_run_selection.kind !== 'published_recipe' ||
+          !input.selectedRecipeRef ||
+          !input.selectedRecipeHash ||
+          canonicalJson(session.current_run_selection.recipe_ref) !==
+            canonicalJson(input.selectedRecipeRef) ||
+          session.current_run_selection.recipe_hash !== input.selectedRecipeHash
+        ) {
+          throw new TaskWorkspaceStoreError(
+            'conflict',
+            'Run Recipe does not match the TaskSession exact selection',
+          );
+        }
+      } else if (session.current_run_selection.kind !== 'temporary_workflow') {
+        throw new TaskWorkspaceStoreError(
+          'conflict',
+          'Temporary Run does not match the TaskSession selection',
+        );
+      }
+
+      const messageId = id('message');
+      const messageSeq = this.nextMessageSeq(input.sessionId);
+      const message: TaskConversationMessageV1 = {
+        format: 'icarus.task-conversation-message/1',
+        message_id: messageId,
+        session_id: input.sessionId,
+        thread_id: session.primary_thread_id,
+        message_seq: messageSeq,
+        role: 'human',
+        body_json: null,
+        body_text: input.messageText,
+        body_hash: messageBodyHash,
+        reply_to_message_id: null,
+        causation_ref: null,
+        query_id: null,
+        created_at_ms: nowMs,
+      };
+      this.database
+        .prepare(
+          `INSERT INTO task_workspace_messages (
+            message_id, session_id, thread_id, message_seq, role, body_json,
+            body_text, body_hash, reply_to_message_id, causation_ref, query_id,
+            created_at_ms
+          ) VALUES (?, ?, ?, ?, 'human', NULL, ?, ?, NULL, NULL, NULL, ?)`,
+        )
+        .run(
+          message.message_id,
+          message.session_id,
+          message.thread_id,
+          message.message_seq,
+          message.body_text,
+          message.body_hash,
+          message.created_at_ms,
+        );
+      const timeline = this.insertTimeline({
+        sessionId: input.sessionId,
+        kind: 'human_message',
+        sourceKind: 'workspace',
+        sourceId: messageId,
+        sourceEventSeq: null,
+        payload: {
+          message_id: messageId,
+          role: 'human',
+          body: input.messageText,
+          query_id: null,
+        },
+        occurredAtMs: nowMs,
+        createdAtMs: nowMs,
+      });
+
+      const launchIntentId = id('launch');
+      const creationDomain = `task_workspace:${input.sessionId}`;
+      const creationKey = hash('creation-key', {
+        session_id: input.sessionId,
+        idempotency_key: input.idempotencyKey,
+      });
+      const status: TaskLaunchStatus =
+        input.mode === 'published_recipe' ? 'creating' : 'drafting';
+      this.database
+        .prepare(
+          `INSERT INTO task_workspace_launch_intents (
+            launch_intent_id, session_id, source_message_id, mode,
+            selected_recipe_ref_json, selected_recipe_hash, selection_token,
+            effective_input_json, effective_input_hash, attachment_manifest_hash,
+            confirmed_draft_revision_id, status, creation_domain, creation_key,
+            idempotency_key, last_error_code, row_version, created_at_ms, updated_at_ms
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL, 1, ?, ?)`,
+        )
+        .run(
+          launchIntentId,
+          input.sessionId,
+          messageId,
+          input.mode,
+          input.selectedRecipeRef
+            ? canonicalJson(input.selectedRecipeRef)
+            : null,
+          input.selectedRecipeHash ?? null,
+          input.selectionToken ?? null,
+          canonicalJson(input.effectiveInput),
+          effectiveInputHash,
+          input.attachmentManifestHash,
+          status,
+          creationDomain,
+          creationKey,
+          input.idempotencyKey,
+          nowMs,
+          nowMs,
+        );
+      this.database
+        .prepare(
+          `INSERT INTO task_workspace_launch_input_revisions
+            (revision_id, launch_intent_id, revision_no, input_json, input_hash, created_at_ms)
+           VALUES (?, ?, 1, ?, ?, ?)`,
+        )
+        .run(
+          id('launch-input'),
+          launchIntentId,
+          canonicalJson(input.effectiveInput),
+          effectiveInputHash,
+          nowMs,
+        );
+      this.insertTimeline({
+        sessionId: input.sessionId,
+        kind: 'launch_status',
+        sourceKind: 'workspace',
+        sourceId: launchIntentId,
+        sourceEventSeq: null,
+        payload: { launch_intent_id: launchIntentId, mode: input.mode, status },
+        occurredAtMs: nowMs,
+        createdAtMs: nowMs,
+      });
+      this.database
+        .prepare(
+          `UPDATE task_workspace_sessions SET updated_at_ms = ?,
+            row_version = row_version + 1 WHERE session_id = ?`,
+        )
+        .run(nowMs, input.sessionId);
+      this.database
+        .prepare(
+          `INSERT INTO task_workspace_idempotency_records
+            (domain, idempotency_key, request_hash, response_json, created_at_ms)
+           VALUES (?, ?, ?, ?, ?)`,
+        )
+        .run(
+          domain,
+          input.idempotencyKey,
+          requestHash,
+          canonicalJson({
+            launch_intent_id: launchIntentId,
+            source_message_id: messageId,
+            timeline_entry_id: timeline.entry_id,
+          }),
+          nowMs,
+        );
+      return {
+        launch: this.getLaunchIntent(launchIntentId),
+        message,
+        timeline,
+        created: true,
+      };
+    });
+  }
+
+  findLaunchIntentByIdempotencyKey(
+    idempotencyKey: string,
+  ): TaskLaunchIntentV1 | null {
+    assertText(idempotencyKey, 'idempotency key', 512);
+    const row = this.database
+      .prepare(
+        'SELECT launch_intent_id FROM task_workspace_launch_intents WHERE idempotency_key = ?',
+      )
+      .get(idempotencyKey) as { launch_intent_id: string } | undefined;
+    return row ? this.getLaunchIntent(row.launch_intent_id) : null;
   }
 
   createLaunchIntent(input: {
@@ -1409,6 +1881,104 @@ export class TaskWorkspaceStore {
     return this.getLaunchIntent(input.launchIntentId);
   }
 
+  confirmCurrentTemporaryRevision(input: {
+    launchIntentId: string;
+    revisionId: string;
+    expectedRowVersion: number;
+    nowMs?: number;
+  }): {
+    launch: TaskLaunchIntentV1;
+    revision: TemporaryWorkflowDraftRevisionV1;
+  } {
+    const nowMs = input.nowMs ?? Date.now();
+    return this.transaction(() => {
+      const launch = this.getLaunchIntent(input.launchIntentId);
+      if (
+        launch.mode !== 'temporary_workflow' ||
+        launch.status !== 'awaiting_confirmation' ||
+        launch.row_version !== input.expectedRowVersion
+      ) {
+        throw new TaskWorkspaceStoreError(
+          'conflict',
+          'Temporary confirmation is stale',
+        );
+      }
+      const authority = this.database
+        .prepare(
+          `SELECT draft.draft_id, draft.current_revision_id, draft.status
+             FROM task_workspace_temporary_drafts AS draft
+             JOIN task_workspace_temporary_draft_revisions AS revision
+               ON revision.draft_id = draft.draft_id
+            WHERE draft.launch_intent_id = ? AND revision.revision_id = ?`,
+        )
+        .get(input.launchIntentId, input.revisionId) as
+        | {
+            draft_id: string;
+            current_revision_id: string | null;
+            status: string;
+          }
+        | undefined;
+      if (
+        !authority ||
+        authority.current_revision_id !== input.revisionId ||
+        authority.status !== 'awaiting_confirmation'
+      ) {
+        throw new TaskWorkspaceStoreError(
+          'conflict',
+          'Temporary revision is not the current revision of this LaunchIntent Draft',
+        );
+      }
+      const launchChanged = this.database
+        .prepare(
+          `UPDATE task_workspace_launch_intents
+              SET status = 'creating', confirmed_draft_revision_id = ?,
+                  last_error_code = NULL, updated_at_ms = ?,
+                  row_version = row_version + 1
+            WHERE launch_intent_id = ? AND row_version = ?
+              AND status = 'awaiting_confirmation'`,
+        )
+        .run(
+          input.revisionId,
+          nowMs,
+          input.launchIntentId,
+          input.expectedRowVersion,
+        ).changes;
+      const draftChanged = this.database
+        .prepare(
+          `UPDATE task_workspace_temporary_drafts
+              SET status = 'confirmed', updated_at_ms = ?,
+                  row_version = row_version + 1
+            WHERE draft_id = ? AND current_revision_id = ?
+              AND status = 'awaiting_confirmation'`,
+        )
+        .run(nowMs, authority.draft_id, input.revisionId).changes;
+      if (launchChanged !== 1 || draftChanged !== 1) {
+        throw new TaskWorkspaceStoreError(
+          'conflict',
+          'Temporary confirmation CAS failed',
+        );
+      }
+      this.insertTimeline({
+        sessionId: launch.session_id,
+        kind: 'launch_status',
+        sourceKind: 'workspace',
+        sourceId: `${input.launchIntentId}:creating:${input.expectedRowVersion + 1}`,
+        sourceEventSeq: null,
+        payload: {
+          launch_intent_id: input.launchIntentId,
+          status: 'creating',
+          confirmed_draft_revision_id: input.revisionId,
+        },
+        occurredAtMs: nowMs,
+        createdAtMs: nowMs,
+      });
+      return {
+        launch: this.getLaunchIntent(input.launchIntentId),
+        revision: this.getTemporaryRevision(input.revisionId),
+      };
+    });
+  }
+
   createTemporaryRevision(input: {
     launchIntentId: string;
     sourceMessageId: string;
@@ -1423,10 +1993,13 @@ export class TaskWorkspaceStore {
     nowMs?: number;
   }): TemporaryWorkflowDraftRevisionV1 {
     const launch = this.getLaunchIntent(input.launchIntentId);
-    if (launch.mode !== 'temporary_workflow') {
+    if (
+      launch.mode !== 'temporary_workflow' ||
+      !['drafting', 'awaiting_confirmation', 'failed'].includes(launch.status)
+    ) {
       throw new TaskWorkspaceStoreError(
         'conflict',
-        'Only Temporary LaunchIntent accepts Draft revisions',
+        'Temporary Draft revision is not allowed in the current LaunchIntent state',
       );
     }
     const nowMs = input.nowMs ?? Date.now();
@@ -1637,6 +2210,139 @@ export class TaskWorkspaceStore {
     return row ? this.mapExecutionLink(row) : null;
   }
 
+  upsertArtifactLink(input: {
+    sessionId: string;
+    workflowId: string;
+    artifactRef: string;
+    artifactHash: Sha256Hash;
+    display: JsonObject;
+    nowMs?: number;
+  }): TaskArtifactLinkV1 {
+    assertText(input.artifactRef, 'artifact ref', 2_000);
+    const linked = this.database
+      .prepare(
+        `SELECT 1 FROM task_workspace_execution_links
+          WHERE session_id = ? AND workflow_id = ?`,
+      )
+      .get(input.sessionId, input.workflowId);
+    if (!linked) {
+      throw new TaskWorkspaceStoreError(
+        'conflict',
+        'Artifact Workflow is not linked to this TaskSession',
+      );
+    }
+    const nowMs = input.nowMs ?? Date.now();
+    return this.transaction(() => {
+      const existing = this.database
+        .prepare(
+          `SELECT * FROM task_workspace_artifact_links
+            WHERE session_id = ? AND workflow_id = ?
+              AND artifact_ref = ? AND artifact_hash = ?`,
+        )
+        .get(
+          input.sessionId,
+          input.workflowId,
+          input.artifactRef,
+          input.artifactHash,
+        ) as Record<string, unknown> | undefined;
+      if (existing) {
+        const currentDisplay = parseJson<JsonObject>(
+          String(existing.display_json),
+        );
+        if (canonicalJson(currentDisplay) !== canonicalJson(input.display)) {
+          this.database
+            .prepare(
+              `UPDATE task_workspace_artifact_links SET display_json = ?
+                WHERE artifact_link_id = ?`,
+            )
+            .run(
+              canonicalJson(input.display),
+              String(existing.artifact_link_id),
+            );
+        }
+        return this.getArtifactLink(String(existing.artifact_link_id));
+      }
+      const artifactLinkId = id('artifact-link');
+      this.database
+        .prepare(
+          `INSERT INTO task_workspace_artifact_links (
+            artifact_link_id, session_id, workflow_id, artifact_ref,
+            artifact_hash, display_json, created_at_ms
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          artifactLinkId,
+          input.sessionId,
+          input.workflowId,
+          input.artifactRef,
+          input.artifactHash,
+          canonicalJson(input.display),
+          nowMs,
+        );
+      this.insertTimeline({
+        sessionId: input.sessionId,
+        kind: 'artifact_published',
+        sourceKind: 'workspace',
+        sourceId: artifactLinkId,
+        sourceEventSeq: null,
+        payload: {
+          artifact_link_id: artifactLinkId,
+          workflow_id: input.workflowId,
+          artifact_ref: input.artifactRef,
+          artifact_hash: input.artifactHash,
+          display: input.display,
+        },
+        occurredAtMs: nowMs,
+        createdAtMs: nowMs,
+      });
+      return this.getArtifactLink(artifactLinkId);
+    });
+  }
+
+  getArtifactLink(artifactLinkId: string): TaskArtifactLinkV1 {
+    const row = this.database
+      .prepare(
+        'SELECT * FROM task_workspace_artifact_links WHERE artifact_link_id = ?',
+      )
+      .get(artifactLinkId) as Record<string, unknown> | undefined;
+    if (!row) {
+      throw new TaskWorkspaceStoreError('not_found', 'Artifact link not found');
+    }
+    return {
+      artifact_link_id: String(row.artifact_link_id),
+      session_id: String(row.session_id),
+      workflow_id: String(row.workflow_id),
+      artifact_ref: String(row.artifact_ref),
+      artifact_hash: row.artifact_hash as Sha256Hash,
+      display_json: parseJson(String(row.display_json)),
+      created_at_ms: Number(row.created_at_ms),
+    };
+  }
+
+  listArtifactLinks(
+    sessionId: string,
+    workflowId?: string,
+  ): TaskArtifactLinkV1[] {
+    const rows = workflowId
+      ? this.database
+          .prepare(
+            `SELECT artifact_link_id FROM task_workspace_artifact_links
+              WHERE session_id = ? AND workflow_id = ?
+              ORDER BY created_at_ms, artifact_link_id COLLATE BINARY`,
+          )
+          .all(sessionId, workflowId)
+      : this.database
+          .prepare(
+            `SELECT artifact_link_id FROM task_workspace_artifact_links
+              WHERE session_id = ?
+              ORDER BY created_at_ms, artifact_link_id COLLATE BINARY`,
+          )
+          .all(sessionId);
+    return (rows as Array<{ artifact_link_id: string }>).map((row) =>
+      this.getArtifactLink(row.artifact_link_id),
+    );
+  }
+
   getRuntimeCursor(
     sessionId: string,
     workflowId: string,
@@ -1686,16 +2392,7 @@ export class TaskWorkspaceStore {
           .get(input.sessionId, input.runId, sequence);
         if (existing) continue;
         const eventType = String(event.event_type);
-        const kind: TaskTimelineEntryKind =
-          eventType === 'runtime_command_decided'
-            ? 'command_result'
-            : eventType.includes('terminal')
-              ? 'workflow_completed'
-              : eventType.includes('wait')
-                ? 'pending_interaction'
-                : event.node_id
-                  ? 'node_progress'
-                  : 'workflow_progress';
+        const kind = runtimeTimelineKind(eventType);
         appended.push(
           this.insertTimeline({
             sessionId: input.sessionId,
@@ -1748,20 +2445,7 @@ export class TaskWorkspaceStore {
             ORDER BY session_seq LIMIT ?`,
         )
         .all(sessionId, afterSessionSeq, limit) as Record<string, unknown>[]
-    ).map((row) => ({
-      entry_id: String(row.entry_id),
-      session_id: String(row.session_id),
-      session_seq: Number(row.session_seq),
-      kind: row.kind as TaskTimelineEntryKind,
-      source_kind: row.source_kind as 'workspace' | 'runtime',
-      source_id: String(row.source_id),
-      source_event_seq:
-        row.source_event_seq === null ? null : Number(row.source_event_seq),
-      payload_json: parseJson(String(row.payload_json)),
-      payload_hash: row.payload_hash as Sha256Hash,
-      occurred_at_ms: Number(row.occurred_at_ms),
-      created_at_ms: Number(row.created_at_ms),
-    }));
+    ).map((row) => this.mapTimelineEntry(row));
   }
 
   rebuildRuntimeTimeline(sessionId: string): void {

@@ -31,12 +31,18 @@ import type {
 import { RuntimeEventHub, type RuntimeEventHint } from './runtime-event-hub.js';
 import {
   sanitizePersonalWorkflowSource,
+  type TaskArtifactLinkV1,
   TaskWorkspaceStore,
   TaskWorkspaceStoreError,
 } from './store.js';
 
+type CoordinatorChatResponse = Awaited<
+  ReturnType<InternalAgentChatService['chat']>
+>;
+
 export interface TaskWorkspaceRuntimeGateway {
   listRecipes: RuntimeWorkspaceGateway['listRecipes'];
+  refreshRecipeSelection: RuntimeWorkspaceGateway['refreshRecipeSelection'];
   createPublished: RuntimeWorkspaceGateway['createPublished'];
   createTemporary: RuntimeWorkspaceGateway['createTemporary'];
   launchPublished?: RuntimeWorkspaceGateway['launchPublished'];
@@ -114,20 +120,18 @@ function stripCodeFence(text: string): string {
   return match ? match[1]! : trimmed;
 }
 
-function draftFromCoordinator(
-  text: string,
-  objective: string,
-): {
+function draftFromCoordinator(text: string): {
   source: JsonObject;
   risk: JsonObject;
-} {
+} | null {
   let parsed: JsonObject | null = null;
   try {
     parsed = asObject(JSON.parse(stripCodeFence(text)));
   } catch {
-    parsed = null;
+    return null;
   }
-  const source = asObject(parsed?.source) ?? terminalTemporarySource();
+  const source = asObject(parsed?.source);
+  if (!source) return null;
   const risk = asObject(parsed?.risk_summary) ?? {
     effect_ceiling: 'read_only',
     human_input_points: [],
@@ -136,58 +140,6 @@ function draftFromCoordinator(
   return {
     source,
     risk,
-  };
-}
-
-function terminalTemporarySource(): JsonObject {
-  return {
-    format: 'icarus.workflow-graph-scope/1',
-    scope_key: 'dynamic_child',
-    interface_ref: { id: 'fixture.interface.child', version: '1.0.0' },
-    nodes: [
-      {
-        id: 'child_done',
-        type: 'terminal',
-        trigger: { type: 'root' },
-        exit: 'done',
-      },
-    ],
-    control_edges: [],
-    data_edges: [],
-    completion: {
-      settled_rules: [
-        {
-          id: 'select_done',
-          phase: 'settled',
-          priority: 100,
-          when: { fact: 'all_nodes_terminal' },
-          select: {
-            exits: ['done'],
-            pick: { type: 'lowest_terminal_node_id' },
-          },
-        },
-      ],
-      no_match: 'error',
-      early_close: 'cancel_and_fence_remaining',
-    },
-    requested_limits: {
-      max_scopes: null,
-      max_nodes: null,
-      max_nodes_per_scope: null,
-      max_edges_per_scope: null,
-      max_nesting_depth: null,
-      max_map_items: null,
-      max_concurrency: null,
-      max_total_attempts: null,
-      max_total_waits: null,
-      max_total_output_bytes: null,
-      max_scope_spec_bytes: null,
-      max_condition_steps: null,
-      max_wait_duration_ms: null,
-      max_pending_signals: null,
-      max_fixed_point_facts: null,
-      max_frontier_bytes: null,
-    },
   };
 }
 
@@ -225,6 +177,7 @@ export class TaskWorkspaceService {
   private readonly now: () => number;
   private readonly pollMs: number;
   private readonly activeTurns = new Map<string, Promise<void>>();
+  private readonly coordinatorTails = new Map<string, Promise<void>>();
   private pollTimer: NodeJS.Timeout | null = null;
   private unsubscribeHub: (() => void) | null = null;
   private stopping = false;
@@ -387,50 +340,82 @@ export class TaskWorkspaceService {
       input.sessionId,
       input.principalRef,
     );
-    const message = this.options.store.appendMessage({
-      sessionId: input.sessionId,
-      role: 'human',
-      bodyText: input.text,
-      createCoordinatorTurn: false,
-      nowMs: this.now(),
-    });
-    this.emitEntries(input.sessionId, [message.timeline]);
+    const nowMs = this.now();
     const temporary =
       session.current_run_selection.kind === 'temporary_workflow';
-    const temporaryOuter = temporary
-      ? (this.listRecipes(input.principalRef).items.find(
-          (item) => item.recipe_ref.id === 'ad_hoc_personal_task',
-        ) ?? null)
-      : null;
-    const launch = this.options.store.createLaunchIntent({
-      sessionId: input.sessionId,
-      sourceMessageId: message.message.message_id,
-      mode: temporary ? 'temporary_workflow' : 'published_recipe',
-      selectionToken: temporary
-        ? (temporaryOuter?.selection_token ?? null)
-        : input.selectionToken,
-      selectedRecipeRef: temporary
-        ? (temporaryOuter?.recipe_ref ?? null)
-        : session.current_run_selection.recipe_ref,
-      selectedRecipeHash: temporary
-        ? (temporaryOuter?.recipe_hash ?? null)
-        : session.current_run_selection.recipe_hash,
-      effectiveInput: {
-        format: 'icarus.task-workspace-effective-input/1',
-        text: input.text,
-        attachments: [],
-      },
-      attachmentManifestHash: sha('attachment-manifest', []),
-      idempotencyKey: input.idempotencyKey,
-      nowMs: this.now(),
-    });
-    if (temporary) {
-      void this.planTemporary(session, launch, input.text).catch((error) => {
-        this.failLaunch(
-          this.options.store.getLaunchIntent(launch.launch_intent_id),
-          error instanceof Error ? error.message : 'temporary_draft_invalid',
-        );
+    const effectiveInput = {
+      format: 'icarus.task-workspace-effective-input/1',
+      text: input.text,
+      attachments: [],
+    };
+    const attachmentManifestHash = sha('attachment-manifest', []);
+    const prior = this.options.store.findLaunchIntentByIdempotencyKey(
+      input.idempotencyKey,
+    );
+    if (prior) {
+      const replay = this.options.store.createRunLaunchIntent({
+        sessionId: input.sessionId,
+        messageText: input.text,
+        mode: prior.mode,
+        selectionToken: prior.selection_token,
+        selectedRecipeRef: prior.selected_recipe_ref,
+        selectedRecipeHash: prior.selected_recipe_hash,
+        effectiveInput,
+        attachmentManifestHash,
+        idempotencyKey: input.idempotencyKey,
+        nowMs,
       });
+      if (replay.launch.status === 'creating') {
+        void this.reconcileCreating(session);
+      }
+      return replay.launch;
+    }
+    let selectedRecipeRef = temporary
+      ? null
+      : session.current_run_selection.recipe_ref;
+    let selectedRecipeHash = temporary
+      ? null
+      : session.current_run_selection.recipe_hash;
+    let selectionToken: string | null = null;
+    if (this.options.runtimeGateway) {
+      if (temporary) {
+        const temporaryOuter = this.options.runtimeGateway
+          .listRecipes({
+            principal_ref: input.principalRef,
+            now_ms: nowMs,
+          })
+          .items.find((item) => item.recipe_ref.id === 'ad_hoc_personal_task');
+        if (temporaryOuter) {
+          selectedRecipeRef = temporaryOuter.recipe_ref;
+          selectedRecipeHash = temporaryOuter.recipe_hash;
+          selectionToken = temporaryOuter.selection_token;
+        }
+      } else {
+        selectionToken = input.selectionToken ?? null;
+      }
+    }
+    const created = this.options.store.createRunLaunchIntent({
+      sessionId: input.sessionId,
+      messageText: input.text,
+      mode: temporary ? 'temporary_workflow' : 'published_recipe',
+      selectionToken,
+      selectedRecipeRef,
+      selectedRecipeHash,
+      effectiveInput,
+      attachmentManifestHash,
+      idempotencyKey: input.idempotencyKey,
+      nowMs,
+    });
+    const launch = created.launch;
+    if (!created.created) return launch;
+    this.emitEntries(input.sessionId, [created.timeline]);
+    if (temporary) {
+      void this.planTemporary(
+        session,
+        launch,
+        input.text,
+        created.message.message_id,
+      ).catch(() => undefined);
     } else {
       void this.createPublished(session, launch);
     }
@@ -459,7 +444,20 @@ export class TaskWorkspaceService {
       launch.session_id,
       input.principalRef,
     );
-    return this.planTemporary(session, launch, input.instruction);
+    const message = this.options.store.appendMessage({
+      sessionId: session.session_id,
+      role: 'human',
+      bodyText: input.instruction,
+      createCoordinatorTurn: false,
+      nowMs: this.now(),
+    });
+    this.emitEntries(session.session_id, [message.timeline]);
+    return this.planTemporary(
+      session,
+      launch,
+      input.instruction,
+      message.message.message_id,
+    );
   }
 
   async confirmTemporary(input: {
@@ -472,88 +470,17 @@ export class TaskWorkspaceService {
       input.launchIntentId,
       input.principalRef,
     );
-    if (
-      launch.status !== 'awaiting_confirmation' ||
-      launch.row_version !== input.expectedRowVersion
-    ) {
-      throw new TaskWorkspaceServiceError(
-        'conflict',
-        'Temporary confirmation is stale',
-      );
-    }
-    const revision = this.options.store.getTemporaryRevision(input.revisionId);
     const session = this.options.store.getSession(
       launch.session_id,
       input.principalRef,
     );
-    let creating = this.options.store.updateLaunchStatus({
+    const confirmed = this.options.store.confirmCurrentTemporaryRevision({
       launchIntentId: launch.launch_intent_id,
-      expectedRowVersion: launch.row_version,
-      status: 'creating',
-      confirmedRevisionId: revision.revision_id,
+      revisionId: input.revisionId,
+      expectedRowVersion: input.expectedRowVersion,
       nowMs: this.now(),
     });
-    if (
-      !this.options.runtimeGateway ||
-      (!this.options.runtimeGateway.launchTemporary &&
-        !this.options.prepareTemporaryCreation) ||
-      !creating.selection_token
-    ) {
-      return this.failLaunch(
-        creating,
-        'runtime_launch_configuration_unavailable',
-      );
-    }
-    try {
-      const nowMs = this.now();
-      const receipt = this.options.runtimeGateway.launchTemporary
-        ? this.options.runtimeGateway.launchTemporary({
-            principal_ref: session.owner_principal_ref,
-            selection_token: creating.selection_token,
-            authorization_ref: `temporary-confirmation:${revision.revision_id}`,
-            launch: {
-              request_id: creating.launch_intent_id,
-              creation_domain: creating.creation_domain,
-              creation_key: creating.creation_key,
-              effective_input_json: creating.effective_input_json,
-              effective_input_hash: creating.effective_input_hash,
-              attachment_manifest_json: [],
-              attachment_manifest_hash: creating.attachment_manifest_hash,
-              deadline_at_ms: null,
-            },
-            now_ms: nowMs,
-            confirmed_revision_id: revision.revision_id,
-            confirmed_source_json: revision.source_json,
-            confirmed_source_hash: revision.source_hash,
-            confirmed_plan_hash: revision.compiled_plan_hash,
-            resource_closure_hash: revision.resource_closure_hash,
-            policy_ceiling_hash: revision.policy_ceiling_hash,
-          })
-        : this.options.runtimeGateway.createTemporary({
-            principal_ref: session.owner_principal_ref,
-            selection_token: creating.selection_token,
-            authorization_ref: `temporary-confirmation:${revision.revision_id}`,
-            creation: await this.options.prepareTemporaryCreation!({
-              session,
-              launch: creating,
-              revision,
-            }),
-            now_ms: nowMs,
-            confirmed_revision_id: revision.revision_id,
-            confirmed_source_hash: revision.source_hash,
-            confirmed_plan_hash: revision.compiled_plan_hash,
-            resource_closure_hash: revision.resource_closure_hash,
-            policy_ceiling_hash: revision.policy_ceiling_hash,
-          });
-      this.linkReceipt(creating, receipt);
-      creating = this.options.store.getLaunchIntent(creating.launch_intent_id);
-    } catch (error) {
-      creating = this.failLaunch(
-        creating,
-        error instanceof Error ? error.message : 'temporary_creation_failed',
-      );
-    }
-    return creating;
+    return this.createTemporary(session, confirmed.launch, confirmed.revision);
   }
 
   cancelLaunch(input: {
@@ -611,6 +538,7 @@ export class TaskWorkspaceService {
   ): Promise<
     WorkspaceRuntimeDetail & {
       readonly pending_interactions: readonly TaskPendingInteractionV1[];
+      readonly artifact_links: readonly TaskArtifactLinkV1[];
     }
   > {
     const session = this.options.store.getSession(sessionId, principalRef);
@@ -620,6 +548,7 @@ export class TaskWorkspaceService {
         freshness: 'degraded',
         workflows: [],
         pending_interactions: [],
+        artifact_links: [],
       };
     }
     await this.catchUpSession(session);
@@ -630,10 +559,12 @@ export class TaskWorkspaceService {
         .map((link) => link.workflow_id),
     });
     this.syncPendingInteractions(session, detail);
+    this.syncArtifactLinks(session, detail);
     return {
       ...detail,
       pending_interactions:
         this.options.store.listPendingInteractions(sessionId),
+      artifact_links: this.options.store.listArtifactLinks(sessionId),
     };
   }
 
@@ -969,6 +900,7 @@ export class TaskWorkspaceService {
     ) {
       throw new TaskWorkspaceServiceError('not_found', 'Source Run not found');
     }
+    const sourceActivationId = run.activation_id;
     const agentJid = this.options.coordinatorAgentJid();
     if (!this.options.coordinator || !agentJid) {
       throw new TaskWorkspaceServiceError(
@@ -977,9 +909,17 @@ export class TaskWorkspaceService {
         true,
       );
     }
-    const response = await this.options.coordinator.chat({
-      chat_jid: agentJid,
-      session_id: session.coordinator_agent_session_id ?? undefined,
+    const message = this.options.store.appendMessage({
+      sessionId: session.session_id,
+      role: 'human',
+      bodyText: input.instruction,
+      createCoordinatorTurn: false,
+      nowMs: this.now(),
+    });
+    this.emitEntries(session.session_id, [message.timeline]);
+    return this.runCoordinatorPlanningTurn({
+      session,
+      sourceMessageId: message.message.message_id,
       message: input.instruction,
       system:
         'Create a replacement Dynamic Child graph source for the requested Temporary Replan. Return exactly one JSON object containing source_json. Do not compile, fence, mutate Runtime, or claim the Replan was applied.',
@@ -990,68 +930,65 @@ export class TaskWorkspaceService {
         source_run_id: input.runId,
         purpose: 'temporary_workflow_replan',
       },
-    });
-    if (!response.ok) {
-      throw new TaskWorkspaceServiceError(
-        'coordinator_unavailable',
-        response.error || 'Temporary Replan planning failed',
-        true,
-      );
-    }
-    const source = temporaryReplanSourceFromCoordinator(response.text);
-    if (!source) {
-      throw new TaskWorkspaceServiceError(
-        'temporary_draft_invalid',
-        'Coordinator did not return a valid Temporary Replan graph source',
-      );
-    }
-    const preparation = this.options.runtimeGateway.prepareTemporaryReplan({
-      principal_ref: input.principalRef,
-      source_workflow_id: input.workflowId,
-      source_activation_id: run.activation_id,
-      source_run_id: input.runId,
-      source_json: source,
-      idempotency_key: input.idempotencyKey,
-      now_ms: this.now(),
-    });
-    const authority = preparation.source_authority;
-    const expectedConfirmationHash =
-      calculateWorkspaceTemporaryReplanConfirmationHash({
-        principal_ref: input.principalRef,
-        source_workflow_id: input.workflowId,
-        source_activation_id: run.activation_id,
-        source_run_id: input.runId,
-        replan_creation_key: preparation.replan_creation_key,
-        proposal_hash: preparation.proposal_hash,
-        confirmation_ref: preparation.confirmation_ref,
-      });
-    if (
-      authority.workflow_id !== input.workflowId ||
-      authority.activation_id !== run.activation_id ||
-      authority.run_id !== input.runId ||
-      preparation.confirmation_hash !== expectedConfirmationHash
-    ) {
-      throw new TaskWorkspaceServiceError(
-        'conflict',
-        'Runtime Replan preparation lineage or confirmation identity drifted',
-      );
-    }
-    return this.options.store.createReplanRequest({
-      sessionId: input.sessionId,
-      sourceWorkflowId: input.workflowId,
-      sourceActivationId: run.activation_id,
-      sourceRunId: input.runId,
-      sourceFrontier: preparation.source_frontier_json,
-      sourceFrontierHash: authority.frontier_hash,
-      proposal: {
-        format: 'icarus.task-workspace-temporary-replan-proposal/1',
-        instruction: input.instruction,
-        instruction_hash: sha('replan-instruction', input.instruction),
-        preparation,
+      consume: (response) => {
+        const source = temporaryReplanSourceFromCoordinator(response.text);
+        if (!source) {
+          throw new TaskWorkspaceServiceError(
+            'temporary_draft_invalid',
+            'Coordinator did not return a valid Temporary Replan graph source',
+          );
+        }
+        const preparation = this.options.runtimeGateway!.prepareTemporaryReplan(
+          {
+            principal_ref: input.principalRef,
+            source_workflow_id: input.workflowId,
+            source_activation_id: sourceActivationId,
+            source_run_id: input.runId,
+            source_json: source,
+            idempotency_key: input.idempotencyKey,
+            now_ms: this.now(),
+          },
+        );
+        const authority = preparation.source_authority;
+        const expectedConfirmationHash =
+          calculateWorkspaceTemporaryReplanConfirmationHash({
+            principal_ref: input.principalRef,
+            source_workflow_id: input.workflowId,
+            source_activation_id: sourceActivationId,
+            source_run_id: input.runId,
+            replan_creation_key: preparation.replan_creation_key,
+            proposal_hash: preparation.proposal_hash,
+            confirmation_ref: preparation.confirmation_ref,
+          });
+        if (
+          authority.workflow_id !== input.workflowId ||
+          authority.activation_id !== sourceActivationId ||
+          authority.run_id !== input.runId ||
+          preparation.confirmation_hash !== expectedConfirmationHash
+        ) {
+          throw new TaskWorkspaceServiceError(
+            'conflict',
+            'Runtime Replan preparation lineage or confirmation identity drifted',
+          );
+        }
+        return this.options.store.createReplanRequest({
+          sessionId: input.sessionId,
+          sourceWorkflowId: input.workflowId,
+          sourceActivationId,
+          sourceRunId: input.runId,
+          sourceFrontier: preparation.source_frontier_json,
+          sourceFrontierHash: authority.frontier_hash,
+          proposal: {
+            format: 'icarus.task-workspace-temporary-replan-proposal/1',
+            instruction: input.instruction,
+            instruction_hash: sha('replan-instruction', input.instruction),
+            preparation,
+          },
+          proposalHash: preparation.proposal_hash,
+          idempotencyKey: input.idempotencyKey,
+          nowMs: this.now(),
+        });
       },
-      proposalHash: preparation.proposal_hash,
-      idempotencyKey: input.idempotencyKey,
-      nowMs: this.now(),
     });
   }
 
@@ -1576,18 +1513,18 @@ export class TaskWorkspaceService {
     if (
       !this.options.runtimeGateway ||
       (!this.options.runtimeGateway.launchPublished &&
-        !this.options.preparePublishedCreation) ||
-      !launch.selection_token
+        !this.options.preparePublishedCreation)
     ) {
       this.failLaunch(launch, 'runtime_launch_configuration_unavailable');
       return;
     }
     try {
       const nowMs = this.now();
+      const selectionToken = this.refreshLaunchSelection(session, launch);
       const receipt = this.options.runtimeGateway.launchPublished
         ? this.options.runtimeGateway.launchPublished({
             principal_ref: session.owner_principal_ref,
-            selection_token: launch.selection_token,
+            selection_token: selectionToken,
             authorization_ref: `workspace-run:${launch.launch_intent_id}`,
             launch: {
               request_id: launch.launch_intent_id,
@@ -1603,7 +1540,7 @@ export class TaskWorkspaceService {
           })
         : this.options.runtimeGateway.createPublished({
             principal_ref: session.owner_principal_ref,
-            selection_token: launch.selection_token,
+            selection_token: selectionToken,
             authorization_ref: `workspace-run:${launch.launch_intent_id}`,
             creation: await this.options.preparePublishedCreation!({
               session,
@@ -1616,6 +1553,73 @@ export class TaskWorkspaceService {
       this.failLaunch(
         this.options.store.getLaunchIntent(launch.launch_intent_id),
         error instanceof Error ? error.message : 'published_creation_failed',
+      );
+    }
+  }
+
+  private async createTemporary(
+    session: TaskSessionV1,
+    launch: TaskLaunchIntentV1,
+    revision: TemporaryWorkflowDraftRevisionV1,
+  ): Promise<TaskLaunchIntentV1> {
+    if (
+      !this.options.runtimeGateway ||
+      (!this.options.runtimeGateway.launchTemporary &&
+        !this.options.prepareTemporaryCreation)
+    ) {
+      return this.failLaunch(
+        launch,
+        'runtime_launch_configuration_unavailable',
+      );
+    }
+    try {
+      const nowMs = this.now();
+      const selectionToken = this.refreshLaunchSelection(session, launch);
+      const receipt = this.options.runtimeGateway.launchTemporary
+        ? this.options.runtimeGateway.launchTemporary({
+            principal_ref: session.owner_principal_ref,
+            selection_token: selectionToken,
+            authorization_ref: `temporary-confirmation:${revision.revision_id}`,
+            launch: {
+              request_id: launch.launch_intent_id,
+              creation_domain: launch.creation_domain,
+              creation_key: launch.creation_key,
+              effective_input_json: launch.effective_input_json,
+              effective_input_hash: launch.effective_input_hash,
+              attachment_manifest_json: [],
+              attachment_manifest_hash: launch.attachment_manifest_hash,
+              deadline_at_ms: null,
+            },
+            now_ms: nowMs,
+            confirmed_revision_id: revision.revision_id,
+            confirmed_source_json: revision.source_json,
+            confirmed_source_hash: revision.source_hash,
+            confirmed_plan_hash: revision.compiled_plan_hash,
+            resource_closure_hash: revision.resource_closure_hash,
+            policy_ceiling_hash: revision.policy_ceiling_hash,
+          })
+        : this.options.runtimeGateway.createTemporary({
+            principal_ref: session.owner_principal_ref,
+            selection_token: selectionToken,
+            authorization_ref: `temporary-confirmation:${revision.revision_id}`,
+            creation: await this.options.prepareTemporaryCreation!({
+              session,
+              launch,
+              revision,
+            }),
+            now_ms: nowMs,
+            confirmed_revision_id: revision.revision_id,
+            confirmed_source_hash: revision.source_hash,
+            confirmed_plan_hash: revision.compiled_plan_hash,
+            resource_closure_hash: revision.resource_closure_hash,
+            policy_ceiling_hash: revision.policy_ceiling_hash,
+          });
+      this.linkReceipt(launch, receipt);
+      return this.options.store.getLaunchIntent(launch.launch_intent_id);
+    } catch (error) {
+      return this.failLaunch(
+        launch,
+        error instanceof Error ? error.message : 'temporary_creation_failed',
       );
     }
   }
@@ -1682,17 +1686,39 @@ export class TaskWorkspaceService {
     }
   }
 
+  private refreshLaunchSelection(
+    session: TaskSessionV1,
+    launch: TaskLaunchIntentV1,
+  ): string {
+    if (
+      !this.options.runtimeGateway ||
+      !launch.selected_recipe_ref ||
+      !launch.selected_recipe_hash
+    ) {
+      throw new TaskWorkspaceServiceError(
+        'runtime_unavailable',
+        'Persisted exact Recipe selection is unavailable',
+        true,
+      );
+    }
+    return this.options.runtimeGateway.refreshRecipeSelection({
+      principal_ref: session.owner_principal_ref,
+      recipe_ref: launch.selected_recipe_ref,
+      recipe_hash: launch.selected_recipe_hash,
+      now_ms: this.now(),
+    }).selection_token;
+  }
+
   private async planTemporary(
     session: TaskSessionV1,
     launch: TaskLaunchIntentV1,
     instruction: string,
+    sourceMessageId = launch.source_message_id,
   ): Promise<TemporaryWorkflowDraftRevisionV1> {
-    const agentJid = this.options.coordinatorAgentJid();
-    let responseText = '';
-    if (this.options.coordinator && agentJid) {
-      const response = await this.options.coordinator.chat({
-        chat_jid: agentJid,
-        session_id: session.coordinator_agent_session_id ?? undefined,
+    try {
+      return await this.runCoordinatorPlanningTurn({
+        session,
+        sourceMessageId,
         message: instruction,
         system:
           'Create or revise a Temporary Workflow draft. Return one JSON object with a graph_scope source and risk_summary. The source must use only the published Temporary Workflow envelope. Do not compile it and do not claim that Runtime execution has started.',
@@ -1701,45 +1727,284 @@ export class TaskWorkspaceService {
           task_session_id: session.session_id,
           purpose: 'temporary_workflow_draft',
         },
+        consume: (response) => {
+          const draft = draftFromCoordinator(response.text);
+          if (!draft) {
+            throw new TaskWorkspaceServiceError(
+              'temporary_draft_invalid',
+              'Coordinator did not return a valid Temporary Workflow graph source',
+            );
+          }
+          if (!this.options.runtimeGateway) {
+            throw new TaskWorkspaceServiceError(
+              'runtime_unavailable',
+              'Temporary Workflow compiler is unavailable',
+              true,
+            );
+          }
+          const compiled = this.options.runtimeGateway.prepareTemporaryDraft({
+            principal_ref: session.owner_principal_ref,
+            selection_token: this.refreshLaunchSelection(session, launch),
+            source_json: draft.source,
+            now_ms: this.now(),
+          });
+          return this.options.store.createTemporaryRevision({
+            launchIntentId: launch.launch_intent_id,
+            sourceMessageId,
+            source: draft.source,
+            sourceHash: compiled.source_hash,
+            compiledPlan: compiled.compiled_plan_json,
+            compiledPlanHash: compiled.compiled_plan_hash,
+            compilerVersion: compiled.compiler_version,
+            resourceClosureHash: compiled.resource_closure_hash,
+            policyCeilingHash: compiled.policy_ceiling_hash,
+            riskSummary: {
+              ...compiled.risk_summary_json,
+              coordinator_notes: draft.risk,
+            },
+            nowMs: this.now(),
+          });
+        },
       });
-      if (response.ok) responseText = response.text;
+    } catch (error) {
+      this.failLaunch(
+        this.options.store.getLaunchIntent(launch.launch_intent_id),
+        error instanceof Error ? error.message : 'temporary_draft_invalid',
+      );
+      throw error;
     }
-    const draft = draftFromCoordinator(responseText, instruction);
-    if (!this.options.runtimeGateway || !launch.selection_token) {
+  }
+
+  private serializeCoordinatorWork<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const prior = this.coordinatorTails.get(sessionId) ?? Promise.resolve();
+    const result = prior.catch(() => undefined).then(operation);
+    const tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.coordinatorTails.set(sessionId, tail);
+    void tail.finally(() => {
+      if (this.coordinatorTails.get(sessionId) === tail) {
+        this.coordinatorTails.delete(sessionId);
+      }
+    });
+    return result;
+  }
+
+  private coordinatorRecoveryMessage(
+    session: TaskSessionV1,
+    currentMessage: string,
+  ): string {
+    const recentMessages = this.options.store
+      .listMessages(session.session_id)
+      .slice(-20)
+      .map((message) => ({
+        role: message.role,
+        body:
+          message.body_text?.slice(0, 4_000) ??
+          (message.body_json === null
+            ? null
+            : JSON.stringify(message.body_json).slice(0, 4_000)),
+      }));
+    let runtimeSummary: JsonValue = [];
+    if (this.options.runtimeGateway) {
+      try {
+        const workflowIds = this.options.store
+          .listExecutionLinks(session.session_id)
+          .map((link) => link.workflow_id);
+        if (workflowIds.length > 0) {
+          const detail = this.options.runtimeGateway.getRuntimeDetail({
+            principal_ref: session.owner_principal_ref,
+            workflow_ids: workflowIds,
+          });
+          runtimeSummary = detail.workflows.slice(0, 20).map((workflow) => ({
+            id: workflow.id ?? null,
+            status: workflow.status ?? null,
+            current_graph_run_id: workflow.current_graph_run_id ?? null,
+            runs: (Array.isArray(workflow.runs) ? workflow.runs : [])
+              .slice(-20)
+              .map((value) => {
+                const run = asObject(value);
+                return run
+                  ? {
+                      id: run.id ?? null,
+                      status: run.status ?? null,
+                      activation_id: run.activation_id ?? null,
+                      final_outcome_kind: run.final_outcome_kind ?? null,
+                    }
+                  : null;
+              }),
+            pending: (Array.isArray(workflow.pending) ? workflow.pending : [])
+              .slice(-20)
+              .map((value) => {
+                const pending = asObject(value);
+                return pending
+                  ? {
+                      id: pending.id ?? null,
+                      node_id: pending.node_id ?? null,
+                      wait_type: pending.wait_type ?? null,
+                      status: pending.status ?? null,
+                    }
+                  : null;
+              }),
+          }));
+        }
+      } catch {
+        runtimeSummary = [{ freshness: 'unavailable' }];
+      }
+    }
+    return [
+      'The prior Agent session could not be resumed. Rehydrate context from the persisted Task Workspace facts below.',
+      JSON.stringify({
+        recent_messages: recentMessages,
+        runtime_summary: runtimeSummary,
+      }),
+      'Continue with this current request:',
+      currentMessage,
+    ].join('\n\n');
+  }
+
+  private async chatCoordinator(input: {
+    session: TaskSessionV1;
+    agentJid: string;
+    message: string;
+    system: string;
+    metadata: Record<string, unknown>;
+  }): Promise<CoordinatorChatResponse> {
+    if (!this.options.coordinator) {
       throw new TaskWorkspaceServiceError(
-        'runtime_unavailable',
-        'Temporary Workflow compiler is unavailable',
+        'coordinator_unavailable',
+        'Task Workspace Coordinator is unavailable',
         true,
       );
     }
-    const compiled = this.options.runtimeGateway.prepareTemporaryDraft({
-      principal_ref: session.owner_principal_ref,
-      selection_token: launch.selection_token,
-      source_json: draft.source,
-      now_ms: this.now(),
+    const response = await this.options.coordinator.chat({
+      chat_jid: input.agentJid,
+      session_id: input.session.coordinator_agent_session_id ?? undefined,
+      message: input.message,
+      system: input.system,
+      metadata: input.metadata,
     });
-    return this.options.store.createTemporaryRevision({
-      launchIntentId: launch.launch_intent_id,
-      sourceMessageId: launch.source_message_id,
-      source: draft.source,
-      sourceHash: compiled.source_hash,
-      compiledPlan: compiled.compiled_plan_json,
-      compiledPlanHash: compiled.compiled_plan_hash,
-      compilerVersion: compiled.compiler_version,
-      resourceClosureHash: compiled.resource_closure_hash,
-      policyCeilingHash: compiled.policy_ceiling_hash,
-      riskSummary: {
-        ...compiled.risk_summary_json,
-        coordinator_notes: draft.risk,
-      },
+    if (
+      response.ok ||
+      !input.session.coordinator_agent_session_id ||
+      !response.error.includes('No conversation found')
+    ) {
+      return response;
+    }
+    this.options.store.replaceCoordinatorAgentSession({
+      sessionId: input.session.session_id,
+      expectedAgentSessionId: input.session.coordinator_agent_session_id,
+      agentSessionId: null,
       nowMs: this.now(),
+    });
+    return this.options.coordinator.chat({
+      chat_jid: input.agentJid,
+      message: this.coordinatorRecoveryMessage(input.session, input.message),
+      system: input.system,
+      metadata: {
+        ...input.metadata,
+        recovered_from_agent_session_id:
+          input.session.coordinator_agent_session_id,
+      },
+    });
+  }
+
+  private runCoordinatorPlanningTurn<T>(input: {
+    session: TaskSessionV1;
+    sourceMessageId: string;
+    message: string;
+    system: string;
+    metadata: Record<string, unknown>;
+    consume: (
+      response: Extract<CoordinatorChatResponse, { ok: true }>,
+    ) => T | Promise<T>;
+  }): Promise<T> {
+    return this.serializeCoordinatorWork(input.session.session_id, async () => {
+      const agentJid = this.options.coordinatorAgentJid();
+      if (!this.options.coordinator || !agentJid) {
+        throw new TaskWorkspaceServiceError(
+          'coordinator_unavailable',
+          'Task Workspace Coordinator is unavailable',
+          true,
+        );
+      }
+      const pending = this.options.store.ensureCoordinatorTurn({
+        sessionId: input.session.session_id,
+        sourceMessageId: input.sourceMessageId,
+        nowMs: this.now(),
+      });
+      const turn = this.options.store.claimCoordinatorTurn(
+        pending.turn_id,
+        this.now(),
+      );
+      if (!turn) {
+        throw new TaskWorkspaceServiceError(
+          'conflict',
+          'Coordinator turn is stale or already completed',
+          true,
+        );
+      }
+      let response: CoordinatorChatResponse | null = null;
+      try {
+        response = await this.chatCoordinator({
+          session: this.options.store.getSession(input.session.session_id),
+          agentJid,
+          message: input.message,
+          system: input.system,
+          metadata: input.metadata,
+        });
+        if (!response.ok) {
+          throw new TaskWorkspaceServiceError(
+            'coordinator_unavailable',
+            response.error || 'Coordinator planning failed',
+            true,
+          );
+        }
+        const result = await input.consume(response);
+        this.options.store.finishCoordinatorTurn({
+          turnId: turn.turn_id,
+          status: 'completed',
+          queryId: response.query_id,
+          agentSessionId: response.session_id,
+          nowMs: this.now(),
+        });
+        return result;
+      } catch (error) {
+        try {
+          this.options.store.finishCoordinatorTurn({
+            turnId: turn.turn_id,
+            status: 'failed',
+            queryId: response?.query_id ?? null,
+            errorCode:
+              error instanceof Error
+                ? error.message.slice(0, 500)
+                : 'coordinator_failed',
+            agentSessionId: response?.session_id ?? null,
+            nowMs: this.now(),
+          });
+        } catch (finishError) {
+          if (
+            !(finishError instanceof TaskWorkspaceStoreError) ||
+            finishError.code !== 'conflict'
+          ) {
+            throw finishError;
+          }
+        }
+        throw error;
+      }
     });
   }
 
   private kickCoordinator(sessionId: string): Promise<void> {
     const existing = this.activeTurns.get(sessionId);
     if (existing) return existing;
-    const running = this.runCoordinatorQueue(sessionId).finally(() => {
+    const running = this.serializeCoordinatorWork(sessionId, () =>
+      this.runCoordinatorQueue(sessionId),
+    ).finally(() => {
       this.activeTurns.delete(sessionId);
     });
     this.activeTurns.set(sessionId, running);
@@ -1771,9 +2036,9 @@ export class TaskWorkspaceService {
         continue;
       }
       try {
-        const response = await this.options.coordinator.chat({
-          chat_jid: agentJid,
-          session_id: session.coordinator_agent_session_id ?? undefined,
+        const response = await this.chatCoordinator({
+          session,
+          agentJid,
           message: source.body_text,
           system:
             'You are the Task Workspace Coordinator. Clarify requirements and explain authoritative Runtime information. Never start a Published Workflow from text and never claim a Runtime mutation succeeded without a canonical receipt.',
@@ -1845,9 +2110,20 @@ export class TaskWorkspaceService {
             intakeId: found.intake_id,
             creationRequestId: found.creation_request_id,
           });
+        } else if (!found.found) {
+          if (launch.mode === 'published_recipe') {
+            await this.createPublished(session, launch);
+          } else if (launch.confirmed_draft_revision_id) {
+            const revision = this.options.store.getTemporaryRevision(
+              launch.confirmed_draft_revision_id,
+            );
+            await this.createTemporary(session, launch, revision);
+          } else {
+            this.failLaunch(launch, 'confirmed_revision_unavailable');
+          }
         }
       } catch {
-        // Durable LaunchIntent remains creating; next open/poll retries lookup.
+        // Durable LaunchIntent remains creating; the next open/poll replays it.
       }
     }
   }
@@ -1893,6 +2169,7 @@ export class TaskWorkspaceService {
       workflow_ids: links.map((link) => link.workflow_id),
     });
     this.syncPendingInteractions(session, detail);
+    this.syncArtifactLinks(session, detail);
     for (const workflow of detail.workflows) {
       if (!Array.isArray(workflow.runs)) continue;
       for (const value of workflow.runs) {
@@ -1929,6 +2206,55 @@ export class TaskWorkspaceService {
           cursor = page.next_event_seq;
           hasMore = page.has_more;
         }
+      }
+    }
+  }
+
+  private syncArtifactLinks(
+    session: TaskSessionV1,
+    detail: WorkspaceRuntimeDetail,
+  ): void {
+    for (const workflow of detail.workflows) {
+      if (
+        typeof workflow.id !== 'string' ||
+        !Array.isArray(workflow.artifacts)
+      ) {
+        continue;
+      }
+      for (const value of workflow.artifacts) {
+        const artifact = asObject(value);
+        if (
+          !artifact ||
+          typeof artifact.artifact_ref !== 'string' ||
+          typeof artifact.artifact_hash !== 'string' ||
+          !/^sha256:[0-9a-f]{64}$/.test(artifact.artifact_hash)
+        ) {
+          continue;
+        }
+        const gatewayDisplay = asObject(artifact.display_json);
+        this.options.store.upsertArtifactLink({
+          sessionId: session.session_id,
+          workflowId: workflow.id,
+          artifactRef: artifact.artifact_ref,
+          artifactHash: artifact.artifact_hash as Sha256Hash,
+          display: {
+            artifact_ref: artifact.artifact_ref,
+            media_type:
+              gatewayDisplay?.media_type ?? artifact.media_type ?? null,
+            byte_length:
+              gatewayDisplay?.byte_length ?? artifact.byte_length ?? null,
+            payload_state:
+              gatewayDisplay?.payload_state ?? artifact.payload_state ?? null,
+            graph_run_id: artifact.graph_run_id ?? null,
+            scope_id: artifact.scope_id ?? null,
+            node_id: artifact.node_id ?? null,
+            attempt_id: artifact.attempt_id ?? null,
+            storage_kind: artifact.storage_kind ?? null,
+            provenance_ref: artifact.provenance_ref ?? null,
+            retention_class: artifact.retention_class ?? null,
+          },
+          nowMs: this.now(),
+        });
       }
     }
   }

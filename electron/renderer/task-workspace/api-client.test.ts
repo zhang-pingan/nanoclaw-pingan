@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { TaskWorkspaceApiClient, TaskWorkspaceApiError } from './api-client.js';
+import {
+  shouldRefreshTemporaryInteraction,
+  TaskWorkspaceApiClient,
+  TaskWorkspaceApiError,
+} from './api-client.js';
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -83,6 +87,29 @@ describe('TaskWorkspaceApiClient', () => {
       retryable: false,
       message: 'Refresh the Catalog',
     });
+  });
+
+  it('refreshes Temporary cards after stale and expired API results', () => {
+    expect(
+      shouldRefreshTemporaryInteraction(
+        new TaskWorkspaceApiError('conflict', 'Stale revision', 409, false),
+      ),
+    ).toBe(true);
+    expect(
+      shouldRefreshTemporaryInteraction(
+        new TaskWorkspaceApiError(
+          'revision_expired',
+          'Expired revision',
+          400,
+          false,
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      shouldRefreshTemporaryInteraction(
+        new TaskWorkspaceApiError('invalid_request', 'Invalid', 400, false),
+      ),
+    ).toBe(false);
   });
 
   it('binds interaction identity to the path instead of duplicating it in the body', async () => {

@@ -80,6 +80,13 @@ export interface WorkspaceRecipeCatalog {
   readonly expires_at_ms: number;
 }
 
+export interface WorkspaceRecipeSelectionRefreshRequest {
+  readonly principal_ref: string;
+  readonly recipe_ref: VersionedRef;
+  readonly recipe_hash: Sha256Hash;
+  readonly now_ms: number;
+}
+
 export type WorkspacePublishedCreationInput = Omit<
   T0CreationInput,
   | 'source'
@@ -854,6 +861,20 @@ function assertWorkspaceCommandRequest(
 
 function isObject(value: JsonValue | undefined): value is JsonObject {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function parseStoredJson(value: unknown): JsonValue | null {
+  if (typeof value !== 'string') return null;
+  try {
+    return JSON.parse(value) as JsonValue;
+  } catch {
+    return null;
+  }
+}
+
+function stringField(value: JsonObject | null, key: string): string | null {
+  const field = value?.[key];
+  return typeof field === 'string' ? field : null;
 }
 
 function recipeKind(row: RecipeRow, content: JsonObject): WorkspaceRecipeKind {
@@ -2114,6 +2135,45 @@ export class RuntimeWorkspaceGateway {
     };
   }
 
+  refreshRecipeSelection(
+    request: WorkspaceRecipeSelectionRefreshRequest,
+  ): WorkspaceRecipeCatalogItemV1 {
+    assertPrincipal(request.principal_ref);
+    if (
+      !isObject(request.recipe_ref) ||
+      typeof request.recipe_ref.id !== 'string' ||
+      request.recipe_ref.id.length < 1 ||
+      request.recipe_ref.id.length > 512 ||
+      typeof request.recipe_ref.version !== 'string' ||
+      request.recipe_ref.version.length < 1 ||
+      request.recipe_ref.version.length > 255 ||
+      !SHA256_PATTERN.test(request.recipe_hash) ||
+      !Number.isSafeInteger(request.now_ms) ||
+      request.now_ms < 0
+    ) {
+      throw new RuntimeWorkspaceGatewayError(
+        'invalid_request',
+        'Persisted exact Recipe selection is invalid',
+      );
+    }
+    const exact = this.listRecipes({
+      principal_ref: request.principal_ref,
+      now_ms: request.now_ms,
+    }).items.find(
+      (item) =>
+        item.recipe_ref.id === request.recipe_ref.id &&
+        item.recipe_ref.version === request.recipe_ref.version &&
+        item.recipe_hash === request.recipe_hash,
+    );
+    if (!exact) {
+      throw new RuntimeWorkspaceGatewayError(
+        'selection_stale',
+        'The persisted exact Recipe is no longer present in the active Catalog',
+      );
+    }
+    return exact;
+  }
+
   extractPersonalWorkflowDraft(
     request: WorkspacePersonalDraftExtractionRequest,
   ): WorkspacePersonalDraftExtraction {
@@ -3156,6 +3216,132 @@ export class RuntimeWorkspaceGateway {
           ORDER BY n.graph_run_id, n.scope_id, n.node_key COLLATE BINARY`,
         [workflowId],
       );
+      const edgeRows = this.store.queryAll<Record<string, unknown>>(
+        `SELECT e.id, e.graph_run_id, e.scope_id, e.edge_key, e.edge_kind,
+                e.compiled_edge_json, e.compiled_edge_hash,
+                CASE e.edge_kind WHEN 'control' THEN control.state ELSE data.state END
+                  AS resolution_state,
+                control.decision_json, data.value_value_id, data.value_hash,
+                data.schema_hash, data.source_attempt_id,
+                CASE e.edge_kind WHEN 'control' THEN control.error_code ELSE data.error_code END
+                  AS resolution_error_code,
+                CASE e.edge_kind WHEN 'control' THEN control.resolution_seq ELSE data.resolution_seq END
+                  AS resolution_seq,
+                CASE e.edge_kind WHEN 'control' THEN control.resolved_at_ms ELSE data.resolved_at_ms END
+                  AS resolved_at_ms
+           FROM workflow_graph_edges e
+           JOIN workflow_graph_runs r ON r.id = e.graph_run_id
+      LEFT JOIN workflow_graph_control_edge_resolutions control
+             ON control.edge_id = e.id AND e.edge_kind = 'control'
+      LEFT JOIN workflow_graph_data_edge_resolutions data
+             ON data.edge_id = e.id AND e.edge_kind = 'data'
+          WHERE r.workflow_id = ?
+          ORDER BY e.graph_run_id, e.scope_id, e.edge_key COLLATE BINARY`,
+        [workflowId],
+      );
+      const edges = edgeRows.map((edge) => {
+        const compiledValue = parseStoredJson(edge.compiled_edge_json);
+        const compiled = isObject(compiledValue) ? compiledValue : null;
+        const from = isObject(compiled?.from) ? compiled.from : null;
+        const to = isObject(compiled?.to) ? compiled.to : null;
+        const fromNodeId =
+          stringField(compiled, 'from_node_id') ?? stringField(from, 'node_id');
+        const toNodeId =
+          stringField(compiled, 'to_node_id') ?? stringField(to, 'node_id');
+        return {
+          id: edge.id,
+          graph_run_id: edge.graph_run_id,
+          scope_id: edge.scope_id,
+          edge_key: edge.edge_key,
+          edge_kind: edge.edge_kind,
+          compiled_edge_json: compiledValue,
+          compiled_edge_hash: edge.compiled_edge_hash,
+          from_node_id: fromNodeId,
+          from_node_key: fromNodeId,
+          to_node_id: toNodeId,
+          to_node_key: toNodeId,
+          resolution: {
+            state: edge.resolution_state,
+            decision_json: parseStoredJson(edge.decision_json),
+            value_value_id: edge.value_value_id,
+            value_hash: edge.value_hash,
+            schema_hash: edge.schema_hash,
+            source_attempt_id: edge.source_attempt_id,
+            error_code: edge.resolution_error_code,
+            resolution_seq: edge.resolution_seq,
+            resolved_at_ms: edge.resolved_at_ms,
+          },
+        } as JsonObject;
+      });
+      const attemptRows = this.store.queryAll<Record<string, unknown>>(
+        `SELECT attempt.id, attempt.graph_run_id, attempt.scope_id, attempt.node_id,
+                attempt.attempt_no, attempt.continuation_kind,
+                attempt.parent_attempt_id, attempt.parent_attempt_no, attempt.phase,
+                attempt.execution_outcome, attempt.quality_decision,
+                attempt.selected_edges_json, attempt.delegation_id,
+                attempt.external_execution_id, attempt.action_name, attempt.query_id,
+                attempt.dispatch_started_at_ms, attempt.dispatch_deadline_at_ms,
+                attempt.execution_started_at_ms, attempt.execution_deadline_at_ms,
+                attempt.artifact_refs_value_id, attempt.artifact_refs_hash,
+                attempt.result_value_id, attempt.result_hash,
+                attempt.retry_reason_code, attempt.error_code, attempt.acceptance_state,
+                attempt.row_version, attempt.created_at_ms, attempt.updated_at_ms,
+                attempt.finished_at_ms
+           FROM workflow_graph_node_attempts attempt
+           JOIN workflow_graph_runs r ON r.id = attempt.graph_run_id
+          WHERE r.workflow_id = ?
+          ORDER BY attempt.graph_run_id, attempt.scope_id, attempt.node_id,
+                   attempt.attempt_no, attempt.id COLLATE BINARY`,
+        [workflowId],
+      );
+      const attempts = attemptRows.map((attempt) => ({
+        ...attempt,
+        selected_edges_json: parseStoredJson(attempt.selected_edges_json) ?? [],
+      })) as JsonObject[];
+      const completionCuts = this.store.queryAll<Record<string, unknown>>(
+        `SELECT cut.id, cut.graph_run_id, cut.scope_id, cut.close_request_id,
+                cut.selected_rule_id, cut.candidate_id, cut.outcome_kind,
+                cut.exit_name, cut.output_value_id, cut.output_hash,
+                cut.completion_policy_hash, cut.cut_event_seq, cut.cut_hash,
+                cut.created_at_ms
+           FROM workflow_graph_completion_cuts cut
+           JOIN workflow_graph_runs r ON r.id = cut.graph_run_id
+          WHERE r.workflow_id = ?
+          ORDER BY cut.graph_run_id, cut.created_at_ms, cut.id COLLATE BINARY`,
+        [workflowId],
+      );
+      const artifactRows = this.store.queryAll<Record<string, unknown>>(
+        `SELECT attempt.graph_run_id, attempt.scope_id, attempt.node_id,
+                attempt.id AS attempt_id,
+                value.id AS artifact_ref, value.content_hash AS artifact_hash,
+                value.storage_kind, value.inline_canonical_json, value.blob_hash,
+                value.immutable_external_locator, value.expected_hash,
+                value.byte_length, value.media_type, value.provenance_ref,
+                value.retention_class, value.payload_state, value.created_at_ms
+           FROM workflow_graph_node_attempts attempt
+           JOIN workflow_graph_runs r ON r.id = attempt.graph_run_id
+           JOIN workflow_values value
+             ON value.id = attempt.artifact_refs_value_id
+            AND value.content_hash = attempt.artifact_refs_hash
+          WHERE r.workflow_id = ?
+          ORDER BY attempt.graph_run_id, attempt.scope_id, attempt.node_id,
+                   attempt.attempt_no, attempt.id COLLATE BINARY`,
+        [workflowId],
+      );
+      const artifacts = artifactRows.map((artifact) => {
+        const { inline_canonical_json: inlineCanonicalJson, ...metadata } =
+          artifact;
+        return {
+          ...metadata,
+          inline_value_json: parseStoredJson(inlineCanonicalJson),
+          display_json: {
+            artifact_ref: artifact.artifact_ref,
+            media_type: artifact.media_type,
+            byte_length: artifact.byte_length,
+            payload_state: artifact.payload_state,
+          },
+        } as JsonObject;
+      });
       const waits = this.store.queryAll<Record<string, unknown>>(
         `SELECT wt.id, wt.graph_run_id, wt.scope_id, wt.node_id, wt.wait_type,
                 wt.status, wt.deadline_at_ms, wt.row_version, wt.created_at_ms,
@@ -3186,6 +3372,10 @@ export class RuntimeWorkspaceGateway {
         runs,
         scopes,
         nodes,
+        edges,
+        attempts,
+        completion_cuts: completionCuts,
+        artifacts,
         pending: waits.filter((wait) => wait.status === 'armed'),
         waits,
         command_hints: commandActions.map((action) => ({

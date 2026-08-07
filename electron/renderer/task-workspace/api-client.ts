@@ -22,6 +22,21 @@ export class TaskWorkspaceApiError extends Error {
   }
 }
 
+export function shouldRefreshTemporaryInteraction(error: unknown): boolean {
+  return (
+    error instanceof TaskWorkspaceApiError &&
+    (error.status === 409 ||
+      [
+        'expired',
+        'revision_expired',
+        'revision_stale',
+        'selection_expired',
+        'selection_stale',
+        'stale_revision',
+      ].includes(error.code))
+  );
+}
+
 export class TaskWorkspaceApiClient {
   constructor(private readonly fetcher: Fetcher) {}
 

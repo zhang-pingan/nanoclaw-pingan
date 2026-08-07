@@ -21,6 +21,7 @@ import {
   finalizeChildScopeT7b,
   materializeDynamicScopeT2b,
   persistDynamicCompileResultT2a,
+  recordDynamicBuildFailureT2a,
   sealExpansionManifestT4,
 } from './runtime/child-runtime.js';
 import {
@@ -29,6 +30,7 @@ import {
 } from './runtime/root-finalizer.js';
 import {
   insertInlineValue,
+  requireSingleChange,
   runtimeObjectHash,
   stableRuntimeId,
 } from './runtime/graph-store.js';
@@ -224,6 +226,9 @@ interface CompileCandidate extends Record<string, unknown> {
   build_id: string;
   graph_run_id: string;
   build_row_version: number;
+  run_row_version: number;
+  owner_scope_row_version: number | null;
+  owner_node_row_version: number | null;
   run_work_fence_epoch: number;
   owner_scope_work_fence_epoch: number;
   compiler_snapshot_hash: Sha256Hash;
@@ -299,7 +304,11 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
   private compile(limit: number, nowMs: number): WorkflowRuntimeAdvanceResult {
     const rows = this.store.queryAll<CompileCandidate>(
       `SELECT b.id AS build_id, b.graph_run_id,
-              b.row_version AS build_row_version, b.run_work_fence_epoch,
+              b.row_version AS build_row_version,
+              r.row_version AS run_row_version,
+              owner_scope.row_version AS owner_scope_row_version,
+              owner.row_version AS owner_node_row_version,
+              b.run_work_fence_epoch,
               b.owner_scope_work_fence_epoch, b.compiler_snapshot_hash,
               b.source_snapshot_json,
               source_value.inline_canonical_json AS source_snapshot_value_json,
@@ -320,6 +329,9 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
     LEFT JOIN workflow_values source_value
            ON source_value.id = b.source_snapshot_value_id
           AND source_value.content_hash = b.source_snapshot_hash
+    LEFT JOIN workflow_graph_scopes owner_scope
+           ON owner_scope.graph_run_id = b.graph_run_id
+          AND owner_scope.id = b.owner_scope_id
     LEFT JOIN workflow_graph_nodes owner
            ON owner.graph_run_id = b.graph_run_id
           AND owner.scope_id = b.owner_scope_id
@@ -392,7 +404,24 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
           ? {}
           : { entryPoint: row.entry_point }),
       });
-      if (!outcome.ok) continue;
+      if (!outcome.ok) {
+        this.persistCompileFailure(
+          row,
+          {
+            format: 'icarus.workflow-runtime-compile-failure/1',
+            failure_kind: 'compiler_rejected',
+            build_id: row.build_id,
+            graph_run_id: row.graph_run_id,
+            scope_kind: row.scope_kind,
+            source_hash: outcome.value.sourceHash,
+            diagnostics: outcome.value.diagnostics,
+          },
+          outcome.value.diagnostics[0]?.code ?? 'compiler_rejected',
+          nowMs,
+        );
+        processed += 1;
+        continue;
+      }
       const dynamicBinding =
         object(stateConfig.temporary_confirmation) ??
         object(stateConfig.personal_release);
@@ -404,9 +433,30 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
           (typeof dynamicBinding.plan_hash === 'string' &&
             dynamicBinding.plan_hash !== outcome.value.plan.plan_hash))
       ) {
-        throw new Error(
-          `Confirmed Dynamic Child identity mismatch for ${row.build_id}`,
+        this.persistCompileFailure(
+          row,
+          {
+            format: 'icarus.workflow-runtime-compile-failure/1',
+            failure_kind: 'confirmed_identity_mismatch',
+            build_id: row.build_id,
+            graph_run_id: row.graph_run_id,
+            scope_kind: row.scope_kind,
+            confirmed_source_hash:
+              typeof dynamicBinding.source_hash === 'string'
+                ? dynamicBinding.source_hash
+                : null,
+            actual_source_hash: outcome.value.sourceHash,
+            confirmed_plan_hash:
+              typeof dynamicBinding.plan_hash === 'string'
+                ? dynamicBinding.plan_hash
+                : null,
+            actual_plan_hash: outcome.value.plan.plan_hash,
+          },
+          'integrity_violation',
+          nowMs,
         );
+        processed += 1;
+        continue;
       }
       if (row.scope_kind === 'root') {
         persistCompileResultT2a(this.store, {
@@ -438,6 +488,115 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
       processed += 1;
     }
     return { processed, has_more: rows.length > limit };
+  }
+
+  private persistCompileFailure(
+    row: CompileCandidate,
+    detail: JsonObject,
+    errorCode: string,
+    nowMs: number,
+  ): void {
+    const stateConfig = parseObject(row.state_config_json);
+    const schema =
+      runtimeRef(stateConfig.fence_manifest_schema) ??
+      runtimeRef(stateConfig.manifest_schema) ??
+      this.firstResource('schema');
+    if (!schema) {
+      throw new Error('Runtime compile failure has no diagnostic schema');
+    }
+    const detailHash = runtimeObjectHash('compile-failure-detail', detail);
+    const detailValue = {
+      id: stableRuntimeId('value', {
+        graph_run_id: row.graph_run_id,
+        build_id: row.build_id,
+        kind: 'compile-failure-detail',
+        content_hash: detailHash,
+      }),
+      hash: detailHash,
+    };
+
+    if (row.scope_kind === 'root') {
+      this.store.withImmediateTransaction((transaction) => {
+        insertInlineValue(transaction, {
+          id: detailValue.id,
+          content: detail,
+          contentHash: detailValue.hash,
+          schemaResourceId: schema.rowId,
+          schemaResourceHash: schema.hash,
+          provenanceRef: `runtime-service:${row.build_id}:compile-failure`,
+          retentionClass: 'workflow_audit',
+          ownerGraphRunId: row.graph_run_id,
+          createdAtMs: nowMs,
+        });
+        requireSingleChange(
+          transaction.execute(
+            `UPDATE workflow_graph_scope_builds
+                SET status = 'failed', error_code = ?,
+                    error_detail_value_id = ?, error_detail_hash = ?,
+                    lease_owner = NULL, lease_token = NULL,
+                    lease_expires_at_ms = NULL,
+                    row_version = row_version + 1, updated_at_ms = ?
+              WHERE id = ? AND graph_run_id = ? AND row_version = ?
+                AND status = 'ready_to_compile'
+                AND run_work_fence_epoch = ?
+                AND owner_scope_work_fence_epoch = ?
+                AND compiler_snapshot_hash = ?`,
+            [
+              errorCode,
+              detailValue.id,
+              detailValue.hash,
+              nowMs,
+              row.build_id,
+              row.graph_run_id,
+              row.build_row_version,
+              row.run_work_fence_epoch,
+              row.owner_scope_work_fence_epoch,
+              row.compiler_snapshot_hash,
+            ],
+          ).changes,
+          'Root compile failure CAS',
+        );
+      });
+      return;
+    }
+
+    const fenceSchema = runtimeRef(stateConfig.fence_manifest_schema) ?? schema;
+    const mapSchema =
+      runtimeRef(stateConfig.map_item_results_manifest_schema) ?? fenceSchema;
+    if (
+      row.owner_scope_row_version === null ||
+      row.owner_node_row_version === null
+    ) {
+      throw new Error(`Dynamic build ${row.build_id} has no owner authority`);
+    }
+    this.store.withImmediateTransaction((transaction) => {
+      insertInlineValue(transaction, {
+        id: detailValue.id,
+        content: detail,
+        contentHash: detailValue.hash,
+        schemaResourceId: schema.rowId,
+        schemaResourceHash: schema.hash,
+        provenanceRef: `runtime-service:${row.build_id}:compile-failure`,
+        retentionClass: 'workflow_audit',
+        ownerGraphRunId: row.graph_run_id,
+        createdAtMs: nowMs,
+      });
+    });
+    recordDynamicBuildFailureT2a(this.store, {
+      graphRunId: row.graph_run_id,
+      buildId: row.build_id,
+      expectedBuildRowVersion: row.build_row_version,
+      expectedRunRowVersion: row.run_row_version,
+      expectedOwnerScopeRowVersion: row.owner_scope_row_version,
+      expectedOwnerNodeRowVersion: row.owner_node_row_version,
+      expectedRunWorkFenceEpoch: row.run_work_fence_epoch,
+      expectedOwnerScopeWorkFenceEpoch: row.owner_scope_work_fence_epoch,
+      errorCode,
+      errorDetail: detailValue,
+      fenceManifestSchema: fenceSchema,
+      mapItemResultsManifestSchema: mapSchema,
+      nowMs,
+    });
   }
 
   private materialize(

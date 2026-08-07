@@ -31,6 +31,19 @@ function empty(text: string): string {
   return `<div class="tw-empty tw-empty-compact">${escapeHtml(text)}</div>`;
 }
 
+function recordIdentity(
+  record: Record<string, unknown>,
+  fallback: string,
+): string {
+  return String(
+    record.artifact_link_id ??
+      record.artifact_ref ??
+      record.id ??
+      record.ref ??
+      fallback,
+  );
+}
+
 export function renderOverview(state: TaskWorkspaceState): string {
   const workflow = currentWorkflow(state);
   const run = currentRun(state);
@@ -106,10 +119,19 @@ export function renderDag(state: TaskWorkspaceState): string {
   const edges = records(workflow.edges).filter(
     (edge) => edge.graph_run_id === runId,
   );
+  const attempts = records(workflow.attempts).filter(
+    (attempt) => attempt.graph_run_id === runId,
+  );
+  const completionCuts = records(workflow.completion_cuts).filter(
+    (cut) => cut.graph_run_id === runId,
+  );
+  const nodeKeys = new Map(
+    allNodes.map((node) => [String(node.id), String(node.node_key ?? node.id)]),
+  );
   return `
     <section class="tw-inspector-section">
       ${temporary && childScopes.length ? '<div class="tw-context-note">Dynamic Child DAG shown. The fixed Runtime wrapper is hidden.</div>' : ''}
-      <div class="tw-dag-summary"><span>${nodes.length} nodes</span><span>${edges.length} edges</span><span>${allScopes.length} scopes</span></div>
+      <div class="tw-dag-summary"><span>${nodes.length} nodes</span><span>${edges.length} edges</span><span>${attempts.length} attempts</span><span>${completionCuts.length} completion cuts</span><span>${allScopes.length} scopes</span></div>
       <div class="tw-dag-list">
         ${
           nodes.length
@@ -126,21 +148,41 @@ export function renderDag(state: TaskWorkspaceState): string {
             : empty('The current Run has no materialized nodes.')
         }
       </div>
-      ${edges.length ? `<details class="tw-disclosure"><summary>Edges</summary><div class="tw-edge-list">${edges.map((edge) => `<div><span>${escapeHtml(edge.from_node_key ?? compactId(edge.from_node_id))}</span><span aria-hidden="true">-&gt;</span><span>${escapeHtml(edge.to_node_key ?? compactId(edge.to_node_id))}</span></div>`).join('')}</div></details>` : ''}
+      ${edges.length ? `<details class="tw-disclosure"><summary>Edges</summary><div class="tw-edge-list">${edges.map((edge) => `<div title="${escapeAttribute(String(edge.edge_kind ?? edge.resolution_state ?? ''))}"><span>${escapeHtml(edge.from_node_key ?? nodeKeys.get(String(edge.from_node_id)) ?? compactId(edge.from_node_id))}</span><span aria-hidden="true">-&gt;</span><span>${escapeHtml(edge.to_node_key ?? nodeKeys.get(String(edge.to_node_id)) ?? compactId(edge.to_node_id))}</span></div>`).join('')}</div></details>` : ''}
+      ${attempts.length ? `<details class="tw-disclosure"><summary>Attempts</summary><dl class="tw-facts">${attempts.map((attempt) => fact(`${nodeKeys.get(String(attempt.node_id)) ?? compactId(attempt.node_id)} / #${attempt.attempt_no ?? '?'}`, attempt.execution_outcome ?? attempt.quality_decision ?? attempt.phase ?? '--', String(attempt.query_id ?? attempt.id ?? ''))).join('')}</dl></details>` : ''}
+      ${completionCuts.length ? `<details class="tw-disclosure"><summary>Completion cuts</summary><dl class="tw-facts">${completionCuts.map((cut) => fact(String(cut.exit_name ?? compactId(cut.scope_id) ?? 'Completion'), cut.outcome_kind ?? '--', String(cut.cut_hash ?? cut.id ?? ''))).join('')}</dl></details>` : ''}
     </section>`;
 }
 
 export function renderArtifacts(state: TaskWorkspaceState): string {
-  const artifacts = state.timeline.filter(
-    (entry) =>
-      entry.kind === 'artifact_published' ||
-      String(entry.payload_json.event_type ?? '')
-        .toLocaleLowerCase()
-        .includes('artifact'),
+  const workflow = currentWorkflow(state);
+  const run = currentRun(state);
+  const workflowId = workflowIdentity(workflow);
+  const runId = String(run?.id ?? '');
+  const linked = records(state.runtimeDetail?.artifact_links).filter(
+    (artifact) =>
+      (!artifact.workflow_id || artifact.workflow_id === workflowId) &&
+      (!artifact.graph_run_id || artifact.graph_run_id === runId),
   );
-  if (!artifacts.length)
+  const runtime = records(workflow?.artifacts).filter(
+    (artifact) => !artifact.graph_run_id || artifact.graph_run_id === runId,
+  );
+  const timeline = state.timeline
+    .filter(
+      (entry) =>
+        entry.kind === 'artifact_published' ||
+        String(entry.payload_json.event_type ?? '')
+          .toLocaleLowerCase()
+          .includes('artifact'),
+    )
+    .map((entry) => entry.payload_json);
+  const artifacts = new Map<string, Record<string, unknown>>();
+  [...runtime, ...linked, ...timeline].forEach((artifact, index) => {
+    artifacts.set(recordIdentity(artifact, `artifact-${index}`), artifact);
+  });
+  if (!artifacts.size)
     return empty('No Workspace attachment or Runtime Artifact is linked.');
-  return `<section class="tw-inspector-section tw-artifact-list">${artifacts.map((entry) => renderArtifact(entry.payload_json)).join('')}</section>`;
+  return `<section class="tw-inspector-section tw-artifact-list">${[...artifacts.values()].map(renderArtifact).join('')}</section>`;
 }
 
 export function renderPending(state: TaskWorkspaceState): string {

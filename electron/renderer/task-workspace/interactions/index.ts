@@ -5,6 +5,7 @@ import {
   readableLabel,
   stringifyJson,
 } from '../rendering.js';
+import type { TimelineEntry } from '../state.js';
 
 export interface NormalizedInteraction {
   id: string;
@@ -211,6 +212,70 @@ export function normalizeInteraction(
     revisionId: String(revision?.revision_id ?? nested.revision_id ?? ''),
     raw: { ...nested, ...snapshot },
   };
+}
+
+export function resolveTemporaryConfirmation(
+  entry: TimelineEntry,
+  timeline: readonly TimelineEntry[],
+): Record<string, unknown> | null {
+  const source = normalizeInteraction(entry.payload_json);
+  if (source.kind !== 'temporary_confirmation' || !source.launchIntentId) {
+    return null;
+  }
+  const later = timeline
+    .filter((candidate) => candidate.session_seq > entry.session_seq)
+    .sort((left, right) => right.session_seq - left.session_seq);
+  const replacement = later.find((candidate) => {
+    const interaction = normalizeInteraction(candidate.payload_json);
+    return (
+      interaction.kind === 'temporary_confirmation' &&
+      interaction.launchIntentId === source.launchIntentId &&
+      Boolean(interaction.revisionId) &&
+      interaction.revisionId !== source.revisionId
+    );
+  });
+  if (replacement) {
+    const currentRevisionId = normalizeInteraction(
+      replacement.payload_json,
+    ).revisionId;
+    return {
+      ...entry.payload_json,
+      status: 'expired',
+      canonical_result: {
+        disposition: 'expired',
+        reason: 'revision_superseded',
+        current_revision_id: currentRevisionId,
+      },
+    };
+  }
+  const statusEntry = later.find(
+    (candidate) =>
+      candidate.payload_json.launch_intent_id === source.launchIntentId &&
+      typeof candidate.payload_json.status === 'string' &&
+      !['drafting', 'awaiting_confirmation'].includes(
+        String(candidate.payload_json.status),
+      ),
+  );
+  if (!statusEntry) return entry.payload_json;
+  const launchStatus = String(statusEntry.payload_json.status);
+  return {
+    ...entry.payload_json,
+    status: ['failed', 'cancelled'].includes(launchStatus)
+      ? 'denied'
+      : 'accepted',
+    canonical_result: { launch_status: launchStatus },
+  };
+}
+
+export function isCurrentTemporaryRevision(
+  launch: Record<string, unknown>,
+  revisionId: string,
+): boolean {
+  const draft = isRecord(launch.draft) ? launch.draft : null;
+  const currentRevisionId = String(
+    launch.current_revision_id ?? draft?.current_revision_id ?? '',
+  );
+  return !currentRevisionId || currentRevisionId === revisionId;
 }
 
 export function renderInteractionCard(

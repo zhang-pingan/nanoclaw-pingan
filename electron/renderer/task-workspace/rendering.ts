@@ -136,7 +136,11 @@ export function renderArtifact(payload: Record<string, unknown>): string {
       ? artifact.display
       : artifact;
   const mime = String(
-    display.mime_type ?? display.content_type ?? display.mime ?? '',
+    display.mime_type ??
+      display.media_type ??
+      display.content_type ??
+      display.mime ??
+      '',
   ).toLocaleLowerCase();
   const format = String(
     display.format ?? display.kind ?? '',

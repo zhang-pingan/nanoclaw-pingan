@@ -48,6 +48,7 @@ export interface RuntimeDetail {
   freshness: 'ready' | 'degraded';
   workflows: Array<Record<string, unknown>>;
   pending_interactions?: Array<Record<string, unknown>>;
+  artifact_links?: Array<Record<string, unknown>>;
 }
 
 export interface TaskWorkspaceState {

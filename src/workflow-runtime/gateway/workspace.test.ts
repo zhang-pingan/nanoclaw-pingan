@@ -489,6 +489,141 @@ afterEach(() => {
 });
 
 describe('RuntimeWorkspaceGateway', () => {
+  it('refreshes a persisted exact Recipe selection after token expiry or Host secret rotation', () => {
+    const store = openFresh();
+    ensureTaskWorkspaceCore(store, 1_000);
+    const original = new RuntimeWorkspaceGateway(store, Buffer.alloc(32, 7), {
+      token_ttl_ms: 100,
+    });
+    const selected = original
+      .listRecipes({
+        principal_ref: 'human:local-owner',
+        now_ms: 2_000,
+      })
+      .items.find((item) => item.recipe_ref.id === 'ad_hoc_personal_task')!;
+    const source = terminalChildSource();
+
+    expect(() =>
+      original.prepareTemporaryDraft({
+        principal_ref: 'human:local-owner',
+        selection_token: selected.selection_token,
+        source_json: source,
+        now_ms: 2_101,
+      }),
+    ).toThrow(/stale/);
+
+    const restarted = new RuntimeWorkspaceGateway(store, Buffer.alloc(32, 8), {
+      token_ttl_ms: 100,
+    });
+    expect(() =>
+      restarted.prepareTemporaryDraft({
+        principal_ref: 'human:local-owner',
+        selection_token: selected.selection_token,
+        source_json: source,
+        now_ms: 2_050,
+      }),
+    ).toThrow(/signature is invalid/);
+
+    const refreshed = restarted.refreshRecipeSelection({
+      principal_ref: 'human:local-owner',
+      recipe_ref: selected.recipe_ref,
+      recipe_hash: selected.recipe_hash,
+      now_ms: 2_200,
+    });
+    expect(refreshed).toMatchObject({
+      recipe_ref: selected.recipe_ref,
+      recipe_hash: selected.recipe_hash,
+    });
+    expect(
+      restarted.prepareTemporaryDraft({
+        principal_ref: 'human:local-owner',
+        selection_token: refreshed.selection_token,
+        source_json: source,
+        now_ms: 2_201,
+      }).source_hash,
+    ).toMatch(/^sha256:/);
+    expect(() =>
+      restarted.refreshRecipeSelection({
+        principal_ref: 'human:local-owner',
+        recipe_ref: selected.recipe_ref,
+        recipe_hash: hash('stale-recipe', {}),
+        now_ms: 2_202,
+      }),
+    ).toThrow(/no longer present in the active Catalog/);
+  }, 30_000);
+
+  it('returns task-scoped edges, attempts, completion cuts, and Runtime Artifact links', () => {
+    const target = launchedTemporary('runtime-detail');
+    advanceWorkflowToCompletion(target.store, target.workflowId, 3_000);
+    seedUnsafeEffect(target.store, target.runId, 'runtime-detail', 4_000);
+    target.store.withImmediateTransaction((transaction) => {
+      const input = transaction.queryOne<{
+        workflow_input_value_id: string;
+        workflow_input_hash: Sha256Hash;
+      }>(
+        `SELECT workflow_input_value_id, workflow_input_hash
+           FROM workflows WHERE id = ?`,
+        [target.workflowId],
+      )!;
+      transaction.execute(
+        `UPDATE workflow_graph_node_attempts
+            SET artifact_refs_value_id = ?, artifact_refs_hash = ?,
+                row_version = row_version + 1, updated_at_ms = ?
+          WHERE graph_run_id = ? AND error_code = 'effect_unknown'`,
+        [
+          input.workflow_input_value_id,
+          input.workflow_input_hash,
+          4_001,
+          target.runId,
+        ],
+      );
+    });
+
+    const workflow = target.gateway.getRuntimeDetail({
+      principal_ref: 'human:local-owner',
+      workflow_ids: [target.workflowId],
+    }).workflows[0]!;
+    expect((workflow.edges as JsonObject[]).length).toBeGreaterThan(0);
+    expect(workflow.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          graph_run_id: target.runId,
+          compiled_edge_json: expect.any(Object),
+          resolution: expect.objectContaining({ state: expect.any(String) }),
+        }),
+      ]),
+    );
+    expect(workflow.attempts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          graph_run_id: target.runId,
+          phase: 'terminal',
+          selected_edges_json: [],
+        }),
+      ]),
+    );
+    expect((workflow.completion_cuts as JsonObject[]).length).toBeGreaterThan(
+      0,
+    );
+    expect(workflow.completion_cuts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          graph_run_id: target.runId,
+          cut_hash: expect.stringMatching(/^sha256:/),
+        }),
+      ]),
+    );
+    expect(workflow.artifacts).toEqual([
+      expect.objectContaining({
+        graph_run_id: target.runId,
+        artifact_ref: expect.any(String),
+        artifact_hash: expect.stringMatching(/^sha256:/),
+        inline_value_json: { text: 'runtime-detail' },
+        display_json: expect.objectContaining({ payload_state: 'live' }),
+      }),
+    ]);
+  });
+
   it('publishes, activates, pins, and executes versioned Personal Workflows', () => {
     const temporary = launchedTemporary('personal-source');
     advanceWorkflowToCompletion(temporary.store, temporary.workflowId, 3_000);

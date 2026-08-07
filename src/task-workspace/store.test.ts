@@ -104,6 +104,208 @@ describe('TaskWorkspaceStore', () => {
     expect(store.listSessions('human:local-owner')).toEqual([retained]);
   });
 
+  it('atomically binds Run idempotency before writing the Human message', () => {
+    const store = openStore();
+    const session = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Atomic Run',
+      nowMs: 1,
+    });
+    const effectiveInput: JsonObject = {
+      format: 'icarus.task-workspace-effective-input/1',
+      text: 'Run exactly once',
+      attachments: [],
+    };
+    const first = store.createRunLaunchIntent({
+      sessionId: session.session_id,
+      messageText: 'Run exactly once',
+      mode: 'temporary_workflow',
+      selectedRecipeRef: { id: 'ad_hoc_personal_task', version: '1.0.0' },
+      selectedRecipeHash: sha('1'),
+      selectionToken: 'selection:first',
+      effectiveInput,
+      attachmentManifestHash: sha('2'),
+      idempotencyKey: 'run:atomic',
+      nowMs: 2,
+    });
+    const replay = store.createRunLaunchIntent({
+      sessionId: session.session_id,
+      messageText: 'Run exactly once',
+      mode: 'temporary_workflow',
+      selectedRecipeRef: { id: 'ad_hoc_personal_task', version: '1.0.0' },
+      selectedRecipeHash: sha('1'),
+      selectionToken: 'selection:refreshed',
+      effectiveInput,
+      attachmentManifestHash: sha('2'),
+      idempotencyKey: 'run:atomic',
+      nowMs: 3,
+    });
+    expect(first.created).toBe(true);
+    expect(replay.created).toBe(false);
+    expect(replay.launch.launch_intent_id).toBe(first.launch.launch_intent_id);
+    expect(replay.message.message_id).toBe(first.message.message_id);
+    expect(store.listMessages(session.session_id)).toHaveLength(1);
+    expect(() =>
+      store.createRunLaunchIntent({
+        sessionId: session.session_id,
+        messageText: 'Run exactly once',
+        mode: 'temporary_workflow',
+        selectedRecipeRef: {
+          id: 'ad_hoc_personal_task',
+          version: '1.0.0',
+        },
+        selectedRecipeHash: sha('1'),
+        effectiveInput,
+        attachmentManifestHash: sha('3'),
+        idempotencyKey: 'run:atomic',
+      }),
+    ).toThrow(/different Session, selection, input, or attachment manifest/);
+    expect(store.listMessages(session.session_id)).toHaveLength(1);
+  });
+
+  it('rejects a Published Run that does not match the Session exact Recipe', () => {
+    const store = openStore();
+    let session = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Published Run',
+      nowMs: 1,
+    });
+    session = store.setRunSelection({
+      sessionId: session.session_id,
+      principalRef: 'human:local-owner',
+      selection: {
+        kind: 'published_recipe',
+        recipe_ref: { id: 'recipe:test', version: '2.0.0' },
+        recipe_hash: sha('4'),
+        recipe_kind: 'core',
+      },
+      expectedRowVersion: session.row_version,
+      nowMs: 2,
+    });
+    expect(() =>
+      store.createRunLaunchIntent({
+        sessionId: session.session_id,
+        messageText: 'Run selected Recipe',
+        mode: 'published_recipe',
+        selectedRecipeRef: { id: 'recipe:test', version: '1.0.0' },
+        selectedRecipeHash: sha('4'),
+        effectiveInput: { text: 'Run selected Recipe', attachments: [] },
+        attachmentManifestHash: sha('5'),
+        idempotencyKey: 'run:mismatched-selection',
+      }),
+    ).toThrow(/does not match the TaskSession exact selection/);
+    expect(store.listMessages(session.session_id)).toEqual([]);
+  });
+
+  it('only confirms the current revision belonging to the LaunchIntent Draft', () => {
+    const store = openStore();
+    const session = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Temporary confirmation',
+      nowMs: 1,
+    });
+    const run = store.createRunLaunchIntent({
+      sessionId: session.session_id,
+      messageText: 'Plan this task',
+      mode: 'temporary_workflow',
+      effectiveInput: { text: 'Plan this task', attachments: [] },
+      attachmentManifestHash: sha('6'),
+      idempotencyKey: 'run:revision',
+      nowMs: 2,
+    });
+    const revision = (marker: string) =>
+      store.createTemporaryRevision({
+        launchIntentId: run.launch.launch_intent_id,
+        sourceMessageId: run.message.message_id,
+        source: { scope_key: marker },
+        sourceHash: sha(marker),
+        compiledPlan: { plan: marker },
+        compiledPlanHash: sha(marker.toUpperCase()),
+        compilerVersion: 'test',
+        resourceClosureHash: sha('7'),
+        policyCeilingHash: sha('8'),
+        riskSummary: { marker },
+        nowMs: marker === 'a' ? 3 : 4,
+      });
+    const oldRevision = revision('a');
+    const currentRevision = revision('b');
+    const awaiting = store.getLaunchIntent(run.launch.launch_intent_id);
+    expect(() =>
+      store.confirmCurrentTemporaryRevision({
+        launchIntentId: awaiting.launch_intent_id,
+        revisionId: oldRevision.revision_id,
+        expectedRowVersion: awaiting.row_version,
+        nowMs: 5,
+      }),
+    ).toThrow(/not the current revision/);
+    const confirmed = store.confirmCurrentTemporaryRevision({
+      launchIntentId: awaiting.launch_intent_id,
+      revisionId: currentRevision.revision_id,
+      expectedRowVersion: awaiting.row_version,
+      nowMs: 6,
+    });
+    expect(confirmed.launch).toMatchObject({
+      status: 'creating',
+      confirmed_draft_revision_id: currentRevision.revision_id,
+    });
+    expect(confirmed.revision).toEqual(currentRevision);
+  });
+
+  it('serializes persisted Coordinator turns and allows Agent session recovery', () => {
+    const store = openStore();
+    const session = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Coordinator turns',
+      nowMs: 1,
+    });
+    const firstMessage = store.appendMessage({
+      sessionId: session.session_id,
+      role: 'human',
+      bodyText: 'First request',
+      nowMs: 2,
+    }).message;
+    const secondMessage = store.appendMessage({
+      sessionId: session.session_id,
+      role: 'human',
+      bodyText: 'Second request',
+      nowMs: 3,
+    }).message;
+    const first = store.ensureCoordinatorTurn({
+      sessionId: session.session_id,
+      sourceMessageId: firstMessage.message_id,
+      nowMs: 4,
+    });
+    const second = store.ensureCoordinatorTurn({
+      sessionId: session.session_id,
+      sourceMessageId: secondMessage.message_id,
+      nowMs: 5,
+    });
+    expect(store.claimCoordinatorTurn(first.turn_id, 6)?.status).toBe(
+      'running',
+    );
+    expect(store.claimCoordinatorTurn(second.turn_id, 7)).toBeNull();
+    const finished = store.finishCoordinatorTurn({
+      turnId: first.turn_id,
+      status: 'completed',
+      queryId: 'query:first',
+      agentSessionId: 'agent-session:first',
+      nowMs: 8,
+    });
+    expect(finished.query_id).toBe('query:first');
+    expect(store.claimCoordinatorTurn(second.turn_id, 9)?.status).toBe(
+      'running',
+    );
+    const recovered = store.replaceCoordinatorAgentSession({
+      sessionId: session.session_id,
+      expectedAgentSessionId: 'agent-session:first',
+      agentSessionId: 'agent-session:recovered',
+      nowMs: 10,
+    });
+    expect(recovered.coordinator_agent_session_id).toBe(
+      'agent-session:recovered',
+    );
+  });
+
   it('resolves Runtime links only to TaskSessions owned by the principal', () => {
     const store = openStore();
     const target = linkedSession(store);
@@ -137,6 +339,53 @@ describe('TaskWorkspaceStore', () => {
     expect(() =>
       service.resolveRuntimeLink(target.workflowId, 'human:foreign'),
     ).toThrow(/not linked/);
+  });
+
+  it('persists Runtime Artifact links without copying Artifact bytes', () => {
+    const store = openStore();
+    const target = linkedSession(store);
+    const created = store.upsertArtifactLink({
+      sessionId: target.sessionId,
+      workflowId: target.workflowId,
+      artifactRef: 'value:artifact-result',
+      artifactHash: sha('d'),
+      display: {
+        graph_run_id: 'run:test',
+        node_id: 'node:result',
+        media_type: 'application/json',
+        byte_length: 42,
+        payload_state: 'inline',
+      },
+      nowMs: 9,
+    });
+    const enriched = store.upsertArtifactLink({
+      sessionId: target.sessionId,
+      workflowId: target.workflowId,
+      artifactRef: 'value:artifact-result',
+      artifactHash: sha('d'),
+      display: {
+        graph_run_id: 'run:test',
+        node_id: 'node:result',
+        media_type: 'application/json',
+        byte_length: 42,
+        payload_state: 'inline',
+        display_name: 'Result',
+      },
+      nowMs: 10,
+    });
+    expect(enriched.artifact_link_id).toBe(created.artifact_link_id);
+    expect(
+      store.listArtifactLinks(target.sessionId, target.workflowId),
+    ).toEqual([enriched]);
+    expect(enriched.display_json).toMatchObject({
+      display_name: 'Result',
+      media_type: 'application/json',
+    });
+    expect(
+      store
+        .listTimeline(target.sessionId)
+        .filter((entry) => entry.kind === 'artifact_published'),
+    ).toHaveLength(1);
   });
 
   it('binds closed command idempotency and persists an applying recovery anchor', () => {
@@ -238,7 +487,7 @@ describe('TaskWorkspaceStore', () => {
     ).toHaveLength(2);
   });
 
-  it('maps Runtime command decisions and expires waits missing from authoritative detail', () => {
+  it('maps explicit Runtime event types and expires missing waits', () => {
     const store = openStore();
     const target = linkedSession(store);
     store.appendRuntimeEvents({
@@ -252,13 +501,57 @@ describe('TaskWorkspaceStore', () => {
           event_type: 'runtime_command_decided',
           occurred_at_ms: 30,
         },
+        {
+          seq: 2,
+          event_type: 'node_terminal',
+          node_id: 'node:terminal',
+          occurred_at_ms: 31,
+        },
+        {
+          seq: 3,
+          event_type: 'terminal_candidate',
+          node_id: 'node:candidate',
+          occurred_at_ms: 32,
+        },
+        {
+          seq: 4,
+          event_type: 'wait_resolved',
+          node_id: 'node:wait',
+          occurred_at_ms: 33,
+        },
+        {
+          seq: 5,
+          event_type: 'wait_armed',
+          node_id: 'node:pending-wait',
+          occurred_at_ms: 34,
+        },
+        {
+          seq: 6,
+          event_type: 'completion_cut_committed',
+          occurred_at_ms: 35,
+        },
+        {
+          seq: 7,
+          event_type: 'workflow_terminal_committed',
+          occurred_at_ms: 36,
+        },
       ],
-      nextEventSeq: 1,
+      nextEventSeq: 7,
       nowMs: 30,
     });
-    expect(store.listTimeline(target.sessionId).at(-1)?.kind).toBe(
+    const runtimeKinds = store
+      .listTimeline(target.sessionId)
+      .filter((entry) => entry.source_kind === 'runtime')
+      .map((entry) => entry.kind);
+    expect(runtimeKinds).toEqual([
       'command_result',
-    );
+      'node_progress',
+      'node_progress',
+      'node_progress',
+      'pending_interaction',
+      'workflow_progress',
+      'workflow_completed',
+    ]);
 
     store.upsertPendingInteraction({
       interactionId: 'interaction:expired',

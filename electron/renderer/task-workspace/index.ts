@@ -1,12 +1,15 @@
 import {
   TaskWorkspaceApiClient,
   TaskWorkspaceApiError,
+  shouldRefreshTemporaryInteraction,
   type Fetcher,
 } from './api-client.js';
 import {
+  isCurrentTemporaryRevision,
   normalizeInteraction,
   renderInteractionCard,
   replanInteraction,
+  resolveTemporaryConfirmation,
 } from './interactions/index.js';
 import {
   compactId,
@@ -659,27 +662,7 @@ class TaskWorkspaceRenderer {
     }
     const source = normalizeInteraction(entry.payload_json);
     if (source.kind === 'temporary_confirmation' && source.launchIntentId) {
-      const statusEntry = [...this.state.timeline]
-        .sort((left, right) => right.session_seq - left.session_seq)
-        .find(
-          (candidate) =>
-            candidate.session_seq > entry.session_seq &&
-            candidate.payload_json.launch_intent_id === source.launchIntentId &&
-            typeof candidate.payload_json.status === 'string' &&
-            !['drafting', 'awaiting_confirmation'].includes(
-              String(candidate.payload_json.status),
-            ),
-        );
-      if (statusEntry) {
-        const launchStatus = String(statusEntry.payload_json.status);
-        return {
-          ...entry.payload_json,
-          status: ['failed', 'cancelled'].includes(launchStatus)
-            ? 'denied'
-            : 'accepted',
-          canonical_result: { launch_status: launchStatus },
-        };
-      }
+      return resolveTemporaryConfirmation(entry, this.state.timeline);
     }
     if (source.kind === 'runtime_command_confirmation' && source.id) {
       const result = [...this.state.timeline]
@@ -1021,6 +1004,14 @@ class TaskWorkspaceRenderer {
         : response;
       const rowVersion = Number(launch.row_version ?? 0);
       if (actionId === 'confirm-temporary') {
+        if (!isCurrentTemporaryRevision(launch, interaction.revisionId)) {
+          throw new TaskWorkspaceApiError(
+            'revision_stale',
+            'This Temporary revision has been replaced. Refreshing the current revision.',
+            409,
+            false,
+          );
+        }
         await this.api.confirmTemporary(
           interaction.launchIntentId,
           interaction.revisionId,
@@ -1038,6 +1029,11 @@ class TaskWorkspaceRenderer {
       await this.poll();
     } catch (error) {
       this.report(error);
+      if (shouldRefreshTemporaryInteraction(error)) {
+        await this.catchUpTimeline().catch(() => undefined);
+        await this.refreshSessions().catch(() => undefined);
+        this.renderTimeline();
+      }
     } finally {
       this.setBusy(false);
     }

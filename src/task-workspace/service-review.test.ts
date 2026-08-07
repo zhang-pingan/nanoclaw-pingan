@@ -1,0 +1,497 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import type { Sha256Hash } from '../workflow-runtime/contracts/types.js';
+import { RuntimeEventHub } from './runtime-event-hub.js';
+import { TaskWorkspaceService } from './service.js';
+import { TaskWorkspaceStore } from './store.js';
+
+const roots: string[] = [];
+const stores: TaskWorkspaceStore[] = [];
+
+function sha(char: string): Sha256Hash {
+  return `sha256:${char.repeat(64)}` as Sha256Hash;
+}
+
+function openStore(): TaskWorkspaceStore {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'icarus-workspace-review-'),
+  );
+  roots.push(root);
+  const store = new TaskWorkspaceStore(path.join(root, 'task-workspace.db'));
+  stores.push(store);
+  return store;
+}
+
+function service(
+  store: TaskWorkspaceStore,
+  runtimeGateway: Record<string, unknown> | null,
+  coordinator: { chat: (...args: never[]) => unknown } | null = null,
+): TaskWorkspaceService {
+  return new TaskWorkspaceService({
+    store,
+    runtimeGateway: runtimeGateway as never,
+    runtimeEventHub: new RuntimeEventHub(),
+    coordinator: coordinator as never,
+    coordinatorAgentJid: () => (coordinator ? 'agent:coordinator' : null),
+    now: () => 100,
+  });
+}
+
+function appendLaunch(
+  store: TaskWorkspaceStore,
+  mode: 'published_recipe' | 'temporary_workflow',
+) {
+  let session = store.createSession({
+    ownerPrincipalRef: 'human:local-owner',
+    title: 'Review test',
+    nowMs: 1,
+  });
+  if (mode === 'published_recipe') {
+    session = store.setRunSelection({
+      sessionId: session.session_id,
+      principalRef: session.owner_principal_ref,
+      selection: {
+        kind: 'published_recipe',
+        recipe_kind: 'core',
+        recipe_ref: { id: 'recipe:test', version: '1.0.0' },
+        recipe_hash: sha('a'),
+      },
+      expectedRowVersion: session.row_version,
+      nowMs: 2,
+    });
+  }
+  const message = store.appendMessage({
+    sessionId: session.session_id,
+    role: 'human',
+    bodyText: 'run review task',
+    nowMs: 3,
+  });
+  const launch = store.createLaunchIntent({
+    sessionId: session.session_id,
+    sourceMessageId: message.message.message_id,
+    mode,
+    selectionToken: 'expired-or-restart-invalid',
+    selectedRecipeRef:
+      mode === 'published_recipe'
+        ? { id: 'recipe:test', version: '1.0.0' }
+        : { id: 'ad_hoc_personal_task', version: '1.0.0' },
+    selectedRecipeHash: mode === 'published_recipe' ? sha('a') : sha('b'),
+    effectiveInput: { text: 'run review task', attachments: [] },
+    attachmentManifestHash: sha('c'),
+    idempotencyKey: `launch:${mode}`,
+    nowMs: 4,
+  });
+  return { session, message: message.message, launch };
+}
+
+async function waitFor(check: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (check()) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  throw new Error('Timed out waiting for asynchronous Workspace work');
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  for (const store of stores.splice(0)) store.close();
+  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true });
+});
+
+describe('TaskWorkspaceService review hardening', () => {
+  it('replays Run idempotency before refreshing selection or writing another message', async () => {
+    const store = openStore();
+    let session = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Idempotent Run',
+      nowMs: 1,
+    });
+    session = store.setRunSelection({
+      sessionId: session.session_id,
+      principalRef: session.owner_principal_ref,
+      selection: {
+        kind: 'published_recipe',
+        recipe_kind: 'core',
+        recipe_ref: { id: 'recipe:test', version: '1.0.0' },
+        recipe_hash: sha('a'),
+      },
+      expectedRowVersion: session.row_version,
+      nowMs: 2,
+    });
+    const refresh = vi
+      .fn()
+      .mockReturnValueOnce({ selection_token: 'fresh-token' })
+      .mockImplementationOnce(() => {
+        throw new Error('selection should not refresh during replay');
+      });
+    const runtime = {
+      refreshRecipeSelection: refresh,
+      launchPublished: vi.fn(() => ({
+        workflowId: 'workflow:idempotent',
+        intakeId: 'intake:idempotent',
+        creationRequestId: 'creation:idempotent',
+      })),
+      findCreation: vi.fn(() => ({ found: true })),
+    };
+    const workspace = service(store, runtime);
+    const request = {
+      sessionId: session.session_id,
+      principalRef: session.owner_principal_ref,
+      text: 'run once',
+      idempotencyKey: 'run:idempotent',
+    };
+
+    const first = await workspace.run(request);
+    const current = store.getSession(session.session_id);
+    store.setRunSelection({
+      sessionId: current.session_id,
+      principalRef: current.owner_principal_ref,
+      selection: { kind: 'temporary_workflow' },
+      expectedRowVersion: current.row_version,
+      nowMs: 3,
+    });
+    const replay = await workspace.run(request);
+
+    expect(replay.launch_intent_id).toBe(first.launch_intent_id);
+    expect(replay.mode).toBe('published_recipe');
+    expect(replay.status).toBe('linked');
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(store.listMessages(session.session_id)).toHaveLength(1);
+  });
+
+  it('refreshes the persisted exact Temporary Recipe before confirmation', async () => {
+    const store = openStore();
+    const target = appendLaunch(store, 'temporary_workflow');
+    const revision = store.createTemporaryRevision({
+      launchIntentId: target.launch.launch_intent_id,
+      sourceMessageId: target.message.message_id,
+      source: { format: 'source' },
+      sourceHash: sha('d'),
+      compiledPlan: { format: 'plan' },
+      compiledPlanHash: sha('e'),
+      compilerVersion: 'test',
+      resourceClosureHash: sha('f'),
+      policyCeilingHash: sha('1'),
+      riskSummary: {},
+      nowMs: 5,
+    });
+    const launchTemporary = vi.fn((_request: Record<string, unknown>) => ({
+      workflowId: 'workflow:temporary',
+      intakeId: 'intake:temporary',
+      creationRequestId: 'creation:temporary',
+    }));
+    const runtime = {
+      refreshRecipeSelection: vi.fn(() => ({ selection_token: 'fresh-token' })),
+      launchTemporary,
+    };
+    const workspace = service(store, runtime);
+
+    const result = await workspace.confirmTemporary({
+      launchIntentId: target.launch.launch_intent_id,
+      revisionId: revision.revision_id,
+      principalRef: target.session.owner_principal_ref,
+      expectedRowVersion: store.getLaunchIntent(target.launch.launch_intent_id)
+        .row_version,
+    });
+
+    expect(runtime.refreshRecipeSelection).toHaveBeenCalledWith({
+      principal_ref: target.session.owner_principal_ref,
+      recipe_ref: { id: 'ad_hoc_personal_task', version: '1.0.0' },
+      recipe_hash: sha('b'),
+      now_ms: 100,
+    });
+    expect(launchTemporary.mock.calls[0]?.[0]).toMatchObject({
+      selection_token: 'fresh-token',
+      confirmed_revision_id: revision.revision_id,
+    });
+    expect(result.status).toBe('linked');
+  });
+
+  it('refreshes the exact Recipe and persists Agent identity for a Temporary revision', async () => {
+    const store = openStore();
+    const target = appendLaunch(store, 'temporary_workflow');
+    const coordinator = {
+      chat: vi.fn(async () => ({
+        ok: true as const,
+        text: JSON.stringify({
+          source: { format: 'icarus.workflow-graph-scope/1' },
+          risk_summary: { notes: ['reviewed'] },
+        }),
+        session_id: 'agent-session:planner',
+        run_id: 'agent-run:planner',
+        query_id: 'query:planner',
+        model: 'test',
+      })),
+    };
+    const prepareTemporaryDraft = vi.fn(
+      (_request: Record<string, unknown>) => ({
+        source_hash: sha('d'),
+        compiled_plan_json: { format: 'compiled-plan' },
+        compiled_plan_hash: sha('e'),
+        compiler_version: 'test',
+        resource_closure_hash: sha('f'),
+        policy_ceiling_hash: sha('1'),
+        risk_summary_json: {},
+      }),
+    );
+    const runtime = {
+      refreshRecipeSelection: vi.fn(() => ({ selection_token: 'fresh-token' })),
+      prepareTemporaryDraft,
+    };
+    const workspace = service(store, runtime, coordinator);
+
+    const revision = await workspace.reviseTemporary({
+      launchIntentId: target.launch.launch_intent_id,
+      principalRef: target.session.owner_principal_ref,
+      instruction: 'revise the plan',
+    });
+
+    expect(prepareTemporaryDraft.mock.calls[0]?.[0]).toMatchObject({
+      selection_token: 'fresh-token',
+      principal_ref: target.session.owner_principal_ref,
+    });
+    expect(revision.source_message_id).not.toBe(target.message.message_id);
+    expect(
+      store.getSession(target.session.session_id).coordinator_agent_session_id,
+    ).toBe('agent-session:planner');
+    expect(
+      store.ensureCoordinatorTurn({
+        sessionId: target.session.session_id,
+        sourceMessageId: revision.source_message_id,
+      }),
+    ).toMatchObject({ status: 'completed', query_id: 'query:planner' });
+  });
+
+  it('exact-replays a creating Published intent when Runtime lookup is empty', async () => {
+    const store = openStore();
+    const target = appendLaunch(store, 'published_recipe');
+    const launchPublished = vi.fn(() => ({
+      workflowId: 'workflow:replayed',
+      intakeId: 'intake:replayed',
+      creationRequestId: 'creation:replayed',
+    }));
+    const runtime = {
+      findCreation: vi.fn(() => ({ found: false })),
+      refreshRecipeSelection: vi.fn(() => ({ selection_token: 'fresh-token' })),
+      launchPublished,
+      getRuntimeDetail: vi.fn(() => ({
+        format: 'icarus.workspace-runtime-detail/1',
+        freshness: 'ready',
+        workflows: [],
+      })),
+    };
+    const workspace = service(store, runtime);
+
+    await workspace.getSession(
+      target.session.session_id,
+      target.session.owner_principal_ref,
+    );
+
+    expect(launchPublished).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selection_token: 'fresh-token',
+        launch: expect.objectContaining({
+          request_id: target.launch.launch_intent_id,
+          creation_domain: target.launch.creation_domain,
+          creation_key: target.launch.creation_key,
+          effective_input_hash: target.launch.effective_input_hash,
+        }),
+      }),
+    );
+    expect(store.getLaunchIntent(target.launch.launch_intent_id).status).toBe(
+      'linked',
+    );
+  });
+
+  it('persists Coordinator diagnostics instead of compiling a no-op draft', async () => {
+    const store = openStore();
+    const coordinator = {
+      chat: vi.fn(async () => ({
+        ok: true as const,
+        text: 'not-json',
+        session_id: 'agent-session:invalid',
+        run_id: 'agent-run:invalid',
+        query_id: 'query:invalid',
+        model: 'test',
+      })),
+    };
+    const runtime = {
+      listRecipes: () => ({
+        format: 'icarus.workspace-recipe-catalog/1',
+        expires_at_ms: 200,
+        items: [
+          {
+            recipe_ref: { id: 'ad_hoc_personal_task', version: '1.0.0' },
+            recipe_hash: sha('b'),
+            selection_token: 'initial-token',
+          },
+        ],
+      }),
+      refreshRecipeSelection: vi.fn(() => ({ selection_token: 'fresh-token' })),
+      prepareTemporaryDraft: vi.fn(),
+    };
+    const workspace = service(store, runtime, coordinator);
+    const session = workspace.createSession({
+      principalRef: 'human:local-owner',
+      title: 'Invalid planner output',
+    });
+
+    const launch = await workspace.run({
+      sessionId: session.session_id,
+      principalRef: session.owner_principal_ref,
+      text: 'plan this task',
+      idempotencyKey: 'run:invalid-planner',
+    });
+    await waitFor(
+      () => store.getLaunchIntent(launch.launch_intent_id).status === 'failed',
+    );
+
+    const failed = store.getLaunchIntent(launch.launch_intent_id);
+    const turn = store.ensureCoordinatorTurn({
+      sessionId: session.session_id,
+      sourceMessageId: launch.source_message_id,
+    });
+    expect(failed.last_error_code).toMatch(/valid Temporary Workflow/);
+    expect(turn).toMatchObject({
+      status: 'failed',
+      query_id: 'query:invalid',
+    });
+    expect(runtime.prepareTemporaryDraft).not.toHaveBeenCalled();
+    expect(
+      store
+        .listTimeline(session.session_id)
+        .some(
+          (entry) =>
+            entry.payload_json.interaction_kind === 'temporary_confirmation',
+        ),
+    ).toBe(false);
+  });
+
+  it('rehydrates messages and Runtime summary after an Agent session is lost', async () => {
+    const store = openStore();
+    const session = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Recover coordinator',
+      nowMs: 1,
+    });
+    store.replaceCoordinatorAgentSession({
+      sessionId: session.session_id,
+      expectedAgentSessionId: null,
+      agentSessionId: 'agent-session:missing',
+      nowMs: 2,
+    });
+    const coordinator = {
+      chat: vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          error: 'No conversation found for session',
+          run_id: 'agent-run:missing',
+          query_id: 'query:missing',
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: 'Recovered response',
+          session_id: 'agent-session:new',
+          run_id: 'agent-run:new',
+          query_id: 'query:new',
+          model: 'test',
+        }),
+    };
+    const workspace = service(store, null, coordinator);
+
+    const sent = await workspace.send({
+      sessionId: session.session_id,
+      principalRef: session.owner_principal_ref,
+      text: 'remember this request',
+    });
+    await waitFor(() => store.listMessages(session.session_id).length === 2);
+
+    expect(coordinator.chat.mock.calls[0]?.[0]).toMatchObject({
+      session_id: 'agent-session:missing',
+    });
+    expect(coordinator.chat.mock.calls[1]?.[0]).not.toHaveProperty(
+      'session_id',
+    );
+    expect(String(coordinator.chat.mock.calls[1]?.[0]?.message)).toContain(
+      'remember this request',
+    );
+    expect(
+      store.getSession(session.session_id).coordinator_agent_session_id,
+    ).toBe('agent-session:new');
+    expect(store.getCoordinatorTurn(sent.turn!.turn_id)).toMatchObject({
+      status: 'completed',
+      query_id: 'query:new',
+    });
+  });
+
+  it('persists typed Runtime Artifact links without copying inline values', async () => {
+    const store = openStore();
+    const target = appendLaunch(store, 'temporary_workflow');
+    store.addExecutionLink({
+      session_id: target.session.session_id,
+      workflow_id: 'workflow:artifact',
+      intake_id: 'intake:artifact',
+      creation_request_id: 'creation:artifact',
+      launch_intent_id: target.launch.launch_intent_id,
+      created_at_ms: 5,
+    });
+    const runtime = {
+      getRuntimeDetail: () => ({
+        format: 'icarus.workspace-runtime-detail/1',
+        freshness: 'ready',
+        workflows: [
+          {
+            id: 'workflow:artifact',
+            availability: 'available',
+            runs: [],
+            pending: [],
+            artifacts: [
+              {
+                artifact_ref: 'value:artifact',
+                artifact_hash: sha('9'),
+                graph_run_id: 'run:artifact',
+                node_id: 'node:artifact',
+                attempt_id: 'attempt:artifact',
+                media_type: 'application/json',
+                byte_length: 42,
+                payload_state: 'live',
+                inline_value_json: { secret: 'not-copied' },
+                display_json: {
+                  media_type: 'application/json',
+                  byte_length: 42,
+                  payload_state: 'live',
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    };
+    const workspace = service(store, runtime);
+
+    const detail = await workspace.runtimeDetail(
+      target.session.session_id,
+      target.session.owner_principal_ref,
+    );
+
+    expect(detail.artifact_links).toHaveLength(1);
+    expect(detail.artifact_links[0]).toMatchObject({
+      workflow_id: 'workflow:artifact',
+      artifact_ref: 'value:artifact',
+      artifact_hash: sha('9'),
+      display_json: {
+        graph_run_id: 'run:artifact',
+        node_id: 'node:artifact',
+        media_type: 'application/json',
+      },
+    });
+    expect(detail.artifact_links[0]?.display_json).not.toHaveProperty(
+      'inline_value_json',
+    );
+  });
+});
