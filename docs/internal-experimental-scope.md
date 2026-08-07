@@ -36,7 +36,7 @@ Latest-only removes compatibility work; it does not authorize silent or broadly 
 
 Before the first real group, irreplaceable business record, signed history, or external client dependency is created, the project must declare a compatibility freeze point and replace this policy with an explicit version-support, migration, and replay policy. Backward compatibility does not arise implicitly.
 
-The current Collaboration boundary is Project Space protocol v3 with local SQLite schema v5. The earlier Agent Group v1/v2 Role/Claim and single-Machine documents are historical design baselines only. Current code, API examples, tests, backups, and replay must reject those formats rather than migrate, dual-write, or reinterpret them. Before a real signed Group history exists, any further incompatible Collaboration change must replace v3 explicitly and update the active plan and root documentation in the same change.
+The current Collaboration boundary is Project Space protocol v3 with local SQLite schema v6. The earlier Agent Group v1/v2 Role/Claim and single-Machine documents are historical design baselines only. Current code, API examples, tests, backups, and replay must reject those formats rather than migrate, dual-write, or reinterpret them. Before a real signed Group history exists, any further incompatible Collaboration change must replace v3 explicitly and update the active plan and root documentation in the same change.
 
 ## Supported Runtime Topology
 

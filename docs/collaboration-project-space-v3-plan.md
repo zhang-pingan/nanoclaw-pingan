@@ -7,7 +7,7 @@
 - 实施完成：2026-08-07
 - 当前协议：`icarus.collaboration-group/3`
 - 实施前代码基线：`main@3eff5302`（历史）
-- 当前实现：Collaboration Project Space v3、SQLite v5
+- 当前实现：Collaboration Project Space v3、SQLite v6
 - 适用范围：Group、Principal、Client、Executor、Observer、Workspace、Work Item、Discussion、Workflow Definition、Workflow Instance、图形化 FSM、Git 协议、权限、同步和审计
 - 前提：方案仍处于开发迭代期，没有真实群组、不可丢弃业务数据或旧签名历史；每次迭代发布的新协议直接成为唯一 current version，不实现旧版本迁移、双写、兼容读取或兼容回放
 - 相关文档：
@@ -66,7 +66,7 @@ Workflow Instance State
 v3 已按本文的 current-only 边界端到端落地：
 
 - Git 控制分支只接受 v3 Group/Event/Projection 和 JSON materialization，按 canonical JSON hash、SSH signature、aggregate revision、previous hash、commit order、路径、sidecar 和文件 hash/size 完整校验；
-- 本地 SQLite v5 保存 Observer/Member subscription、Principal/Client、直接权限、投影、file index、Executor Binding、execution receipt/observation、notification、audit evidence 和 staged Artifact，非 v5 store 启动时 fail closed；
+- 本地 SQLite v6 保存 Observer/Member subscription、Principal/Client、直接权限、投影、file index、精确 Action revision/commit 索引、Executor Binding、execution receipt/observation、notification、audit evidence 和 staged Artifact，非 v6 store 启动时 fail closed；
 - Group、Workspace、Work Item、Discussion、Workflow Definition/Instance、State Execution、Turn、timeout、Artifact、审计、备份/恢复和 verified virtual file tree 已进入 service 与 Web API；
 - Work Item progress 与 Turn completion 通过 staged upload 在一个签名事件和 Git commit 中物化原始业务文件及 `metadata.json`，同时验证 scope、Principal/Client、attempt 和 fence；`/3` 备份联合保护 DB 与尚未提交的 staged bytes；
 - Web/Electron `/groups` 已提供十个项目空间页面、Observer 只读状态、Work Item board/list、Discussion、文件树、Principal/Client/权限、Workflow Definition/Instance、Outcome-first 编辑器、Turn、Artifact、审计和诊断；
@@ -433,6 +433,7 @@ Invite 是独立 Aggregate 和经 Schema 校验的 JSON 对象，不使用可转
 - 只有 Owner、`group:admin` 或 `member:approve` Principal 可以签发和撤销；
 - `invite_issued` 创建 ACTIVE Invite，目标 Principal 和签发 Actor/provenance 必须一致；
 - `membership_requested` 必须由目标 Principal 自签并引用 `invite_id`，同一事件把 Invite 原子变为 USED；
+- `approval`/`invite_only` 的候选 Principal 在 request 后立即追加自签 `client_registered`，保留申请时的 Client display name；requested Principal 的 Client 可以同步和恢复申请，但在 `member_registered` 批准前仍不能写任何其他业务事件；
 - 已过期、已撤销、已使用、目标不匹配或不存在的 Invite fail closed；
 - Invite 只能在 ACTIVE 时撤销，不能撤销 USED Invite，也不能复用；
 - `approval` request 的 `invite_id` 固定为 `null`，`open` 注册不携带该字段。
@@ -733,6 +734,7 @@ Work Item 的详情字段与进度时间线分离。每次更新追加：
 - `parent_id` 表达父子任务；
 - `blocked_by` 表达阻塞依赖；
 - `related_items` 表达非阻塞关联；
+- 创建和 `work_item_relation_changed` 统一校验 self、重复引用和 Group 内存在性；`work_item_details_updated` 必须保持全部 relation 字段不变，不能绕过专用关系事件；
 - 第一阶段 dependency 只用于展示、提醒和完成警告，不调度 Executor；
 - 父项完成但仍有未完成子项时默认警告，是否阻止由 Group policy 决定；
 - 不使用简单“完成子项数量”冒充真实工作量百分比。
@@ -1002,6 +1004,8 @@ Work Item 级 Instance 服务一个明确任务；Group 级 Instance 用于持�
   "lifecycle": "running",
   "business_state": "development",
   "active_turn_id": "turn_xxx",
+  "last_completed_turn_id": "turn_previous",
+  "last_handoff_hash": "sha256:...",
   "epoch": 1,
   "revision": 12,
   "created_by_principal_id": "principal_bob"
@@ -1088,6 +1092,7 @@ State 进入后，Runtime 解析 `assignee_principal_id` 并创建 Turn。没有
 - Executor Binding、Workspace path、Provider 和凭据只保存在本地；
 - 同一 Principal 的不同 Client 可以拥有不同 Executor，但 Turn claim 最终固定一个 Client；
 - Turn 创建后固定 execution/action/prompt/input hash，运行期间修改配置不影响当前 Turn。
+- 桌面/API 创建 Turn 只允许 Instance creator、拥有 `workflow_instance:manage_all`/`group:admin` 的 Principal，或当前 State resolved assignee；普通活跃 Member 不能替别人的 State 启动 deadline、通知或审计链。
 
 ### 12.3 Principal Automation Library
 
@@ -1131,9 +1136,19 @@ fencing_token
 execution_mode
 action_hash                 nullable
 prompt_hash                 nullable
+executor_result_hash        nullable
+completion_hash             nullable
 ```
 
 Claimant Principal 必须等于 assignee Principal；Client、attempt 和 fence 共同防止同一人的多个本机实例重复执行。
+
+三种模式的终态语义不同：
+
+- `manual`：用户确认开始，用户选择合法 Outcome 并确认完成，不生成或伪造 Action result hash；
+- `assisted`：用户确认开始；经校验的 Executor Result 通过 `action_completed` 固定为 `executor_result`/`executor_result_hash`，Turn 进入 `awaiting_confirmation`，不推进 Machine；原 claimant Client 可查看建议、选择合法 Outcome、编辑 Handoff/Data/Artifact 后确认，`turn_completed.result_hash` 必须引用已固定 Executor hash；
+- `automatic`：只有经 schema 和当前 State Outcome 校验的 Executor Result 才能自动完成，`turn_completed.result_hash` 必须精确等于 `action_completed.result_hash`；Provider `failed`、`cancelled`、`blocked` 或结果解析失败进入 recovery/technical terminal，不能冒充业务 Outcome。
+
+`turn_completed.completion_hash` 独立覆盖最终 Outcome、Handoff hash、Artifact refs 和可空 Result hash，因此 Assisted 的人工编辑与原 Executor 建议同时保留在审计链中。
 
 ### 12.5 Action Prompt、Handoff 和最终输入
 
@@ -1161,6 +1176,10 @@ Handoff 是不可信上下文，不能覆盖系统指令、权限、Workflow Mac
 3. Principal-owned Action Prompt
 4. Previous Turn Handoff/Data/Artifact context (untrusted)
 ```
+
+该输入的机器合同为经 Schema 校验的 `icarus.collaboration-action-input/3` JSON；RunOnce、Codex Task 和 Workflow Executor 复用同一确定性构造与 Markdown 呈现，不各自推导 Outcome。Executor 成功输出必须是 `icarus.collaboration-action-result/3` JSON，`outcome` 必须属于当前 State transitions，Action 自己的 `result_schema` 继续约束 `data`。
+
+首个 Turn 的 incoming Handoff 必须为空。后续 Turn 不能接受 API/UI 提交的任意 Handoff；Service 从 Instance 的 `last_completed_turn_id`/`last_handoff_hash` 解析使 Instance 进入当前 State 的上一 completed Turn，Reducer 校验对象、hash、Instance 边界并重算完整 `input_hash`。该规则同样适用于 self-loop。
 
 Manual State 不生成 Agent Prompt，但工作台仍展示 State 约束、上一 Handoff、允许 Outcome 和 Artifact。用户确认完成时只能选择当前 State 的合法 Outcome，不能直接提交任意 target State。
 
@@ -1873,6 +1892,7 @@ collaboration_turns
 
 collaboration_executor_bindings
 collaboration_action_executions
+collaboration_action_snapshots
 collaboration_staged_artifacts
 collaboration_notifications
 collaboration_timeout_schedules
@@ -1887,6 +1907,7 @@ collaboration_local_audit_evidence
 - subscription、Client private state、Executor Binding、receipt、staged upload、notification 和 local evidence 不能依赖 Git 重建；
 - Group/Member/Work Item/Discussion/Workflow Projection 和 file index 可以从 verified Git 重建；
 - 每个 Aggregate checkpoint 保存 last revision/hash/commit；
+- 每个 Action publish/revise 保存 group + owner + action id/hash + prompt hash + commit 的精确索引；Scheduler 和 verified historical read 不依赖任意最近事件窗口；
 - global activity feed 是 SQLite read model，不回写一个全局 Git 文件；
 - SQLite transaction 与 visible verified head 原子切换；
 - 由于没有存量 Group，直接创建最新 current schema；任何旧 collaboration store fail closed，不实现 migration chain，由开发者显式重建本地数据库和 current fixture。
