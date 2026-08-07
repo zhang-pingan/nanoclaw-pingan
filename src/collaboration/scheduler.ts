@@ -509,7 +509,17 @@ export class CollaborationScheduler {
   ): Promise<void> {
     const current =
       this.store.getGroup(groupId)?.projection?.turns[turn.turn_id];
-    if (!current || current.state === 'recovery_required') return;
+    const instance =
+      this.store.getGroup(groupId)?.projection?.workflowInstances[
+        turn.workflow_instance_id
+      ];
+    if (
+      !current ||
+      !instance ||
+      !current.fencing_token ||
+      current.state === 'recovery_required'
+    )
+      return;
     await this.groups.requestTurnRecovery({
       groupId,
       instanceId: turn.workflow_instance_id,
@@ -518,8 +528,9 @@ export class CollaborationScheduler {
         groupId,
         turn.workflow_instance_id,
       ),
+      epoch: instance.epoch,
       attempt: turn.attempt,
-      fencingToken: turn.fencing_token,
+      fencingToken: current.fencing_token,
       reason,
     });
   }

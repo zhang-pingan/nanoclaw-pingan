@@ -1920,8 +1920,9 @@ export class CollaborationProjectSpaceService {
     readonly instanceId: string;
     readonly turnId: string;
     readonly expectedRevision: number;
+    readonly epoch: number;
     readonly attempt: number;
-    readonly fencingToken?: string | null;
+    readonly fencingToken: string;
     readonly reason: string;
   }): Promise<CollaborationProjectSpaceGroupRecord> {
     return this.appendLocal(input.groupId, {
@@ -1931,8 +1932,9 @@ export class CollaborationProjectSpaceService {
       eventType: 'turn_recovery_requested',
       payload: {
         turn_id: input.turnId,
+        epoch: input.epoch,
         attempt: input.attempt,
-        fencing_token: input.fencingToken ?? null,
+        fencing_token: input.fencingToken,
         reason: input.reason,
       },
     });

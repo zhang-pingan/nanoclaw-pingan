@@ -220,8 +220,9 @@ const turnCancelledPayloadSchema = z
 const recoveryPayloadSchema = z
   .object({
     turn_id: id,
+    epoch: z.number().int().positive(),
     attempt: z.number().int().positive(),
-    fencing_token: sha256.nullable(),
+    fencing_token: sha256,
     reason: z.string().min(1).max(4000),
   })
   .strict();
@@ -741,6 +742,21 @@ function canManageWorkflowInstance(
   );
 }
 
+function hasWorkflowInstanceAuthority(
+  projection: CollaborationProjectionV3,
+  principalId: string,
+  instance: WorkflowInstance,
+): boolean {
+  return (
+    instance.created_by_principal_id === principalId ||
+    hasCollaborationPermissionV3(
+      projection,
+      principalId,
+      'workflow_instance:manage_all',
+    )
+  );
+}
+
 function assertTurnFence(
   turn: CollaborationTurnV3,
   payload: { turn_id: string; attempt: number; fencing_token: string },
@@ -1117,13 +1133,26 @@ export function reduceCollaborationEventV3(
     case 'action_revised': {
       const { action } = actionPayloadSchema.parse(payload);
       if (
+        event.aggregate_type !== 'workspace' ||
+        event.aggregate_id !== action.owner_principal_id ||
         action.owner_principal_id !== event.actor.principal_id ||
         !action.prompt_ref.startsWith(
           `workspace/principals/${event.actor.principal_id}/automations/prompts/`,
         )
       )
         conflict('Principal Automation must remain in the actor-owned library');
-      next.actions[`${action.owner_principal_id}:${action.action_id}`] = action;
+      const key = `${action.owner_principal_id}:${action.action_id}`;
+      const previous = next.actions[key];
+      if (event.event_type === 'action_published') {
+        if (previous) conflict('Published Action already exists');
+        if (action.version !== 1)
+          conflict('A new Action must publish at version 1');
+      } else {
+        if (!previous) conflict('Action revise requires an existing Action');
+        if (action.version !== previous.version + 1)
+          conflict('Action revisions must use a sequential version');
+      }
+      next.actions[key] = action;
       break;
     }
     case 'work_item_created':
@@ -1155,13 +1184,6 @@ export function reduceCollaborationEventV3(
           !['proposed', 'open'].includes(item.status)
         )
           conflict('A new human Work Item must start proposed or open');
-        for (const ref of [
-          ...(item.parent_id ? [item.parent_id] : []),
-          ...item.blocked_by,
-          ...item.related_items,
-        ])
-          if (!next.workItems[ref])
-            conflict(`Related Work Item does not exist: ${ref}`);
       } else {
         const previous = next.workItems[item.work_item_id];
         if (!previous) conflict('Work Item does not exist');
@@ -1180,6 +1202,13 @@ export function reduceCollaborationEventV3(
         )
           conflict('Work Item details cannot rewrite lifecycle or ownership');
       }
+      for (const ref of [
+        ...(item.parent_id ? [item.parent_id] : []),
+        ...item.blocked_by,
+        ...item.related_items,
+      ])
+        if (!next.workItems[ref])
+          conflict(`Related Work Item does not exist: ${ref}`);
       assertActivePrincipals(next, [
         item.owner_principal_id,
         ...item.contributors,
@@ -1276,6 +1305,18 @@ export function reduceCollaborationEventV3(
       if (!canManageWorkItem(next, event.actor.principal_id, item))
         conflict('Actor cannot change this Work Item relations');
       const relations = workItemRelationPayloadSchema.parse(payload);
+      if (
+        relations.parent_id === item.work_item_id ||
+        relations.blocked_by.includes(item.work_item_id) ||
+        relations.related_items.includes(item.work_item_id)
+      )
+        conflict('A Work Item relation cannot reference itself');
+      for (const [name, refs] of [
+        ['blocked_by', relations.blocked_by],
+        ['related_items', relations.related_items],
+      ] as const)
+        if (new Set(refs).size !== refs.length)
+          conflict(`Work Item ${name} references must be unique`);
       for (const ref of [
         ...(relations.parent_id ? [relations.parent_id] : []),
         ...relations.blocked_by,
@@ -1670,6 +1711,12 @@ export function reduceCollaborationEventV3(
         conflict('Workflow Instance or assignee does not exist');
       if (!canManageWorkflowInstance(next, event.actor.principal_id, instance))
         conflict('Actor cannot reassign this Workflow Instance');
+      const definition = activeDefinition(next, instance);
+      const definitionState = definition.machine.states[parsed.state_id];
+      if (!definitionState || definitionState.terminal)
+        conflict(
+          'Workflow reassignment must reference an executable Definition State',
+        );
       if (
         instance.business_state === parsed.state_id &&
         instance.active_turn_id !== null
@@ -1677,8 +1724,10 @@ export function reduceCollaborationEventV3(
         conflict(
           'Current State must cancel/recover its Turn before reassignment',
         );
+      const previousPrincipal = instance.resolved_assignments[parsed.state_id];
       instance.resolved_assignments[parsed.state_id] = parsed.principal_id;
-      const definition = activeDefinition(next, instance);
+      if (previousPrincipal !== parsed.principal_id)
+        delete next.stateExecutions[instance.instance_id]?.[parsed.state_id];
       if (
         instance.lifecycle === 'draft' &&
         validateWorkflowAssignments(next, instance, definition.machine, false)
@@ -1700,27 +1749,46 @@ export function reduceCollaborationEventV3(
           event.actor.principal_id
       )
         conflict('Only the resolved Principal may configure State Execution');
-      if (execution.action_ref) {
-        const action =
-          next.actions[
-            `${event.actor.principal_id}:${
-              execution.action_ref
-                .split('/')
-                .at(-1)
-                ?.replace(/\.json$/u, '') ?? ''
-            }`
-          ];
-        const exact = Object.values(next.actions).find(
-          (candidate) =>
-            candidate.owner_principal_id === event.actor.principal_id &&
-            execution.action_ref?.endsWith(`/${candidate.action_id}.json`),
+      const definition = activeDefinition(next, instance);
+      const definitionState = definition.machine.states[execution.state_id];
+      if (!definitionState || definitionState.terminal)
+        conflict(
+          'State Execution must reference an executable Definition State',
         );
-        if (!action && !exact)
-          conflict('State Execution Action is not Principal-owned');
-        const selected = action ?? exact!;
+      const current =
+        next.stateExecutions[instance.instance_id]?.[execution.state_id];
+      if (event.event_type === 'state_execution_published') {
+        if (current) conflict('Published State Execution already exists');
+        if (execution.revision !== 1)
+          conflict('A new State Execution must publish at revision 1');
+      } else {
+        if (!current)
+          conflict('State Execution revise requires an existing object');
         if (
-          execution.action_hash !== collaborationCanonicalHashV3(selected) ||
-          execution.prompt_hash !== selected.prompt_hash
+          execution.revision !== current.revision + 1 ||
+          execution.instance_id !== current.instance_id ||
+          execution.state_id !== current.state_id ||
+          execution.principal_id !== current.principal_id
+        )
+          conflict('State Execution revisions must be sequential and stable');
+      }
+      if (execution.published_at_event !== event.event_id)
+        conflict('State Execution event provenance does not match');
+      if (execution.action_ref) {
+        const actionId =
+          execution.action_ref
+            .split('/')
+            .at(-1)
+            ?.replace(/\.json$/u, '') ?? '';
+        const action = next.actions[`${event.actor.principal_id}:${actionId}`];
+        const expectedActionRef = action
+          ? `workspace/principals/${event.actor.principal_id}/automations/actions/${action.action_id}.json`
+          : null;
+        if (!action || execution.action_ref !== expectedActionRef)
+          conflict('State Execution Action is not Principal-owned');
+        if (
+          execution.action_hash !== collaborationCanonicalHashV3(action) ||
+          execution.prompt_hash !== action.prompt_hash
         )
           conflict('State Execution Action or Prompt hash does not match');
       }
@@ -1867,6 +1935,13 @@ export function reduceCollaborationEventV3(
       const turn = next.turns[parsed.turn_id];
       if (!turn) conflict('Turn does not exist');
       assertTurnFence(turn, parsed, event);
+      const instance = next.workflowInstances[event.aggregate_id];
+      if (
+        !instance ||
+        instance.active_turn_id !== turn.turn_id ||
+        !['running', 'waiting_input', 'waiting_approval'].includes(turn.state)
+      )
+        conflict('Action callback cannot change a terminal or inactive Turn');
       if (event.actor.executor_id !== turn.executor_id)
         conflict('Action callback Executor does not match the fenced Turn');
       turn.state =
@@ -1875,10 +1950,8 @@ export function reduceCollaborationEventV3(
           : event.event_type === 'action_waiting_approval'
             ? 'waiting_approval'
             : 'running';
-      next.workflowInstances[event.aggregate_id]!.revision =
-        event.aggregate_revision;
-      next.workflowInstances[event.aggregate_id]!.updated_at =
-        event.occurred_at;
+      instance.revision = event.aggregate_revision;
+      instance.updated_at = event.occurred_at;
       break;
     }
     case 'turn_timeout_observed': {
@@ -1984,18 +2057,27 @@ export function reduceCollaborationEventV3(
       const instance = next.workflowInstances[event.aggregate_id];
       const parsed = turnCancelledPayloadSchema.parse(payload);
       const turn = next.turns[parsed.turn_id];
-      if (!instance || !turn || turn.attempt !== parsed.attempt)
-        conflict('Turn cancellation references a stale attempt');
       if (
-        turn.fencing_token &&
-        (turn.fencing_token !== parsed.fencing_token ||
-          turn.claimant_principal_id !== event.actor.principal_id ||
-          turn.claimant_client_id !== event.actor.client_id) &&
-        !hasCollaborationPermissionV3(
-          next,
-          event.actor.principal_id,
-          'workflow_instance:manage_all',
-        )
+        !instance ||
+        !turn ||
+        instance.active_turn_id !== turn.turn_id ||
+        turn.attempt !== parsed.attempt ||
+        ['completed', 'cancelled'].includes(turn.state)
+      )
+        conflict('Turn cancellation references a stale attempt');
+      const authority = hasWorkflowInstanceAuthority(
+        next,
+        event.actor.principal_id,
+        instance,
+      );
+      if (!turn.fencing_token) {
+        if (parsed.fencing_token !== null || !authority)
+          conflict('Only Instance authority may cancel an unclaimed Turn');
+      } else if (
+        parsed.fencing_token !== turn.fencing_token ||
+        (!authority &&
+          (turn.claimant_principal_id !== event.actor.principal_id ||
+            turn.claimant_client_id !== event.actor.client_id))
       )
         conflict('Only claimant or Instance authority may cancel a Turn');
       turn.state = 'cancelled';
@@ -2010,17 +2092,17 @@ export function reduceCollaborationEventV3(
       const instance = next.workflowInstances[event.aggregate_id];
       const parsed = recoveryPayloadSchema.parse(payload);
       const turn = next.turns[parsed.turn_id];
-      if (!instance || !turn || turn.attempt !== parsed.attempt)
-        conflict('Turn recovery references a stale attempt');
       if (
-        turn.assignee_principal_id !== event.actor.principal_id &&
-        !hasCollaborationPermissionV3(
-          next,
-          event.actor.principal_id,
-          'workflow_instance:manage_all',
-        )
+        !instance ||
+        !turn ||
+        instance.active_turn_id !== turn.turn_id ||
+        parsed.epoch !== instance.epoch ||
+        !['running', 'waiting_input', 'waiting_approval'].includes(turn.state)
       )
-        conflict('Actor cannot request recovery for this Turn');
+        conflict('Turn recovery references a stale Workflow epoch or state');
+      if (turn.attempt !== parsed.attempt)
+        conflict('Turn recovery references a stale attempt');
+      assertTurnFence(turn, parsed, event);
       turn.state = 'recovery_required';
       turn.recovery_reason = parsed.reason;
       instance.lifecycle = 'recovery_required';
