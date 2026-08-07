@@ -560,6 +560,41 @@ function assertMemberAndClient(
     conflict('Event actor Executor is not registered to its Principal');
 }
 
+function assertActivePrincipals(
+  projection: CollaborationProjectionV3,
+  principalIds: readonly string[],
+): void {
+  for (const principalId of principalIds)
+    if (!activeCollaborationMemberV3(projection, principalId))
+      conflict(`Principal is not an active Group member: ${principalId}`);
+}
+
+function canManageWorkItem(
+  projection: CollaborationProjectionV3,
+  principalId: string,
+  item: WorkItem,
+): boolean {
+  return (
+    item.owner_principal_id === principalId ||
+    hasCollaborationPermissionV3(
+      projection,
+      principalId,
+      'work_item:manage_all',
+    )
+  );
+}
+
+function canContributeToWorkItem(
+  projection: CollaborationProjectionV3,
+  principalId: string,
+  item: WorkItem,
+): boolean {
+  return (
+    canManageWorkItem(projection, principalId, item) ||
+    item.contributors.includes(principalId)
+  );
+}
+
 const WORK_ITEM_TRANSITIONS: Record<string, readonly string[]> = {
   proposed: ['open', 'cancelled'],
   open: ['in_progress', 'cancelled'],
@@ -1026,16 +1061,51 @@ export function reduceCollaborationEventV3(
           conflict('Actor cannot create this Work Item');
         if (event.actor.executor_id && item.status !== 'proposed')
           conflict('Agent-created Work Items default to proposed');
-      } else if (!next.workItems[item.work_item_id]) {
-        conflict('Work Item does not exist');
+        if (
+          !event.actor.executor_id &&
+          !['proposed', 'open'].includes(item.status)
+        )
+          conflict('A new human Work Item must start proposed or open');
+        for (const ref of [
+          ...(item.parent_id ? [item.parent_id] : []),
+          ...item.blocked_by,
+          ...item.related_items,
+        ])
+          if (!next.workItems[ref])
+            conflict(`Related Work Item does not exist: ${ref}`);
+      } else {
+        const previous = next.workItems[item.work_item_id];
+        if (!previous) conflict('Work Item does not exist');
+        if (!canManageWorkItem(next, event.actor.principal_id, previous))
+          conflict('Actor cannot update this Work Item');
+        if (
+          item.creator_principal_id !== previous.creator_principal_id ||
+          item.created_at !== previous.created_at ||
+          item.owner_principal_id !== previous.owner_principal_id ||
+          item.status !== previous.status ||
+          item.assignment_status !== previous.assignment_status ||
+          item.primary_workflow_instance_id !==
+            previous.primary_workflow_instance_id ||
+          item.closed_at !== previous.closed_at ||
+          item.archived !== previous.archived
+        )
+          conflict('Work Item details cannot rewrite lifecycle or ownership');
       }
+      assertActivePrincipals(next, [
+        item.owner_principal_id,
+        ...item.contributors,
+        ...item.watchers,
+      ]);
       next.workItems[item.work_item_id] = item;
       break;
     }
     case 'work_item_assignment_changed': {
       const item = next.workItems[event.aggregate_id];
       if (!item) conflict('Work Item does not exist');
+      if (!canManageWorkItem(next, event.actor.principal_id, item))
+        conflict('Actor cannot reassign this Work Item');
       const parsed = workItemAssignmentPayloadSchema.parse(payload);
+      assertActivePrincipals(next, [parsed.owner_principal_id]);
       item.owner_principal_id = parsed.owner_principal_id;
       item.preferred_executor_id = parsed.preferred_executor_id;
       item.assignment_status = parsed.assignment_status;
@@ -1059,10 +1129,21 @@ export function reduceCollaborationEventV3(
     case 'work_item_status_changed': {
       const item = next.workItems[event.aggregate_id];
       if (!item) conflict('Work Item does not exist');
+      if (!canManageWorkItem(next, event.actor.principal_id, item))
+        conflict('Actor cannot change this Work Item status');
       const { status, closed_at: closedAt } =
         workItemStatusPayloadSchema.parse(payload);
       if (!WORK_ITEM_TRANSITIONS[item.status]?.includes(status))
         conflict(`Invalid Work Item transition: ${item.status} -> ${status}`);
+      const primaryInstance = item.primary_workflow_instance_id
+        ? next.workflowInstances[item.primary_workflow_instance_id]
+        : null;
+      if (
+        status === 'done' &&
+        primaryInstance &&
+        primaryInstance.lifecycle !== 'closed'
+      )
+        conflict('An active primary Workflow owns Work Item completion');
       item.status = status;
       item.closed_at = closedAt;
       item.updated_at = event.occurred_at;
@@ -1071,19 +1152,25 @@ export function reduceCollaborationEventV3(
     }
     case 'work_item_progress_posted': {
       const { update } = workItemProgressPayloadSchema.parse(payload);
-      if (
-        update.work_item_id !== event.aggregate_id ||
-        !next.workItems[event.aggregate_id]
-      )
+      const item = next.workItems[event.aggregate_id];
+      if (update.work_item_id !== event.aggregate_id || !item)
         conflict('Work Item progress references a missing or different item');
+      if (
+        update.actor_principal_id !== event.actor.principal_id ||
+        update.actor_client_id !== event.actor.client_id ||
+        !canContributeToWorkItem(next, event.actor.principal_id, item)
+      )
+        conflict('Actor cannot post progress to this Work Item');
       (next.workItemUpdates[event.aggregate_id] ??= []).push(update);
-      next.workItems[event.aggregate_id]!.revision = event.aggregate_revision;
-      next.workItems[event.aggregate_id]!.updated_at = event.occurred_at;
+      item.revision = event.aggregate_revision;
+      item.updated_at = event.occurred_at;
       break;
     }
     case 'work_item_relation_changed': {
       const item = next.workItems[event.aggregate_id];
       if (!item) conflict('Work Item does not exist');
+      if (!canManageWorkItem(next, event.actor.principal_id, item))
+        conflict('Actor cannot change this Work Item relations');
       const relations = workItemRelationPayloadSchema.parse(payload);
       for (const ref of [
         ...(relations.parent_id ? [relations.parent_id] : []),
@@ -1102,6 +1189,8 @@ export function reduceCollaborationEventV3(
     case 'work_item_archived': {
       const item = next.workItems[event.aggregate_id];
       if (!item) conflict('Work Item does not exist');
+      if (!canManageWorkItem(next, event.actor.principal_id, item))
+        conflict('Actor cannot archive this Work Item');
       item.archived = true;
       item.revision = event.aggregate_revision;
       item.updated_at = event.occurred_at;
@@ -1115,6 +1204,23 @@ export function reduceCollaborationEventV3(
         next.discussions[discussion.thread_id]
       )
         conflict('Discussion genesis is invalid');
+      if (
+        discussion.created_by !== event.actor.principal_id ||
+        !hasCollaborationPermissionV3(
+          next,
+          event.actor.principal_id,
+          'discussion:create',
+        )
+      )
+        conflict('Actor cannot create this Discussion');
+      if (
+        (discussion.scope.type === 'work_item' &&
+          !next.workItems[discussion.scope.ref]) ||
+        (discussion.scope.type === 'workflow_instance' &&
+          !next.workflowInstances[discussion.scope.ref]) ||
+        (discussion.scope.type === 'turn' && !next.turns[discussion.scope.ref])
+      )
+        conflict('Discussion scope does not exist');
       next.discussions[discussion.thread_id] = { discussion, messages: {} };
       break;
     }
@@ -1124,6 +1230,16 @@ export function reduceCollaborationEventV3(
       const { message } = messagePayloadSchema.parse(payload);
       if (!thread || message.thread_id !== event.aggregate_id)
         conflict('Message Discussion does not exist');
+      if (
+        !hasCollaborationPermissionV3(
+          next,
+          event.actor.principal_id,
+          'discussion:post',
+        )
+      )
+        conflict('Actor cannot post to Discussions');
+      if (thread.discussion.status !== 'open')
+        conflict('Resolved Discussions do not accept messages');
       if (
         message.author_principal_id !== event.actor.principal_id ||
         message.actor_client_id !== event.actor.client_id
@@ -1137,6 +1253,12 @@ export function reduceCollaborationEventV3(
         (!previous || message.revision !== previous.revision + 1)
       )
         conflict('Message revision is stale');
+      if (
+        event.event_type === 'message_revised' &&
+        previous?.author_principal_id !== event.actor.principal_id
+      )
+        conflict('Only the message author may revise it');
+      assertActivePrincipals(next, message.mentions);
       thread.messages[message.message_id] = message;
       thread.discussion.revision = event.aggregate_revision;
       break;
@@ -1146,6 +1268,15 @@ export function reduceCollaborationEventV3(
       const { message_id: messageId } = messageIdPayloadSchema.parse(payload);
       const message = thread?.messages[messageId];
       if (!thread || !message) conflict('Message does not exist');
+      if (
+        message.author_principal_id !== event.actor.principal_id &&
+        !hasCollaborationPermissionV3(
+          next,
+          event.actor.principal_id,
+          'discussion:moderate',
+        )
+      )
+        conflict('Only the author or a moderator may tombstone a message');
       message.tombstoned = true;
       message.body = '';
       message.revision += 1;
@@ -1157,6 +1288,15 @@ export function reduceCollaborationEventV3(
     case 'discussion_reopened': {
       const thread = next.discussions[event.aggregate_id];
       if (!thread) conflict('Discussion does not exist');
+      if (
+        thread.discussion.created_by !== event.actor.principal_id &&
+        !hasCollaborationPermissionV3(
+          next,
+          event.actor.principal_id,
+          'discussion:moderate',
+        )
+      )
+        conflict('Actor cannot resolve or reopen this Discussion');
       thread.discussion.status =
         event.event_type === 'discussion_resolved' ? 'resolved' : 'open';
       thread.discussion.resolved_at =

@@ -19,15 +19,23 @@ import { COLLABORATION_CONTROL_BRANCH } from './protocol/version.js';
 import {
   actionDefinitionV3Schema,
   collaborationBasenameSchema,
+  discussionMessageSchema,
+  discussionSchema,
+  executorDescriptorSchema,
   memberDefinitionV3Schema,
   permissionGrantSchema,
+  workItemProgressSchema,
+  workItemSchema,
   type CollaborationAggregateType,
   type CollaborationEventTypeV3,
   type CollaborationEventV3,
   type CollaborationPermission,
+  type Discussion,
   type FileMetadata,
   type MemberDefinitionV3,
   type ObserverSubscription,
+  type WorkItem,
+  type WorkItemStatus,
 } from './protocol/v3-schema.js';
 
 export interface ValidatedProjectSpaceHistory {
@@ -430,6 +438,51 @@ export class CollaborationProjectSpaceService {
     });
   }
 
+  async registerExecutor(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly executorId: string;
+    readonly displayName: string;
+    readonly kind: 'codex' | 'workflow' | 'run_once' | 'external';
+    readonly capabilities?: readonly string[];
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const eventId = newId('evt');
+    const executor = executorDescriptorSchema.parse({
+      format: 'icarus.collaboration-executor/1',
+      principal_id: group.localPrincipalId,
+      executor_id: input.executorId,
+      display_name: input.displayName,
+      kind: input.kind,
+      capabilities: [...(input.capabilities ?? [])],
+      registered_at_event: eventId,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'membership',
+      aggregateId: group.localPrincipalId!,
+      expectedRevision: input.expectedRevision,
+      eventType: 'executor_registered',
+      payload: { executor },
+      eventId,
+    });
+  }
+
+  async revokeExecutor(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly executorId: string;
+    readonly reason: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'membership',
+      aggregateId: group.localPrincipalId!,
+      expectedRevision: input.expectedRevision,
+      eventType: 'executor_revoked',
+      payload: { executor_id: input.executorId, reason: input.reason },
+    });
+  }
+
   async archiveGroup(
     groupId: string,
     reason: string,
@@ -654,6 +707,432 @@ export class CollaborationProjectSpaceService {
       payload: { action },
       materializedFiles: [{ path: promptRef, contents: input.prompt }],
     });
+  }
+
+  async createWorkItem(input: {
+    readonly groupId: string;
+    readonly expectedRevision?: 0;
+    readonly workItemId?: string;
+    readonly type: WorkItem['type'];
+    readonly title: string;
+    readonly description?: string;
+    readonly status?: 'proposed' | 'open';
+    readonly priority?: WorkItem['priority'];
+    readonly ownerPrincipalId?: string;
+    readonly preferredExecutorId?: string | null;
+    readonly contributors?: readonly string[];
+    readonly watchers?: readonly string[];
+    readonly acceptanceCriteria?: readonly string[];
+    readonly labels?: readonly string[];
+    readonly dueAt?: string | null;
+    readonly parentId?: string | null;
+    readonly blockedBy?: readonly string[];
+    readonly relatedItems?: readonly string[];
+    readonly executorId?: string | null;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const now = new Date(this.now()).toISOString();
+    const workItemId = input.workItemId ?? newId('wi');
+    const ownerPrincipalId = input.ownerPrincipalId ?? group.localPrincipalId!;
+    const item = workItemSchema.parse({
+      format: 'icarus.collaboration-work-item/1',
+      work_item_id: workItemId,
+      type: input.type,
+      title: input.title,
+      description: input.description ?? '',
+      status: input.executorId ? 'proposed' : (input.status ?? 'open'),
+      priority: input.priority ?? 'normal',
+      creator_principal_id: group.localPrincipalId,
+      owner_principal_id: ownerPrincipalId,
+      preferred_executor_id: input.preferredExecutorId ?? null,
+      contributors: [...(input.contributors ?? [])],
+      watchers: [...(input.watchers ?? [])],
+      acceptance_criteria: [...(input.acceptanceCriteria ?? [])],
+      labels: [...(input.labels ?? [])],
+      due_at: input.dueAt ?? null,
+      parent_id: input.parentId ?? null,
+      blocked_by: [...(input.blockedBy ?? [])],
+      related_items: [...(input.relatedItems ?? [])],
+      primary_workflow_instance_id: null,
+      assignment_status:
+        ownerPrincipalId === group.localPrincipalId ? 'accepted' : 'pending',
+      created_at: now,
+      updated_at: now,
+      closed_at: null,
+      revision: 1,
+      archived: false,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'work_item',
+      aggregateId: workItemId,
+      expectedRevision: input.expectedRevision ?? 0,
+      eventType: 'work_item_created',
+      payload: { item },
+      executorId: input.executorId ?? null,
+    });
+  }
+
+  async updateWorkItemDetails(input: {
+    readonly groupId: string;
+    readonly workItemId: string;
+    readonly expectedRevision: number;
+    readonly type?: WorkItem['type'];
+    readonly title?: string;
+    readonly description?: string;
+    readonly priority?: WorkItem['priority'];
+    readonly preferredExecutorId?: string | null;
+    readonly contributors?: readonly string[];
+    readonly watchers?: readonly string[];
+    readonly acceptanceCriteria?: readonly string[];
+    readonly labels?: readonly string[];
+    readonly dueAt?: string | null;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const history = await this.sync(input.groupId);
+    const current = history.projection.workItems[input.workItemId];
+    if (!current) throw new Error('Work Item does not exist');
+    const item = workItemSchema.parse({
+      ...current,
+      type: input.type ?? current.type,
+      title: input.title ?? current.title,
+      description: input.description ?? current.description,
+      priority: input.priority ?? current.priority,
+      preferred_executor_id:
+        input.preferredExecutorId === undefined
+          ? current.preferred_executor_id
+          : input.preferredExecutorId,
+      contributors: input.contributors
+        ? [...input.contributors]
+        : current.contributors,
+      watchers: input.watchers ? [...input.watchers] : current.watchers,
+      acceptance_criteria: input.acceptanceCriteria
+        ? [...input.acceptanceCriteria]
+        : current.acceptance_criteria,
+      labels: input.labels ? [...input.labels] : current.labels,
+      due_at: input.dueAt === undefined ? current.due_at : input.dueAt,
+      updated_at: new Date(this.now()).toISOString(),
+      revision: input.expectedRevision + 1,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'work_item',
+      aggregateId: input.workItemId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'work_item_details_updated',
+      payload: { item },
+    });
+  }
+
+  async changeWorkItemAssignment(input: {
+    readonly groupId: string;
+    readonly workItemId: string;
+    readonly expectedRevision: number;
+    readonly ownerPrincipalId: string;
+    readonly preferredExecutorId?: string | null;
+    readonly requireAcknowledgement?: boolean;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'work_item',
+      aggregateId: input.workItemId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'work_item_assignment_changed',
+      payload: {
+        owner_principal_id: input.ownerPrincipalId,
+        preferred_executor_id: input.preferredExecutorId ?? null,
+        assignment_status:
+          !input.requireAcknowledgement &&
+          input.ownerPrincipalId === group.localPrincipalId
+            ? 'accepted'
+            : 'pending',
+      },
+    });
+  }
+
+  async answerWorkItemAssignment(input: {
+    readonly groupId: string;
+    readonly workItemId: string;
+    readonly expectedRevision: number;
+    readonly accepted: boolean;
+    readonly reason?: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'work_item',
+      aggregateId: input.workItemId,
+      expectedRevision: input.expectedRevision,
+      eventType: input.accepted
+        ? 'work_item_assignment_acknowledged'
+        : 'work_item_assignment_declined',
+      payload: input.accepted ? {} : { reason: input.reason ?? 'declined' },
+    });
+  }
+
+  async changeWorkItemStatus(input: {
+    readonly groupId: string;
+    readonly workItemId: string;
+    readonly expectedRevision: number;
+    readonly status: WorkItemStatus;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'work_item',
+      aggregateId: input.workItemId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'work_item_status_changed',
+      payload: {
+        status: input.status,
+        closed_at: ['done', 'cancelled'].includes(input.status)
+          ? new Date(this.now()).toISOString()
+          : null,
+      },
+    });
+  }
+
+  async postWorkItemProgress(input: {
+    readonly groupId: string;
+    readonly workItemId: string;
+    readonly expectedRevision: number;
+    readonly summary: string;
+    readonly completed?: readonly string[];
+    readonly nextSteps?: readonly string[];
+    readonly blockers?: readonly string[];
+    readonly artifactRefs?: readonly string[];
+    readonly executorId?: string | null;
+    readonly origin?: 'human' | 'agent' | 'workflow';
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const update = workItemProgressSchema.parse({
+      format: 'icarus.collaboration-work-item-progress/1',
+      update_id: newId('update'),
+      work_item_id: input.workItemId,
+      summary: input.summary,
+      completed: [...(input.completed ?? [])],
+      next_steps: [...(input.nextSteps ?? [])],
+      blockers: [...(input.blockers ?? [])],
+      artifact_refs: [...(input.artifactRefs ?? [])],
+      actor_principal_id: group.localPrincipalId,
+      actor_client_id: group.localClientId,
+      executor_id: input.executorId ?? null,
+      origin: input.origin ?? 'human',
+      created_at: new Date(this.now()).toISOString(),
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'work_item',
+      aggregateId: input.workItemId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'work_item_progress_posted',
+      payload: { update },
+      executorId: input.executorId ?? null,
+    });
+  }
+
+  async changeWorkItemRelations(input: {
+    readonly groupId: string;
+    readonly workItemId: string;
+    readonly expectedRevision: number;
+    readonly parentId?: string | null;
+    readonly blockedBy?: readonly string[];
+    readonly relatedItems?: readonly string[];
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'work_item',
+      aggregateId: input.workItemId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'work_item_relation_changed',
+      payload: {
+        parent_id: input.parentId ?? null,
+        blocked_by: [...(input.blockedBy ?? [])],
+        related_items: [...(input.relatedItems ?? [])],
+      },
+    });
+  }
+
+  async archiveWorkItem(input: {
+    readonly groupId: string;
+    readonly workItemId: string;
+    readonly expectedRevision: number;
+    readonly reason: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'work_item',
+      aggregateId: input.workItemId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'work_item_archived',
+      payload: { reason: input.reason },
+    });
+  }
+
+  async createDiscussion(input: {
+    readonly groupId: string;
+    readonly expectedRevision?: 0;
+    readonly threadId?: string;
+    readonly title: string;
+    readonly scope: Discussion['scope'];
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const discussion = discussionSchema.parse({
+      format: 'icarus.collaboration-discussion/1',
+      thread_id: input.threadId ?? newId('thread'),
+      title: input.title,
+      created_by: group.localPrincipalId,
+      scope: input.scope,
+      status: 'open',
+      created_at: new Date(this.now()).toISOString(),
+      resolved_at: null,
+      revision: 1,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'discussion',
+      aggregateId: discussion.thread_id,
+      expectedRevision: input.expectedRevision ?? 0,
+      eventType: 'discussion_created',
+      payload: { discussion },
+    });
+  }
+
+  async postDiscussionMessage(input: {
+    readonly groupId: string;
+    readonly threadId: string;
+    readonly expectedRevision: number;
+    readonly messageId?: string;
+    readonly body: string;
+    readonly mentions?: readonly string[];
+    readonly refs?: readonly string[];
+    readonly executorId?: string | null;
+    readonly origin?: 'human' | 'agent' | 'workflow';
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const now = new Date(this.now()).toISOString();
+    const message = discussionMessageSchema.parse({
+      format: 'icarus.collaboration-message/1',
+      message_id: input.messageId ?? newId('message'),
+      thread_id: input.threadId,
+      author_principal_id: group.localPrincipalId,
+      actor_client_id: group.localClientId,
+      executor_id: input.executorId ?? null,
+      origin: input.origin ?? 'human',
+      body: input.body,
+      mentions: [...(input.mentions ?? [])],
+      refs: [...(input.refs ?? [])],
+      revision: 1,
+      tombstoned: false,
+      created_at: now,
+      updated_at: now,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'discussion',
+      aggregateId: input.threadId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'message_posted',
+      payload: { message },
+      executorId: input.executorId ?? null,
+    });
+  }
+
+  async reviseDiscussionMessage(input: {
+    readonly groupId: string;
+    readonly threadId: string;
+    readonly expectedRevision: number;
+    readonly messageId: string;
+    readonly body: string;
+    readonly mentions?: readonly string[];
+    readonly refs?: readonly string[];
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const history = await this.sync(input.groupId);
+    const previous =
+      history.projection.discussions[input.threadId]?.messages[input.messageId];
+    if (!previous) throw new Error('Discussion message does not exist');
+    if (previous.author_principal_id !== group.localPrincipalId)
+      throw new Error('Only the message author may revise it');
+    const message = discussionMessageSchema.parse({
+      ...previous,
+      actor_client_id: group.localClientId,
+      body: input.body,
+      mentions: input.mentions ? [...input.mentions] : previous.mentions,
+      refs: input.refs ? [...input.refs] : previous.refs,
+      revision: previous.revision + 1,
+      updated_at: new Date(this.now()).toISOString(),
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'discussion',
+      aggregateId: input.threadId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'message_revised',
+      payload: { message },
+    });
+  }
+
+  async tombstoneDiscussionMessage(input: {
+    readonly groupId: string;
+    readonly threadId: string;
+    readonly expectedRevision: number;
+    readonly messageId: string;
+    readonly reason?: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'discussion',
+      aggregateId: input.threadId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'message_tombstoned',
+      payload: {
+        message_id: input.messageId,
+        reason: input.reason ?? '',
+      },
+    });
+  }
+
+  async setDiscussionResolved(input: {
+    readonly groupId: string;
+    readonly threadId: string;
+    readonly expectedRevision: number;
+    readonly resolved: boolean;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'discussion',
+      aggregateId: input.threadId,
+      expectedRevision: input.expectedRevision,
+      eventType: input.resolved ? 'discussion_resolved' : 'discussion_reopened',
+      payload: {},
+    });
+  }
+
+  refreshDueNotifications(groupId: string): number {
+    const group = this.requireLocalMember(groupId);
+    const projection = group.projection;
+    if (!projection) return 0;
+    let enqueued = 0;
+    for (const item of Object.values(projection.workItems)) {
+      if (
+        !item.due_at ||
+        item.archived ||
+        ['done', 'cancelled'].includes(item.status) ||
+        Date.parse(item.due_at) > this.now()
+      )
+        continue;
+      const recipient = group.localPrincipalId!;
+      const isAdmin =
+        recipient === projection.group.owner_principal_id ||
+        projection.permissionGrants[recipient]?.grants.includes('group:admin');
+      if (
+        recipient !== item.owner_principal_id &&
+        !item.watchers.includes(recipient) &&
+        !isAdmin
+      )
+        continue;
+      const result = this.store.enqueueNotification({
+        groupId,
+        recipientPrincipalId: recipient,
+        recipientClientId: group.localClientId!,
+        kind: 'work_item_due',
+        resourceType: 'work_item',
+        resourceId: item.work_item_id,
+        reason: 'due_at_reached',
+        dedupeKey: `work-item-due:${groupId}:${item.work_item_id}:${item.due_at}:${recipient}`,
+        dueAtMs: Date.parse(item.due_at),
+        payload: { due_at: item.due_at, status: item.status },
+        nowMs: this.now(),
+      });
+      if (result.enqueued) enqueued += 1;
+    }
+    return enqueued;
   }
 
   async readVerifiedFile(input: {
@@ -886,6 +1365,7 @@ export class CollaborationProjectSpaceService {
           occurredAt: new Date(this.now()).toISOString(),
           payload,
         });
+        reduceCollaborationEventV3(history.projection, event);
         return input.materializedFiles
           ? { event, materializedFiles: input.materializedFiles }
           : event;
@@ -903,6 +1383,11 @@ export class CollaborationProjectSpaceService {
     groupId: string,
     history: ValidatedProjectSpaceHistory,
   ): void {
+    const knownEventIds = new Set(
+      this.store
+        .listEventRecords(groupId)
+        .map((record) => record.event.event_id),
+    );
     this.histories.set(groupId, history);
     this.store.saveVerifiedProjection({
       groupId,
@@ -911,6 +1396,45 @@ export class CollaborationProjectSpaceService {
       eventRecords: history.eventRecords,
       nowMs: this.now(),
     });
+    const group = this.store.getGroup(groupId);
+    if (
+      group?.subscriptionMode !== 'member' ||
+      !group.localPrincipalId ||
+      !group.localClientId
+    )
+      return;
+    for (const record of history.eventRecords) {
+      if (knownEventIds.has(record.event.event_id)) continue;
+      if (
+        !['message_posted', 'message_revised'].includes(record.event.event_type)
+      )
+        continue;
+      const parsed = discussionMessageSchema.safeParse(
+        record.event.payload.message,
+      );
+      if (
+        !parsed.success ||
+        parsed.data.author_principal_id === group.localPrincipalId ||
+        !parsed.data.mentions.includes(group.localPrincipalId)
+      )
+        continue;
+      this.store.enqueueNotification({
+        groupId,
+        recipientPrincipalId: group.localPrincipalId,
+        recipientClientId: group.localClientId,
+        kind: 'discussion_mention',
+        resourceType: 'discussion',
+        resourceId: parsed.data.thread_id,
+        reason: 'mentioned',
+        dedupeKey: `discussion-mention:${groupId}:${parsed.data.message_id}:${String(parsed.data.revision)}:${group.localPrincipalId}`,
+        payload: {
+          message_id: parsed.data.message_id,
+          author_principal_id: parsed.data.author_principal_id,
+        },
+        nowMs: this.now(),
+      });
+    }
+    this.refreshDueNotifications(groupId);
   }
 
   private requireLocalMember(

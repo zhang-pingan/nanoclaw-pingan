@@ -381,4 +381,225 @@ describe('Collaboration project space v3 Group and identity service', () => {
     ).rejects.toThrow(/verified size and sha256/u);
     owner.store.close();
   });
+
+  it('manages parallel Work Items, append-only progress, relations, and due reminders', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/project.git',
+      name: 'Project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_project',
+    });
+    await owner.service.createWorkItem({
+      groupId: 'group_project',
+      workItemId: 'wi_api',
+      type: 'task',
+      title: 'Implement API',
+      dueAt: '2026-08-05T12:00:00.000Z',
+    });
+    await owner.service.createWorkItem({
+      groupId: 'group_project',
+      workItemId: 'wi_test',
+      type: 'issue',
+      title: 'Add regression tests',
+    });
+    const related = await owner.service.changeWorkItemRelations({
+      groupId: 'group_project',
+      workItemId: 'wi_api',
+      expectedRevision: 1,
+      blockedBy: ['wi_test'],
+    });
+    expect(related.projection?.workItems.wi_api.blocked_by).toEqual([
+      'wi_test',
+    ]);
+    expect(related.projection?.workItems.wi_test.revision).toBe(1);
+
+    const progressed = await owner.service.postWorkItemProgress({
+      groupId: 'group_project',
+      workItemId: 'wi_api',
+      expectedRevision: 2,
+      summary: 'Route implementation complete',
+      completed: ['POST /work-items'],
+    });
+    expect(progressed.projection?.workItemUpdates.wi_api).toEqual([
+      expect.objectContaining({ summary: 'Route implementation complete' }),
+    ]);
+    await owner.service.changeWorkItemStatus({
+      groupId: 'group_project',
+      workItemId: 'wi_api',
+      expectedRevision: 3,
+      status: 'in_progress',
+    });
+    await expect(
+      owner.service.changeWorkItemStatus({
+        groupId: 'group_project',
+        workItemId: 'wi_test',
+        expectedRevision: 1,
+        status: 'done',
+      }),
+    ).rejects.toThrow(/Invalid Work Item transition/u);
+
+    expect(owner.service.refreshDueNotifications('group_project')).toBe(0);
+    expect(
+      owner.store.listPendingNotifications({
+        principalId: ALICE.principalId,
+        clientId: ALICE.clientId,
+        groupId: 'group_project',
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        kind: 'work_item_due',
+        resourceId: 'wi_api',
+      }),
+    ]);
+    owner.store.close();
+  });
+
+  it('forces Executor-created Work Items to PROPOSED and preserves Principal ownership', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/project.git',
+      name: 'Project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_project',
+    });
+    await owner.service.registerExecutor({
+      groupId: 'group_project',
+      expectedRevision: 0,
+      executorId: 'executor_codex',
+      displayName: 'Codex',
+      kind: 'codex',
+    });
+    const created = await owner.service.createWorkItem({
+      groupId: 'group_project',
+      workItemId: 'wi_found',
+      type: 'issue',
+      title: 'Discovered failure',
+      status: 'open',
+      executorId: 'executor_codex',
+    });
+    expect(created.projection?.workItems.wi_found).toMatchObject({
+      status: 'proposed',
+      owner_principal_id: ALICE.principalId,
+      preferred_executor_id: null,
+    });
+    owner.store.close();
+  });
+
+  it('enforces Discussion authorship and persists deduplicated mention notifications', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/project.git',
+      name: 'Project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_project',
+    });
+    const bobIdentity: CollaborationPrincipalIdentity = {
+      ...ALICE,
+      principalId: 'principal_sha256_bob',
+      clientId: 'client_bob',
+      publicKey:
+        'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXQfKE4hE1m3sXEXAMPLEreview',
+      keyRef: 'ssh-ed25519:SHA256:bob',
+    };
+    const bob = service(tempDirectory(), transport, bobIdentity);
+    const joined = await bob.service.joinGroup({
+      remoteUrl: '/tmp/project.git',
+      signingKeyPath: '/tmp/bob',
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    const membershipRevision =
+      joined.projection?.aggregateHeads[`membership:${bobIdentity.principalId}`]
+        ?.revision ?? 0;
+    await owner.service.updatePermissions({
+      groupId: 'group_project',
+      principalId: bobIdentity.principalId,
+      grants: ['discussion:create', 'discussion:post'],
+      expectedRevision: membershipRevision,
+    });
+    await owner.service.createDiscussion({
+      groupId: 'group_project',
+      threadId: 'thread_api',
+      title: 'API review',
+      scope: { type: 'group' },
+    });
+    await owner.service.postDiscussionMessage({
+      groupId: 'group_project',
+      threadId: 'thread_api',
+      expectedRevision: 1,
+      messageId: 'message_review',
+      body: 'Please review the API.',
+      mentions: [bobIdentity.principalId],
+    });
+    await bob.service.sync('group_project');
+    await bob.service.sync('group_project');
+    expect(
+      bob.store.listPendingNotifications({
+        principalId: bobIdentity.principalId,
+        clientId: bobIdentity.clientId,
+        groupId: 'group_project',
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        kind: 'discussion_mention',
+        resourceId: 'thread_api',
+      }),
+    ]);
+    await expect(
+      bob.service.reviseDiscussionMessage({
+        groupId: 'group_project',
+        threadId: 'thread_api',
+        expectedRevision: 2,
+        messageId: 'message_review',
+        body: "I rewrote Alice's message.",
+      }),
+    ).rejects.toThrow(/Only the message author/u);
+
+    const posted = await bob.service.postDiscussionMessage({
+      groupId: 'group_project',
+      threadId: 'thread_api',
+      expectedRevision: 2,
+      messageId: 'message_bob',
+      body: 'Reviewed and approved.',
+    });
+    expect(
+      posted.projection?.discussions.thread_api.messages.message_bob
+        .author_principal_id,
+    ).toBe(bobIdentity.principalId);
+    await bob.service.reviseDiscussionMessage({
+      groupId: 'group_project',
+      threadId: 'thread_api',
+      expectedRevision: 3,
+      messageId: 'message_bob',
+      body: 'Reviewed and approved with one note.',
+    });
+    await owner.service.setDiscussionResolved({
+      groupId: 'group_project',
+      threadId: 'thread_api',
+      expectedRevision: 4,
+      resolved: true,
+    });
+    const final = await bob.service.sync('group_project');
+    expect(final.projection.discussions.thread_api.discussion.status).toBe(
+      'resolved',
+    );
+    owner.store.close();
+    bob.store.close();
+  });
 });
