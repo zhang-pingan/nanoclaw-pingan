@@ -10,17 +10,17 @@ import {
   RunOnceActionExecutor,
   WorkflowActionExecutor,
 } from './executors/index.js';
-import { CollaborationGitTransport } from './git-transport.js';
-import { CollaborationIdentityService } from './identity.js';
-import { CollaborationScheduler } from './scheduler.js';
-import { CollaborationGroupService } from './service.js';
+import { CollaborationProjectSpaceGitTransport } from './project-space-git.js';
+import { CollaborationProjectSpaceIdentityService } from './project-space-identity.js';
+import { CollaborationProjectSpaceService } from './project-space-service.js';
 import {
-  CollaborationStore,
-  createCollaborationBackup,
-  rollbackCollaborationRestore,
-  restoreCollaborationBackup,
-  type CollaborationBackupManifest,
-} from './store.js';
+  CollaborationProjectSpaceStore,
+  createCollaborationProjectSpaceBackup,
+  restoreCollaborationProjectSpaceBackup,
+  rollbackCollaborationProjectSpaceRestore,
+  type CollaborationProjectSpaceBackupManifest,
+} from './project-space-store.js';
+import { CollaborationScheduler } from './scheduler.js';
 
 export interface CollaborationRuntimeOptions {
   readonly storeDir: string;
@@ -41,6 +41,7 @@ export interface CollaborationRuntimeStatus {
   readonly available: boolean;
   readonly databasePath: string;
   readonly repositoryRoot: string;
+  readonly protocolVersion: 3;
   readonly error: string | null;
   readonly scheduler: ReturnType<CollaborationScheduler['diagnostics']> | null;
 }
@@ -48,8 +49,8 @@ export interface CollaborationRuntimeStatus {
 export class CollaborationRuntime {
   readonly databasePath: string;
   readonly repositoryRoot: string;
-  private storeValue: CollaborationStore | null = null;
-  private groupsValue: CollaborationGroupService | null = null;
+  private storeValue: CollaborationProjectSpaceStore | null = null;
+  private groupsValue: CollaborationProjectSpaceService | null = null;
   private schedulerValue: CollaborationScheduler | null = null;
   private registryValue: ActionExecutorRegistry | null = null;
   private errorValue: string | null = null;
@@ -66,12 +67,12 @@ export class CollaborationRuntime {
   start(): boolean {
     if (this.storeValue) return true;
     try {
-      const store = new CollaborationStore(this.databasePath);
-      const groups = new CollaborationGroupService(
+      const store = new CollaborationProjectSpaceStore(this.databasePath);
+      const groups = new CollaborationProjectSpaceService(
         store,
-        new CollaborationGitTransport(),
+        new CollaborationProjectSpaceGitTransport(),
         this.repositoryRoot,
-        new CollaborationIdentityService(this.options.storeDir),
+        new CollaborationProjectSpaceIdentityService(this.options.storeDir),
         this.options.now,
       );
       const registry = new ActionExecutorRegistry();
@@ -101,13 +102,11 @@ export class CollaborationRuntime {
       scheduler.start();
       this.options.logger.info(
         {
+          protocolVersion: 3,
           databasePath: this.databasePath,
           repositoryRoot: this.repositoryRoot,
-          workflowExecutor: Boolean(this.options.workflowHost),
-          codexDesktopVisibilityConfirmed:
-            this.options.codex.desktopVisibilityConfirmed,
         },
-        'Collaboration Runtime started',
+        'Collaboration project-space v3 Runtime started',
       );
       return true;
     } catch (error) {
@@ -120,7 +119,7 @@ export class CollaborationRuntime {
       this.registryValue = null;
       this.options.logger.error(
         { error: this.errorValue, databasePath: this.databasePath },
-        'Collaboration Runtime is unavailable; other Host services remain active',
+        'Collaboration project-space v3 Runtime is unavailable',
       );
       return false;
     }
@@ -153,12 +152,13 @@ export class CollaborationRuntime {
       available: Boolean(this.storeValue),
       databasePath: this.databasePath,
       repositoryRoot: this.repositoryRoot,
+      protocolVersion: 3,
       error: this.errorValue,
       scheduler: this.schedulerValue?.diagnostics() ?? null,
     };
   }
 
-  get store(): CollaborationStore {
+  get store(): CollaborationProjectSpaceStore {
     if (!this.storeValue)
       throw new Error(
         this.errorValue
@@ -168,10 +168,10 @@ export class CollaborationRuntime {
     return this.storeValue;
   }
 
-  get groups(): CollaborationGroupService {
+  get groups(): CollaborationProjectSpaceService {
     if (!this.groupsValue) {
       void this.store;
-      throw new Error('Collaboration Group Service is unavailable');
+      throw new Error('Collaboration Project Space Service is unavailable');
     }
     return this.groupsValue;
   }
@@ -184,21 +184,28 @@ export class CollaborationRuntime {
     return this.schedulerValue;
   }
 
+  get executors(): ActionExecutorRegistry {
+    if (!this.registryValue) {
+      void this.store;
+      throw new Error('Collaboration Executor Registry is unavailable');
+    }
+    return this.registryValue;
+  }
+
   async createBackup(
     backupDirectory: string,
-  ): Promise<CollaborationBackupManifest> {
+  ): Promise<CollaborationProjectSpaceBackupManifest> {
     void this.store;
     await this.stop();
     try {
-      return createCollaborationBackup({
+      return createCollaborationProjectSpaceBackup({
         databasePath: this.databasePath,
         backupDirectory,
       });
     } finally {
       if (!this.start())
         throw new Error(
-          this.errorValue ||
-            'Collaboration Runtime could not restart after backup',
+          this.errorValue || 'Collaboration Runtime could not restart',
         );
     }
   }
@@ -210,7 +217,7 @@ export class CollaborationRuntime {
     await this.stop();
     let rollbackDirectory: string | null = null;
     try {
-      const result = restoreCollaborationBackup({
+      const result = restoreCollaborationProjectSpaceBackup({
         databasePath: this.databasePath,
         backupDirectory,
       });
@@ -219,27 +226,19 @@ export class CollaborationRuntime {
         const restoredError =
           this.errorValue || 'Restored Collaboration Runtime could not start';
         if (!rollbackDirectory) throw new Error(restoredError);
-        rollbackCollaborationRestore({
+        rollbackCollaborationProjectSpaceRestore({
           databasePath: this.databasePath,
           rollbackDirectory,
         });
         rollbackDirectory = null;
         if (!this.start())
           throw new Error(
-            `${restoredError}; the previous Collaboration Runtime also could not restart: ${this.errorValue ?? 'unknown error'}`,
+            `${restoredError}; previous database also failed to restart`,
           );
-        throw new Error(
-          `${restoredError}; the previous Collaboration database was restored`,
-        );
+        throw new Error(`${restoredError}; previous database was restored`);
       }
       return result;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!this.storeValue) this.errorValue = message;
-      this.options.logger.error(
-        { error: message, backupDirectory },
-        'Collaboration backup restore failed',
-      );
       if (!this.storeValue) this.start();
       throw error;
     }

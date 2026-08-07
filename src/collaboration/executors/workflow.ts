@@ -59,7 +59,7 @@ export class WorkflowActionExecutor implements ActionExecutor {
   async prepare(request: ActionRequest): Promise<PreparedAction> {
     if (request.action.kind !== 'workflow')
       throw new Error('WorkflowActionExecutor received another action kind');
-    if (!request.action.input.workflow_ref)
+    if (!request.action.workflow_ref)
       throw new ActionBlockedError(
         'workflow_runtime_unavailable',
         'Workflow action has no workflow_ref',
@@ -73,7 +73,7 @@ export class WorkflowActionExecutor implements ActionExecutor {
     let started: FiniteWorkflowCreationReceipt;
     try {
       started = this.host.startCollaborationFiniteRun({
-        workflowRef: action.action.input.workflow_ref!,
+        workflowRef: action.action.workflow_ref!,
         operationKey: action.operationKey,
         promptSha256: promptHash(action.prompt),
         bindingConfig: action.binding.config,
@@ -91,7 +91,7 @@ export class WorkflowActionExecutor implements ActionExecutor {
       activation_id: started.activation.activationId,
       creation_disposition: started.disposition,
       activation_disposition: started.activation.disposition,
-      workflow_ref: action.action.input.workflow_ref,
+      workflow_ref: action.action.workflow_ref,
     };
     const receipt: DispatchReceipt = {
       executionRef,
@@ -184,7 +184,7 @@ export class WorkflowActionExecutor implements ActionExecutor {
           ? 'cancelled'
           : 'failure';
     const result = collaborationActionResultSchema.parse({
-      format: 'icarus.collaboration-action-result/2',
+      format: 'icarus.collaboration-action-result/3',
       outcome,
       summary:
         observation.state === 'succeeded'

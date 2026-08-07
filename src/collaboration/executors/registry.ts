@@ -1,7 +1,7 @@
-import type { ActionDefinition } from '../protocol/index.js';
+import type { ActionDefinitionV3 } from '../protocol/v3-schema.js';
 import type { ActionExecutor } from './types.js';
 
-function key(kind: ActionDefinition['kind'], adapter?: string): string {
+function key(kind: ActionDefinitionV3['kind'], adapter?: string): string {
   return kind === 'external' ? `${kind}:${adapter ?? ''}` : kind;
 }
 
@@ -19,8 +19,8 @@ export class ActionExecutorRegistry {
     this.executors.set(id, executor);
   }
 
-  resolve(action: ActionDefinition): ActionExecutor {
-    const id = key(action.kind, action.adapter);
+  resolve(action: ActionDefinitionV3): ActionExecutor {
+    const id = key(action.kind, action.adapter ?? undefined);
     const executor = this.executors.get(id);
     if (!executor)
       throw new Error(`Collaboration Action Executor is not configured: ${id}`);

@@ -9,8 +9,11 @@ import {
   type WorkflowExecutionHostGateway,
 } from '../../workflow-execution/host-service.js';
 import type { WorkflowRuntimeStore } from '../../workflow-runtime/gateway/connection.js';
-import type { ActionDefinition } from '../protocol/index.js';
-import type { CollaborationExecutorBinding } from '../store.js';
+import type { CollaborationExecutorBindingV3 } from '../project-space-store.js';
+import type {
+  ActionDefinitionV3,
+  CollaborationTurnV3,
+} from '../protocol/v3-schema.js';
 import { WorkflowActionExecutor } from './workflow.js';
 import type { ActionRequest } from './types.js';
 
@@ -43,33 +46,37 @@ const creationTemplate = {
   initialActivation: {},
 } as unknown as FiniteWorkflowCreationTemplate;
 
-function action(): ActionDefinition {
+function action(): ActionDefinitionV3 {
   return {
-    format: 'icarus.agent-group-action/2',
+    format: 'icarus.collaboration-action/1',
     action_id: 'workflow-action',
-    role: 'reviewer',
-    state_id: 'review',
+    name: 'Review workflow',
+    owner_principal_id: 'principal_alice',
+    version: 1,
     kind: 'workflow',
-    input: {
-      prompt_ref: 'prompts/workflow.md',
-      workflow_ref: 'workflow:local-review',
-    },
-    requirements: { filesystem_access: 'read_only' },
-    result_schema: { ref: 'workflow-result@1' },
+    adapter: null,
+    workflow_ref: 'workflow:local-review',
+    prompt_ref: 'prompts/workflow.md',
+    prompt_hash: hash(prompt),
+    executor_policy: 'principal_selected',
+    filesystem_access: 'read_only',
+    result_schema: { ref: 'workflow-result@1', schema: null },
   };
 }
 
-function binding(): CollaborationExecutorBinding {
+function binding(): CollaborationExecutorBindingV3 {
   return {
-    groupId: 'ag_test',
+    groupId: 'group_test',
+    instanceId: 'instance_1',
     stateId: 'review',
-    implementationHash: `sha256:${'c'.repeat(64)}`,
+    principalId: 'principal_alice',
+    clientId: 'client_1',
     actionHash: `sha256:${'d'.repeat(64)}`,
+    promptHash: hash(prompt),
+    executorId: 'executor_local',
     executorKind: 'workflow',
-    adapter: null,
-    agentJid: null,
     workspacePath: '/tmp/workspace',
-    filesystemAccessCap: 'read_only',
+    filesystemAccess: 'read_only',
     approvalPolicy: 'never',
     config: {
       workflow_launch_profile: {
@@ -84,15 +91,49 @@ function binding(): CollaborationExecutorBinding {
   };
 }
 
+function turn(): CollaborationTurnV3 {
+  return {
+    format: 'icarus.collaboration-turn/1',
+    turn_id: 'turn_1',
+    workflow_instance_id: 'instance_1',
+    state_id: 'review',
+    assignee_principal_id: 'principal_alice',
+    claimant_principal_id: 'principal_alice',
+    claimant_client_id: 'client_1',
+    executor_id: 'executor_local',
+    attempt: 1,
+    fencing_token: `sha256:${'b'.repeat(64)}`,
+    execution_mode: 'automatic',
+    state: 'running',
+    action_ref: 'actions/review/action.json',
+    action_hash: `sha256:${'d'.repeat(64)}`,
+    prompt_hash: hash(prompt),
+    input_hash: `sha256:${'e'.repeat(64)}`,
+    idempotency_key: operationKey,
+    incoming_handoff: null,
+    incoming_handoff_hash: null,
+    timeout_policy_snapshot: null,
+    start_deadline_at: null,
+    execution_deadline_at: null,
+    deadline_snapshot_hash: `sha256:${'f'.repeat(64)}`,
+    created_at: '2026-08-06T00:00:00.000Z',
+    started_at: '2026-08-06T00:00:01.000Z',
+    completed_at: null,
+    outcome: null,
+    handoff: null,
+    handoff_hash: null,
+    recovery_reason: null,
+  };
+}
+
 function request(): ActionRequest {
   return {
     executionId: 'collaboration:workflow-1',
     operationKey,
-    groupId: 'ag_test',
-    turnId: 'turn_1',
+    groupId: 'group_test',
+    instanceId: 'instance_1',
+    turn: turn(),
     epoch: 1,
-    attempt: 1,
-    fencingToken: `sha256:${'b'.repeat(64)}`,
     action: action(),
     prompt,
     binding: binding(),

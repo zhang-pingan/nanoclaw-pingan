@@ -53,6 +53,7 @@ describe('CollaborationRuntime', () => {
     expect(selected.status()).toMatchObject({
       available: true,
       databasePath: path.join(storeDir, 'collaboration.db'),
+      protocolVersion: 3,
       error: null,
       scheduler: { running: true },
     });
@@ -66,9 +67,11 @@ describe('CollaborationRuntime', () => {
     expect(selected.start()).toBe(true);
     const backupDirectory = path.join(storeDir, 'backup');
     const manifest = await selected.createBackup(backupDirectory);
-    expect(manifest.files.map((file) => file.name)).toContain(
-      'collaboration.db',
-    );
+    expect(manifest).toMatchObject({
+      format: 'icarus.collaboration-backup/3',
+      database_basename: 'collaboration.db',
+      file: { size: expect.any(Number), sha256: expect.any(String) },
+    });
     expect(selected.status()).toMatchObject({
       available: true,
       scheduler: { running: true },
@@ -80,19 +83,21 @@ describe('CollaborationRuntime', () => {
     const storeDir = root();
     const selected = runtime(storeDir);
     expect(selected.start()).toBe(true);
-    selected.scheduler.stop();
     selected.store.registerGroup({
-      groupId: 'ag_slow_shutdown',
+      subscription: {
+        format: 'icarus.collaboration-subscription/1',
+        group_id: 'group_slow_shutdown',
+        remote_url: '/tmp/slow-remote.git',
+        subscription_mode: 'observer',
+        poll_interval_ms: 60_000,
+        last_verified_head: null,
+        notifications_enabled: true,
+        created_at: '2026-08-06T12:00:00.000Z',
+      },
       name: 'Slow shutdown',
-      creatorPrincipalId: 'alice',
-      localPrincipalId: 'alice',
-      localAgentId: 'agent_alice',
-      remoteUrl: '/tmp/slow-remote.git',
+      lifecycle: 'active',
+      ownerPrincipalId: 'principal_alice',
       repositoryPath: '/tmp/slow-repository.git',
-      signingKeyPath: '/tmp/slow-signing-key',
-      signingPublicKey: 'ssh-ed25519 test',
-      signingKeyRef: 'ssh-ed25519:SHA256:test',
-      pollIntervalMs: 15_000,
     });
     let enterSync!: () => void;
     const syncEntered = new Promise<void>((resolve) => {
@@ -102,15 +107,15 @@ describe('CollaborationRuntime', () => {
     const syncReleased = new Promise<void>((resolve) => {
       releaseSync = resolve;
     });
-    vi.spyOn(selected.groups, 'syncHistory').mockImplementation(async () => {
+    vi.spyOn(selected.groups, 'sync').mockImplementation(async () => {
       enterSync();
       await syncReleased;
       throw new Error('slow sync released');
     });
-    const releaseLock = vi.spyOn(selected.store, 'releaseGroupLock');
+    const releaseLock = vi.spyOn(selected.store, 'releaseProcessLock');
     const closeStore = vi.spyOn(selected.store, 'close');
 
-    const syncing = selected.scheduler.syncNow('ag_slow_shutdown');
+    const syncing = selected.scheduler.syncNow('group_slow_shutdown');
     await syncEntered;
     expect(
       selected.store
@@ -118,14 +123,14 @@ describe('CollaborationRuntime', () => {
         .prepare(
           'SELECT COUNT(*) AS count FROM collaboration_process_locks WHERE group_id = ?',
         )
-        .get('ag_slow_shutdown'),
+        .get('group_slow_shutdown'),
     ).toEqual({ count: 1 });
 
     const stopping = selected.stop();
     await Promise.resolve();
     expect(closeStore).not.toHaveBeenCalled();
     await expect(
-      selected.scheduler.syncNow('ag_slow_shutdown'),
+      selected.scheduler.syncNow('group_slow_shutdown'),
     ).rejects.toThrow(/quiescing/);
 
     releaseSync();
@@ -152,7 +157,7 @@ describe('CollaborationRuntime', () => {
     expect(selected.start()).toBe(false);
     expect(selected.status()).toMatchObject({
       available: false,
-      error: expect.stringMatching(/newer than supported|unsupported/i),
+      error: expect.stringMatching(/stale|reinitialize/i),
       scheduler: null,
     });
   });

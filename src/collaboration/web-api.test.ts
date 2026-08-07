@@ -1,107 +1,146 @@
 import http from 'node:http';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import type { CollaborationRuntime } from './runtime.js';
 import type {
-  CollaborationExecutionRecord,
-  CollaborationExecutorBinding,
-  CollaborationGroupRecord,
-  CollaborationSyncAttempt,
-} from './store.js';
-import {
-  CollaborationWebApi,
-  collaborationWebApiTestables,
-} from './web-api.js';
+  CollaborationActionExecutionV3,
+  CollaborationExecutorBindingV3,
+  CollaborationProjectSpaceGroupRecord,
+} from './project-space-store.js';
+import type { CollaborationProjectionV3 } from './protocol/v3-reducer.js';
+import type { CollaborationRuntime } from './runtime.js';
+import { CollaborationWebApi } from './web-api.js';
 
-function apiGroup(): CollaborationGroupRecord {
+const hash = (value: string) => `sha256:${value.repeat(64)}`;
+
+function projection(): CollaborationProjectionV3 {
   return {
-    groupId: 'ag_test',
-    name: 'Test',
-    creatorPrincipalId: 'alice',
-    localPrincipalId: 'alice',
-    localAgentId: 'agent_alice',
-    lifecycle: 'READY',
-    businessState: 'development',
-    protocolStatus: 'OK',
-    protocolError: null,
-    projection: null,
-    remoteUrl: '/tmp/remote.git',
-    repositoryPath: '/tmp/repository.git',
-    signingKeyPath: '/tmp/signing-key',
-    signingPublicKey: 'ssh-ed25519 public',
-    signingKeyRef: 'ssh-ed25519:SHA256:test',
-    pollIntervalMs: 15_000,
-    nextSyncAtMs: 1,
-    backoffAttempt: 0,
-    lastSyncAtMs: null,
+    workItems: {
+      work_1: { work_item_id: 'work_1', title: 'Ship v3', revision: 2 },
+    },
+    workItemUpdates: { work_1: [] },
+    discussions: {},
+    workflowDefinitions: {},
+    latestWorkflowDefinitionVersions: {},
+    workflowInstances: {},
+    stateExecutions: {},
+    turns: {},
+    activity: [],
+    members: {},
+    clients: {},
+    executors: {},
+    permissionGrants: {},
+  } as unknown as CollaborationProjectionV3;
+}
+
+function group(
+  subscriptionMode: 'observer' | 'member' = 'member',
+): CollaborationProjectSpaceGroupRecord {
+  return {
+    groupId: 'group_test',
+    name: 'Test project',
+    lifecycle: 'active',
+    ownerPrincipalId: 'principal_alice',
+    subscriptionMode,
+    localPrincipalId: subscriptionMode === 'member' ? 'principal_alice' : null,
+    localClientId: subscriptionMode === 'member' ? 'client_alice' : null,
+    remoteUrl:
+      'https://private-token@example.test/group.git?access_token=query-secret&ref=main',
+    repositoryPath: '/private/collaboration/repository.git',
+    signingKeyPath:
+      subscriptionMode === 'member' ? '/private/keys/id_ed25519' : null,
+    signingPublicKey: null,
+    signingKeyRef: null,
+    protocolStatus: 'verified',
+    protocolError:
+      'fetch https://private-token@example.test/group.git?access_token=query-secret failed',
+    projection: projection(),
+    pollIntervalMs: 60_000,
+    nextSyncAtMs: 0,
+    lastVerifiedHead: 'a'.repeat(40),
+    lastSyncAtMs: 1,
     lastError: null,
-    headCommit: 'head-1',
+    backoffAttempt: 0,
   };
 }
 
-function apiHistory() {
-  const implementationHash = `sha256:${'c'.repeat(64)}`;
-  const actionHash = `sha256:${'d'.repeat(64)}`;
+function binding(): CollaborationExecutorBindingV3 {
   return {
-    definition: {
-      machine: {
-        states: {
-          development: {
-            label: 'Development',
-            owner_role: 'developer',
-            terminal: false,
-            transitions: [{ outcome: 'completed', target_state: 'completed' }],
-          },
-          completed: { label: 'Completed', terminal: true, transitions: [] },
-        },
-      },
+    groupId: 'group_test',
+    instanceId: 'instance_1',
+    stateId: 'implementation',
+    principalId: 'principal_alice',
+    clientId: 'client_alice',
+    actionHash: hash('a'),
+    promptHash: hash('p'),
+    executorId: 'executor_1',
+    executorKind: 'external',
+    workspacePath: '/private/workspace',
+    filesystemAccess: 'workspace_write',
+    approvalPolicy: 'on-request',
+    config: {
+      adapter: 'codex-task',
+      api_token: 'provider-secret',
+      nested: { harmless: 'visible' },
     },
-    projection: {
-      activeTurnId: 'turn_1',
-      roleClaims: {
-        developer: [
-          {
-            principal_id: 'alice',
-            agent_id: 'agent_alice',
-          },
-        ],
-      },
-      stateImplementations: {
-        development: {
-          implementation: {
-            role: 'developer',
-            state_id: 'development',
-            owner: {
-              principal_id: 'alice',
-              agent_id: 'agent_alice',
-            },
-            mode: 'assisted',
-            action_ref: 'actions/developer/development/execute.yaml',
-          },
-          implementationHash,
-          actionHash,
-          action: {
-            kind: 'external',
-            adapter: 'codex-task',
-          },
-        },
-      },
-      turns: {
-        turn_1: {
-          turnId: 'turn_1',
-          stateId: 'development',
-          role: 'developer',
-          state: 'PENDING_START',
-          attempt: 1,
-        },
-      },
-    },
+    enabled: true,
+    updatedAtMs: 1,
   };
+}
+
+function execution(): CollaborationActionExecutionV3 {
+  return {
+    executionId: 'execution_1',
+    groupId: 'group_test',
+    instanceId: 'instance_1',
+    turnId: 'turn_1',
+    epoch: 1,
+    attempt: 1,
+    claimantClientId: 'client_alice',
+    fencingToken: hash('f'),
+    operationKey: hash('k'),
+    executorId: 'executor_1',
+    executorKind: 'external',
+    state: 'running',
+    executionRef: 'provider:secret-ref',
+    providerMetadata: { provider_secret: 'must-not-leak' },
+    receipt: { token: 'must-not-leak' },
+    observation: null,
+    recoveryRequiredReason: null,
+    dispatchStartedAtMs: 1,
+    receiptRecordedAtMs: 2,
+    providerCompletedAtMs: null,
+    createdAtMs: 1,
+    updatedAtMs: 2,
+  };
+}
+
+function runtime(
+  input: {
+    selectedGroup?: CollaborationProjectSpaceGroupRecord;
+    groups?: Record<string, unknown>;
+    store?: Record<string, unknown>;
+  } = {},
+): CollaborationRuntime {
+  const selectedGroup = input.selectedGroup ?? group();
+  return {
+    status: vi.fn(() => ({
+      available: true,
+      protocolVersion: 3,
+      error: null,
+      scheduler: { running: true },
+    })),
+    databasePath: '/private/collaboration.db',
+    store: {
+      getGroup: vi.fn(() => selectedGroup),
+      listGroups: vi.fn(() => [selectedGroup]),
+      listExecutorBindings: vi.fn(() => []),
+      listActionExecutions: vi.fn(() => []),
+      listPendingNotifications: vi.fn(() => []),
+      ...input.store,
+    },
+    groups: { ...input.groups },
+  } as unknown as CollaborationRuntime;
 }
 
 async function withApiServer(
@@ -123,879 +162,245 @@ async function withApiServer(
   }
 }
 
-describe('Collaboration Web API redaction', () => {
-  it('rejects attempts to override Host-generated collaboration identity', () => {
-    expect(() =>
-      collaborationWebApiTestables.rejectSystemIdentityOverrides({
-        remoteUrl: '/tmp/group.git',
-        principalId: 'caller-selected',
-        agentId: 'caller-selected',
-      }),
-    ).toThrow(/must not be provided.*generated by the Host/);
-    expect(() =>
-      collaborationWebApiTestables.rejectSystemIdentityOverrides({
-        principal_id: 'caller-selected',
-      }),
-    ).toThrow(/principal_id must not be provided/);
-    expect(() =>
-      collaborationWebApiTestables.rejectSystemIdentityOverrides({
-        remoteUrl: '/tmp/group.git',
-        signingKeyPath: '/tmp/signing-key',
-      }),
-    ).not.toThrow();
-  });
-
-  it('never serializes the signing key path or remote credentials', () => {
-    const group = {
-      groupId: 'ag_test',
-      name: 'Test',
-      creatorPrincipalId: 'alice',
-      localPrincipalId: 'alice',
-      localAgentId: 'agent_alice',
-      lifecycle: 'READY',
-      businessState: 'development',
-      protocolStatus: 'OK',
-      protocolError:
-        'git fetch https://private-token@example.test/group.git failed',
-      projection: null,
-      remoteUrl:
-        'https://private-token@example.test/group.git?accessToken=query-secret&ref=main',
-      repositoryPath: '/private/cache/repository.git',
-      signingKeyPath: '/private/keys/id_ed25519',
-      signingPublicKey: 'ssh-ed25519 public',
-      signingKeyRef: 'ssh-ed25519:SHA256:test',
-      pollIntervalMs: 15_000,
-      nextSyncAtMs: 1,
-      backoffAttempt: 0,
-      lastSyncAtMs: null,
-      lastError:
-        'https://private-token@example.test/group.git?accessToken=query-secret is unavailable',
-      headCommit: null,
-    } satisfies CollaborationGroupRecord;
-
-    const serialized = collaborationWebApiTestables.publicGroup(group);
-    expect(JSON.stringify(serialized)).not.toContain('/private/keys');
-    expect(JSON.stringify(serialized)).not.toContain('/private/cache');
-    expect(serialized.remoteUrl).toContain('redacted@');
-    expect(serialized.remoteUrl).toContain('accessToken=redacted');
-    expect(serialized.remoteUrl).toContain('ref=main');
-    expect(serialized.remoteUrl).not.toContain('query-secret');
-    expect(serialized.protocolError).not.toContain('private-token');
-    expect(serialized.lastError).not.toContain('private-token');
-    expect(serialized.lastError).not.toContain('query-secret');
-  });
-
-  it('allowlists provider fields and removes raw receipt/metadata', () => {
-    const execution = {
-      executionId: 'execution-1',
-      groupId: 'ag_test',
-      turnId: 'turn-1',
-      epoch: 1,
-      attempt: 1,
-      fencingToken: `sha256:${'a'.repeat(64)}`,
-      operationKey: `sha256:${'b'.repeat(64)}`,
-      executorKind: 'external',
-      adapter: 'codex-task',
-      state: 'running',
-      executionRef: 'collaboration-action:opaque',
-      providerMetadata: {
-        transport: 'app_server_stdio',
-        thread_id: 'thread-local',
-        turn_id: 'turn-local',
-        cli_version: '0.146.0',
-        provider_secret_id: 'must-not-leak',
+describe('Collaboration project-space v3 Web API', () => {
+  it('returns current-only status and redacts local/provider secrets', async () => {
+    const selected = runtime({
+      store: {
+        listExecutorBindings: vi.fn(() => [binding()]),
+        listActionExecutions: vi.fn(() => [execution()]),
       },
-      receipt: { private_receipt: 'must-not-leak' },
-      observation: {
-        state: 'running',
-        executionRef: 'collaboration-action:opaque',
-        providerMetadata: { provider_secret_id: 'must-not-leak' },
-        result: null,
-        resultHash: null,
-      },
-      pendingResultEvent: null,
-      recoveryRequiredReason: null,
-      dispatchStartedAtMs: 1,
-      receiptRecordedAtMs: 2,
-      providerCompletedAtMs: null,
-      createdAtMs: 1,
-      updatedAtMs: 2,
-    } satisfies CollaborationExecutionRecord;
-
-    const serialized = collaborationWebApiTestables.publicExecution(execution);
-    expect(serialized.provider).toMatchObject({
-      kind: 'codex-task',
-      threadId: 'thread-local',
-      turnId: 'turn-local',
     });
-    expect(JSON.stringify(serialized)).not.toContain('must-not-leak');
-    expect(serialized).not.toHaveProperty('receipt');
-    expect(serialized).not.toHaveProperty('providerMetadata');
-  });
+    await withApiServer(new CollaborationWebApi(selected), async (baseUrl) => {
+      const status = await fetch(`${baseUrl}/api/collaboration/status`);
+      expect(await status.json()).toMatchObject({
+        collaboration: { available: true, protocolVersion: 3 },
+      });
 
-  it('redacts secret-like executor config keys recursively', () => {
-    const binding = {
-      groupId: 'ag_test',
-      stateId: 'development',
-      implementationHash: `sha256:${'c'.repeat(64)}`,
-      actionHash: `sha256:${'d'.repeat(64)}`,
-      executorKind: 'external',
-      adapter: 'codex-task',
-      agentJid: null,
-      workspacePath: '/workspace',
-      filesystemAccessCap: 'workspace_write',
-      approvalPolicy: 'on-request',
-      config: {
-        transport: 'app_server',
-        nested: {
-          access_token: 'secret-value',
-          apiKey: 'api-secret',
-          clientSecret: 'client-secret',
-          harmless: 'visible',
-        },
-      },
-      enabled: true,
-      updatedAtMs: 1,
-    } satisfies CollaborationExecutorBinding;
-    expect(collaborationWebApiTestables.publicBinding(binding).config).toEqual({
-      transport: 'app_server',
-      nested: {
-        access_token: '[redacted]',
-        apiKey: '[redacted]',
-        clientSecret: '[redacted]',
-        harmless: 'visible',
-      },
+      const response = await fetch(
+        `${baseUrl}/api/collaboration/groups/group_test`,
+      );
+      const body = (await response.json()) as Record<string, unknown>;
+      const serialized = JSON.stringify(body);
+      expect(response.status).toBe(200);
+      expect(serialized).not.toContain('/private/');
+      expect(serialized).not.toContain('private-token');
+      expect(serialized).not.toContain('query-secret');
+      expect(serialized).not.toContain('provider-secret');
+      expect(serialized).not.toContain('must-not-leak');
+      expect(serialized).toContain('redacted');
+      expect(body).not.toHaveProperty('repositoryPath');
     });
   });
 
-  it('redacts credentials from standalone diagnostic URLs', () => {
-    const diagnostic = collaborationWebApiTestables.redactDiagnostic(
-      'clone https://user:password@example.test/group.git failed',
-    );
-    expect(diagnostic).toContain('https://redacted@example.test/group.git');
-    expect(diagnostic).not.toContain('password');
-  });
-
-  it('redacts credentials from sync history errors', () => {
-    const attempt = {
-      id: 1,
-      groupId: 'ag_test',
-      startedAtMs: 1,
-      completedAtMs: 2,
-      outcome: 'failed',
-      headBefore: 'before',
-      headAfter: 'after',
-      error:
-        'fetch https://user:password@example.test/group.git?accessToken=query-secret failed',
-      errorClass: 'runtime',
-    } satisfies CollaborationSyncAttempt;
-    const serialized = collaborationWebApiTestables.publicSyncAttempt(
-      attempt,
-      'https://user:password@example.test/group.git?accessToken=query-secret',
-    );
-    expect(serialized.error).toContain('redacted@example.test');
-    expect(serialized.error).toContain('accessToken=redacted');
-    expect(serialized.error).not.toContain('password');
-    expect(serialized.error).not.toContain('query-secret');
-  });
-
-  it('redacts credentials from integrity incident messages', () => {
-    const serialized = collaborationWebApiTestables.publicIntegrityIncident(
-      {
-        incidentId: 'incident_1',
-        message:
-          'fetch https://user:password@example.test/group.git?accessToken=query-secret failed',
-      },
-      'https://user:password@example.test/group.git?accessToken=query-secret',
-    );
-    expect(serialized.message).toContain('redacted@example.test');
-    expect(serialized.message).toContain('accessToken=redacted');
-    expect(serialized.message).not.toContain('password');
-    expect(serialized.message).not.toContain('query-secret');
-  });
-
-  it('never exposes a staged upload absolute path or local claimant identity', () => {
-    const serialized = collaborationWebApiTestables.publicStagedArtifact({
-      artifactId: 'artifact_1',
-      groupId: 'ag_test',
-      turnId: 'turn_1',
-      attempt: 2,
-      principalId: 'alice',
-      agentId: 'agent_alice',
-      originalName: 'report.txt',
-      repositoryPath: 'artifacts/turn_1/artifact_1-report.txt',
-      stagedPath: '/private/uploads/upload-1',
-      sha256: `sha256:${'a'.repeat(64)}`,
-      size: 10,
-      contentType: 'text/plain',
-      state: 'staged',
-      createdAtMs: 1,
-      expiresAtMs: 2,
-      committedAtMs: null,
-    });
-    expect(serialized).not.toHaveProperty('stagedPath');
-    expect(serialized).not.toHaveProperty('principalId');
-    expect(serialized).not.toHaveProperty('agentId');
-    expect(JSON.stringify(serialized)).not.toContain('/private/uploads');
-  });
-});
-
-describe('Collaboration Web API v2 authority boundaries', () => {
-  it('routes exact Role claim and release resources using the path Role', async () => {
-    const group = apiGroup();
-    const claimRole = vi.fn(async () => group);
-    const releaseRole = vi.fn(async () => group);
-    const runtime = {
-      status: () => ({
-        available: true,
-        databasePath: '/tmp/collaboration.db',
-        repositoryRoot: '/tmp/repositories',
-        error: null,
-        scheduler: null,
-      }),
-      store: { getGroup: () => group, listGroups: () => [group] },
-      groups: {
-        getCachedHistory: () => apiHistory(),
-        claimRole,
-        releaseRole,
-      },
-    } as unknown as CollaborationRuntime;
-    await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
-      const claim = await fetch(
-        `${baseUrl}/api/collaboration/groups/ag_test/roles/developer/claim`,
-        {
+  it('rejects Host-derived identity fields and duplicate JSON keys', async () => {
+    const createGroup = vi.fn();
+    await withApiServer(
+      new CollaborationWebApi(runtime({ groups: { createGroup } })),
+      async (baseUrl) => {
+        const override = await fetch(`${baseUrl}/api/collaboration/groups`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: 'reviewer' }),
-        },
-      );
-      expect(claim.status).toBe(200);
-      expect(claimRole).toHaveBeenCalledWith('ag_test', 'developer');
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ actorPrincipalId: 'principal_attacker' }),
+        });
+        expect(override.status).toBe(400);
+        expect(await override.json()).toMatchObject({
+          error: expect.stringMatching(/Host-derived/),
+        });
 
-      const release = await fetch(
-        `${baseUrl}/api/collaboration/groups/ag_test/roles/developer/claim`,
-        {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            role: 'reviewer',
-            expectedRevision: 11,
-          }),
-        },
-      );
-      expect(release.status).toBe(200);
-      expect(releaseRole).toHaveBeenCalledWith('ag_test', 'developer', 11);
-    });
-  });
-
-  it('returns the active shared Prompt from the validated Git head', async () => {
-    const repositoryPath = mkdtempSync(
-      path.join(os.tmpdir(), 'icarus-web-api-prompt-'),
-    );
-    try {
-      execFileSync('git', ['init', '-q'], { cwd: repositoryPath });
-      execFileSync('git', ['config', 'user.name', 'Collaboration Test'], {
-        cwd: repositoryPath,
-      });
-      execFileSync('git', ['config', 'user.email', 'test@example.invalid'], {
-        cwd: repositoryPath,
-      });
-      const promptRef = 'prompts/developer/development/execute-development.md';
-      mkdirSync(path.join(repositoryPath, path.dirname(promptRef)), {
-        recursive: true,
-      });
-      writeFileSync(
-        path.join(repositoryPath, promptRef),
-        'Use the shared review checklist.\n',
-      );
-      execFileSync('git', ['add', '.'], { cwd: repositoryPath });
-      execFileSync('git', ['commit', '-q', '-m', 'prompt fixture'], {
-        cwd: repositoryPath,
-      });
-      const head = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: repositoryPath,
-        encoding: 'utf8',
-      }).trim();
-      const baseHistory = apiHistory();
-      const history = {
-        ...baseHistory,
-        head,
-        projection: {
-          ...baseHistory.projection,
-          stateImplementations: {
-            development: {
-              ...baseHistory.projection.stateImplementations.development,
-              action: {
-                ...baseHistory.projection.stateImplementations.development
-                  .action,
-                input: { prompt_ref: promptRef },
-              },
-            },
+        const duplicate = await fetch(
+          `${baseUrl}/api/collaboration/groups/inspect`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: '{"remoteUrl":"first","remoteUrl":"second"}',
           },
-        },
-      };
-      const group = { ...apiGroup(), repositoryPath, headCommit: head };
-      const runtime = {
-        status: () => ({
-          available: true,
-          databasePath: path.join(repositoryPath, 'collaboration.db'),
-          repositoryRoot: repositoryPath,
-          error: null,
-          scheduler: null,
-        }),
-        store: {
-          getGroup: () => group,
-          listGroups: () => [group],
-          listExecutorBindings: () => [],
-          listExecutions: () => [],
-          listStagedArtifacts: () => [],
-          listPendingNotifications: () => [],
-        },
-        groups: { getCachedHistory: () => history },
-      } as unknown as CollaborationRuntime;
-
-      await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
-        const response = await fetch(
-          `${baseUrl}/api/collaboration/groups/ag_test`,
         );
-        expect(response.status).toBe(200);
-        await expect(response.json()).resolves.toMatchObject({
-          implementationPrompts: {
-            development: 'Use the shared review checklist.\n',
-          },
-        });
-      });
-    } finally {
-      rmSync(repositoryPath, { recursive: true, force: true });
-    }
-  });
-
-  it.each([
-    [{ principalId: 'caller' }, /principalId must not be provided/],
-    [{ agent_id: 'caller' }, /agent_id must not be provided/],
-    [{ actions: {} }, /creator-owned workflow skeleton/],
-    [{ prompts: {} }, /creator-owned workflow skeleton/],
-  ])(
-    'rejects create payload override %j before calling the service',
-    async (override, message) => {
-      const createGroup = vi.fn();
-      const runtime = {
-        status: () => ({
-          available: true,
-          databasePath: '/tmp/collaboration.db',
-          repositoryRoot: '/tmp/repositories',
-          error: null,
-          scheduler: null,
-        }),
-        store: { listGroups: () => [] },
-        groups: { createGroup },
-      } as unknown as CollaborationRuntime;
-      await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
-        const response = await fetch(`${baseUrl}/api/collaboration/groups`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            remoteUrl: '/tmp/group.git',
-            name: 'Test',
-            signingKeyPath: '/tmp/signing-key',
-            ...override,
-          }),
-        });
-        expect(response.status).toBe(400);
-        await expect(response.json()).resolves.toMatchObject({
-          error: expect.stringMatching(message),
+        expect(duplicate.status).toBe(400);
+        expect(await duplicate.json()).toMatchObject({
+          error: expect.stringMatching(/duplicate/i),
         });
         expect(createGroup).not.toHaveBeenCalled();
-      });
-    },
-  );
-
-  it('routes creator-owned Machine and layout updates without accepting executor fields', async () => {
-    const group = apiGroup();
-    const reviseMachine = vi.fn(async () => group);
-    const updateMachineLayout = vi.fn(async () => group);
-    const runtime = {
-      status: () => ({
-        available: true,
-        databasePath: '/tmp/collaboration.db',
-        repositoryRoot: '/tmp/repositories',
-        error: null,
-        scheduler: null,
-      }),
-      store: { getGroup: () => group },
-      groups: {
-        getCachedHistory: () => apiHistory(),
-        reviseMachine,
-        updateMachineLayout,
       },
-    } as unknown as CollaborationRuntime;
-    await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
-      const machine = await fetch(
-        `${baseUrl}/api/collaboration/groups/ag_test/machine`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            expectedRevision: 7,
-            machine: { initial_state: 'development', states: {} },
-            roles: { developer: {} },
-          }),
-        },
-      );
-      expect(machine.status).toBe(200);
-      expect(reviseMachine).toHaveBeenCalledWith({
-        groupId: 'ag_test',
-        expectedRevision: 7,
-        machine: { initial_state: 'development', states: {} },
-        roles: { developer: {} },
-      });
-
-      const layout = await fetch(
-        `${baseUrl}/api/collaboration/groups/ag_test/machine-layout`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            expectedRevision: 8,
-            layout: {
-              format: 'icarus.agent-group-machine-layout/1',
-              view: 'free',
-              nodes: {},
-            },
-          }),
-        },
-      );
-      expect(layout.status).toBe(200);
-      expect(updateMachineLayout).toHaveBeenCalledWith({
-        groupId: 'ag_test',
-        expectedRevision: 8,
-        layout: {
-          format: 'icarus.agent-group-machine-layout/1',
-          view: 'free',
-          nodes: {},
-        },
-      });
-
-      const rejected = await fetch(
-        `${baseUrl}/api/collaboration/groups/ag_test/machine`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            expectedRevision: 9,
-            machine: {},
-            roles: {},
-            actions: {},
-          }),
-        },
-      );
-      expect(rejected.status).toBe(400);
-      expect(reviseMachine).toHaveBeenCalledTimes(1);
-    });
+    );
   });
 
-  it.each(['executorKind', 'adapter', 'promptOverride'])(
-    'rejects local Binding override field %s',
-    async (field) => {
-      const group = apiGroup();
-      const history = apiHistory();
-      const saveExecutorBinding = vi.fn();
-      const runtime = {
-        status: () => ({
-          available: true,
-          databasePath: '/tmp/collaboration.db',
-          repositoryRoot: '/tmp/repositories',
-          error: null,
-          scheduler: null,
+  it('keeps Observer reads available while mutation authorization fails closed', async () => {
+    const createWorkItem = vi.fn(async () => {
+      throw new Error('Observer subscription is read-only');
+    });
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({
+          selectedGroup: group('observer'),
+          groups: { createWorkItem },
         }),
-        store: {
-          getGroup: () => group,
-          listGroups: () => [group],
-          saveExecutorBinding,
-        },
-        groups: { getCachedHistory: () => history },
-      } as unknown as CollaborationRuntime;
-      await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
-        const response = await fetch(
-          `${baseUrl}/api/collaboration/groups/ag_test/states/development/binding`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              workspacePath: '/tmp/workspace',
-              filesystemAccessCap: 'workspace_write',
-              approvalPolicy: 'on-request',
-              [field]: 'caller-selected',
-            }),
-          },
+      ),
+      async (baseUrl) => {
+        const read = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/work-items`,
         );
-        expect(response.status).toBe(400);
-        expect(saveExecutorBinding).not.toHaveBeenCalled();
-      });
-    },
-  );
+        expect(read.status).toBe(200);
+        expect(await read.json()).toMatchObject({
+          workItems: [{ work_item_id: 'work_1' }],
+        });
 
-  it('inherits Action type when saving a valid State Binding', async () => {
-    const group = apiGroup();
-    const history = apiHistory();
-    let saved: CollaborationExecutorBinding | null = null;
-    const runtime = {
-      status: () => ({
-        available: true,
-        databasePath: '/tmp/collaboration.db',
-        repositoryRoot: '/tmp/repositories',
-        error: null,
-        scheduler: null,
-      }),
-      store: {
-        getGroup: () => group,
-        listGroups: () => [group],
-        saveExecutorBinding: (binding: CollaborationExecutorBinding) => {
-          saved = { ...binding, updatedAtMs: 1 };
-        },
-        getExecutorBinding: () => saved,
-      },
-      groups: { getCachedHistory: () => history },
-    } as unknown as CollaborationRuntime;
-    await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
-      const response = await fetch(
-        `${baseUrl}/api/collaboration/groups/ag_test/states/development/binding`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            workspacePath: '/tmp/workspace',
-            filesystemAccessCap: 'workspace_write',
-            approvalPolicy: 'on-request',
-            config: { apiToken: 'must-redact', visible: true },
-          }),
-        },
-      );
-      expect(response.status).toBe(200);
-      expect(saved).toMatchObject({
-        stateId: 'development',
-        executorKind: 'external',
-        adapter: 'codex-task',
-      });
-      const body = (await response.json()) as { binding: { config: unknown } };
-      expect(body.binding.config).toEqual({
-        apiToken: '[redacted]',
-        visible: true,
-      });
-    });
-  });
-
-  it.each(['targetState', 'target_state', 'nextState'])(
-    'rejects completion target override %s',
-    async (field) => {
-      const group = apiGroup();
-      const history = apiHistory();
-      const completeTurn = vi.fn();
-      const runtime = {
-        status: () => ({
-          available: true,
-          databasePath: '/tmp/collaboration.db',
-          repositoryRoot: '/tmp/repositories',
-          error: null,
-          scheduler: null,
-        }),
-        store: { getGroup: () => group, listGroups: () => [group] },
-        groups: { getCachedHistory: () => history, completeTurn },
-      } as unknown as CollaborationRuntime;
-      await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
-        const response = await fetch(
-          `${baseUrl}/api/collaboration/groups/ag_test/turns/turn_1/complete`,
+        const write = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/work-items`,
           {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              expectedRevision: 7,
-              outcome: 'completed',
-              summary: 'Done',
-              [field]: 'completed',
-            }),
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ type: 'task', title: 'Unauthorized' }),
           },
         );
-        expect(response.status).toBe(400);
-        expect(completeTurn).not.toHaveBeenCalled();
-      });
-    },
-  );
-
-  it('records only a current notification for the local recipient', async () => {
-    const group = apiGroup();
-    const history = apiHistory();
-    const notification = {
-      notificationId: 'notification_turn_1',
-      groupId: 'ag_test',
-      turnId: 'turn_1',
-      attempt: 1,
-      kind: 'turn_created',
-      deadlineKind: 'start',
-      recipientPrincipalId: 'alice',
-      recipientAgentId: 'agent_alice',
-      reminderOrdinal: 0,
-      deadlineAtMs: null,
-      firstDiscoveredAtMs: 1,
-      localObservedAtMs: 1,
-      deliveredAtMs: null,
-    } as const;
-    const markNotificationDelivered = vi.fn(() => true);
-    const runtime = {
-      status: () => ({
-        available: true,
-        databasePath: '/tmp/collaboration.db',
-        repositoryRoot: '/tmp/repositories',
-        error: null,
-        scheduler: null,
-      }),
-      store: {
-        getGroup: () => group,
-        listGroups: () => [group],
-        listPendingNotifications: () => [notification],
-        markNotificationDelivered,
+        expect(write.status).toBe(400);
+        expect(await write.json()).toMatchObject({
+          error: 'Observer subscription is read-only',
+        });
       },
-      groups: { getCachedHistory: () => history },
-    } as unknown as CollaborationRuntime;
-    await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
-      const accepted = await fetch(
-        `${baseUrl}/api/collaboration/groups/ag_test/notifications/notification_turn_1/delivered`,
-        { method: 'POST' },
-      );
-      expect(accepted.status).toBe(200);
-      expect(markNotificationDelivered).toHaveBeenCalledWith({
-        notificationId: 'notification_turn_1',
-        recipientPrincipalId: 'alice',
-        recipientAgentId: 'agent_alice',
-      });
-      const rejected = await fetch(
-        `${baseUrl}/api/collaboration/groups/ag_test/notifications/notification_forged/delivered`,
-        { method: 'POST' },
-      );
-      expect(rejected.status).toBe(400);
-      expect(markNotificationDelivered).toHaveBeenCalledTimes(1);
-    });
+    );
   });
 
-  it('exports the current Group and Epoch audit with shared and local evidence', async () => {
-    const group = apiGroup();
-    const sharedEvent = {
-      format: 'icarus.agent-group-event/2',
-      protocol_version: 2,
-      group_id: 'ag_test',
-      event_id: 'evt_1',
-      epoch: 1,
-      sequence: 1,
-      event_type: 'group_initialized',
-      actor: { principal_id: 'alice', agent_id: 'agent_alice' },
-      expected: { state_revision: 0 },
-      payload: {},
-      occurred_at: '2026-08-06T12:00:00.000Z',
-    } as const;
-    const history = {
-      head: 'head-1',
-      commits: [],
-      // Incremental validation may expose only a suffix; the audit route must
-      // load the complete cached chain by Projection sequence.
-      events: [],
-      definition: {
-        machine: {
-          initial_state: 'development',
-          states: {
-            development: {
-              label: 'Development',
-              owner_role: 'developer',
-              terminal: false,
-              transitions: [
-                { outcome: 'completed', target_state: 'completed' },
-              ],
-            },
-            completed: {
-              label: 'Completed',
-              terminal: true,
-              transitions: [],
-            },
-          },
-        },
-      },
-      projection: {
-        groupId: 'ag_test',
-        epoch: 1,
-        sequence: 1,
-        seenEventIds: ['evt_1'],
-        lifecycle: 'READY',
-        businessState: 'development',
-        members: {
-          alice: [
-            {
-              principal_id: 'alice',
-              agent_id: 'agent_alice',
-              signing_key_ref: 'ssh-ed25519:SHA256:test',
-            },
-          ],
-        },
-        turns: {},
-      },
-    };
-    const listEventRecords = vi.fn(() => [
-      { event: sharedEvent, commitHash: 'head-1' },
-    ]);
-    const listExecutions = vi.fn(() => []);
-    const listNotificationsForAudit = vi.fn(() => []);
-    const runtime = {
-      status: () => ({
-        available: true,
-        databasePath: '/tmp/collaboration.db',
-        repositoryRoot: '/tmp/repositories',
-        error: null,
-        scheduler: null,
-      }),
-      store: {
-        getGroup: () => group,
-        listGroups: () => [group],
-        listEventRecords,
-        listExecutions,
-        listNotificationsForAudit,
-      },
-      groups: { getCachedHistory: () => history },
-    } as unknown as CollaborationRuntime;
-
-    await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
-      const response = await fetch(
-        `${baseUrl}/api/collaboration/groups/ag_test/audit`,
-      );
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toMatchObject({
-        format: 'icarus.agent-group-audit/2',
-        scope: { groupId: 'ag_test', epoch: 1 },
-        group: {
-          groupId: 'ag_test',
-          lifecycle: 'READY',
-          businessState: 'development',
-        },
-        sharedEvents: [
-          {
-            eventId: 'evt_1',
-            sequence: 1,
-            commitHash: 'head-1',
-          },
-        ],
-        turns: [],
-      });
-      expect(listEventRecords).toHaveBeenCalledWith('ag_test', 1);
-      expect(listExecutions).toHaveBeenCalledWith('ag_test');
-      expect(listNotificationsForAudit).toHaveBeenCalledWith('ag_test');
-    });
-  });
-});
-
-describe('Collaboration Web API data updates', () => {
-  it('routes a revision- and turn-fenced UTF-8 data update', async () => {
-    const group = apiGroup();
-    const updateData = vi.fn(async () => ({
-      group,
-      path: 'data/notes/status.txt',
-      contentSha256: `sha256:${'a'.repeat(64)}`,
-      sizeBytes: 0,
-    }));
-    const runtime = {
-      status: () => ({
-        available: true,
-        databasePath: '/tmp/collaboration.db',
-        repositoryRoot: '/tmp/repositories',
-        error: null,
-        scheduler: null,
-      }),
-      store: { getGroup: () => group },
-      groups: {
-        getCachedHistory: () => ({
-          projection: { activeTurnId: null },
-        }),
-        updateData,
-      },
-    } as unknown as CollaborationRuntime;
-
-    await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
-      const response = await fetch(
-        `${baseUrl}/api/collaboration/groups/ag_test/data`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            path: 'notes/status.txt',
-            content: '',
-            mediaType: 'text/plain',
-            expectedRevision: 7,
-            turnId: 'turn_1',
-            attempt: 2,
-            fencingToken: `sha256:${'b'.repeat(64)}`,
+  it('accepts raw multipart business files with validated JSON metadata', async () => {
+    const publishSharedFile = vi.fn(async () => group());
+    await withApiServer(
+      new CollaborationWebApi(runtime({ groups: { publishSharedFile } })),
+      async (baseUrl) => {
+        const form = new FormData();
+        form.append(
+          'metadata',
+          new Blob([
+            JSON.stringify({
+              expectedRevision: 0,
+              fileName: 'evidence.pdf',
+              mediaType: 'application/pdf',
+            }),
+          ]),
+        );
+        form.append(
+          'file',
+          new Blob([Buffer.from('%PDF-1.7\nraw\n')], {
+            type: 'application/pdf',
           }),
-        },
-      );
-      expect(response.status).toBe(200);
-      expect(updateData).toHaveBeenCalledWith({
-        groupId: 'ag_test',
-        path: 'notes/status.txt',
-        content: '',
-        mediaType: 'text/plain',
-        expectedRevision: 7,
-        turn: {
-          turnId: 'turn_1',
-          attempt: 2,
-          fencingToken: `sha256:${'b'.repeat(64)}`,
-        },
-      });
-      await expect(response.json()).resolves.toMatchObject({
-        path: 'data/notes/status.txt',
-        sizeBytes: 0,
-      });
-    });
-  });
-
-  it.each([
-    { turnId: 'turn_1' },
-    { attempt: 2, fencingToken: `sha256:${'b'.repeat(64)}` },
-    { turnId: 'turn_1', fencingToken: `sha256:${'b'.repeat(64)}` },
-    { turnId: 'turn_1', attempt: 2 },
-  ])(
-    'rejects incomplete turn fence %j before calling the service',
-    async (partialFence) => {
-      const group = apiGroup();
-      const updateData = vi.fn();
-      const runtime = {
-        status: () => ({
-          available: true,
-          databasePath: '/tmp/collaboration.db',
-          repositoryRoot: '/tmp/repositories',
-          error: null,
-          scheduler: null,
-        }),
-        store: { getGroup: () => group },
-        groups: {
-          getCachedHistory: () => ({
-            projection: { activeTurnId: null },
-          }),
-          updateData,
-        },
-      } as unknown as CollaborationRuntime;
-
-      await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
+          'evidence.pdf',
+        );
         const response = await fetch(
-          `${baseUrl}/api/collaboration/groups/ag_test/data`,
+          `${baseUrl}/api/collaboration/groups/group_test/workspace/shared/files`,
+          { method: 'POST', body: form },
+        );
+        expect(response.status).toBe(201);
+        expect(publishSharedFile).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          expectedRevision: 0,
+          fileName: 'evidence.pdf',
+          mediaType: 'application/pdf',
+          contents: Buffer.from('%PDF-1.7\nraw\n'),
+        });
+      },
+    );
+  });
+
+  it('maps per-Aggregate revision conflicts to 409', async () => {
+    const updateWorkItemDetails = vi.fn(async () => {
+      throw new Error('Work Item revision conflict: expected 1, current 2');
+    });
+    await withApiServer(
+      new CollaborationWebApi(runtime({ groups: { updateWorkItemDetails } })),
+      async (baseUrl) => {
+        const response = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/work-items/work_1`,
+          {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ expectedRevision: 1, title: 'Stale' }),
+          },
+        );
+        expect(response.status).toBe(409);
+        expect(await response.json()).toMatchObject({
+          error: expect.stringMatching(/revision conflict/),
+        });
+      },
+    );
+  });
+
+  it('validates Discussion and Outcome-first Workflow commands before dispatch', async () => {
+    const createDiscussion = vi.fn(async () => group());
+    const proposeWorkflowDefinition = vi.fn(async () => group());
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({ groups: { createDiscussion, proposeWorkflowDefinition } }),
+      ),
+      async (baseUrl) => {
+        const discussion = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/discussions`,
           {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
-              path: 'notes/status.txt',
-              content: 'unsafe',
-              expectedRevision: 7,
-              ...partialFence,
+              title: 'Release decision',
+              scope: { type: 'group' },
             }),
           },
         );
-        expect(response.status).toBe(400);
-        expect(updateData).not.toHaveBeenCalled();
-      });
-    },
-  );
+        expect(discussion.status).toBe(201);
+        expect(createDiscussion).toHaveBeenCalledWith(
+          expect.objectContaining({ groupId: 'group_test' }),
+        );
+
+        const workflow = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/workflow-definitions`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              definitionId: 'delivery',
+              expectedRevision: 0,
+              version: 1,
+              name: 'Delivery',
+              machine: {
+                format: 'icarus.collaboration-machine/3',
+                initial_state: 'build',
+                states: {
+                  build: {
+                    label: 'Build',
+                    description: '',
+                    assignee: { type: 'participant_slot', slot: 'builder' },
+                    terminal: false,
+                    timeout_policy: null,
+                    transitions: [
+                      {
+                        outcome: 'done',
+                        label: 'Done',
+                        target_state: 'shipped',
+                      },
+                    ],
+                  },
+                  shipped: {
+                    label: 'Shipped',
+                    description: '',
+                    terminal: true,
+                    transitions: [],
+                  },
+                },
+              },
+              layout: {
+                format: 'icarus.collaboration-workflow-layout/1',
+                view: 'participants',
+                nodes: { build: { x: 10, y: 20 }, shipped: { x: 300, y: 20 } },
+                revision: 1,
+              },
+            }),
+          },
+        );
+        expect(workflow.status).toBe(201);
+        expect(proposeWorkflowDefinition).toHaveBeenCalledWith(
+          expect.objectContaining({
+            groupId: 'group_test',
+            machine: expect.objectContaining({
+              format: 'icarus.collaboration-machine/3',
+            }),
+          }),
+        );
+      },
+    );
+  });
 });

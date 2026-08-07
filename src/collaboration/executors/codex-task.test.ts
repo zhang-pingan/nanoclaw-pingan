@@ -4,8 +4,11 @@ import type {
   CodexTaskHandle,
   CodexTurnCompletion,
 } from '../../workflow-execution/codex/app-server-client.js';
-import type { ActionDefinition } from '../protocol/index.js';
-import type { CollaborationExecutorBinding } from '../store.js';
+import type { CollaborationExecutorBindingV3 } from '../project-space-store.js';
+import type {
+  ActionDefinitionV3,
+  CollaborationTurnV3,
+} from '../protocol/v3-schema.js';
 import {
   CodexTaskActionExecutor,
   type CollaborationCodexClient,
@@ -20,50 +23,92 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function action(): ActionDefinition {
+const hash = (value: string) => `sha256:${value.repeat(64)}`;
+
+function action(): ActionDefinitionV3 {
   return {
-    format: 'icarus.agent-group-action/2',
+    format: 'icarus.collaboration-action/1',
     action_id: 'implement',
-    role: 'developer',
-    state_id: 'development',
+    name: 'Implement',
+    owner_principal_id: 'principal_alice',
+    version: 1,
     kind: 'external',
     adapter: 'codex-task',
-    input: { prompt_ref: 'prompts/implement.md' },
-    requirements: { filesystem_access: 'workspace_write' },
-    result_schema: { ref: 'code-change-result@1' },
+    workflow_ref: null,
+    prompt_ref: 'prompts/implement.md',
+    prompt_hash: hash('e'),
+    executor_policy: 'principal_selected',
+    filesystem_access: 'workspace_write',
+    result_schema: { ref: 'code-change-result@1', schema: null },
   };
 }
 
 function binding(
-  overrides: Partial<CollaborationExecutorBinding> = {},
-): CollaborationExecutorBinding {
+  overrides: Partial<CollaborationExecutorBindingV3> = {},
+): CollaborationExecutorBindingV3 {
   return {
-    groupId: 'ag_test',
+    groupId: 'group_test',
+    instanceId: 'instance_1',
     stateId: 'development',
-    implementationHash: `sha256:${'c'.repeat(64)}`,
-    actionHash: `sha256:${'d'.repeat(64)}`,
+    principalId: 'principal_alice',
+    clientId: 'client_1',
+    actionHash: hash('d'),
+    promptHash: hash('e'),
+    executorId: 'executor_codex',
     executorKind: 'external',
-    adapter: 'codex-task',
-    agentJid: null,
     workspacePath: '/tmp/workspace',
-    filesystemAccessCap: 'workspace_write',
+    filesystemAccess: 'workspace_write',
     approvalPolicy: 'on-request',
-    config: { transport: 'app_server' },
+    config: { adapter: 'codex-task', transport: 'app_server' },
     enabled: true,
     updatedAtMs: 1,
     ...overrides,
   };
 }
 
+function turn(): CollaborationTurnV3 {
+  return {
+    format: 'icarus.collaboration-turn/1',
+    turn_id: 'turn_1',
+    workflow_instance_id: 'instance_1',
+    state_id: 'development',
+    assignee_principal_id: 'principal_alice',
+    claimant_principal_id: 'principal_alice',
+    claimant_client_id: 'client_1',
+    executor_id: 'executor_codex',
+    attempt: 1,
+    fencing_token: hash('b'),
+    execution_mode: 'automatic',
+    state: 'running',
+    action_ref: 'actions/implement/action.json',
+    action_hash: hash('d'),
+    prompt_hash: hash('e'),
+    input_hash: hash('f'),
+    idempotency_key: hash('a'),
+    incoming_handoff: null,
+    incoming_handoff_hash: null,
+    timeout_policy_snapshot: null,
+    start_deadline_at: null,
+    execution_deadline_at: null,
+    deadline_snapshot_hash: hash('0'),
+    created_at: '2026-08-06T00:00:00.000Z',
+    started_at: '2026-08-06T00:00:01.000Z',
+    completed_at: null,
+    outcome: null,
+    handoff: null,
+    handoff_hash: null,
+    recovery_reason: null,
+  };
+}
+
 function request(selectedBinding = binding()): ActionRequest {
   return {
     executionId: 'collaboration:codex-1',
-    operationKey: `sha256:${'a'.repeat(64)}`,
-    groupId: 'ag_test',
-    turnId: 'turn_1',
+    operationKey: hash('a'),
+    groupId: 'group_test',
+    instanceId: 'instance_1',
+    turn: turn(),
     epoch: 1,
-    attempt: 1,
-    fencingToken: `sha256:${'b'.repeat(64)}`,
     action: action(),
     prompt: 'Implement the bounded change.',
     binding: selectedBinding,
@@ -188,7 +233,13 @@ describe('CodexTaskActionExecutor', () => {
       desktopVisibilityConfirmed: true,
     });
     await expect(
-      visible.prepare(request(binding({ config: { transport: 'deep_link' } }))),
+      visible.prepare(
+        request(
+          binding({
+            config: { adapter: 'codex-task', transport: 'deep_link' },
+          }),
+        ),
+      ),
     ).rejects.toBeInstanceOf(ActionBlockedError);
   });
 

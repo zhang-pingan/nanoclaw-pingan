@@ -3,12 +3,12 @@ import crypto from 'node:crypto';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { z } from 'zod';
 
-import {
-  canonicalJsonStringify,
-  type ActionDefinition,
-  type FilesystemAccess,
-} from '../protocol/index.js';
-import type { CollaborationExecutorBinding } from '../store.js';
+import type { CollaborationExecutorBindingV3 } from '../project-space-store.js';
+import { canonicalJsonStringify } from '../protocol/canonical-json.js';
+import type {
+  ActionDefinitionV3,
+  CollaborationTurnV3,
+} from '../protocol/v3-schema.js';
 
 export type ActionExecutionState =
   | 'accepted'
@@ -23,7 +23,7 @@ export type ActionExecutionState =
 
 export const collaborationActionResultSchema = z
   .object({
-    format: z.literal('icarus.collaboration-action-result/2'),
+    format: z.literal('icarus.collaboration-action-result/3'),
     outcome: z.string().min(1).max(160),
     summary: z.string().min(1).max(4000),
     instruction: z.string().max(16_000).default(''),
@@ -52,7 +52,7 @@ export const collaborationActionResultSchema = z
       .nullable(),
   })
   .strict();
-export type CollaborationActionResult = z.infer<
+export type CollaborationActionResultV3 = z.infer<
   typeof collaborationActionResultSchema
 >;
 
@@ -60,17 +60,19 @@ export interface ActionRequest {
   readonly executionId: string;
   readonly operationKey: string;
   readonly groupId: string;
-  readonly turnId: string;
+  readonly instanceId: string;
+  readonly turn: CollaborationTurnV3;
   readonly epoch: number;
-  readonly attempt: number;
-  readonly fencingToken: string;
-  readonly action: ActionDefinition;
+  readonly action: ActionDefinitionV3;
   readonly prompt: string;
-  readonly binding: CollaborationExecutorBinding;
+  readonly binding: CollaborationExecutorBindingV3;
 }
 
 export interface PreparedAction extends ActionRequest {
-  readonly effectiveFilesystemAccess: FilesystemAccess;
+  readonly effectiveFilesystemAccess: 'read_only' | 'workspace_write';
+  readonly turnId: string;
+  readonly attempt: number;
+  readonly fencingToken: string;
 }
 
 export interface DispatchReceipt {
@@ -83,7 +85,7 @@ export interface ActionObservation {
   readonly state: ActionExecutionState;
   readonly executionRef: string;
   readonly providerMetadata: Record<string, unknown>;
-  readonly result: CollaborationActionResult | null;
+  readonly result: CollaborationActionResultV3 | null;
   readonly resultHash: string | null;
   readonly recoveryReason?: string;
 }
@@ -94,7 +96,7 @@ export interface CancelResult {
 }
 
 export interface ActionExecutor {
-  readonly kind: ActionDefinition['kind'];
+  readonly kind: ActionDefinitionV3['kind'];
   readonly adapter?: string;
   prepare(request: ActionRequest): Promise<PreparedAction>;
   dispatch(action: PreparedAction): Promise<DispatchReceipt>;
@@ -122,34 +124,48 @@ export class ActionBlockedError extends Error {
   }
 }
 
-const accessRank: Record<FilesystemAccess, number> = {
-  read_only: 0,
-  workspace_write: 1,
-};
+const accessRank = { read_only: 0, workspace_write: 1 } as const;
 
 export function prepareWithLocalPolicy(request: ActionRequest): PreparedAction {
   if (!request.binding.enabled)
     throw new ActionBlockedError(
       'executor_unconfigured',
-      `Executor binding is disabled for state ${request.binding.stateId}`,
+      `Executor binding is disabled for State ${request.binding.stateId}`,
     );
-  const required = request.action.requirements.filesystem_access;
-  if (accessRank[request.binding.filesystemAccessCap] < accessRank[required])
+  const required = request.action.filesystem_access;
+  if (accessRank[request.binding.filesystemAccess] < accessRank[required])
     throw new ActionBlockedError(
       'local_permission_insufficient',
-      `Local ${request.binding.filesystemAccessCap} cap does not cover ${required}`,
+      `Local ${request.binding.filesystemAccess} cap does not cover ${required}`,
     );
-  return { ...request, effectiveFilesystemAccess: required };
+  if (!request.turn.fencing_token)
+    throw new ActionBlockedError(
+      'executor_unconfigured',
+      'A fenced Turn is required before dispatch',
+    );
+  return {
+    ...request,
+    effectiveFilesystemAccess: required,
+    turnId: request.turn.turn_id,
+    attempt: request.turn.attempt,
+    fencingToken: request.turn.fencing_token,
+  };
 }
 
-export function actionResultHash(result: CollaborationActionResult): string {
-  return `sha256:${crypto.createHash('sha256').update(canonicalJsonStringify(result)).digest('hex')}`;
+export function actionResultHash(result: CollaborationActionResultV3): string {
+  return `sha256:${crypto
+    .createHash('sha256')
+    .update(canonicalJsonStringify(result))
+    .digest('hex')}`;
 }
 
 export function validateActionResult(
-  action: ActionDefinition,
+  action: ActionDefinitionV3,
   input: unknown,
-): { readonly result: CollaborationActionResult; readonly resultHash: string } {
+): {
+  readonly result: CollaborationActionResultV3;
+  readonly resultHash: string;
+} {
   const result = collaborationActionResultSchema.parse(input);
   if (action.result_schema.schema) {
     const ajv = new Ajv2020({ strict: true, allErrors: true });
@@ -170,7 +186,7 @@ export function terminalObservation(
   >,
   executionRef: string,
   providerMetadata: Record<string, unknown>,
-  action: ActionDefinition,
+  action: ActionDefinitionV3,
   result: unknown,
 ): ActionObservation {
   const validated = validateActionResult(action, result);

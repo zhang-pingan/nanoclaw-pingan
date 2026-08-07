@@ -1,5 +1,14 @@
 import crypto from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
@@ -1306,6 +1315,60 @@ export class CollaborationProjectSpaceStore {
     ).map((row) => JSON.parse(row.turn_json) as CollaborationTurnV3);
   }
 
+  listFileIndex(groupId: string): Array<{
+    readonly fileId: string;
+    readonly virtualPath: string;
+    readonly repositoryPath: string;
+    readonly ownerPrincipalId: string | null;
+    readonly metadata: Record<string, unknown>;
+    readonly verifiedHead: string;
+  }> {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_file_index
+            WHERE group_id = ? ORDER BY virtual_path, file_id`,
+        )
+        .all(groupId) as Record<string, unknown>[]
+    ).map((row) => ({
+      fileId: String(row.file_id),
+      virtualPath: String(row.virtual_path),
+      repositoryPath: String(row.repository_path),
+      ownerPrincipalId:
+        row.owner_principal_id == null ? null : String(row.owner_principal_id),
+      metadata: JSON.parse(String(row.metadata_json)) as Record<
+        string,
+        unknown
+      >,
+      verifiedHead: String(row.verified_head),
+    }));
+  }
+
+  listActionExecutions(groupId: string): CollaborationActionExecutionV3[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_action_executions
+            WHERE group_id = ? ORDER BY updated_at_ms DESC, execution_id`,
+        )
+        .all(groupId) as Record<string, unknown>[]
+    ).map((row) => this.actionExecutionFromRow(row));
+  }
+
+  listNotificationsForAudit(groupId: string): CollaborationNotificationV3[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_notifications
+            WHERE group_id = ? ORDER BY first_observed_at_ms, notification_id`,
+        )
+        .all(groupId) as Record<string, unknown>[]
+    ).map((row) => this.notificationFromRow(row));
+  }
+
   saveExecutorBinding(
     input: Omit<CollaborationExecutorBindingV3, 'updatedAtMs'> & {
       readonly updatedAtMs?: number;
@@ -2096,6 +2159,143 @@ export class CollaborationProjectSpaceStore {
     this.assertOpen();
     return this.database;
   }
+}
+
+export interface CollaborationProjectSpaceBackupManifest {
+  readonly format: 'icarus.collaboration-backup/3';
+  readonly database_basename: string;
+  readonly schema_version: number;
+  readonly created_at: string;
+  readonly file: {
+    readonly size: number;
+    readonly sha256: string;
+  };
+}
+
+function safeDatabasePath(databasePath: string): string {
+  const resolved = path.resolve(databasePath);
+  if (
+    resolved === path.parse(resolved).root ||
+    path.extname(resolved) !== '.db'
+  )
+    throw new Error(`Unsafe collaboration database path: ${resolved}`);
+  return resolved;
+}
+
+function fileSha256(file: string): string {
+  return crypto.createHash('sha256').update(readFileSync(file)).digest('hex');
+}
+
+export function createCollaborationProjectSpaceBackup(input: {
+  readonly databasePath: string;
+  readonly backupDirectory: string;
+  readonly createdAt?: Date;
+}): CollaborationProjectSpaceBackupManifest {
+  const databasePath = safeDatabasePath(input.databasePath);
+  if (!existsSync(databasePath))
+    throw new Error(`Collaboration database does not exist: ${databasePath}`);
+  const backupDirectory = path.resolve(input.backupDirectory);
+  if (existsSync(backupDirectory))
+    throw new Error(`Backup directory already exists: ${backupDirectory}`);
+  mkdirSync(backupDirectory, { recursive: true, mode: 0o700 });
+  const checkpoint = new Database(databasePath);
+  try {
+    checkpoint.pragma('wal_checkpoint(TRUNCATE)');
+    if (
+      schemaVersion(checkpoint) !==
+      CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION
+    )
+      throw new Error('Only the current collaboration schema can be backed up');
+  } finally {
+    checkpoint.close();
+  }
+  const destination = path.join(backupDirectory, path.basename(databasePath));
+  copyFileSync(databasePath, destination);
+  const manifest: CollaborationProjectSpaceBackupManifest = {
+    format: 'icarus.collaboration-backup/3',
+    database_basename: path.basename(databasePath),
+    schema_version: CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION,
+    created_at: (input.createdAt ?? new Date()).toISOString(),
+    file: {
+      size: statSync(destination).size,
+      sha256: fileSha256(destination),
+    },
+  };
+  writeFileSync(
+    path.join(backupDirectory, 'manifest.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    { mode: 0o600 },
+  );
+  return manifest;
+}
+
+export function restoreCollaborationProjectSpaceBackup(input: {
+  readonly databasePath: string;
+  readonly backupDirectory: string;
+}): { readonly rollbackDirectory: string | null } {
+  const databasePath = safeDatabasePath(input.databasePath);
+  const backupDirectory = path.resolve(input.backupDirectory);
+  const manifest = JSON.parse(
+    readFileSync(path.join(backupDirectory, 'manifest.json'), 'utf8'),
+  ) as CollaborationProjectSpaceBackupManifest;
+  if (
+    manifest.format !== 'icarus.collaboration-backup/3' ||
+    manifest.schema_version !==
+      CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION ||
+    manifest.database_basename !== path.basename(databasePath)
+  )
+    throw new Error('Collaboration backup is not the current v3 format');
+  const source = path.join(backupDirectory, manifest.database_basename);
+  if (
+    !existsSync(source) ||
+    statSync(source).size !== manifest.file.size ||
+    fileSha256(source) !== manifest.file.sha256
+  )
+    throw new Error('Collaboration backup failed integrity verification');
+  const staging = path.join(
+    path.dirname(databasePath),
+    `.collaboration-restore-${crypto.randomUUID()}.db`,
+  );
+  copyFileSync(source, staging);
+  const verified = new CollaborationProjectSpaceStore(staging);
+  verified.close();
+  const rollbackDirectory = existsSync(databasePath)
+    ? path.join(
+        path.dirname(databasePath),
+        `.collaboration-pre-restore-${crypto.randomUUID()}`,
+      )
+    : null;
+  if (rollbackDirectory) {
+    mkdirSync(rollbackDirectory, { mode: 0o700 });
+    renameSync(
+      databasePath,
+      path.join(rollbackDirectory, path.basename(databasePath)),
+    );
+  }
+  renameSync(staging, databasePath);
+  for (const suffix of ['-wal', '-shm']) {
+    const stale = `${databasePath}${suffix}`;
+    if (existsSync(stale)) rmSync(stale);
+  }
+  return { rollbackDirectory };
+}
+
+export function rollbackCollaborationProjectSpaceRestore(input: {
+  readonly databasePath: string;
+  readonly rollbackDirectory: string;
+}): void {
+  const databasePath = safeDatabasePath(input.databasePath);
+  const rollbackDirectory = path.resolve(input.rollbackDirectory);
+  if (
+    path.dirname(rollbackDirectory) !== path.dirname(databasePath) ||
+    !path.basename(rollbackDirectory).startsWith('.collaboration-pre-restore-')
+  )
+    throw new Error('Unsafe collaboration rollback directory');
+  const rollback = path.join(rollbackDirectory, path.basename(databasePath));
+  if (!existsSync(rollback))
+    throw new Error('Collaboration rollback database is missing');
+  if (existsSync(databasePath)) rmSync(databasePath);
+  renameSync(rollback, databasePath);
 }
 
 type WorkItemRow = CollaborationProjectionV3['workItems'][string];

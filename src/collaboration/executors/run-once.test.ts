@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { RunOnceResponse } from '../../internal-agent-run-once/schemas.js';
-import type { ActionDefinition } from '../protocol/index.js';
-import type { CollaborationExecutorBinding } from '../store.js';
+import type { CollaborationExecutorBindingV3 } from '../project-space-store.js';
+import type {
+  ActionDefinitionV3,
+  CollaborationTurnV3,
+} from '../protocol/v3-schema.js';
 import { RunOnceActionExecutor, type RunOnceService } from './run-once.js';
 import {
   ActionBlockedError,
@@ -12,39 +15,83 @@ import {
   type ActionRequest,
 } from './types.js';
 
-function action(resultSchema?: Record<string, unknown>): ActionDefinition {
+const hash = (value: string) => `sha256:${value.repeat(64)}`;
+
+function action(resultSchema?: Record<string, unknown>): ActionDefinitionV3 {
   return {
-    format: 'icarus.agent-group-action/2',
+    format: 'icarus.collaboration-action/1',
     action_id: 'implement',
-    role: 'developer',
-    state_id: 'development',
+    name: 'Implement',
+    owner_principal_id: 'principal_alice',
+    version: 1,
     kind: 'run_once',
-    input: { prompt_ref: 'prompts/implement.md' },
-    requirements: { filesystem_access: 'workspace_write' },
+    adapter: null,
+    workflow_ref: null,
+    prompt_ref: 'prompts/implement.md',
+    prompt_hash: hash('e'),
+    executor_policy: 'principal_selected',
+    filesystem_access: 'workspace_write',
     result_schema: {
       ref: 'code-change-result@1',
-      ...(resultSchema ? { schema: resultSchema } : {}),
+      schema: resultSchema ?? null,
     },
   };
 }
 
 function binding(
-  cap: CollaborationExecutorBinding['filesystemAccessCap'] = 'workspace_write',
-): CollaborationExecutorBinding {
+  cap: CollaborationExecutorBindingV3['filesystemAccess'] = 'workspace_write',
+): CollaborationExecutorBindingV3 {
   return {
-    groupId: 'ag_test',
+    groupId: 'group_test',
+    instanceId: 'instance_1',
     stateId: 'development',
-    implementationHash: `sha256:${'c'.repeat(64)}`,
-    actionHash: `sha256:${'d'.repeat(64)}`,
+    principalId: 'principal_alice',
+    clientId: 'client_1',
+    actionHash: hash('d'),
+    promptHash: hash('e'),
+    executorId: 'executor_local',
     executorKind: 'run_once',
-    adapter: null,
-    agentJid: 'web:main',
     workspacePath: '/tmp/workspace',
-    filesystemAccessCap: cap,
+    filesystemAccess: cap,
     approvalPolicy: 'on-request',
-    config: {},
+    config: { agent_jid: 'web:main' },
     enabled: true,
     updatedAtMs: 1,
+  };
+}
+
+function turn(): CollaborationTurnV3 {
+  return {
+    format: 'icarus.collaboration-turn/1',
+    turn_id: 'turn_1',
+    workflow_instance_id: 'instance_1',
+    state_id: 'development',
+    assignee_principal_id: 'principal_alice',
+    claimant_principal_id: 'principal_alice',
+    claimant_client_id: 'client_1',
+    executor_id: 'executor_local',
+    attempt: 1,
+    fencing_token: hash('b'),
+    execution_mode: 'automatic',
+    state: 'running',
+    action_ref: 'actions/implement/action.json',
+    action_hash: hash('d'),
+    prompt_hash: hash('e'),
+    input_hash: hash('f'),
+    idempotency_key: hash('a'),
+    incoming_handoff: null,
+    incoming_handoff_hash: null,
+    timeout_policy_snapshot: null,
+    start_deadline_at: null,
+    execution_deadline_at: null,
+    deadline_snapshot_hash: hash('0'),
+    created_at: '2026-08-06T00:00:00.000Z',
+    started_at: '2026-08-06T00:00:01.000Z',
+    completed_at: null,
+    outcome: null,
+    handoff: null,
+    handoff_hash: null,
+    recovery_reason: null,
   };
 }
 
@@ -54,12 +101,11 @@ function request(
 ): ActionRequest {
   return {
     executionId: 'collaboration:1',
-    operationKey: `sha256:${'a'.repeat(64)}`,
-    groupId: 'ag_test',
-    turnId: 'turn_1',
+    operationKey: hash('a'),
+    groupId: 'group_test',
+    instanceId: 'instance_1',
+    turn: turn(),
     epoch: 1,
-    attempt: 1,
-    fencingToken: `sha256:${'b'.repeat(64)}`,
     action: selectedAction,
     prompt: 'Implement the task.',
     binding: selectedBinding,
@@ -185,7 +231,7 @@ describe('RunOnceActionExecutor', () => {
     });
     expect(() =>
       validateActionResult(selectedAction, {
-        format: 'icarus.collaboration-action-result/2',
+        format: 'icarus.collaboration-action-result/3',
         outcome: 'success',
         summary: 'missing approved field',
         instruction: '',
@@ -199,7 +245,7 @@ describe('RunOnceActionExecutor', () => {
 
   it('hashes result objects with locale-independent code-unit key order', () => {
     const result = {
-      format: 'icarus.collaboration-action-result/2' as const,
+      format: 'icarus.collaboration-action-result/3' as const,
       outcome: 'success' as const,
       summary: 'deterministic',
       instruction: '',

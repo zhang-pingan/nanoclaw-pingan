@@ -123,10 +123,10 @@ export class CodexTaskActionExecutor implements ActionExecutor {
       request.action.adapter !== COLLABORATION_CODEX_TASK_ADAPTER
     )
       throw new Error('CodexTaskActionExecutor received another action kind');
-    if (request.binding.adapter !== COLLABORATION_CODEX_TASK_ADAPTER)
+    if (request.binding.config.adapter !== COLLABORATION_CODEX_TASK_ADAPTER)
       throw new ActionBlockedError(
         'executor_unconfigured',
-        'The local role binding is not configured for codex-task',
+        'The local Principal binding is not configured for codex-task',
       );
     if (request.binding.config.transport !== 'app_server')
       throw new ActionBlockedError(
@@ -283,7 +283,7 @@ export class CodexTaskActionExecutor implements ActionExecutor {
           active.providerMetadata,
         );
         const result = collaborationActionResultSchema.parse({
-          format: 'icarus.collaboration-action-result/2',
+          format: 'icarus.collaboration-action-result/3',
           outcome: normalized.outcome,
           summary: normalized.summary,
           data: {
