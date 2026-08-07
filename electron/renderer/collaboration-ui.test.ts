@@ -7,9 +7,12 @@ import {
 import {
   collaborationArtifactName,
   collaborationAuditEventTimeline,
+  collaborationCanApproveMembers,
+  collaborationCanCreateTurn,
   collaborationCanMutate,
   collaborationCurrentTurn,
   collaborationDuration,
+  collaborationEligibleTurnExecutors,
   collaborationIsObserver,
   collaborationOutcomeRoutes,
   collaborationPendingNotifications,
@@ -18,6 +21,7 @@ import {
   collaborationTurnAccess,
   collaborationTurnDeadline,
   collaborationTurnHistory,
+  buildCollaborationStartTurnRequest,
   collaborationVerifiedFileTree,
   collaborationWorkItemColumns,
 } from './collaboration-ui.js';
@@ -105,6 +109,112 @@ describe('Collaboration project-space v3 UI helpers', () => {
       localClient: false,
       canComplete: false,
     });
+  });
+
+  it('derives membership approval authority', () => {
+    expect(
+      collaborationCanApproveMembers({
+        subscriptionMode: 'member',
+        lifecycle: 'active',
+        localPrincipalId: 'principal_owner',
+        localClientId: 'client_owner',
+        ownerPrincipalId: 'principal_owner',
+        projection: { permissionGrants: {} },
+      }),
+    ).toBe(true);
+    expect(
+      collaborationCanApproveMembers({
+        subscriptionMode: 'member',
+        lifecycle: 'active',
+        localPrincipalId: 'principal_admin',
+        localClientId: 'client_admin',
+        ownerPrincipalId: 'principal_owner',
+        projection: {
+          permissionGrants: {
+            principal_admin: { grants: ['member:approve'] },
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      collaborationCanApproveMembers({ subscriptionMode: 'observer' }),
+    ).toBe(false);
+  });
+
+  it('creates each next Workflow Turn and requires an assisted Executor', () => {
+    const instance = {
+      instance_id: 'instance_1',
+      lifecycle: 'running',
+      business_state: 'build',
+      active_turn_id: null,
+    };
+    const definition = {
+      machine: {
+        states: {
+          build: { terminal: false },
+          done: { terminal: true },
+        },
+      },
+    };
+    expect(collaborationCanCreateTurn(instance, definition)).toBe(true);
+    expect(
+      collaborationCanCreateTurn(
+        { ...instance, business_state: 'done' },
+        definition,
+      ),
+    ).toBe(false);
+    expect(
+      buildCollaborationStartTurnRequest(4, { execution_mode: 'manual' }),
+    ).toEqual({ expectedRevision: 4, executorId: null });
+    expect(() =>
+      buildCollaborationStartTurnRequest(4, {
+        execution_mode: 'assisted',
+      }),
+    ).toThrow(/Executor/u);
+
+    const group = {
+      groupId: 'group_1',
+      localPrincipalId: 'principal_alice',
+      localClientId: 'client_alice',
+    };
+    const turn = {
+      workflow_instance_id: 'instance_1',
+      state_id: 'build',
+      assignee_principal_id: 'principal_alice',
+      action_hash: 'sha256:action',
+      prompt_hash: 'sha256:prompt',
+      execution_mode: 'assisted',
+    };
+    const bindings = [
+      {
+        groupId: 'group_1',
+        instanceId: 'instance_1',
+        stateId: 'build',
+        principalId: 'principal_alice',
+        clientId: 'client_alice',
+        actionHash: 'sha256:action',
+        promptHash: 'sha256:prompt',
+        executorId: 'executor_codex',
+        enabled: true,
+      },
+      {
+        groupId: 'group_1',
+        instanceId: 'instance_1',
+        stateId: 'build',
+        principalId: 'principal_alice',
+        clientId: 'client_other',
+        actionHash: 'sha256:action',
+        promptHash: 'sha256:prompt',
+        executorId: 'executor_wrong_client',
+        enabled: true,
+      },
+    ];
+    expect(collaborationEligibleTurnExecutors(group, turn, bindings)).toEqual([
+      'executor_codex',
+    ]);
+    expect(
+      buildCollaborationStartTurnRequest(4, turn, 'executor_codex'),
+    ).toEqual({ expectedRevision: 4, executorId: 'executor_codex' });
   });
 
   it('finds per-Instance current/history Turns and legal Outcomes', () => {

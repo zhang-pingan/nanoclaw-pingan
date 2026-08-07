@@ -68,6 +68,14 @@ describe('Collaboration project-space request builders', () => {
       displayName: 'Alice',
       clientDisplayName: 'Alice laptop',
     });
+    expect(
+      buildCollaborationJoinRequest({
+        signingKeyPath: '/tmp/id_ed25519',
+        displayName: 'Bob',
+        clientDisplayName: 'Bob laptop',
+        inviteId: 'invite_bob',
+      }),
+    ).toMatchObject({ inviteId: 'invite_bob' });
   });
 
   it('builds a validated v3 Machine and participant layout', () => {

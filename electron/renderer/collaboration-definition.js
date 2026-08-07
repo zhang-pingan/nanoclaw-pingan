@@ -118,6 +118,9 @@ export function buildCollaborationJoinRequest(input) {
     signingKeyPath: requiredString(input.signingKeyPath, 'SSH signing key'),
     displayName: requiredString(input.displayName, 'Principal 显示名'),
     clientDisplayName: requiredString(input.clientDisplayName, 'Client 显示名'),
+    ...(String(input.inviteId || '').trim()
+      ? { inviteId: identifier(input.inviteId, 'Invite ID') }
+      : {}),
   };
 }
 

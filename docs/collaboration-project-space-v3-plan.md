@@ -411,8 +411,31 @@ Inspect remote
 
 - `open`：候选 Principal 自签注册，协议验证 Principal 与公钥 fingerprint 一致；
 - `approval`：候选提交申请，Owner/Admin 签名批准；
-- `invite_only`：申请还必须引用有效邀请；
+- `invite_only`：申请必须引用面向该 Principal 的有效一次性 Invite，随后仍进入 requested 状态等待批准；
 - transport 写权限与协议 Membership 是两层独立授权。
+
+Invite 是独立 Aggregate 和经 Schema 校验的 JSON 对象，不使用可转发 bearer token：
+
+```json
+{
+  "format": "icarus.collaboration-invite/1",
+  "invite_id": "invite_uuid",
+  "principal_id": "principal_sha256_xxx",
+  "issued_by_principal_id": "principal_sha256_owner",
+  "status": "active",
+  "issued_at": "2026-08-06T12:00:00.000Z",
+  "expires_at": null,
+  "used_at_event": null,
+  "revoked_at_event": null
+}
+```
+
+- 只有 Owner、`group:admin` 或 `member:approve` Principal 可以签发和撤销；
+- `invite_issued` 创建 ACTIVE Invite，目标 Principal 和签发 Actor/provenance 必须一致；
+- `membership_requested` 必须由目标 Principal 自签并引用 `invite_id`，同一事件把 Invite 原子变为 USED；
+- 已过期、已撤销、已使用、目标不匹配或不存在的 Invite fail closed；
+- Invite 只能在 ACTIVE 时撤销，不能撤销 USED Invite，也不能复用；
+- `approval` request 的 `invite_id` 固定为 `null`，`open` 注册不携带该字段。
 
 ### 5.4 Git 可见性边界
 
@@ -1233,6 +1256,9 @@ members/
 permissions/
   {principal-id}.json
 
+invites/
+  {invite-id}.json
+
 workspace/
   shared/
     data/
@@ -1295,6 +1321,8 @@ artifacts/
 
 events/
   group/
+  invites/
+    {invite-id}/
   members/
     {principal-id}/
   workspace/
@@ -1310,6 +1338,7 @@ events/
 
 projections/
   group.json
+  invites/
   members/
   work-items/
   discussions/
@@ -1350,6 +1379,7 @@ artifacts/{turn}/                         -> artifacts/workflows/{instance}/{tur
 | 路径                                  | 合法写入者                          | 约束                               |
 | ------------------------------------- | ----------------------------------- | ---------------------------------- |
 | `group.json`                          | Owner/Admin                         | Group event 物化                   |
+| `invites/{invite}.json`               | member approval authority           | 目标 Principal、有效期、一次性状态 |
 | `members/{principal}/member.json`     | 本人注册、Admin 状态管理            | Principal 与签名 fingerprint 一致  |
 | `members/{principal}/clients/`        | 对应 Principal                      | Client ID 与事件一致               |
 | `members/{principal}/executors/`      | 对应 Principal                      | 只允许公开 descriptor              |
@@ -1426,9 +1456,13 @@ group_initialized
 group_settings_updated
 group_archived
 group_reopened
+invite_issued
+invite_revoked
 membership_requested
+membership_rejected
 member_registered
 member_suspended
+member_reactivated
 member_removed
 client_registered
 client_revoked
@@ -1730,9 +1764,12 @@ DELETE /api/collaboration/subscriptions/{groupId}
 POST /api/collaboration/groups/{groupId}/join-requests
 POST /api/collaboration/groups/{groupId}/join-requests/{requestId}/approve
 POST /api/collaboration/groups/{groupId}/join-requests/{requestId}/reject
+GET  /api/collaboration/groups/{groupId}/invites
+POST /api/collaboration/groups/{groupId}/invites
+POST /api/collaboration/groups/{groupId}/invites/{inviteId}/revoke
 ```
 
-Observer subscription 是本地记录，不写 Group Git。Join API 不接受调用方覆盖 `principal_id/client_id`，Host 从本机 Identity Service 解析。
+Observer subscription 是本地记录，不写 Group Git。Join API 不接受调用方覆盖 `principal_id/client_id`，Host 从本机 Identity Service 解析。`invite_only` 的 Join body 只提交 `inviteId` 引用；目标 Principal 仍由 Host Identity 派生并由 reducer 与 Invite 比对。
 
 ### 21.2 Group、Members 和 Permissions
 
@@ -2056,6 +2093,7 @@ Observer 使用相同浏览和验证界面，但：
 - Observer 不写 members/event，不需要 signing identity；
 - Observer 升级 Member 复用 cache；
 - open/approval/invite-only 分别通过正反例；
+- Invite 未授权签发、错绑、过期、撤销、消费和复用分别通过正反例，Git materialization 可从事件重建；
 - Git read ACL 与协议 Membership 在诊断中明确区分。
 
 ### 26.2 Permission 和路径
@@ -2161,6 +2199,9 @@ Observer 使用相同浏览和验证界面，但：
 - Principal/participant lane 正确；
 - 不使用拖拽也能完成所有 Workflow 编辑；
 - 多 Instance Runtime 图正确选择 scope；
+- approval 群组的有权 Principal 可以在 Members 视图批准或拒绝 requested Member；
+- running Instance 可以从首个 Turn 连续创建下一 Turn 直到 terminal，manual 与 assisted 路径均可完成；
+- assisted Turn 必须从当前 Principal/Client/Action/Prompt 匹配的 Binding 中选择并提交 Executor；
 - 虚拟文件树 display mapping、刷新和验证状态清晰；
 - 错误定位到具体 Aggregate/State/Outcome/path。
 
@@ -2169,6 +2210,7 @@ Observer 使用相同浏览和验证界面，但：
 - 用户可以创建没有 Role、Machine 和 Workflow 的 Group，并立即进入 ACTIVE。
 - Observer 可以只读订阅、定时/手动刷新、验签和浏览全部 Git 可见内容，但不会出现在成员列表或产生写事件。
 - 正式加入只注册系统派生 Principal；一个 Principal 可以使用多个 Client，也可以不配置 Executor。
+- invite-only 群组使用面向 Principal、可撤销/过期、一次性消费的签名 Invite，并在 UI 中完成签发、申请和审批闭环。
 - 客户端将 Principal ID、Work Item ID 和 Workflow ID 映射为友好项目树，同时保留稳定 raw identity。
 - 每个 Principal 可以在自己的 Group-visible space 发布进度和文件，不能修改其他 Principal 空间。
 - Group 可以创建和并行管理多个 Work Item，支持负责人、进度、阻塞、依赖、Discussion、due date 和 Artifact。

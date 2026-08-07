@@ -14,9 +14,13 @@ import { mountCollaborationFsmEditor } from './collaboration-fsm-editor.js';
 import {
   collaborationArtifactName,
   collaborationAuditEventTimeline,
+  buildCollaborationStartTurnRequest,
+  collaborationCanApproveMembers,
+  collaborationCanCreateTurn,
   collaborationCanMutate,
   collaborationCurrentTurn,
   collaborationDuration,
+  collaborationEligibleTurnExecutors,
   collaborationElapsed,
   collaborationIsObserver,
   collaborationOutcomeRoutes,
@@ -397,6 +401,12 @@ export function createCollaborationWorkspace(options) {
     const turns = collaborationTurnHistory(projection, instance.instance_id);
     const access = collaborationTurnAccess(group, turn);
     const routes = collaborationOutcomeRoutes(definition, turn);
+    const canCreateTurn =
+      collaborationCanMutate(group) &&
+      collaborationCanCreateTurn(instance, definition);
+    const currentAssignedToLocal =
+      instance.resolved_assignments?.[instance.business_state] ===
+      group.localPrincipalId;
     queueMicrotask(() => {
       const host = document.getElementById('collaboration-instance-graph');
       if (host && definition)
@@ -409,7 +419,10 @@ export function createCollaborationWorkspace(options) {
           ),
         });
     });
-    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-instance">Back</button>${collaborationCanMutate(group) ? `<button type="button" class="btn-ghost" data-collaboration-action="instance-command" data-command="${instance.lifecycle === 'draft' || instance.lifecycle === 'ready' ? 'start' : instance.lifecycle === 'paused' ? 'resume' : 'pause'}">${instance.lifecycle === 'paused' ? 'Resume' : instance.lifecycle === 'running' ? 'Pause' : 'Start'}</button>` : ''}</section><section class="collaboration-metrics">${metric('Lifecycle', instance.lifecycle)}${metric('State', instance.business_state)}${metric('Epoch', instance.epoch)}${metric('Turns', turns.length)}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(instance.definition_id)} · ${html(instance.instance_id)}</h3>${status(instance.lifecycle)}</div><div id="collaboration-instance-graph"></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Current Turn</h3>${turn ? status(turn.state) : ''}</div>${turn ? `<dl class="collaboration-definition-list"><div><dt>State</dt><dd>${html(turn.state_id)}</dd></div><div><dt>Assignee</dt><dd>${html(collaborationPrincipalName(projection, turn.assignee_principal_id))}</dd></div><div><dt>Client</dt><dd>${html(turn.claimant_client_id || '-')}</dd></div><div><dt>Mode</dt><dd>${html(turn.execution_mode)}</dd></div><div><dt>Attempt</dt><dd>${html(turn.attempt)}</dd></div><div><dt>Deadline</dt><dd>${html(collaborationTurnDeadline(turn)?.deadlineAt || '-')}</dd></div></dl><div class="collaboration-record-actions">${access.canStart ? '<button type="button" class="btn-primary" data-collaboration-action="start-turn">Start Turn</button>' : ''}${access.canComplete ? '<button type="button" class="btn-primary" data-collaboration-action="complete-turn">Complete</button>' : ''}${collaborationCanMutate(group) && turn.assignee_principal_id === group.localPrincipalId ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">Execution</button>' : ''}</div><div class="collaboration-outcome-preview">${routes.map((route) => `<span><strong>${html(route.outcome)}</strong> → ${html(route.target_state)}</span>`).join('')}</div>` : empty('No active Turn')}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Turn history</h3><span>${turns.length}</span></div>${turns.map((item) => `<article class="collaboration-record"><div><strong>${html(item.state_id)}</strong><small>${html(timestamp(item.created_at))}${item.outcome ? ` · ${html(item.outcome)}` : ''}</small>${renderArtifactRefs(projection, item.artifact_refs)}</div>${status(item.state)}</article>`).join('') || empty('No Turns')}</section>`;
+    const currentTurn = turn
+      ? `<dl class="collaboration-definition-list"><div><dt>State</dt><dd>${html(turn.state_id)}</dd></div><div><dt>Assignee</dt><dd>${html(collaborationPrincipalName(projection, turn.assignee_principal_id))}</dd></div><div><dt>Client</dt><dd>${html(turn.claimant_client_id || '-')}</dd></div><div><dt>Mode</dt><dd>${html(turn.execution_mode)}</dd></div><div><dt>Attempt</dt><dd>${html(turn.attempt)}</dd></div><div><dt>Deadline</dt><dd>${html(collaborationTurnDeadline(turn)?.deadlineAt || '-')}</dd></div></dl><div class="collaboration-record-actions">${access.canStart ? '<button type="button" class="btn-primary" data-collaboration-action="start-turn">Start Turn</button>' : ''}${access.canComplete ? '<button type="button" class="btn-primary" data-collaboration-action="complete-turn">Complete</button>' : ''}${collaborationCanMutate(group) && turn.assignee_principal_id === group.localPrincipalId ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">Execution</button>' : ''}</div><div class="collaboration-outcome-preview">${routes.map((route) => `<span><strong>${html(route.outcome)}</strong> → ${html(route.target_state)}</span>`).join('')}</div>`
+      : `<div class="collaboration-section-empty">${instance.lifecycle === 'running' ? `Ready for ${html(instance.business_state)}` : 'No active Turn'}</div><div class="collaboration-record-actions">${currentAssignedToLocal ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">Execution</button>' : ''}${canCreateTurn ? `<button type="button" class="btn-primary" data-collaboration-action="create-turn">${turns.length ? 'Continue' : 'Create Turn'}</button>` : ''}</div>`;
+    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-instance">Back</button>${collaborationCanMutate(group) ? `<button type="button" class="btn-ghost" data-collaboration-action="instance-command" data-command="${instance.lifecycle === 'draft' || instance.lifecycle === 'ready' ? 'start' : instance.lifecycle === 'paused' ? 'resume' : 'pause'}">${instance.lifecycle === 'paused' ? 'Resume' : instance.lifecycle === 'running' ? 'Pause' : 'Start'}</button>` : ''}</section><section class="collaboration-metrics">${metric('Lifecycle', instance.lifecycle)}${metric('State', instance.business_state)}${metric('Epoch', instance.epoch)}${metric('Turns', turns.length)}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(instance.definition_id)} · ${html(instance.instance_id)}</h3>${status(instance.lifecycle)}</div><div id="collaboration-instance-graph"></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Current Turn</h3>${turn ? status(turn.state) : ''}</div>${currentTurn}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Turn history</h3><span>${turns.length}</span></div>${turns.map((item) => `<article class="collaboration-record"><div><strong>${html(item.state_id)}</strong><small>${html(timestamp(item.created_at))}${item.outcome ? ` · ${html(item.outcome)}` : ''}</small>${renderArtifactRefs(projection, item.artifact_refs)}</div>${status(item.state)}</article>`).join('') || empty('No Turns')}</section>`;
   };
 
   const renderWorkflows = () => {
@@ -426,7 +439,13 @@ export function createCollaborationWorkspace(options) {
   const renderMembers = () => {
     const group = selectedGroup();
     const projection = group.projection;
-    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>Principals</h3><span>${Object.keys(projection?.members || {}).length}</span></div><div class="collaboration-record-list">${Object.values(
+    const canApprove = collaborationCanApproveMembers(group);
+    const invites = Object.values(projection?.invites || {});
+    const inviteSection =
+      projection?.group?.membership_policy?.join === 'invite_only'
+        ? `<section class="collaboration-section"><div class="collaboration-section-head"><h3>Invites</h3>${canApprove ? '<button type="button" class="btn-primary" data-collaboration-action="issue-invite">Issue</button>' : ''}</div><div class="collaboration-record-list">${invites.map((invite) => `<article class="collaboration-record"><div><strong>${html(collaborationPrincipalName(projection, invite.principal_id))}</strong><small>${html(invite.invite_id)} · ${html(invite.expires_at ? timestamp(invite.expires_at) : 'No expiry')}</small></div>${status(invite.status)}${canApprove && invite.status === 'active' ? `<button type="button" class="btn-ghost" data-collaboration-action="revoke-invite" data-invite-id="${attr(invite.invite_id)}">Revoke</button>` : ''}</article>`).join('') || empty('No Invites')}</div></section>`
+        : '';
+    return `${inviteSection}<section class="collaboration-section"><div class="collaboration-section-head"><h3>Principals</h3><span>${Object.keys(projection?.members || {}).length}</span></div><div class="collaboration-record-list">${Object.values(
       projection?.members || {},
     )
       .map((member) => {
@@ -435,7 +454,11 @@ export function createCollaborationWorkspace(options) {
         const clients = Object.values(
           projection.clients?.[member.principal_id] || {},
         );
-        return `<article class="collaboration-record"><div><strong>${html(member.display_name)}</strong><small>${html(member.principal_id)} · ${clients.length} Clients</small><p>${grants.map((grant) => `<code>${html(grant)}</code>`).join(' ') || 'No direct grants'}</p></div>${status(member.status)}${group.localPrincipalId === group.ownerPrincipalId && collaborationCanMutate(group) ? `<button type="button" class="btn-ghost" data-collaboration-action="edit-permissions" data-principal-id="${attr(member.principal_id)}">Permissions</button>` : ''}</article>`;
+        const approvalActions =
+          canApprove && member.status === 'requested'
+            ? `<div class="collaboration-record-actions"><button type="button" class="btn-primary" data-collaboration-action="approve-member" data-principal-id="${attr(member.principal_id)}">Approve</button><button type="button" class="btn-danger-soft" data-collaboration-action="reject-member" data-principal-id="${attr(member.principal_id)}">Reject</button></div>`
+            : '';
+        return `<article class="collaboration-record"><div><strong>${html(member.display_name)}</strong><small>${html(member.principal_id)} · ${clients.length} Clients</small><p>${grants.map((grant) => `<code>${html(grant)}</code>`).join(' ') || 'No direct grants'}</p></div>${status(member.status)}${approvalActions}${group.localPrincipalId === group.ownerPrincipalId && collaborationCanMutate(group) && member.status === 'active' ? `<button type="button" class="btn-ghost" data-collaboration-action="edit-permissions" data-principal-id="${attr(member.principal_id)}">Permissions</button>` : ''}</article>`;
       })
       .join('')}</div></section>`;
   };
@@ -633,10 +656,12 @@ export function createCollaborationWorkspace(options) {
 
   const requestJoin = () => {
     const group = selectedGroup();
+    const inviteOnly =
+      group.projection?.group?.membership_policy?.join === 'invite_only';
     openDialog({
       title: 'Request membership',
       submitText: 'Submit',
-      body: `<div class="collaboration-form-grid">${field('SSH signing key', 'signingKeyPath')}${field('Principal name', 'displayName')}${field('Client name', 'clientDisplayName')}</div>`,
+      body: `<div class="collaboration-form-grid">${field('SSH signing key', 'signingKeyPath')}${field('Principal name', 'displayName')}${field('Client name', 'clientDisplayName')}${inviteOnly ? field('Invite ID', 'inviteId') : ''}</div>`,
       onSubmit: async (formData) => {
         await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/join-requests`,
@@ -647,6 +672,58 @@ export function createCollaborationWorkspace(options) {
                 Object.fromEntries(formData.entries()),
               ),
             ),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
+  const issueInvite = () => {
+    const group = selectedGroup();
+    openDialog({
+      title: 'Issue Invite',
+      submitText: 'Issue',
+      body: `<div class="collaboration-form-grid">${field('Principal ID', 'principalId')}${field('Expires at', 'expiresAt', '', { required: false })}</div>`,
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/invites`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              principalId: formData.get('principalId'),
+              expiresAt: formData.get('expiresAt') || null,
+              expectedRevision: 0,
+            }),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
+  const rejectMember = (principalId) => {
+    const group = selectedGroup();
+    openDialog({
+      title: 'Reject membership',
+      submitText: 'Reject',
+      danger: true,
+      body: field('Reason', 'reason', '', { multiline: true }),
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/join-requests/${encodeURIComponent(principalId)}/reject`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              expectedRevision: aggregateRevision(
+                group.projection,
+                'membership',
+                principalId,
+              ),
+              reason: formData.get('reason'),
+            }),
           },
         );
         closeDialog();
@@ -1027,6 +1104,63 @@ export function createCollaborationWorkspace(options) {
     });
   };
 
+  const startCurrentTurn = async (executorId = null) => {
+    const group = selectedGroup();
+    const instance = selectedInstance();
+    const turn = collaborationCurrentTurn(
+      group.projection,
+      instance.instance_id,
+    );
+    if (!turn) throw new Error('Workflow Instance has no active Turn');
+    await options.request(
+      `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/turns/${encodeURIComponent(turn.turn_id)}/start`,
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          buildCollaborationStartTurnRequest(
+            aggregateRevision(
+              group.projection,
+              'workflow_instance',
+              instance.instance_id,
+            ),
+            turn,
+            executorId,
+          ),
+        ),
+      },
+    );
+    await loadDetail(group.groupId, false);
+  };
+
+  const selectTurnExecutor = () => {
+    const group = selectedGroup();
+    const instance = selectedInstance();
+    const turn = collaborationCurrentTurn(
+      group.projection,
+      instance.instance_id,
+    );
+    const executors = collaborationEligibleTurnExecutors(
+      group,
+      turn,
+      state.detail.bindings,
+    );
+    if (!executors.length)
+      throw new Error(
+        'No enabled local Executor Binding matches this assisted Turn',
+      );
+    openDialog({
+      title: `Start ${turn.state_id}`,
+      submitText: 'Start',
+      body: field('Executor', 'executorId', executors[0], {
+        options: executors.map((executorId) => [executorId, executorId]),
+      }),
+      onSubmit: async (formData) => {
+        await startCurrentTurn(formData.get('executorId'));
+        closeDialog();
+      },
+    });
+  };
+
   const configureExecution = () => {
     const group = selectedGroup();
     const instance = selectedInstance();
@@ -1034,8 +1168,9 @@ export function createCollaborationWorkspace(options) {
       group.projection,
       instance.instance_id,
     );
+    const stateId = turn?.state_id ?? instance.business_state;
     openDialog({
-      title: `Execution · ${turn.state_id}`,
+      title: `Execution · ${stateId}`,
       body: `<div class="collaboration-form-grid">${field(
         'Mode',
         'mode',
@@ -1080,7 +1215,7 @@ export function createCollaborationWorkspace(options) {
         const values = Object.fromEntries(formData.entries());
         const manual = values.mode === 'manual';
         await options.request(
-          `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/states/${encodeURIComponent(turn.state_id)}/execution`,
+          `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/states/${encodeURIComponent(stateId)}/execution`,
           {
             method: 'PUT',
             body: JSON.stringify({
@@ -1140,6 +1275,44 @@ export function createCollaborationWorkspace(options) {
     const group = selectedGroup();
     if (action === 'go-activity') return selectTab('activity');
     if (action === 'request-join') return requestJoin();
+    if (action === 'issue-invite') return issueInvite();
+    if (action === 'revoke-invite') {
+      const inviteId = button.dataset.inviteId;
+      await options.request(
+        `/groups/${encodeURIComponent(group.groupId)}/invites/${encodeURIComponent(inviteId)}/revoke`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            expectedRevision: aggregateRevision(
+              group.projection,
+              'invite',
+              inviteId,
+            ),
+            reason: 'Revoked from project-space members view',
+          }),
+        },
+      );
+      return loadDetail(group.groupId, false);
+    }
+    if (action === 'approve-member') {
+      const principalId = button.dataset.principalId;
+      await options.request(
+        `/groups/${encodeURIComponent(group.groupId)}/join-requests/${encodeURIComponent(principalId)}/approve`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            expectedRevision: aggregateRevision(
+              group.projection,
+              'membership',
+              principalId,
+            ),
+          }),
+        },
+      );
+      return loadDetail(group.groupId, false);
+    }
+    if (action === 'reject-member')
+      return rejectMember(button.dataset.principalId);
     if (action === 'new-work-item') return newWorkItem();
     if (action === 'open-work-item') {
       state.selectedWorkItemId = button.dataset.workItemId;
@@ -1267,14 +1440,10 @@ export function createCollaborationWorkspace(options) {
       );
       return loadDetail(group.groupId, false);
     }
-    if (action === 'start-turn') {
+    if (action === 'create-turn') {
       const instance = selectedInstance();
-      const turn = collaborationCurrentTurn(
-        group.projection,
-        instance.instance_id,
-      );
       await options.request(
-        `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/turns/${encodeURIComponent(turn.turn_id)}/start`,
+        `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/commands`,
         {
           method: 'POST',
           body: JSON.stringify({
@@ -1283,10 +1452,21 @@ export function createCollaborationWorkspace(options) {
               'workflow_instance',
               instance.instance_id,
             ),
+            command: 'create_turn',
           }),
         },
       );
       return loadDetail(group.groupId, false);
+    }
+    if (action === 'start-turn') {
+      const instance = selectedInstance();
+      const turn = collaborationCurrentTurn(
+        group.projection,
+        instance.instance_id,
+      );
+      return turn.execution_mode === 'manual'
+        ? startCurrentTurn()
+        : selectTurnExecutor();
     }
     if (action === 'complete-turn') return completeTurn();
     if (action === 'configure-execution') return configureExecution();

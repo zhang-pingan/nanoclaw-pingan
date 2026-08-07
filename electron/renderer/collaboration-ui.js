@@ -11,6 +11,58 @@ export function collaborationCanMutate(group) {
   );
 }
 
+export function collaborationCanApproveMembers(group) {
+  if (!collaborationCanMutate(group)) return false;
+  if (group.localPrincipalId === group.ownerPrincipalId) return true;
+  const grants =
+    group.projection?.permissionGrants?.[group.localPrincipalId]?.grants || [];
+  return grants.includes('member:approve') || grants.includes('group:admin');
+}
+
+export function collaborationCanCreateTurn(instance, definition) {
+  if (
+    !instance ||
+    instance.lifecycle !== 'running' ||
+    instance.active_turn_id
+  )
+    return false;
+  const state = definition?.machine?.states?.[instance.business_state];
+  return Boolean(state && !state.terminal);
+}
+
+export function collaborationEligibleTurnExecutors(group, turn, bindings) {
+  if (!group || !turn || turn.execution_mode === 'manual') return [];
+  return [
+    ...new Set(
+      (bindings || [])
+        .filter(
+          (binding) =>
+            binding.enabled &&
+            binding.groupId === group.groupId &&
+            binding.instanceId === turn.workflow_instance_id &&
+            binding.stateId === turn.state_id &&
+            binding.principalId === group.localPrincipalId &&
+            binding.clientId === group.localClientId &&
+            binding.actionHash === turn.action_hash &&
+            binding.promptHash === turn.prompt_hash,
+        )
+        .map((binding) => binding.executorId),
+    ),
+  ];
+}
+
+export function buildCollaborationStartTurnRequest(
+  expectedRevision,
+  turn,
+  executorId = null,
+) {
+  if (turn?.execution_mode === 'manual')
+    return { expectedRevision, executorId: null };
+  const selected = String(executorId || '').trim();
+  if (!selected) throw new Error('Assisted Turn requires an Executor');
+  return { expectedRevision, executorId: selected };
+}
+
 export function collaborationPrincipalName(projection, principalId) {
   return projection?.members?.[principalId]?.display_name || principalId || '-';
 }
