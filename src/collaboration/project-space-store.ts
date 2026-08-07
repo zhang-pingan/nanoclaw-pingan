@@ -13,7 +13,12 @@ import {
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
+import { z } from 'zod';
 
+import {
+  prettyCollaborationJson,
+  strictParseJson,
+} from './protocol/canonical-json.js';
 import {
   observerSubscriptionSchema,
   type CollaborationEventV3,
@@ -2422,15 +2427,82 @@ export class CollaborationProjectSpaceStore {
   }
 }
 
-export interface CollaborationProjectSpaceBackupManifest {
-  readonly format: 'icarus.collaboration-backup/3';
-  readonly database_basename: string;
-  readonly schema_version: number;
-  readonly created_at: string;
-  readonly file: {
-    readonly size: number;
-    readonly sha256: string;
-  };
+const backupSha256Schema = z.string().regex(/^sha256:[0-9a-f]{64}$/u);
+const backupRelativePathSchema = z
+  .string()
+  .min(3)
+  .max(512)
+  .refine(
+    (value) => {
+      const parts = value.split('/');
+      return (
+        parts.length === 2 &&
+        parts.every(
+          (part) =>
+            part.length > 0 &&
+            !['.', '..'].includes(part) &&
+            !part.includes('\\'),
+        )
+      );
+    },
+    { message: 'Staged Artifact backup path is unsafe' },
+  );
+
+const collaborationProjectSpaceBackupManifestSchema = z
+  .object({
+    format: z.literal('icarus.collaboration-backup/3'),
+    database_basename: z
+      .string()
+      .min(1)
+      .refine((value) => path.basename(value) === value),
+    schema_version: z.literal(
+      CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION,
+    ),
+    created_at: z.string().datetime({ offset: true }),
+    file: z
+      .object({
+        size: z.number().int().nonnegative(),
+        sha256: backupSha256Schema,
+      })
+      .strict(),
+    staged_artifacts: z
+      .object({
+        directory_basename: z.literal('collaboration-staged-artifacts'),
+        files: z
+          .array(
+            z
+              .object({
+                artifact_id: z.string().min(1).max(160),
+                relative_path: backupRelativePathSchema,
+                size: z.number().int().nonnegative(),
+                sha256: backupSha256Schema,
+              })
+              .strict(),
+          )
+          .refine(
+            (files) =>
+              new Set(files.map((file) => file.artifact_id)).size ===
+                files.length &&
+              new Set(files.map((file) => file.relative_path)).size ===
+                files.length,
+            { message: 'Staged Artifact backup members must be unique' },
+          ),
+      })
+      .strict(),
+  })
+  .strict();
+
+export type CollaborationProjectSpaceBackupManifest = z.infer<
+  typeof collaborationProjectSpaceBackupManifestSchema
+>;
+
+interface BackupArtifactRow {
+  readonly artifact_id: string;
+  readonly original_name: string;
+  readonly staged_path: string;
+  readonly sha256: string;
+  readonly size: number;
+  readonly state: 'staged' | 'committed' | 'expired';
 }
 
 function safeDatabasePath(databasePath: string): string {
@@ -2444,7 +2516,44 @@ function safeDatabasePath(databasePath: string): string {
 }
 
 function fileSha256(file: string): string {
-  return crypto.createHash('sha256').update(readFileSync(file)).digest('hex');
+  return `sha256:${crypto
+    .createHash('sha256')
+    .update(readFileSync(file))
+    .digest('hex')}`;
+}
+
+function requireRegularFile(file: string, label: string) {
+  if (!existsSync(file)) throw new Error(`${label} is missing`);
+  const details = lstatSync(file);
+  if (!details.isFile() || details.isSymbolicLink())
+    throw new Error(`${label} is not a regular file`);
+  return details;
+}
+
+function backupArtifactRows(database: Database.Database): BackupArtifactRow[] {
+  return database
+    .prepare(
+      `SELECT artifact_id, original_name, staged_path, sha256, size, state
+         FROM collaboration_staged_artifacts ORDER BY artifact_id`,
+    )
+    .all() as BackupArtifactRow[];
+}
+
+function artifactBackupRelativePath(row: BackupArtifactRow): string {
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9._:@-]*$/u.test(row.artifact_id) ||
+    path.basename(row.original_name) !== row.original_name ||
+    ['.', '..'].includes(row.original_name)
+  )
+    throw new Error(`Staged Artifact path is unsafe: ${row.artifact_id}`);
+  return backupRelativePathSchema.parse(
+    `${row.artifact_id}/${row.original_name}`,
+  );
+}
+
+function artifactPath(root: string, relativePath: string): string {
+  const parsed = backupRelativePathSchema.parse(relativePath);
+  return path.join(root, ...parsed.split('/'));
 }
 
 export function createCollaborationProjectSpaceBackup(input: {
@@ -2459,35 +2568,103 @@ export function createCollaborationProjectSpaceBackup(input: {
   if (existsSync(backupDirectory))
     throw new Error(`Backup directory already exists: ${backupDirectory}`);
   mkdirSync(backupDirectory, { recursive: true, mode: 0o700 });
-  const checkpoint = new Database(databasePath);
   try {
-    checkpoint.pragma('wal_checkpoint(TRUNCATE)');
-    if (
-      schemaVersion(checkpoint) !==
-      CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION
-    )
-      throw new Error('Only the current collaboration schema can be backed up');
-  } finally {
-    checkpoint.close();
+    const checkpoint = new Database(databasePath);
+    try {
+      checkpoint.pragma('wal_checkpoint(TRUNCATE)');
+      if (
+        schemaVersion(checkpoint) !==
+        CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION
+      )
+        throw new Error(
+          'Only the current collaboration schema can be backed up',
+        );
+    } finally {
+      checkpoint.close();
+    }
+    const destination = path.join(backupDirectory, path.basename(databasePath));
+    copyFileSync(databasePath, destination);
+    const snapshot = new Database(destination, {
+      readonly: true,
+      fileMustExist: true,
+    });
+    let rows: BackupArtifactRow[];
+    try {
+      rows = backupArtifactRows(snapshot);
+    } finally {
+      snapshot.close();
+    }
+    const sourceArtifactRoot = path.join(
+      path.dirname(databasePath),
+      'collaboration-staged-artifacts',
+    );
+    const backupArtifactRoot = path.join(
+      backupDirectory,
+      'collaboration-staged-artifacts',
+    );
+    const files: CollaborationProjectSpaceBackupManifest['staged_artifacts']['files'][number][] =
+      [];
+    for (const row of rows) {
+      if (row.state !== 'staged') continue;
+      const relativePath = artifactBackupRelativePath(row);
+      const source = artifactPath(sourceArtifactRoot, relativePath);
+      if (path.resolve(row.staged_path) !== path.resolve(source))
+        throw new Error(
+          `Staged Artifact path is outside the current store: ${row.artifact_id}`,
+        );
+      const details = requireRegularFile(
+        source,
+        `Staged Artifact ${row.artifact_id}`,
+      );
+      if (
+        details.size !== row.size ||
+        fileSha256(source) !== backupSha256Schema.parse(row.sha256)
+      )
+        throw new Error(
+          `Staged Artifact integrity check failed: ${row.artifact_id}`,
+        );
+      const destinationFile = artifactPath(backupArtifactRoot, relativePath);
+      mkdirSync(path.dirname(destinationFile), {
+        recursive: true,
+        mode: 0o700,
+      });
+      copyFileSync(source, destinationFile);
+      const destinationSha256 = fileSha256(destinationFile);
+      if (destinationSha256 !== row.sha256)
+        throw new Error(
+          `Staged Artifact backup copy failed integrity verification: ${row.artifact_id}`,
+        );
+      files.push({
+        artifact_id: row.artifact_id,
+        relative_path: relativePath,
+        size: details.size,
+        sha256: destinationSha256,
+      });
+    }
+    const manifest = collaborationProjectSpaceBackupManifestSchema.parse({
+      format: 'icarus.collaboration-backup/3',
+      database_basename: path.basename(databasePath),
+      schema_version: CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION,
+      created_at: (input.createdAt ?? new Date()).toISOString(),
+      file: {
+        size: statSync(destination).size,
+        sha256: fileSha256(destination),
+      },
+      staged_artifacts: {
+        directory_basename: 'collaboration-staged-artifacts',
+        files,
+      },
+    });
+    writeFileSync(
+      path.join(backupDirectory, 'manifest.json'),
+      prettyCollaborationJson(manifest),
+      { mode: 0o600 },
+    );
+    return manifest;
+  } catch (error) {
+    rmSync(backupDirectory, { recursive: true, force: true });
+    throw error;
   }
-  const destination = path.join(backupDirectory, path.basename(databasePath));
-  copyFileSync(databasePath, destination);
-  const manifest: CollaborationProjectSpaceBackupManifest = {
-    format: 'icarus.collaboration-backup/3',
-    database_basename: path.basename(databasePath),
-    schema_version: CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION,
-    created_at: (input.createdAt ?? new Date()).toISOString(),
-    file: {
-      size: statSync(destination).size,
-      sha256: fileSha256(destination),
-    },
-  };
-  writeFileSync(
-    path.join(backupDirectory, 'manifest.json'),
-    `${JSON.stringify(manifest, null, 2)}\n`,
-    { mode: 0o600 },
-  );
-  return manifest;
 }
 
 export function restoreCollaborationProjectSpaceBackup(input: {
@@ -2496,49 +2673,182 @@ export function restoreCollaborationProjectSpaceBackup(input: {
 }): { readonly rollbackDirectory: string | null } {
   const databasePath = safeDatabasePath(input.databasePath);
   const backupDirectory = path.resolve(input.backupDirectory);
-  const manifest = JSON.parse(
-    readFileSync(path.join(backupDirectory, 'manifest.json'), 'utf8'),
-  ) as CollaborationProjectSpaceBackupManifest;
-  if (
-    manifest.format !== 'icarus.collaboration-backup/3' ||
-    manifest.schema_version !==
-      CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION ||
-    manifest.database_basename !== path.basename(databasePath)
-  )
+  const manifest = collaborationProjectSpaceBackupManifestSchema.parse(
+    strictParseJson(
+      readFileSync(path.join(backupDirectory, 'manifest.json'), 'utf8'),
+    ),
+  );
+  if (manifest.database_basename !== path.basename(databasePath))
     throw new Error('Collaboration backup is not the current v3 format');
   const source = path.join(backupDirectory, manifest.database_basename);
+  const sourceDetails = requireRegularFile(
+    source,
+    'Collaboration backup database',
+  );
   if (
-    !existsSync(source) ||
-    statSync(source).size !== manifest.file.size ||
+    sourceDetails.size !== manifest.file.size ||
     fileSha256(source) !== manifest.file.sha256
   )
     throw new Error('Collaboration backup failed integrity verification');
+  const liveArtifactRoot = path.join(
+    path.dirname(databasePath),
+    manifest.staged_artifacts.directory_basename,
+  );
   const staging = path.join(
     path.dirname(databasePath),
     `.collaboration-restore-${crypto.randomUUID()}.db`,
   );
-  copyFileSync(source, staging);
-  const verified = new CollaborationProjectSpaceStore(staging);
-  verified.close();
-  const rollbackDirectory = existsSync(databasePath)
-    ? path.join(
-        path.dirname(databasePath),
-        `.collaboration-pre-restore-${crypto.randomUUID()}`,
-      )
-    : null;
-  if (rollbackDirectory) {
-    mkdirSync(rollbackDirectory, { mode: 0o700 });
-    renameSync(
-      databasePath,
-      path.join(rollbackDirectory, path.basename(databasePath)),
-    );
+  const stagedArtifacts = path.join(
+    path.dirname(databasePath),
+    `.collaboration-restore-${crypto.randomUUID()}-artifacts`,
+  );
+  let rollbackDirectory: string | null = null;
+  let installedDatabase = false;
+  let installedArtifacts = false;
+  try {
+    copyFileSync(source, staging);
+    mkdirSync(stagedArtifacts, { recursive: true, mode: 0o700 });
+    const verified = new CollaborationProjectSpaceStore(staging);
+    try {
+      const rows = backupArtifactRows(verified.rawDatabaseForTests());
+      const stagedRows = rows.filter((row) => row.state === 'staged');
+      const manifestFiles = new Map(
+        manifest.staged_artifacts.files.map((file) => [file.artifact_id, file]),
+      );
+      if (stagedRows.length !== manifestFiles.size)
+        throw new Error(
+          'Collaboration backup staged Artifact inventory does not match the database',
+        );
+      const updatePath = verified
+        .rawDatabaseForTests()
+        .prepare(
+          'UPDATE collaboration_staged_artifacts SET staged_path = ? WHERE artifact_id = ?',
+        );
+      verified.rawDatabaseForTests().transaction(() => {
+        for (const row of rows) {
+          const relativePath = artifactBackupRelativePath(row);
+          updatePath.run(
+            artifactPath(liveArtifactRoot, relativePath),
+            row.artifact_id,
+          );
+          if (row.state !== 'staged') continue;
+          const file = manifestFiles.get(row.artifact_id);
+          if (
+            !file ||
+            file.relative_path !== relativePath ||
+            file.size !== row.size ||
+            file.sha256 !== backupSha256Schema.parse(row.sha256)
+          )
+            throw new Error(
+              `Collaboration backup staged Artifact metadata mismatch: ${row.artifact_id}`,
+            );
+          const backupFile = artifactPath(
+            path.join(
+              backupDirectory,
+              manifest.staged_artifacts.directory_basename,
+            ),
+            file.relative_path,
+          );
+          const details = requireRegularFile(
+            backupFile,
+            `Backup Artifact ${row.artifact_id}`,
+          );
+          if (
+            details.size !== file.size ||
+            fileSha256(backupFile) !== file.sha256
+          )
+            throw new Error(
+              `Collaboration backup Artifact integrity verification failed: ${row.artifact_id}`,
+            );
+          const stagedFile = artifactPath(stagedArtifacts, file.relative_path);
+          mkdirSync(path.dirname(stagedFile), {
+            recursive: true,
+            mode: 0o700,
+          });
+          copyFileSync(backupFile, stagedFile);
+        }
+      })();
+      verified.rawDatabaseForTests().pragma('wal_checkpoint(TRUNCATE)');
+    } finally {
+      verified.close();
+    }
+    for (const suffix of ['-wal', '-shm']) {
+      const companion = `${staging}${suffix}`;
+      if (existsSync(companion)) rmSync(companion);
+    }
+
+    const hasLiveState =
+      existsSync(databasePath) ||
+      existsSync(liveArtifactRoot) ||
+      ['-wal', '-shm'].some((suffix) => existsSync(`${databasePath}${suffix}`));
+    rollbackDirectory = hasLiveState
+      ? path.join(
+          path.dirname(databasePath),
+          `.collaboration-pre-restore-${crypto.randomUUID()}`,
+        )
+      : null;
+    if (rollbackDirectory) {
+      mkdirSync(rollbackDirectory, { mode: 0o700 });
+      for (const suffix of ['', '-wal', '-shm']) {
+        const current = `${databasePath}${suffix}`;
+        if (existsSync(current))
+          renameSync(
+            current,
+            path.join(
+              rollbackDirectory,
+              `${path.basename(databasePath)}${suffix}`,
+            ),
+          );
+      }
+      if (existsSync(liveArtifactRoot))
+        renameSync(
+          liveArtifactRoot,
+          path.join(rollbackDirectory, path.basename(liveArtifactRoot)),
+        );
+    }
+    renameSync(staging, databasePath);
+    installedDatabase = true;
+    renameSync(stagedArtifacts, liveArtifactRoot);
+    installedArtifacts = true;
+    return { rollbackDirectory };
+  } catch (error) {
+    if (installedDatabase && existsSync(databasePath)) rmSync(databasePath);
+    if (installedArtifacts && existsSync(liveArtifactRoot))
+      rmSync(liveArtifactRoot, { recursive: true, force: true });
+    if (rollbackDirectory) {
+      const rollbackDatabase = path.join(
+        rollbackDirectory,
+        path.basename(databasePath),
+      );
+      if (existsSync(rollbackDatabase)) {
+        if (existsSync(databasePath)) rmSync(databasePath);
+        renameSync(rollbackDatabase, databasePath);
+      }
+      for (const suffix of ['-wal', '-shm']) {
+        const rollbackCompanion = `${rollbackDatabase}${suffix}`;
+        if (existsSync(rollbackCompanion))
+          renameSync(rollbackCompanion, `${databasePath}${suffix}`);
+      }
+      const rollbackArtifacts = path.join(
+        rollbackDirectory,
+        path.basename(liveArtifactRoot),
+      );
+      if (existsSync(rollbackArtifacts)) {
+        if (existsSync(liveArtifactRoot))
+          rmSync(liveArtifactRoot, { recursive: true, force: true });
+        renameSync(rollbackArtifacts, liveArtifactRoot);
+      }
+      rmSync(rollbackDirectory, { recursive: true, force: true });
+    }
+    if (existsSync(staging)) rmSync(staging);
+    for (const suffix of ['-wal', '-shm']) {
+      const companion = `${staging}${suffix}`;
+      if (existsSync(companion)) rmSync(companion);
+    }
+    if (existsSync(stagedArtifacts))
+      rmSync(stagedArtifacts, { recursive: true, force: true });
+    throw error;
   }
-  renameSync(staging, databasePath);
-  for (const suffix of ['-wal', '-shm']) {
-    const stale = `${databasePath}${suffix}`;
-    if (existsSync(stale)) rmSync(stale);
-  }
-  return { rollbackDirectory };
 }
 
 export function rollbackCollaborationProjectSpaceRestore(input: {
@@ -2555,8 +2865,29 @@ export function rollbackCollaborationProjectSpaceRestore(input: {
   const rollback = path.join(rollbackDirectory, path.basename(databasePath));
   if (!existsSync(rollback))
     throw new Error('Collaboration rollback database is missing');
+  const liveArtifactRoot = path.join(
+    path.dirname(databasePath),
+    'collaboration-staged-artifacts',
+  );
   if (existsSync(databasePath)) rmSync(databasePath);
+  for (const suffix of ['-wal', '-shm']) {
+    const current = `${databasePath}${suffix}`;
+    if (existsSync(current)) rmSync(current);
+  }
+  if (existsSync(liveArtifactRoot))
+    rmSync(liveArtifactRoot, { recursive: true, force: true });
   renameSync(rollback, databasePath);
+  for (const suffix of ['-wal', '-shm']) {
+    const rollbackCompanion = `${rollback}${suffix}`;
+    if (existsSync(rollbackCompanion))
+      renameSync(rollbackCompanion, `${databasePath}${suffix}`);
+  }
+  const rollbackArtifacts = path.join(
+    rollbackDirectory,
+    path.basename(liveArtifactRoot),
+  );
+  if (existsSync(rollbackArtifacts))
+    renameSync(rollbackArtifacts, liveArtifactRoot);
 }
 
 type WorkItemRow = CollaborationProjectionV3['workItems'][string];

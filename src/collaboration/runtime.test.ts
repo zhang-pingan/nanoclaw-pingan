@@ -71,6 +71,10 @@ describe('CollaborationRuntime', () => {
       format: 'icarus.collaboration-backup/3',
       database_basename: 'collaboration.db',
       file: { size: expect.any(Number), sha256: expect.any(String) },
+      staged_artifacts: {
+        directory_basename: 'collaboration-staged-artifacts',
+        files: [],
+      },
     });
     expect(selected.status()).toMatchObject({
       available: true,

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -10,6 +10,9 @@ import {
   CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION,
   CollaborationProjectSpaceStore,
   CollaborationProjectSpaceStoreError,
+  createCollaborationProjectSpaceBackup,
+  restoreCollaborationProjectSpaceBackup,
+  rollbackCollaborationProjectSpaceRestore,
 } from './project-space-store.js';
 import {
   buildCollaborationEventV3,
@@ -336,6 +339,127 @@ describe('Collaboration project space v3 store', () => {
       'expired',
     );
     expect(existsSync(abandoned.stagedPath)).toBe(false);
+    store.close();
+  });
+
+  it('backs up, restores, and rolls back staged Artifact bytes with strict integrity', () => {
+    const databasePath = temporaryPath('backup-artifacts.db');
+    const backupDirectory = path.join(path.dirname(databasePath), 'backup');
+    let store = new CollaborationProjectSpaceStore(databasePath);
+    store.registerGroup({
+      subscription: {
+        format: 'icarus.collaboration-subscription/1',
+        group_id: 'group_test',
+        remote_url: '/tmp/group.git',
+        subscription_mode: 'member',
+        poll_interval_ms: 60_000,
+        last_verified_head: null,
+        notifications_enabled: true,
+        created_at: NOW,
+      },
+      name: 'Test group',
+      lifecycle: 'active',
+      ownerPrincipalId: PRINCIPAL,
+      repositoryPath: '/tmp/cache.git',
+      localPrincipalId: PRINCIPAL,
+      localClientId: CLIENT,
+      signingKeyPath: '/tmp/id_ed25519',
+      signingPublicKey: 'ssh-ed25519 test',
+      signingKeyRef: 'ssh-ed25519:SHA256:alice',
+    });
+    const backedUp = store.stageArtifact({
+      artifactId: 'artifact_backed_up',
+      groupId: 'group_test',
+      scopeType: 'work_item',
+      scopeId: 'wi_1',
+      principalId: PRINCIPAL,
+      clientId: CLIENT,
+      originalName: 'evidence.bin',
+      mediaType: 'application/octet-stream',
+      contents: Buffer.from([0, 1, 2, 255]),
+    });
+    store.close();
+
+    const manifest = createCollaborationProjectSpaceBackup({
+      databasePath,
+      backupDirectory,
+      createdAt: new Date(NOW),
+    });
+    expect(manifest).toMatchObject({
+      format: 'icarus.collaboration-backup/3',
+      file: { sha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u) },
+      staged_artifacts: {
+        directory_basename: 'collaboration-staged-artifacts',
+        files: [
+          {
+            artifact_id: 'artifact_backed_up',
+            relative_path: 'artifact_backed_up/evidence.bin',
+            size: 4,
+            sha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u),
+          },
+        ],
+      },
+    });
+
+    store = new CollaborationProjectSpaceStore(databasePath);
+    store.markStagedArtifactsCommitted([backedUp.artifactId]);
+    const replacement = store.stageArtifact({
+      artifactId: 'artifact_replacement',
+      groupId: 'group_test',
+      scopeType: 'work_item',
+      scopeId: 'wi_1',
+      principalId: PRINCIPAL,
+      clientId: CLIENT,
+      originalName: 'replacement.txt',
+      mediaType: 'text/plain',
+      contents: Buffer.from('replacement'),
+    });
+    store.close();
+
+    const restored = restoreCollaborationProjectSpaceBackup({
+      databasePath,
+      backupDirectory,
+    });
+    expect(restored.rollbackDirectory).not.toBeNull();
+    store = new CollaborationProjectSpaceStore(databasePath);
+    expect(store.readStagedArtifact(backedUp.artifactId).contents).toEqual(
+      Buffer.from([0, 1, 2, 255]),
+    );
+    expect(store.getStagedArtifact(replacement.artifactId)).toBeNull();
+    store.close();
+
+    rollbackCollaborationProjectSpaceRestore({
+      databasePath,
+      rollbackDirectory: restored.rollbackDirectory!,
+    });
+    store = new CollaborationProjectSpaceStore(databasePath);
+    expect(store.getStagedArtifact(backedUp.artifactId)?.state).toBe(
+      'committed',
+    );
+    expect(store.readStagedArtifact(replacement.artifactId).contents).toEqual(
+      Buffer.from('replacement'),
+    );
+    store.close();
+
+    writeFileSync(
+      path.join(
+        backupDirectory,
+        'collaboration-staged-artifacts',
+        'artifact_backed_up',
+        'evidence.bin',
+      ),
+      Buffer.from('tampered'),
+    );
+    expect(() =>
+      restoreCollaborationProjectSpaceBackup({
+        databasePath,
+        backupDirectory,
+      }),
+    ).toThrow(/Artifact integrity verification failed/u);
+    store = new CollaborationProjectSpaceStore(databasePath);
+    expect(store.readStagedArtifact(replacement.artifactId).contents).toEqual(
+      Buffer.from('replacement'),
+    );
     store.close();
   });
 
