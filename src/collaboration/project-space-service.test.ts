@@ -163,6 +163,27 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
   }
 }
 
+class OverlapDetectingMemoryTransport extends MemoryTransport {
+  private activeInspections = 0;
+  maxConcurrentInspections = 0;
+
+  override async inspect(input: {
+    remoteUrl: string;
+  }): Promise<ValidatedProjectSpaceHistory> {
+    this.activeInspections += 1;
+    this.maxConcurrentInspections = Math.max(
+      this.maxConcurrentInspections,
+      this.activeInspections,
+    );
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return await super.inspect(input);
+    } finally {
+      this.activeInspections -= 1;
+    }
+  }
+}
+
 function service(
   root: string,
   transport: MemoryTransport,
@@ -210,6 +231,37 @@ describe('Collaboration project space v3 Group and identity service', () => {
     expect(JSON.stringify(group.projection)).not.toMatch(
       /roleClaims|owner_role/u,
     );
+    local.store.close();
+  });
+
+  it('serializes background sync with a command for the same repository', async () => {
+    const transport = new OverlapDetectingMemoryTransport();
+    const local = service(tempDirectory(), transport, ALICE);
+    await local.service.createGroup({
+      remoteUrl: '/tmp/project.git',
+      name: 'Project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_project',
+    });
+
+    const [, updated] = await Promise.all([
+      local.service.sync('group_project'),
+      local.service.createDiscussion({
+        groupId: 'group_project',
+        threadId: 'thread_concurrent',
+        title: 'Concurrent command',
+        scope: { type: 'group' },
+      }),
+    ]);
+
+    expect(transport.maxConcurrentInspections).toBe(1);
+    expect(
+      updated.projection?.discussions.thread_concurrent?.discussion.title,
+    ).toBe('Concurrent command');
     local.store.close();
   });
 

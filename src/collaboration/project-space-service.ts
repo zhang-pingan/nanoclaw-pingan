@@ -157,6 +157,7 @@ export function collaborationProjectSpaceRepositoryPath(
 
 export class CollaborationProjectSpaceService {
   private readonly histories = new Map<string, ValidatedProjectSpaceHistory>();
+  private readonly repositoryOperations = new Map<string, Promise<void>>();
 
   constructor(
     readonly store: CollaborationProjectSpaceStore,
@@ -2128,6 +2129,16 @@ export class CollaborationProjectSpaceService {
   async sync(groupId: string): Promise<ValidatedProjectSpaceHistory> {
     const group = this.store.getGroup(groupId);
     if (!group) throw new Error(`Collaboration Group not found: ${groupId}`);
+    return this.withRepositoryOperation(group.repositoryPath, () =>
+      this.syncUnlocked(groupId),
+    );
+  }
+
+  private async syncUnlocked(
+    groupId: string,
+  ): Promise<ValidatedProjectSpaceHistory> {
+    const group = this.store.getGroup(groupId);
+    if (!group) throw new Error(`Collaboration Group not found: ${groupId}`);
     const attemptId = this.store.startSyncAttempt(
       groupId,
       group.lastVerifiedHead,
@@ -2274,43 +2285,68 @@ export class CollaborationProjectSpaceService {
     },
   ): Promise<CollaborationProjectSpaceGroupRecord> {
     const group = this.store.getGroup(groupId);
-    if (
-      !group ||
-      group.subscriptionMode !== 'member' ||
-      !group.localPrincipalId ||
-      !group.localClientId ||
-      !group.signingKeyPath ||
-      !group.signingPublicKey ||
-      !group.signingKeyRef
-    )
-      throw new Error(
-        'Observer subscriptions cannot issue collaboration commands',
-      );
-    const history = await this.sync(groupId);
-    const head =
-      history.projection.aggregateHeads[
-        `${input.aggregateType}:${input.aggregateId}`
-      ];
-    if ((head?.revision ?? 0) !== input.expectedRevision)
-      throw new Error(
-        `Aggregate revision conflict: expected ${String(input.expectedRevision)}, current ${String(head?.revision ?? 0)}`,
-      );
-    const identity: CollaborationPrincipalIdentity = {
-      principalId: group.localPrincipalId,
-      clientId: group.localClientId,
-      privateKeyPath: group.signingKeyPath,
-      publicKey: group.signingPublicKey,
-      keyRef: group.signingKeyRef,
-    };
-    const updated = await this.appendWithIdentity({
-      history,
-      remoteUrl: group.remoteUrl,
-      repositoryPath: group.repositoryPath,
-      identity,
-      ...input,
+    if (!group) throw new Error(`Collaboration Group not found: ${groupId}`);
+    return this.withRepositoryOperation(group.repositoryPath, async () => {
+      const currentGroup = this.store.getGroup(groupId);
+      if (
+        !currentGroup ||
+        currentGroup.subscriptionMode !== 'member' ||
+        !currentGroup.localPrincipalId ||
+        !currentGroup.localClientId ||
+        !currentGroup.signingKeyPath ||
+        !currentGroup.signingPublicKey ||
+        !currentGroup.signingKeyRef
+      )
+        throw new Error(
+          'Observer subscriptions cannot issue collaboration commands',
+        );
+      const history = await this.syncUnlocked(groupId);
+      const head =
+        history.projection.aggregateHeads[
+          `${input.aggregateType}:${input.aggregateId}`
+        ];
+      if ((head?.revision ?? 0) !== input.expectedRevision)
+        throw new Error(
+          `Aggregate revision conflict: expected ${String(input.expectedRevision)}, current ${String(head?.revision ?? 0)}`,
+        );
+      const identity: CollaborationPrincipalIdentity = {
+        principalId: currentGroup.localPrincipalId,
+        clientId: currentGroup.localClientId,
+        privateKeyPath: currentGroup.signingKeyPath,
+        publicKey: currentGroup.signingPublicKey,
+        keyRef: currentGroup.signingKeyRef,
+      };
+      const updated = await this.appendWithIdentity({
+        history,
+        remoteUrl: currentGroup.remoteUrl,
+        repositoryPath: currentGroup.repositoryPath,
+        identity,
+        ...input,
+      });
+      this.saveHistory(groupId, updated);
+      return this.store.getGroup(groupId)!;
     });
-    this.saveHistory(groupId, updated);
-    return this.store.getGroup(groupId)!;
+  }
+
+  private async withRepositoryOperation<T>(
+    repositoryPath: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.repositoryOperations.get(repositoryPath);
+    const result = (previous ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(operation);
+    const settled = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.repositoryOperations.set(repositoryPath, settled);
+    try {
+      return await result;
+    } finally {
+      if (this.repositoryOperations.get(repositoryPath) === settled)
+        this.repositoryOperations.delete(repositoryPath);
+    }
   }
 
   private async appendWithIdentity(input: {
