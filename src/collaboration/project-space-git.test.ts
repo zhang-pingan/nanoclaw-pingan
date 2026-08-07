@@ -24,6 +24,33 @@ import {
 
 const roots: string[] = [];
 const NOW = '2026-08-06T12:00:00.000Z';
+const DELIVERY_MACHINE = {
+  format: 'icarus.collaboration-machine/3' as const,
+  initial_state: 'build',
+  states: {
+    build: {
+      label: 'Build',
+      description: 'Build the verified artifact.',
+      assignee: { type: 'participant_slot' as const, slot: 'builder' },
+      terminal: false,
+      transitions: [
+        { outcome: 'complete', label: 'Complete', target_state: 'done' },
+      ],
+    },
+    done: {
+      label: 'Done',
+      description: '',
+      terminal: true,
+      transitions: [],
+    },
+  },
+};
+const DELIVERY_LAYOUT = {
+  format: 'icarus.collaboration-workflow-layout/1' as const,
+  view: 'participants' as const,
+  nodes: { build: { x: 96, y: 160 }, done: { x: 420, y: 160 } },
+  revision: 1,
+};
 
 afterEach(() => {
   for (const root of roots.splice(0))
@@ -333,9 +360,81 @@ describe('Collaboration project space v3 Git protocol', () => {
           }),
         ]),
       );
+      expect(store.getStagedArtifact(staged.metadata.artifact_id)?.state).toBe(
+        'committed',
+      );
+    } finally {
+      store.close();
+    }
+  }, 30_000);
+
+  it('materializes Workflow Definition lifecycle commits when files stay unchanged', async () => {
+    const test = fixture();
+    const store = new CollaborationProjectSpaceStore(
+      path.join(test.root, 'collaboration.db'),
+    );
+    const identities = {
+      resolveSigningIdentity: async () => test.identity,
+    } as unknown as CollaborationProjectSpaceIdentityService;
+    const service = new CollaborationProjectSpaceService(
+      store,
+      new CollaborationProjectSpaceGitTransport(),
+      path.join(test.root, 'repositories'),
+      identities,
+      () => Date.parse(NOW),
+    );
+    try {
+      await service.createGroup({
+        remoteUrl: test.remote,
+        name: 'Signed project',
+        signingKeyPath: test.identity.privateKeyPath,
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'open',
+        observerAccess: 'allowed',
+        groupId: 'group_signed',
+      });
+      await service.proposeWorkflowDefinition({
+        groupId: 'group_signed',
+        definitionId: 'delivery',
+        expectedRevision: 0,
+        version: 1,
+        name: 'Delivery',
+        machine: DELIVERY_MACHINE,
+        layout: DELIVERY_LAYOUT,
+      });
+      const published = await service.publishWorkflowDefinition({
+        groupId: 'group_signed',
+        definitionId: 'delivery',
+        expectedRevision: 1,
+        version: 1,
+      });
       expect(
-        store.getStagedArtifact(staged.metadata.artifact_id)?.state,
-      ).toBe('committed');
+        published.projection?.workflowDefinitions['delivery@1'].definition
+          .status,
+      ).toBe('published');
+
+      const laidOut = await service.updateWorkflowLayout({
+        groupId: 'group_signed',
+        definitionId: 'delivery',
+        expectedRevision: 2,
+        version: 1,
+        view: 'free',
+        nodes: { build: { x: 120, y: 180 }, done: { x: 520, y: 180 } },
+      });
+      expect(
+        laidOut.projection?.workflowDefinitions['delivery@1'].layout.view,
+      ).toBe('free');
+
+      const retired = await service.retireWorkflowDefinition({
+        groupId: 'group_signed',
+        definitionId: 'delivery',
+        expectedRevision: 3,
+        reason: 'Fixture complete',
+      });
+      expect(
+        retired.projection?.workflowDefinitions['delivery@1'].definition.status,
+      ).toBe('retired');
     } finally {
       store.close();
     }

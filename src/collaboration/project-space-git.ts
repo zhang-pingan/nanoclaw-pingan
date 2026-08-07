@@ -306,7 +306,10 @@ function eventArtifacts(event: CollaborationEventV3): ArtifactMetadataV3[] {
     event.event_type !== 'turn_completed'
   )
     return [];
-  return artifactMetadataV3Schema.array().max(20).parse(event.payload.artifacts);
+  return artifactMetadataV3Schema
+    .array()
+    .max(20)
+    .parse(event.payload.artifacts);
 }
 
 function automaticMaterialization(
@@ -982,10 +985,11 @@ async function verifyMaterializedCommit(
   const automatic = automaticMaterialization(event, projection);
   const allowedExtra = allowedExtraMaterializationPaths(event);
   const changed = new Set(changes.map((change) => change.file));
-  const expected = new Set([eventFile, ...automatic.keys(), ...allowedExtra]);
+  const allowed = new Set([eventFile, ...automatic.keys(), ...allowedExtra]);
+  const required = [eventFile, ...allowedExtra];
   if (
-    changed.size !== expected.size ||
-    [...changed].some((file) => !expected.has(file))
+    required.some((file) => !changed.has(file)) ||
+    [...changed].some((file) => !allowed.has(file))
   )
     throw new CollaborationProtocolError(
       'PROTOCOL_QUARANTINED',
