@@ -5,13 +5,18 @@ import type { ActionObservation } from './executors/types.js';
 import type { CollaborationProjectSpaceService } from './project-space-service.js';
 import type {
   CollaborationActionExecutionV3,
+  CollaborationProjectSpaceEventRecord,
   CollaborationProjectSpaceGroupRecord,
   CollaborationProjectSpaceStore,
 } from './project-space-store.js';
-import type {
-  ActionDefinitionV3,
-  CollaborationTurnV3,
+export { deterministicCollaborationPollDelay } from './project-space-store.js';
+import {
+  actionDefinitionV3Schema,
+  type ActionDefinitionV3,
+  type CollaborationTurnV3,
 } from './protocol/v3-schema.js';
+import type { CollaborationEventV3 } from './protocol/v3-schema.js';
+import { collaborationCanonicalHashV3 } from './protocol/v3-reducer.js';
 
 export interface CollaborationSchedulerOptions {
   readonly ownerId?: string;
@@ -30,24 +35,48 @@ export interface CollaborationSchedulerDiagnostic {
   readonly lastError: string | null;
 }
 
-export function deterministicCollaborationPollDelay(
-  groupId: string,
-  baseMs: number,
-): number {
-  const byte = crypto.createHash('sha256').update(groupId).digest()[0] ?? 0;
-  return Math.max(1_000, Math.round(baseMs * (0.9 + (byte / 255) * 0.2)));
+interface CollaborationActionSnapshot {
+  readonly action: ActionDefinitionV3;
+  readonly verifiedCommit: string;
 }
 
-function actionForTurn(
-  group: CollaborationProjectSpaceGroupRecord,
-  turn: CollaborationTurnV3,
+function actionFromEvent(
+  event: CollaborationEventV3,
 ): ActionDefinitionV3 | null {
-  if (!group.projection || !turn.action_ref) return null;
-  return (
-    Object.values(group.projection.actions).find((action) =>
-      turn.action_ref?.endsWith(`/${action.action_id}.json`),
-    ) ?? null
-  );
+  if (
+    event.event_type !== 'action_published' &&
+    event.event_type !== 'action_revised'
+  )
+    return null;
+  const parsed = actionDefinitionV3Schema.safeParse(event.payload.action);
+  return parsed.success ? parsed.data : null;
+}
+
+export function collaborationActionSnapshotForTurn(
+  records: readonly CollaborationProjectSpaceEventRecord[],
+  turn: CollaborationTurnV3,
+): CollaborationActionSnapshot | null {
+  if (!turn.action_ref || !turn.action_hash || !turn.prompt_hash) return null;
+  for (const record of records) {
+    const action = actionFromEvent(record.event);
+    if (!action) continue;
+    const expectedActionRef = `workspace/principals/${action.owner_principal_id}/automations/actions/${action.action_id}.json`;
+    if (
+      action.owner_principal_id !== turn.assignee_principal_id ||
+      record.event.aggregate_type !== 'workspace' ||
+      record.event.aggregate_id !== action.owner_principal_id ||
+      record.event.actor.principal_id !== action.owner_principal_id ||
+      action.prompt_ref.startsWith(
+        `workspace/principals/${action.owner_principal_id}/automations/prompts/`,
+      ) === false ||
+      turn.action_ref !== expectedActionRef ||
+      collaborationCanonicalHashV3(action) !== turn.action_hash ||
+      action.prompt_hash !== turn.prompt_hash
+    )
+      continue;
+    return { action, verifiedCommit: record.commitHash };
+  }
+  return null;
 }
 
 export class CollaborationScheduler {
@@ -144,7 +173,6 @@ export class CollaborationScheduler {
 
   private async driveGroup(groupId: string): Promise<void> {
     const history = await this.groups.sync(groupId);
-    await this.groups.observeDueTimeouts(groupId);
     const group = this.store.getGroup(groupId);
     if (
       !group ||
@@ -153,6 +181,7 @@ export class CollaborationScheduler {
       !group.localClientId
     )
       return;
+    await this.groups.observeDueTimeouts(groupId);
     for (const turn of Object.values(history.projection.turns)) {
       if (
         turn.assignee_principal_id !== group.localPrincipalId ||
@@ -222,16 +251,49 @@ export class CollaborationScheduler {
     const instance =
       group?.projection?.workflowInstances[turn.workflow_instance_id];
     const binding = group ? this.bindingForTurn(group, turn) : null;
-    const action = group ? actionForTurn(group, turn) : null;
     if (
       !group ||
       !instance ||
       !binding?.enabled ||
-      !action ||
       !turn.fencing_token ||
       !group.localClientId
     )
       return;
+    const snapshot = collaborationActionSnapshotForTurn(
+      this.store.listEventRecords(groupId, 5_000),
+      turn,
+    );
+    if (!snapshot) {
+      await this.requestRecovery(
+        groupId,
+        turn,
+        'Verified Action snapshot does not match the Turn owner and hashes',
+      );
+      return;
+    }
+    let prompt: string;
+    try {
+      const bytes = await this.groups.readVerifiedFile({
+        groupId,
+        repositoryFile: snapshot.action.prompt_ref,
+        verifiedCommit: snapshot.verifiedCommit,
+      });
+      const promptHash = `sha256:${crypto
+        .createHash('sha256')
+        .update(bytes)
+        .digest('hex')}`;
+      if (promptHash !== turn.prompt_hash)
+        throw new Error('Verified Prompt bytes do not match the Turn hash');
+      prompt = bytes.toString('utf8');
+    } catch (error) {
+      await this.requestRecovery(
+        groupId,
+        turn,
+        error instanceof Error ? error.message : String(error),
+      );
+      return;
+    }
+    const action = snapshot.action;
     const executor = this.executors.resolve(action);
     const claim = this.store.claimActionExecution({
       groupId,
@@ -249,12 +311,6 @@ export class CollaborationScheduler {
     let execution = claim.execution;
     if (claim.acquired) {
       try {
-        const prompt = (
-          await this.groups.readVerifiedFile({
-            groupId,
-            repositoryFile: action.prompt_ref,
-          })
-        ).toString('utf8');
         const prepared = await executor.prepare({
           executionId: execution.executionId,
           operationKey: execution.operationKey,

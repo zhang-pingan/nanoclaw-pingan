@@ -2115,13 +2115,22 @@ export class CollaborationProjectSpaceService {
   async readVerifiedFile(input: {
     readonly groupId: string;
     readonly repositoryFile: string;
+    readonly verifiedCommit?: string;
   }): Promise<Buffer> {
     const group = this.store.getGroup(input.groupId);
     if (!group?.lastVerifiedHead)
       throw new Error('Group has no verified snapshot');
+    const verifiedHead = input.verifiedCommit ?? group.lastVerifiedHead;
+    if (
+      input.verifiedCommit &&
+      !this.store
+        .listEventRecords(input.groupId, 5_000)
+        .some((record) => record.commitHash === input.verifiedCommit)
+    )
+      throw new Error('Requested Action snapshot commit is not verified');
     return this.transport.readVerifiedFile({
       repositoryPath: group.repositoryPath,
-      verifiedHead: group.lastVerifiedHead,
+      verifiedHead,
       repositoryFile: input.repositoryFile,
     });
   }

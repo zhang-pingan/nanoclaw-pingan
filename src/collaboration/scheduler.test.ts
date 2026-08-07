@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { ActionExecutorRegistry } from './executors/registry.js';
@@ -14,6 +16,10 @@ import type {
   CollaborationProjectSpaceStore,
 } from './project-space-store.js';
 import type { CollaborationProjectionV3 } from './protocol/v3-reducer.js';
+import {
+  buildCollaborationEventV3,
+  collaborationCanonicalHashV3,
+} from './protocol/v3-reducer.js';
 import type {
   ActionDefinitionV3,
   CollaborationTurnV3,
@@ -26,6 +32,8 @@ import {
 
 const hash = (value: string) => `sha256:${value.repeat(64)}`;
 const NOW = 1_786_032_000_000;
+const PROMPT = '# Prompt\n';
+const PROMPT_HASH = `sha256:${crypto.createHash('sha256').update(PROMPT).digest('hex')}`;
 
 function action(): ActionDefinitionV3 {
   return {
@@ -37,8 +45,9 @@ function action(): ActionDefinitionV3 {
     kind: 'run_once',
     adapter: null,
     workflow_ref: null,
-    prompt_ref: 'workspace/principals/principal_alice/prompts/implement.md',
-    prompt_hash: hash('p'),
+    prompt_ref:
+      'workspace/principals/principal_alice/automations/prompts/implement.md',
+    prompt_hash: PROMPT_HASH,
     executor_policy: 'principal_selected',
     filesystem_access: 'workspace_write',
     result_schema: { ref: 'result@1', schema: null },
@@ -60,9 +69,10 @@ function turn(state: CollaborationTurnV3['state']): CollaborationTurnV3 {
     fencing_token: claimed ? hash('f') : null,
     execution_mode: 'automatic',
     state,
-    action_ref: 'workspace/principals/principal_alice/actions/implement.json',
-    action_hash: hash('a'),
-    prompt_hash: hash('p'),
+    action_ref:
+      'workspace/principals/principal_alice/automations/actions/implement.json',
+    action_hash: collaborationCanonicalHashV3(action()),
+    prompt_hash: PROMPT_HASH,
     input_hash: hash('i'),
     idempotency_key: hash('k'),
     incoming_handoff: null,
@@ -111,8 +121,8 @@ function binding(): CollaborationExecutorBindingV3 {
     stateId: 'implementation',
     principalId: 'principal_alice',
     clientId: 'client_alice',
-    actionHash: hash('a'),
-    promptHash: hash('p'),
+    actionHash: collaborationCanonicalHashV3(action()),
+    promptHash: PROMPT_HASH,
     executorId: 'executor_local',
     executorKind: 'run_once',
     workspacePath: '/tmp/workspace',
@@ -172,6 +182,34 @@ function succeeded(): ActionObservation {
   };
 }
 
+function actionRecord(
+  selectedAction: ActionDefinitionV3,
+  commitOrder = 1,
+  commitHash = 'a'.repeat(40),
+) {
+  return {
+    event: buildCollaborationEventV3({
+      groupId: 'group_test',
+      eventId: `evt_action_${commitOrder}`,
+      aggregateType: 'workspace',
+      aggregateId: selectedAction.owner_principal_id,
+      aggregateRevision: commitOrder,
+      previousEventHash: commitOrder === 1 ? null : hash('e'),
+      eventType:
+        selectedAction.version === 1 ? 'action_published' : 'action_revised',
+      actor: {
+        principal_id: selectedAction.owner_principal_id,
+        client_id: 'client_alice',
+        executor_id: null,
+      },
+      occurredAt: '2026-08-06T12:00:00.000Z',
+      payload: { action: selectedAction },
+    }),
+    commitHash,
+    commitOrder,
+  };
+}
+
 function harness(input: {
   initialState?: CollaborationTurnV3['state'];
   observation?: ActionObservation;
@@ -180,23 +218,34 @@ function harness(input: {
   dispatchError?: Error;
   markDispatchAccepted?: boolean;
   observationAccepted?: boolean;
+  groupMode?: 'observer' | 'member';
+  projectionActions?: Record<string, ActionDefinitionV3>;
+  eventRecords?: ReturnType<typeof actionRecord>[];
+  promptByCommit?: Record<string, string>;
+  turnOverrides?: Partial<CollaborationTurnV3>;
 }) {
-  let currentTurn = turn(input.initialState ?? 'running');
+  let currentTurn = {
+    ...turn(input.initialState ?? 'running'),
+    ...input.turnOverrides,
+  };
   const selectedInstance = instance();
   const selectedAction = action();
+  const eventRecords = input.eventRecords ?? [actionRecord(selectedAction)];
   const projection = {
     turns: { turn_1: currentTurn },
     workflowInstances: { instance_1: selectedInstance },
-    actions: { implement: selectedAction },
+    actions: input.projectionActions ?? {
+      'principal_alice:implement': selectedAction,
+    },
     aggregateHeads: {
       'workflow_instance:instance_1': { revision: 1 },
     },
   } as unknown as CollaborationProjectionV3;
   const group = {
     groupId: 'group_test',
-    subscriptionMode: 'member',
-    localPrincipalId: 'principal_alice',
-    localClientId: 'client_alice',
+    subscriptionMode: input.groupMode ?? 'member',
+    localPrincipalId: input.groupMode === 'observer' ? null : 'principal_alice',
+    localClientId: input.groupMode === 'observer' ? null : 'client_alice',
     projection,
     nextSyncAtMs: 0,
   } as CollaborationProjectSpaceGroupRecord;
@@ -207,6 +256,7 @@ function harness(input: {
     getGroup: vi.fn(() => group),
     acquireProcessLock: vi.fn(() => true),
     releaseProcessLock: vi.fn(),
+    listEventRecords: vi.fn(() => eventRecords),
     getExecutorBinding: vi.fn(() => binding()),
     claimActionExecution: vi.fn(() => ({
       execution,
@@ -235,7 +285,11 @@ function harness(input: {
       projection.turns.turn_1 = currentTurn;
       return group;
     }),
-    readVerifiedFile: vi.fn(async () => Buffer.from('# Prompt\n')),
+    readVerifiedFile: vi.fn(async (request) =>
+      Buffer.from(
+        input.promptByCommit?.[request.verifiedCommit ?? ''] ?? PROMPT,
+      ),
+    ),
     recordActionState: vi.fn(async () => {
       order.push('git-action-state');
       return group;
@@ -292,6 +346,94 @@ describe('Collaboration project-space v3 Scheduler', () => {
     expect(
       deterministicCollaborationPollDelay('group_a', 60_000),
     ).toBeLessThanOrEqual(66_000);
+  });
+
+  it('resolves an Action snapshot by owner and hashes when another Principal uses the same id', async () => {
+    const aliceAction = action();
+    const bobAction = {
+      ...action(),
+      owner_principal_id: 'principal_bob',
+      prompt_ref:
+        'workspace/principals/principal_bob/automations/prompts/implement.md',
+    };
+    const selected = harness({
+      projectionActions: {
+        'principal_bob:implement': bobAction,
+        'principal_alice:implement': aliceAction,
+      },
+      eventRecords: [actionRecord(aliceAction)],
+    });
+
+    await selected.scheduler.syncNow('group_test');
+
+    expect(selected.executor.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: expect.objectContaining({
+          owner_principal_id: 'principal_alice',
+        }),
+      }),
+    );
+  });
+
+  it('executes the frozen Action and Prompt after the current Action is revised', async () => {
+    const original = action();
+    const revisedPrompt = '# Revised Prompt\n';
+    const revised = {
+      ...original,
+      version: 2,
+      name: 'Implement revised',
+      prompt_hash: `sha256:${crypto.createHash('sha256').update(revisedPrompt).digest('hex')}`,
+    };
+    const originalCommit = 'a'.repeat(40);
+    const revisedCommit = 'b'.repeat(40);
+    const selected = harness({
+      projectionActions: { 'principal_alice:implement': revised },
+      eventRecords: [
+        actionRecord(revised, 2, revisedCommit),
+        actionRecord(original, 1, originalCommit),
+      ],
+      promptByCommit: {
+        [originalCommit]: PROMPT,
+        [revisedCommit]: revisedPrompt,
+      },
+    });
+
+    await selected.scheduler.syncNow('group_test');
+
+    expect(selected.executor.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: expect.objectContaining({ version: 1 }),
+        prompt: PROMPT,
+      }),
+    );
+    expect(selected.groups.readVerifiedFile).toHaveBeenCalledWith(
+      expect.objectContaining({ verifiedCommit: originalCommit }),
+    );
+  });
+
+  it('fails closed when no verified Action event matches the Turn hashes', async () => {
+    const selected = harness({
+      turnOverrides: { action_hash: hash('x') },
+    });
+
+    await selected.scheduler.syncNow('group_test');
+
+    expect(selected.executor.dispatch).not.toHaveBeenCalled();
+    expect(selected.groups.requestTurnRecovery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: expect.stringMatching(/Action snapshot/i),
+      }),
+    );
+  });
+
+  it('keeps Observer synchronization read-only', async () => {
+    const selected = harness({ groupMode: 'observer' });
+
+    await selected.scheduler.syncNow('group_test');
+
+    expect(selected.groups.sync).toHaveBeenCalledOnce();
+    expect(selected.groups.observeDueTimeouts).not.toHaveBeenCalled();
+    expect(selected.groups.startTurn).not.toHaveBeenCalled();
   });
 
   it('automatically claims a Principal-owned Turn and persists receipt before Git facts', async () => {

@@ -34,6 +34,26 @@ export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 5;
 export const COLLABORATION_PROJECT_SPACE_STORE_FORMAT =
   'icarus.collaboration-local-store/5';
 
+export function deterministicCollaborationPollDelay(
+  groupId: string,
+  baseMs: number,
+): number {
+  const byte = crypto.createHash('sha256').update(groupId).digest()[0] ?? 0;
+  return Math.max(1_000, Math.round(baseMs * (0.9 + (byte / 255) * 0.2)));
+}
+
+function collaborationSyncDelay(
+  groupId: string,
+  pollIntervalMs: number,
+  backoffAttempt: number,
+): number {
+  const exponential = Math.min(
+    86_400_000,
+    pollIntervalMs * 2 ** Math.min(10, backoffAttempt),
+  );
+  return deterministicCollaborationPollDelay(groupId, exponential);
+}
+
 export class CollaborationProjectSpaceStoreError extends Error {
   constructor(
     readonly code:
@@ -2202,24 +2222,67 @@ export class CollaborationProjectSpaceStore {
     readonly nowMs?: number;
   }): void {
     this.assertOpen();
-    const result = this.database
-      .prepare(
-        `UPDATE collaboration_sync_attempts
-            SET completed_at_ms = ?, outcome = ?, head_after = ?, error = ?,
-                error_class = ?
-          WHERE id = ? AND group_id = ? AND completed_at_ms IS NULL`,
-      )
-      .run(
-        input.nowMs ?? Date.now(),
-        input.outcome,
-        input.headAfter,
-        input.error ?? null,
-        input.errorClass ?? null,
-        input.id,
-        input.groupId,
-      );
-    if (result.changes !== 1)
-      throw new Error(`Sync attempt cannot be completed: ${String(input.id)}`);
+    const nowMs = input.nowMs ?? Date.now();
+    this.database.transaction(() => {
+      const subscription = this.database
+        .prepare(
+          `SELECT poll_interval_ms, backoff_attempt
+             FROM collaboration_subscriptions WHERE group_id = ?`,
+        )
+        .get(input.groupId) as
+        | { poll_interval_ms: number; backoff_attempt: number }
+        | undefined;
+      if (!subscription)
+        throw new Error(`Collaboration Group not found: ${input.groupId}`);
+      const result = this.database
+        .prepare(
+          `UPDATE collaboration_sync_attempts
+              SET completed_at_ms = ?, outcome = ?, head_after = ?, error = ?,
+                  error_class = ?
+            WHERE id = ? AND group_id = ? AND completed_at_ms IS NULL`,
+        )
+        .run(
+          nowMs,
+          input.outcome,
+          input.headAfter,
+          input.error ?? null,
+          input.errorClass ?? null,
+          input.id,
+          input.groupId,
+        );
+      if (result.changes !== 1)
+        throw new Error(
+          `Sync attempt cannot be completed: ${String(input.id)}`,
+        );
+      const nextBackoffAttempt =
+        input.outcome === 'succeeded'
+          ? 0
+          : Math.min(10, Number(subscription.backoff_attempt) + 1);
+      const nextSyncAtMs =
+        nowMs +
+        collaborationSyncDelay(
+          input.groupId,
+          Number(subscription.poll_interval_ms),
+          nextBackoffAttempt,
+        );
+      const subscriptionResult = this.database
+        .prepare(
+          `UPDATE collaboration_subscriptions
+              SET next_sync_at_ms = ?, backoff_attempt = ?, last_error = ?,
+                  last_sync_at_ms = CASE WHEN ? = 'succeeded' THEN ? ELSE last_sync_at_ms END
+            WHERE group_id = ?`,
+        )
+        .run(
+          nextSyncAtMs,
+          nextBackoffAttempt,
+          input.outcome === 'failed' ? (input.error ?? 'Sync failed') : null,
+          input.outcome,
+          nowMs,
+          input.groupId,
+        );
+      if (subscriptionResult.changes !== 1)
+        throw new Error(`Collaboration Group not found: ${input.groupId}`);
+    })();
   }
 
   listSyncAttempts(groupId: string, limit = 50): CollaborationSyncAttemptV3[] {

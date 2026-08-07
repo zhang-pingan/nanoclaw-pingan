@@ -21,6 +21,7 @@ import {
 
 const temporaryDirectories: string[] = [];
 const NOW = '2026-08-06T12:00:00.000Z';
+const NOW_MS = Date.parse(NOW);
 const PRINCIPAL = 'principal_sha256_alice';
 const CLIENT = 'client_alice';
 
@@ -160,6 +161,77 @@ describe('Collaboration project space v3 store', () => {
         .prepare('SELECT COUNT(*) AS count FROM collaboration_principals')
         .get(),
     ).toEqual({ count: 0 });
+    store.close();
+  });
+
+  it('advances successful sync cadence and applies exponential failure backoff with recovery', () => {
+    const store = new CollaborationProjectSpaceStore(
+      temporaryPath('sync-schedule.db'),
+    );
+    store.registerGroup({
+      subscription: {
+        format: 'icarus.collaboration-subscription/1',
+        group_id: 'group_test',
+        remote_url: '/tmp/group.git',
+        subscription_mode: 'observer',
+        poll_interval_ms: 60_000,
+        last_verified_head: null,
+        notifications_enabled: true,
+        created_at: NOW,
+      },
+      name: 'Test group',
+      lifecycle: 'active',
+      ownerPrincipalId: PRINCIPAL,
+      repositoryPath: '/tmp/cache.git',
+      nowMs: NOW_MS,
+    });
+
+    const firstFailure = store.startSyncAttempt('group_test', null, NOW_MS);
+    store.finishSyncAttempt({
+      id: firstFailure,
+      groupId: 'group_test',
+      outcome: 'failed',
+      headAfter: null,
+      error: 'offline',
+      nowMs: NOW_MS,
+    });
+    const failedOnce = store.getGroup('group_test')!;
+    expect(failedOnce.backoffAttempt).toBe(1);
+    expect(failedOnce.nextSyncAtMs).toBeGreaterThan(NOW_MS + 60_000);
+    expect(failedOnce.lastError).toBe('offline');
+
+    const secondFailureAt = failedOnce.nextSyncAtMs;
+    const secondFailure = store.startSyncAttempt(
+      'group_test',
+      null,
+      secondFailureAt,
+    );
+    store.finishSyncAttempt({
+      id: secondFailure,
+      groupId: 'group_test',
+      outcome: 'failed',
+      headAfter: null,
+      error: 'still offline',
+      nowMs: secondFailureAt,
+    });
+    const failedTwice = store.getGroup('group_test')!;
+    expect(failedTwice.backoffAttempt).toBe(2);
+    expect(failedTwice.nextSyncAtMs).toBeGreaterThan(secondFailureAt + 120_000);
+
+    const recoveredAt = failedTwice.nextSyncAtMs;
+    const recovered = store.startSyncAttempt('group_test', null, recoveredAt);
+    store.finishSyncAttempt({
+      id: recovered,
+      groupId: 'group_test',
+      outcome: 'succeeded',
+      headAfter: 'a'.repeat(40),
+      nowMs: recoveredAt,
+    });
+    const healthy = store.getGroup('group_test')!;
+    expect(healthy.backoffAttempt).toBe(0);
+    expect(healthy.nextSyncAtMs).toBeGreaterThan(recoveredAt + 54_000);
+    expect(healthy.nextSyncAtMs).toBeLessThanOrEqual(recoveredAt + 66_000);
+    expect(healthy.lastError).toBeNull();
     store.close();
   });
 
