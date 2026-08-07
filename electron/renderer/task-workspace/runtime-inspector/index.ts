@@ -44,6 +44,16 @@ function recordIdentity(
   );
 }
 
+function artifactGraphRunId(artifact: Record<string, unknown>): string {
+  const payload = isRecord(artifact.artifact) ? artifact.artifact : artifact;
+  const display = isRecord(payload.display_json)
+    ? payload.display_json
+    : isRecord(payload.display)
+      ? payload.display
+      : null;
+  return String(payload.graph_run_id ?? display?.graph_run_id ?? '');
+}
+
 export function renderOverview(state: TaskWorkspaceState): string {
   const workflow = currentWorkflow(state);
   const run = currentRun(state);
@@ -162,10 +172,11 @@ export function renderArtifacts(state: TaskWorkspaceState): string {
   const linked = records(state.runtimeDetail?.artifact_links).filter(
     (artifact) =>
       (!artifact.workflow_id || artifact.workflow_id === workflowId) &&
-      (!artifact.graph_run_id || artifact.graph_run_id === runId),
+      (!artifactGraphRunId(artifact) || artifactGraphRunId(artifact) === runId),
   );
   const runtime = records(workflow?.artifacts).filter(
-    (artifact) => !artifact.graph_run_id || artifact.graph_run_id === runId,
+    (artifact) =>
+      !artifactGraphRunId(artifact) || artifactGraphRunId(artifact) === runId,
   );
   const timeline = state.timeline
     .filter(
@@ -175,7 +186,11 @@ export function renderArtifacts(state: TaskWorkspaceState): string {
           .toLocaleLowerCase()
           .includes('artifact'),
     )
-    .map((entry) => entry.payload_json);
+    .map((entry) => entry.payload_json)
+    .filter(
+      (artifact) =>
+        !artifactGraphRunId(artifact) || artifactGraphRunId(artifact) === runId,
+    );
   const artifacts = new Map<string, Record<string, unknown>>();
   [...runtime, ...linked, ...timeline].forEach((artifact, index) => {
     artifacts.set(recordIdentity(artifact, `artifact-${index}`), artifact);

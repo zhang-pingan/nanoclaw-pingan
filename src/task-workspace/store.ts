@@ -1831,6 +1831,18 @@ export class TaskWorkspaceStore {
     ).map((row) => this.getLaunchIntent(row.launch_intent_id));
   }
 
+  listDraftingTemporaryLaunchIntents(): TaskLaunchIntentV1[] {
+    return (
+      this.database
+        .prepare(
+          `SELECT launch_intent_id FROM task_workspace_launch_intents
+            WHERE mode = 'temporary_workflow' AND status = 'drafting'
+            ORDER BY created_at_ms, launch_intent_id COLLATE BINARY`,
+        )
+        .all() as Array<{ launch_intent_id: string }>
+    ).map((row) => this.getLaunchIntent(row.launch_intent_id));
+  }
+
   updateLaunchStatus(input: {
     launchIntentId: string;
     expectedRowVersion: number;

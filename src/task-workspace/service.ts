@@ -204,7 +204,12 @@ export class TaskWorkspaceService {
     this.pollTimer = null;
     this.unsubscribeHub?.();
     this.unsubscribeHub = null;
-    await Promise.allSettled(this.activeTurns.values());
+    await Promise.allSettled(
+      new Set([
+        ...this.activeTurns.values(),
+        ...this.coordinatorTails.values(),
+      ]),
+    );
   }
 
   createSession(input: {
@@ -1428,6 +1433,9 @@ export class TaskWorkspaceService {
   }
 
   private async recover(): Promise<void> {
+    for (const launch of this.options.store.listDraftingTemporaryLaunchIntents()) {
+      this.failLaunch(launch, 'temporary_planning_interrupted');
+    }
     for (const proposal of this.options.store.listApplyingCommandProposals()) {
       const session = this.options.store.getSession(proposal.session_id);
       try {
@@ -2239,6 +2247,10 @@ export class TaskWorkspaceService {
           artifactHash: artifact.artifact_hash as Sha256Hash,
           display: {
             artifact_ref: artifact.artifact_ref,
+            title: gatewayDisplay?.title ?? null,
+            path: gatewayDisplay?.path ?? null,
+            relative_path: gatewayDisplay?.relative_path ?? null,
+            download_url: gatewayDisplay?.download_url ?? null,
             media_type:
               gatewayDisplay?.media_type ?? artifact.media_type ?? null,
             byte_length:

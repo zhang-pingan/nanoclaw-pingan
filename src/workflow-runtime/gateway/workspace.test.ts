@@ -4,6 +4,10 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { WorkflowExecutionAdapterRegistry } from '../../workflow-execution/adapter-registry.js';
+import { WorkflowAdapterExecutionStore } from '../../workflow-execution/execution-store.js';
+import type { WorkflowExecutionAdapter } from '../../workflow-execution/types.js';
+import { WorkflowExecutionWorker } from '../../workflow-execution/worker.js';
 import { ensureTaskWorkspaceCore } from '../bootstrap/task-workspace-core.js';
 import { buildDeploymentCapacityPublication } from '../contracts/capacity-control-plane-source.js';
 import type { DeploymentRuntimeCapacitySnapshot } from '../contracts/capacity-control-plane-types.js';
@@ -17,7 +21,9 @@ import {
   createG6MapFixture,
   type G6MapFixture,
 } from '../runtime/g6-test-support.js';
+import { insertInlineValue } from '../runtime/graph-store.js';
 import { initializeScopeFixedPointT3a } from '../runtime/reconciler.js';
+import { prepareCapabilityDispatchT5 } from '../runtime/outbox.js';
 import {
   WorkflowRuntimeService,
   WorkflowRuntimeTransactionAuthority,
@@ -552,32 +558,10 @@ describe('RuntimeWorkspaceGateway', () => {
     ).toThrow(/no longer present in the active Catalog/);
   }, 30_000);
 
-  it('returns task-scoped edges, attempts, completion cuts, and Runtime Artifact links', () => {
+  it('returns task-scoped edges, attempts, and completion cuts', () => {
     const target = launchedTemporary('runtime-detail');
     advanceWorkflowToCompletion(target.store, target.workflowId, 3_000);
     seedUnsafeEffect(target.store, target.runId, 'runtime-detail', 4_000);
-    target.store.withImmediateTransaction((transaction) => {
-      const input = transaction.queryOne<{
-        workflow_input_value_id: string;
-        workflow_input_hash: Sha256Hash;
-      }>(
-        `SELECT workflow_input_value_id, workflow_input_hash
-           FROM workflows WHERE id = ?`,
-        [target.workflowId],
-      )!;
-      transaction.execute(
-        `UPDATE workflow_graph_node_attempts
-            SET artifact_refs_value_id = ?, artifact_refs_hash = ?,
-                row_version = row_version + 1, updated_at_ms = ?
-          WHERE graph_run_id = ? AND error_code = 'effect_unknown'`,
-        [
-          input.workflow_input_value_id,
-          input.workflow_input_hash,
-          4_001,
-          target.runId,
-        ],
-      );
-    });
 
     const workflow = target.gateway.getRuntimeDetail({
       principal_ref: 'human:local-owner',
@@ -613,16 +597,269 @@ describe('RuntimeWorkspaceGateway', () => {
         }),
       ]),
     );
-    expect(workflow.artifacts).toEqual([
-      expect.objectContaining({
-        graph_run_id: target.runId,
-        artifact_ref: expect.any(String),
-        artifact_hash: expect.stringMatching(/^sha256:/),
-        inline_value_json: { text: 'runtime-detail' },
-        display_json: expect.objectContaining({ payload_state: 'live' }),
-      }),
-    ]);
+    expect(workflow.artifacts).toEqual([]);
   });
+
+  it('expands Artifact links from a real Worker result Value', async () => {
+    const golden = readGoldenCorpus().cases.cases.find(
+      (entry) => entry.case_id === 'positive.quality-revision-binding',
+    );
+    const delegationGolden = readGoldenCorpus().cases.cases.find(
+      (entry) => entry.case_id === 'positive.static-lowering',
+    );
+    if (!golden || !delegationGolden) {
+      throw new Error('Delegation compiler fixture is unavailable');
+    }
+    const source = JSON.parse(
+      Buffer.from(golden.raw_source_base64, 'base64').toString('utf8'),
+    ) as JsonObject;
+    const sourceNode = (source.nodes as JsonObject[]).find(
+      (node) => node.id === 'quality',
+    )!;
+    sourceNode.type = 'delegation';
+    sourceNode.capability_ref = {
+      id: 'fixture.capability.static',
+      version: '1.0.0',
+    };
+    const snapshot = structuredClone(golden.registry_snapshot);
+    const registrySnapshot = snapshot.registry_snapshot as JsonObject;
+    const delegationRegistry = delegationGolden.registry_snapshot
+      .registry_snapshot as JsonObject;
+    registrySnapshot.resources = [
+      ...(registrySnapshot.resources as JsonObject[]).filter(
+        (resource) => resource.resource_type !== 'capability',
+      ),
+      ...(delegationRegistry.resources as JsonObject[]).filter(
+        (resource) => resource.resource_type === 'capability',
+      ),
+    ];
+    registrySnapshot.dependency_closures = (
+      delegationRegistry.dependency_closures as JsonObject[]
+    ).filter((closure) => closure.root_resource_type === 'capability');
+    const completePolicy = (snapshot.policy_snapshot as JsonObject)
+      .complete_policy as JsonObject;
+    const rootPolicy = completePolicy.root_policy as JsonObject;
+    rootPolicy.allowed_capabilities = [sourceNode.capability_ref];
+    const compiled = compileWorkflow({
+      caseId: 'workspace-gateway-worker-artifact',
+      sourceKind: 'graph_scope',
+      rawSourceBytes: Buffer.from(canonicalJson(source), 'utf8'),
+      inputSnapshot: snapshot,
+    });
+    if (!compiled.ok) {
+      throw new Error(
+        `Delegation Artifact fixture failed to compile: ${JSON.stringify(compiled.value)}`,
+      );
+    }
+    const fixture = createG6MapFixture('workspace-worker-artifact', {
+      compiledFixture: {
+        source,
+        snapshot,
+        plan: compiled.value.plan,
+        staticChildPlanBundle: compiled.value.staticChildPlanBundle,
+        childSource: source,
+        childPlan: compiled.value.plan,
+      },
+    });
+    runtimeFixtures.push(fixture);
+    const initialRun = fixture.instance.store.queryOne<{ row_version: number }>(
+      'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+      [fixture.graphRunId],
+    )!;
+    initializeScopeFixedPointT3a(fixture.instance.store, {
+      graphRunId: fixture.graphRunId,
+      scopeId: fixture.rootScopeId,
+      expectedRunRowVersion: initialRun.row_version,
+      manifestSchema: fixture.seed.refs.fenceManifestSchema!,
+      nowMs: 3_000,
+    });
+    const node = fixture.instance.store.queryOne<{
+      id: string;
+      row_version: number;
+      activation_event_seq: number;
+    }>(
+      `SELECT id, row_version, activation_event_seq
+         FROM workflow_graph_nodes
+        WHERE graph_run_id = ? AND node_type = 'delegation'`,
+      [fixture.graphRunId],
+    )!;
+    const admission = scheduleReadyNodeT4(
+      fixture.instance.store,
+      { current: () => fixedCapacity() },
+      {
+        graphRunId: fixture.graphRunId,
+        scopeId: fixture.rootScopeId,
+        nodeId: node.id,
+        expectedNodeRowVersion: node.row_version,
+        expectedRunWorkFenceEpoch: 0,
+        expectedScopeWorkFenceEpoch: 0,
+        eligibleEventSeq: node.activation_event_seq,
+        activation: { kind: 'execution' },
+        nowMs: 3_001,
+      },
+    );
+    const request: JsonObject = {
+      format: 'icarus.workflow-agent-dispatch-request/1',
+      task: {
+        title: 'Produce report',
+        prompt: 'Produce the requested report',
+        files: [],
+      },
+      result_schema: {
+        id: fixture.seed.refs.schema!.ref.id,
+        version: fixture.seed.refs.schema!.ref.version,
+        content_hash: fixture.seed.refs.schema!.hash,
+      },
+      metadata: { source: 'gateway-regression' },
+    };
+    const requestRef = {
+      id: 'value:workspace-worker-artifact-request',
+      hash: hash('worker-artifact-request', request),
+    };
+    fixture.instance.store.withImmediateTransaction((transaction) => {
+      insertInlineValue(transaction, {
+        id: requestRef.id,
+        content: request,
+        contentHash: requestRef.hash,
+        schemaResourceId: fixture.seed.refs.schema!.rowId,
+        schemaResourceHash: fixture.seed.refs.schema!.hash,
+        provenanceRef: 'workspace-gateway-worker-artifact-test',
+        retentionClass: 'run_recovery',
+        ownerGraphRunId: fixture.graphRunId,
+        createdAtMs: 3_002,
+      });
+    });
+    const dispatch = prepareCapabilityDispatchT5(fixture.instance.store, {
+      graphRunId: fixture.graphRunId,
+      scopeId: fixture.rootScopeId,
+      nodeId: node.id,
+      attemptId: admission.attemptId!,
+      expectedAttemptRowVersion: 1,
+      expectedRunWorkFenceEpoch: 0,
+      expectedScopeWorkFenceEpoch: 0,
+      request: requestRef,
+      policySnapshotSchema: fixture.seed.refs.schema!,
+      operationKey: 'operation:workspace-worker-artifact',
+      requiredClaims: [],
+      dispatchDeadlineAtMs: 4_000,
+      outboxDeadlineAtMs: 5_000,
+      nowMs: 3_003,
+    });
+    const adapterRefId = fixture.instance.store.queryOne<{
+      resource_id: string;
+    }>(
+      `SELECT resource.resource_id
+         FROM workflow_outbox outbox
+         JOIN workflow_registry_resources resource
+           ON resource.id = outbox.adapter_resource_id
+          AND resource.content_hash = outbox.adapter_resource_hash
+        WHERE outbox.id = ?`,
+      [dispatch.outboxId],
+    )!.resource_id;
+    const executionStore = new WorkflowAdapterExecutionStore(
+      path.join(fixture.instance.dataRoot, 'workflow-adapter-executions.db'),
+    );
+    const registry = new WorkflowExecutionAdapterRegistry();
+    registry.register({
+      refId: adapterRefId,
+      preflight: async () => undefined,
+      start: async (context) => ({
+        providerMetadata: { source: 'test-adapter' },
+        completion: Promise.resolve({
+          state: 'succeeded' as const,
+          result: {
+            format: 'icarus.workflow-agent-result/1' as const,
+            outcome: 'success' as const,
+            summary: 'Report produced',
+            provider: {
+              adapter: adapterRefId,
+              execution_id: context.executionId,
+              metadata: { source: 'test-adapter' },
+            },
+            artifacts: [
+              {
+                name: 'report.json',
+                path: '/workspace/run-once/output/report.json',
+                relative_path: 'output/report.json',
+                download_url:
+                  '/api/internal-agent/runs/run-worker/files/output/report.json',
+                sha256: 'd'.repeat(64),
+                size: 42,
+                content_type: 'application/json',
+              },
+            ],
+            error: null,
+          },
+        }),
+        cancel: async () => undefined,
+      }),
+      recover: async () => {
+        throw new Error('Recovery is not expected');
+      },
+    } satisfies WorkflowExecutionAdapter);
+    const worker = new WorkflowExecutionWorker({
+      runtimeStore: fixture.instance.store,
+      executionStore,
+      registry,
+      pollIntervalMs: 100,
+      leaseOwner: 'worker:gateway-artifact-test',
+      now: () => 3_100,
+    });
+
+    try {
+      await worker.tick();
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const accepted = fixture.instance.store.queryOne<{
+          result_value_id: string | null;
+        }>(
+          'SELECT result_value_id FROM workflow_graph_node_attempts WHERE id = ?',
+          [admission.attemptId!],
+        );
+        if (accepted?.result_value_id) break;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+      expect(
+        fixture.instance.store.queryOne<{ result_value_id: string | null }>(
+          'SELECT result_value_id FROM workflow_graph_node_attempts WHERE id = ?',
+          [admission.attemptId!],
+        )?.result_value_id,
+      ).toMatch(/^g5:workflow-adapter-result:/);
+
+      const workflow = new RuntimeWorkspaceGateway(
+        fixture.instance.store,
+        Buffer.alloc(32, 9),
+      ).getRuntimeDetail({
+        principal_ref: 'human:local-owner',
+        workflow_ids: [fixture.workflowId],
+      }).workflows[0]!;
+      expect(workflow.artifacts).toEqual([
+        expect.objectContaining({
+          graph_run_id: fixture.graphRunId,
+          node_id: node.id,
+          attempt_id: admission.attemptId,
+          result_value_id: expect.stringMatching(
+            /^g5:workflow-adapter-result:/,
+          ),
+          artifact_hash: `sha256:${'d'.repeat(64)}`,
+          display_json: expect.objectContaining({
+            title: 'report.json',
+            path: '/workspace/run-once/output/report.json',
+            relative_path: 'output/report.json',
+            download_url:
+              '/api/internal-agent/runs/run-worker/files/output/report.json',
+            media_type: 'application/json',
+            byte_length: 42,
+          }),
+        }),
+      ]);
+      expect((workflow.artifacts as JsonObject[])[0]).not.toHaveProperty(
+        'inline_value_json',
+      );
+    } finally {
+      await worker.stop();
+      executionStore.close();
+    }
+  }, 30_000);
 
   it('publishes, activates, pins, and executes versioned Personal Workflows', () => {
     const temporary = launchedTemporary('personal-source');

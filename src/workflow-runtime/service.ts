@@ -29,6 +29,7 @@ import {
   deriveTemporaryReplanTransitionAuthority,
 } from './runtime/root-finalizer.js';
 import {
+  insertGraphEvent,
   insertInlineValue,
   requireSingleChange,
   runtimeObjectHash,
@@ -225,6 +226,8 @@ export class WorkflowRuntimeService {
 interface CompileCandidate extends Record<string, unknown> {
   build_id: string;
   graph_run_id: string;
+  workflow_id: string;
+  root_scope_id: string;
   build_row_version: number;
   run_row_version: number;
   owner_scope_row_version: number | null;
@@ -303,7 +306,7 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
 
   private compile(limit: number, nowMs: number): WorkflowRuntimeAdvanceResult {
     const rows = this.store.queryAll<CompileCandidate>(
-      `SELECT b.id AS build_id, b.graph_run_id,
+      `SELECT b.id AS build_id, b.graph_run_id, r.workflow_id, r.root_scope_id,
               b.row_version AS build_row_version,
               r.row_version AS run_row_version,
               owner_scope.row_version AS owner_scope_row_version,
@@ -384,7 +387,23 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
         processed += 1;
         continue;
       }
-      if (!compilerInput) continue;
+      if (!compilerInput) {
+        this.persistCompileFailure(
+          row,
+          {
+            format: 'icarus.workflow-runtime-compile-failure/1',
+            failure_kind: 'compiler_snapshot_missing',
+            build_id: row.build_id,
+            graph_run_id: row.graph_run_id,
+            scope_kind: row.scope_kind,
+            compiler_snapshot_hash: row.compiler_snapshot_hash,
+          },
+          'compiler_snapshot_missing',
+          nowMs,
+        );
+        processed += 1;
+        continue;
+      }
       const effectiveCompilerInput =
         row.scope_kind !== 'root' && row.owner_node_json
           ? dynamicChildCompilerInputSnapshot(
@@ -516,6 +535,38 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
     };
 
     if (row.scope_kind === 'root') {
+      const remediationPolicy = this.firstResource(
+        'operational_remediation_policy',
+      );
+      const policyValue = remediationPolicy
+        ? this.store.queryOne<{
+            inline_canonical_json: string;
+          }>(
+            `SELECT value.inline_canonical_json
+               FROM workflow_registry_resources resource
+               JOIN workflow_values value ON value.id = resource.canonical_value_id
+              WHERE resource.id = ? AND resource.content_hash = ?
+                AND resource.publication_state = 'published'`,
+            [remediationPolicy.rowId, remediationPolicy.hash],
+          )
+        : null;
+      const policy = policyValue
+        ? parseObject(policyValue.inline_canonical_json)
+        : null;
+      const configuredDuration = Number(policy?.max_duration_ms);
+      const remediationDurationMs = remediationPolicy
+        ? Number.isSafeInteger(configuredDuration) && configuredDuration > 0
+          ? configuredDuration
+          : 24 * 60 * 60_000
+        : null;
+      const severity =
+        errorCode === 'integrity_violation'
+          ? ('quarantine' as const)
+          : ('action_required' as const);
+      const blockerKind =
+        severity === 'quarantine'
+          ? ('integrity_quarantine' as const)
+          : ('resource_or_credential_unavailable' as const);
       this.store.withImmediateTransaction((transaction) => {
         insertInlineValue(transaction, {
           id: detailValue.id,
@@ -556,6 +607,148 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
           ).changes,
           'Root compile failure CAS',
         );
+        const run = transaction.queryOne<{
+          workflow_id: string;
+          operational_state: string;
+          next_event_seq: number;
+          row_version: number;
+        }>(
+          `SELECT workflow_id, operational_state, next_event_seq, row_version
+             FROM workflow_graph_runs WHERE id = ?`,
+          [row.graph_run_id],
+        );
+        if (
+          !run ||
+          run.workflow_id !== row.workflow_id ||
+          run.operational_state !== 'healthy' ||
+          run.row_version !== row.run_row_version
+        ) {
+          throw new Error('Root compile failure Run authority is stale');
+        }
+        const failureSequence = run.next_event_seq + 1;
+        const blockerSequence = failureSequence + 1;
+        const expectedState =
+          severity === 'quarantine' ? 'quarantined' : 'action_required';
+        const blockerId = stableRuntimeId('blocker', {
+          graph_run_id: row.graph_run_id,
+          blocker_kind: blockerKind,
+          source_kind: 'event',
+          source_identity: failureSequence,
+        });
+        insertGraphEvent(transaction, {
+          graphRunId: row.graph_run_id,
+          sequence: failureSequence,
+          scopeId: row.root_scope_id,
+          nodeId: null,
+          attemptId: null,
+          eventType: 'build_failed',
+          idempotencyKey: `build-failed:${row.build_id}`,
+          payloadValueId: detailValue.id,
+          payloadHash: detailValue.hash,
+          occurredAtMs: nowMs,
+          createdAtMs: nowMs,
+        });
+        if (remediationPolicy) {
+          insertGraphEvent(transaction, {
+            graphRunId: row.graph_run_id,
+            sequence: blockerSequence,
+            scopeId: row.root_scope_id,
+            nodeId: null,
+            attemptId: null,
+            eventType: 'operational_blocker_changed',
+            idempotencyKey: `blocker-open:${blockerId}`,
+            payloadJson: {
+              blocker_id: blockerId,
+              status: 'open',
+              severity,
+            },
+            occurredAtMs: nowMs,
+            createdAtMs: nowMs,
+          });
+        }
+        requireSingleChange(
+          transaction.execute(
+            `UPDATE workflow_graph_runs
+                SET next_event_seq = ?,
+                    operational_state = CASE WHEN ? IS NULL
+                      THEN ? ELSE operational_state END,
+                    row_version = row_version + 1, updated_at_ms = ?
+              WHERE id = ? AND row_version = ? AND next_event_seq = ?
+                AND operational_state = 'healthy'`,
+            [
+              remediationPolicy ? blockerSequence : failureSequence,
+              remediationPolicy?.rowId ?? null,
+              expectedState,
+              nowMs,
+              row.graph_run_id,
+              row.run_row_version,
+              run.next_event_seq,
+            ],
+          ).changes,
+          'Root compile failure event-head CAS',
+        );
+        if (remediationPolicy) {
+          transaction.execute(
+            `INSERT INTO workflow_operational_blockers (
+             id, workflow_id, graph_run_id, blocker_kind, severity,
+             source_effect_operation_id, source_outbox_id,
+             source_root_finalization_schedule_id, source_claim_id,
+             source_event_seq, error_code, evidence_manifest_value_id,
+             evidence_manifest_hash, status, remediation_policy_resource_id,
+             remediation_policy_resource_hash, remediation_attempt_count,
+             next_remediation_at_ms, remediation_deadline_at_ms,
+             opened_event_seq, resolved_event_seq, resolution_command_id,
+             resolution_value_id, resolution_hash, row_version, opened_at_ms,
+             resolved_at_ms, abandoned_at_ms
+           ) VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?,
+             'open', ?, ?, 0, NULL, ?, ?, NULL, NULL, NULL, NULL, 1, ?, NULL,
+             NULL)`,
+            [
+              blockerId,
+              row.workflow_id,
+              row.graph_run_id,
+              blockerKind,
+              severity,
+              failureSequence,
+              errorCode,
+              detailValue.id,
+              detailValue.hash,
+              remediationPolicy.rowId,
+              remediationPolicy.hash,
+              Math.min(Number.MAX_SAFE_INTEGER, nowMs + remediationDurationMs!),
+              blockerSequence,
+              nowMs,
+            ],
+          );
+        } else {
+          requireSingleChange(
+            transaction.execute(
+              `UPDATE workflows
+                  SET operational_state = ?, row_version = row_version + 1,
+                      updated_at_ms = ?
+                WHERE id = ? AND operational_state = 'healthy'`,
+              [expectedState, nowMs, row.workflow_id],
+            ).changes,
+            'Root compile failure Workflow state CAS',
+          );
+        }
+        const converged = transaction.queryOne<{
+          run_state: string;
+          workflow_state: string;
+        }>(
+          `SELECT run.operational_state AS run_state,
+                  workflow.operational_state AS workflow_state
+             FROM workflow_graph_runs run
+             JOIN workflows workflow ON workflow.id = run.workflow_id
+            WHERE run.id = ?`,
+          [row.graph_run_id],
+        );
+        if (
+          converged?.run_state !== expectedState ||
+          converged.workflow_state !== expectedState
+        ) {
+          throw new Error('Root compile failure state did not converge');
+        }
       });
       return;
     }

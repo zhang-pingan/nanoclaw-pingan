@@ -44,6 +44,8 @@ export const workflowAgentResultSchema = z.object({
         sha256: z.string().min(1).optional(),
         size: z.number().int().nonnegative().optional(),
         content_type: z.string().min(1).optional(),
+        relative_path: z.string().min(1).optional(),
+        download_url: z.string().min(1).optional(),
       }),
     )
     .default([]),

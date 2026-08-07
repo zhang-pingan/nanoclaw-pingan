@@ -103,6 +103,42 @@ afterEach(() => {
 });
 
 describe('TaskWorkspaceService review hardening', () => {
+  it('makes interrupted Temporary planning actionable after Host restart', async () => {
+    const initial = openStore();
+    const target = appendLaunch(initial, 'temporary_workflow');
+    const pending = initial.ensureCoordinatorTurn({
+      sessionId: target.session.session_id,
+      sourceMessageId: target.message.message_id,
+      nowMs: 5,
+    });
+    const running = initial.claimCoordinatorTurn(pending.turn_id, 6);
+    if (!running) throw new Error('Planning turn was not claimed');
+    expect(running.status).toBe('running');
+    const databasePath = initial.databasePath;
+    initial.close();
+
+    const restarted = new TaskWorkspaceStore(databasePath);
+    stores.push(restarted);
+    expect(restarted.getCoordinatorTurn(running.turn_id)).toMatchObject({
+      status: 'interrupted',
+      error_code: 'host_restarted',
+    });
+    expect(
+      restarted.getLaunchIntent(target.launch.launch_intent_id).status,
+    ).toBe('drafting');
+    const workspace = service(restarted, null);
+
+    await workspace.start();
+
+    expect(
+      restarted.getLaunchIntent(target.launch.launch_intent_id),
+    ).toMatchObject({
+      status: 'failed',
+      last_error_code: 'temporary_planning_interrupted',
+    });
+    await workspace.stop();
+  });
+
   it('replays Run idempotency before refreshing selection or writing another message', async () => {
     const store = openStore();
     let session = store.createSession({
@@ -462,6 +498,10 @@ describe('TaskWorkspaceService review hardening', () => {
                 payload_state: 'live',
                 inline_value_json: { secret: 'not-copied' },
                 display_json: {
+                  title: 'Runtime report',
+                  path: '/workspace/run-once/output/report.json',
+                  relative_path: 'output/report.json',
+                  download_url: '/api/artifacts/report.json',
                   media_type: 'application/json',
                   byte_length: 42,
                   payload_state: 'live',
@@ -487,6 +527,9 @@ describe('TaskWorkspaceService review hardening', () => {
       display_json: {
         graph_run_id: 'run:artifact',
         node_id: 'node:artifact',
+        title: 'Runtime report',
+        relative_path: 'output/report.json',
+        download_url: '/api/artifacts/report.json',
         media_type: 'application/json',
       },
     });

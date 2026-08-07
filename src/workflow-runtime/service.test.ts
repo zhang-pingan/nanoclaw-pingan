@@ -82,6 +82,49 @@ function persistedFailure(
   return failure;
 }
 
+function requeueRootBuild(
+  fixture: G6MapFixture,
+  sourceSnapshot?: JsonObject,
+): void {
+  fixture.instance.store.withImmediateTransaction((transaction) => {
+    expect(
+      transaction.execute(
+        `UPDATE workflow_graph_scope_builds
+            SET status = 'ready_to_compile', compiled_plan_id = NULL,
+                compiled_plan_hash = NULL, scope_id = NULL,
+                source_snapshot_json = COALESCE(?, source_snapshot_json),
+                source_snapshot_value_id = NULL, source_snapshot_hash = NULL,
+                error_code = NULL, error_detail_value_id = NULL,
+                error_detail_hash = NULL, row_version = row_version + 1,
+                updated_at_ms = ?
+          WHERE id = ? AND status = 'materialized'`,
+        [
+          sourceSnapshot ? JSON.stringify(sourceSnapshot) : null,
+          90,
+          fixture.rootBuildId,
+        ],
+      ).changes,
+    ).toBe(1);
+  });
+}
+
+function operationalState(fixture: G6MapFixture): {
+  run_state: string;
+  workflow_state: string;
+} {
+  return fixture.instance.store.queryOne<{
+    run_state: string;
+    workflow_state: string;
+  }>(
+    `SELECT run.operational_state AS run_state,
+            workflow.operational_state AS workflow_state
+       FROM workflow_graph_runs run
+       JOIN workflows workflow ON workflow.id = run.workflow_id
+      WHERE run.id = ?`,
+    [fixture.graphRunId],
+  )!;
+}
+
 describe('WorkflowRuntimeTransactionAuthority compile failures', () => {
   it('persists a rejected root build instead of leaving poison compile work', () => {
     const fixture = createG6MapFixture('service-root-compile-rejected', {
@@ -91,26 +134,9 @@ describe('WorkflowRuntimeTransactionAuthority compile failures', () => {
       },
     });
     fixtures.push(fixture);
-    fixture.instance.store.withImmediateTransaction((transaction) => {
-      expect(
-        transaction.execute(
-          `UPDATE workflow_graph_scope_builds
-              SET status = 'ready_to_compile', compiled_plan_id = NULL,
-                  compiled_plan_hash = NULL, scope_id = NULL,
-                  source_snapshot_json = ?, source_snapshot_value_id = NULL,
-                  source_snapshot_hash = NULL, row_version = row_version + 1,
-                  updated_at_ms = ?
-            WHERE id = ? AND status = 'materialized'`,
-          [
-            JSON.stringify({
-              format: 'icarus.workflow-definition/1',
-              states: {},
-            }),
-            90,
-            fixture.rootBuildId,
-          ],
-        ).changes,
-      ).toBe(1);
+    requeueRootBuild(fixture, {
+      format: 'icarus.workflow-definition/1',
+      states: {},
     });
     const authority = new WorkflowRuntimeTransactionAuthority(
       fixture.instance.store,
@@ -120,7 +146,61 @@ describe('WorkflowRuntimeTransactionAuthority compile failures', () => {
     expect(persistedFailure(fixture, fixture.rootBuildId).status).toBe(
       'failed',
     );
+    expect(operationalState(fixture)).toEqual({
+      run_state: 'action_required',
+      workflow_state: 'action_required',
+    });
+    expect(
+      fixture.instance.store.queryOne<{ count: number }>(
+        `SELECT count(*) AS count FROM workflow_graph_events
+          WHERE graph_run_id = ? AND event_type = 'build_failed'
+            AND idempotency_key = ?`,
+        [fixture.graphRunId, `build-failed:${fixture.rootBuildId}`],
+      )!.count,
+    ).toBe(1);
     expect(authority.advance('compile', 32, 101).processed).toBe(0);
+  }, 30_000);
+
+  it('fails a root build with no compiler snapshot instead of skipping it forever', () => {
+    const fixture = createG6MapFixture('service-root-snapshot-missing', {
+      dynamicMode: 'expand',
+      stateConfigContent: {},
+    });
+    fixtures.push(fixture);
+    requeueRootBuild(fixture);
+    const authority = new WorkflowRuntimeTransactionAuthority(
+      fixture.instance.store,
+    );
+
+    expect(authority.advance('compile', 32, 100)).toEqual({
+      processed: 1,
+      has_more: false,
+    });
+    const failure = persistedFailure(fixture, fixture.rootBuildId);
+    expect(failure).toMatchObject({
+      status: 'failed',
+      error_code: 'compiler_snapshot_missing',
+    });
+    expect(JSON.parse(failure.detail_json)).toMatchObject({
+      failure_kind: 'compiler_snapshot_missing',
+      build_id: fixture.rootBuildId,
+      graph_run_id: fixture.graphRunId,
+    });
+    expect(operationalState(fixture)).toEqual({
+      run_state: 'action_required',
+      workflow_state: 'action_required',
+    });
+    expect(
+      fixture.instance.store.queryOne<{ count: number }>(
+        `SELECT count(*) AS count FROM workflow_graph_events
+          WHERE graph_run_id = ? AND event_type = 'build_failed'`,
+        [fixture.graphRunId],
+      )!.count,
+    ).toBe(1);
+    expect(authority.advance('compile', 32, 101)).toEqual({
+      processed: 0,
+      has_more: false,
+    });
   }, 30_000);
 
   it('persists compiler rejection diagnostics and does not reprocess the build', () => {

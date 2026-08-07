@@ -877,6 +877,26 @@ function stringField(value: JsonObject | null, key: string): string | null {
   return typeof field === 'string' ? field : null;
 }
 
+function workspaceArtifactHash(input: {
+  resultHash: Sha256Hash;
+  artifactIndex: number;
+  artifact: JsonObject;
+}): Sha256Hash {
+  const supplied = stringField(input.artifact, 'sha256');
+  if (supplied && SHA256_PATTERN.test(supplied)) return supplied as Sha256Hash;
+  if (supplied && /^[0-9a-f]{64}$/.test(supplied)) {
+    return `sha256:${supplied}` as Sha256Hash;
+  }
+  return domainSeparatedSha256(
+    'icarus:workspace-runtime-artifact-metadata:1\n',
+    {
+      result_hash: input.resultHash,
+      artifact_index: input.artifactIndex,
+      artifact: input.artifact,
+    },
+  );
+}
+
 function recipeKind(row: RecipeRow, content: JsonObject): WorkspaceRecipeKind {
   return row.owner_principal_ref ||
     typeof content.owner_principal_ref === 'string'
@@ -3313,34 +3333,78 @@ export class RuntimeWorkspaceGateway {
       const artifactRows = this.store.queryAll<Record<string, unknown>>(
         `SELECT attempt.graph_run_id, attempt.scope_id, attempt.node_id,
                 attempt.id AS attempt_id,
-                value.id AS artifact_ref, value.content_hash AS artifact_hash,
-                value.storage_kind, value.inline_canonical_json, value.blob_hash,
-                value.immutable_external_locator, value.expected_hash,
-                value.byte_length, value.media_type, value.provenance_ref,
-                value.retention_class, value.payload_state, value.created_at_ms
+                value.id AS result_value_id, value.content_hash AS result_hash,
+                value.storage_kind, value.inline_canonical_json,
+                value.provenance_ref, value.retention_class,
+                value.payload_state, value.created_at_ms
            FROM workflow_graph_node_attempts attempt
            JOIN workflow_graph_runs r ON r.id = attempt.graph_run_id
            JOIN workflow_values value
-             ON value.id = attempt.artifact_refs_value_id
-            AND value.content_hash = attempt.artifact_refs_hash
+             ON value.id = attempt.result_value_id
+            AND value.content_hash = attempt.result_hash
           WHERE r.workflow_id = ?
           ORDER BY attempt.graph_run_id, attempt.scope_id, attempt.node_id,
                    attempt.attempt_no, attempt.id COLLATE BINARY`,
         [workflowId],
       );
-      const artifacts = artifactRows.map((artifact) => {
-        const { inline_canonical_json: inlineCanonicalJson, ...metadata } =
-          artifact;
-        return {
-          ...metadata,
-          inline_value_json: parseStoredJson(inlineCanonicalJson),
-          display_json: {
-            artifact_ref: artifact.artifact_ref,
-            media_type: artifact.media_type,
-            byte_length: artifact.byte_length,
-            payload_state: artifact.payload_state,
-          },
-        } as JsonObject;
+      const artifacts = artifactRows.flatMap((row) => {
+        const resultValue = parseStoredJson(row.inline_canonical_json);
+        const result = isObject(resultValue) ? resultValue : null;
+        if (
+          result?.format !== 'icarus.workflow-agent-result/1' ||
+          !Array.isArray(result.artifacts)
+        ) {
+          return [];
+        }
+        return result.artifacts.flatMap((value, artifactIndex) => {
+          const artifact = isObject(value) ? value : null;
+          if (
+            !artifact ||
+            typeof artifact.name !== 'string' ||
+            typeof artifact.path !== 'string'
+          ) {
+            return [];
+          }
+          const resultHash = row.result_hash as Sha256Hash;
+          const artifactRef = `workflow-result:${String(row.result_value_id)}:artifact:${String(artifactIndex)}`;
+          const artifactHash = workspaceArtifactHash({
+            resultHash,
+            artifactIndex,
+            artifact,
+          });
+          const mediaType = stringField(artifact, 'content_type');
+          const byteLength = Number(artifact.size);
+          return [
+            {
+              graph_run_id: row.graph_run_id,
+              scope_id: row.scope_id,
+              node_id: row.node_id,
+              attempt_id: row.attempt_id,
+              artifact_ref: artifactRef,
+              artifact_hash: artifactHash,
+              result_value_id: row.result_value_id,
+              result_hash: resultHash,
+              artifact_index: artifactIndex,
+              storage_kind: row.storage_kind,
+              provenance_ref: row.provenance_ref,
+              retention_class: row.retention_class,
+              payload_state: row.payload_state,
+              created_at_ms: row.created_at_ms,
+              display_json: {
+                artifact_ref: artifactRef,
+                title: artifact.name,
+                path: artifact.path,
+                relative_path: stringField(artifact, 'relative_path'),
+                download_url: stringField(artifact, 'download_url'),
+                media_type: mediaType,
+                byte_length: Number.isSafeInteger(byteLength)
+                  ? byteLength
+                  : null,
+                payload_state: row.payload_state,
+              },
+            } as JsonObject,
+          ];
+        });
       });
       const waits = this.store.queryAll<Record<string, unknown>>(
         `SELECT wt.id, wt.graph_run_id, wt.scope_id, wt.node_id, wt.wait_type,

@@ -252,14 +252,28 @@ describe('Task Workspace generic renderers', () => {
           artifact_link_id: 'link:1',
           workflow_id: 'workflow:1',
           artifact_ref: 'artifact:workspace',
-          display_json: { title: 'Workspace report', content: 'Reviewed' },
+          display_json: {
+            graph_run_id: 'run:1',
+            title: 'Workspace report',
+            content: 'Reviewed',
+          },
+        },
+        {
+          artifact_link_id: 'link:old',
+          workflow_id: 'workflow:1',
+          artifact_ref: 'artifact:workspace-old',
+          display_json: {
+            graph_run_id: 'run:old',
+            title: 'Old Workspace report',
+            content: 'Stale',
+          },
         },
       ],
       workflows: [
         {
           workflow_id: 'workflow:1',
           current_graph_run_id: 'run:1',
-          runs: [{ id: 'run:1' }],
+          runs: [{ id: 'run:old' }, { id: 'run:1' }],
           scopes: [{ id: 'scope:1', graph_run_id: 'run:1' }],
           nodes: [
             {
@@ -310,14 +324,28 @@ describe('Task Workspace generic renderers', () => {
           artifacts: [
             {
               id: 'runtime-artifact:1',
-              graph_run_id: 'run:1',
               artifact_ref: 'artifact:runtime',
-              display_json: { title: 'Runtime output', content: 'Complete' },
+              display_json: {
+                graph_run_id: 'run:1',
+                title: 'Runtime output',
+                content: 'Complete',
+              },
+            },
+            {
+              id: 'runtime-artifact:old',
+              artifact_ref: 'artifact:runtime-old',
+              display_json: {
+                graph_run_id: 'run:old',
+                title: 'Old Runtime output',
+                content: 'Stale',
+              },
             },
           ],
         },
       ],
     };
+    state.selectedWorkflowId = 'workflow:1';
+    state.selectedRunId = 'run:1';
 
     const dag = renderDag(state);
     expect(dag).toContain('1 edges');
@@ -330,6 +358,8 @@ describe('Task Workspace generic renderers', () => {
     const artifacts = renderArtifacts(state);
     expect(artifacts).toContain('Workspace report');
     expect(artifacts).toContain('Runtime output');
+    expect(artifacts).not.toContain('Old Workspace report');
+    expect(artifacts).not.toContain('Old Runtime output');
     expect(artifacts).toContain('data-artifact-ref="artifact:workspace"');
   });
 });

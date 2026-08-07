@@ -94,6 +94,17 @@ describe('ContainerAgentAdapter', () => {
       run_id: 'run-once-1',
       query_id: 'query-1',
       model: 'test-model',
+      output_files: [
+        {
+          name: 'report.json',
+          agent_path: '/workspace/run-once/output/report.json',
+          relative_path: 'output/report.json',
+          size: 42,
+          sha256: 'a'.repeat(64),
+          content_type: 'application/json',
+          download_url: '/api/internal-agent/runs/run-once-1/files/report.json',
+        },
+      ],
     };
     const runOnce = vi.fn(async (_input, lifecycle) => {
       lifecycle?.onAccepted({
@@ -112,7 +123,19 @@ describe('ContainerAgentAdapter', () => {
 
     await expect(handle.completion).resolves.toMatchObject({
       state: 'succeeded',
-      result: { outcome: 'success', summary: 'container complete' },
+      result: {
+        outcome: 'success',
+        summary: 'container complete',
+        artifacts: [
+          expect.objectContaining({
+            name: 'report.json',
+            path: '/workspace/run-once/output/report.json',
+            relative_path: 'output/report.json',
+            download_url:
+              '/api/internal-agent/runs/run-once-1/files/report.json',
+          }),
+        ],
+      },
     });
     expect(runOnce).toHaveBeenCalledWith(
       expect.objectContaining({

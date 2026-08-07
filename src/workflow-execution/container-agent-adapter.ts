@@ -48,6 +48,8 @@ function resultFromRunOnce(
     sha256: file.sha256,
     size: file.size,
     content_type: file.content_type,
+    relative_path: file.relative_path,
+    download_url: file.download_url,
   }));
   if (response.ok) {
     return {
