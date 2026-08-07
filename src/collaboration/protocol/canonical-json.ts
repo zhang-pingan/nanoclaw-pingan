@@ -1,21 +1,23 @@
-export function compareUnicodeCodeUnits(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
+import { canonicalize } from 'json-canonicalize';
 
-export function canonicalJsonValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalJsonValue);
-  if (value && typeof value === 'object')
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => compareUnicodeCodeUnits(left, right))
-        .map(([key, child]) => [key, canonicalJsonValue(child)]),
-    );
-  return value;
-}
+import {
+  assertJsonValue,
+  strictParseJson,
+  strictParseJsonBytes,
+} from '../../workflow-runtime/contracts/strict-json.js';
+
+export { strictParseJson, strictParseJsonBytes };
 
 export function canonicalJsonStringify(
   value: unknown,
   space?: string | number,
 ): string {
-  return JSON.stringify(canonicalJsonValue(value), null, space);
+  assertJsonValue(value);
+  if (space !== undefined) return `${JSON.stringify(value, null, space)}\n`;
+  return canonicalize(value);
+}
+
+export function prettyCollaborationJson(value: unknown): string {
+  assertJsonValue(value);
+  return `${JSON.stringify(value, null, 2)}\n`;
 }
