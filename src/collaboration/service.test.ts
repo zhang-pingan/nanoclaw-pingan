@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { CollaborationGitTransport } from './git-transport.js';
 import { CollaborationIdentityService } from './identity.js';
 import type { MachineDefinition, RoleDefinition } from './protocol/index.js';
+import { collaborationCanonicalHash } from './protocol/index.js';
 import {
   CollaborationGroupService,
   type CreateCollaborationGroupInput,
@@ -211,6 +212,221 @@ afterEach(() => {
 });
 
 describe('CollaborationGroupService v2', () => {
+  it('rejects Machine and layout updates from a joined non-creator', async () => {
+    const testRoot = root();
+    const remoteUrl = remote(testRoot);
+    const owner = service(testRoot, 'owner');
+    const reviewer = service(testRoot, 'reviewer');
+    const ownerKey = key(testRoot, 'owner-key');
+    const reviewerKey = key(testRoot, 'reviewer-key');
+    const definition = twoRoleSkeleton();
+    try {
+      await owner.groupService.createGroup({
+        ...createInput(remoteUrl, ownerKey),
+        ...definition,
+      });
+      const joined = await reviewer.groupService.joinGroup({
+        remoteUrl,
+        signingKeyPath: reviewerKey,
+        capabilities: ['review_task'],
+        role: 'reviewer',
+      });
+      await expect(
+        reviewer.groupService.reviseMachine({
+          groupId: 'ag_service',
+          machine: definition.machine,
+          roles: definition.roles,
+          expectedRevision: joined.projection!.revision,
+        }),
+      ).rejects.toThrow(/Only the group creator/);
+      await expect(
+        reviewer.groupService.updateMachineLayout({
+          groupId: 'ag_service',
+          expectedRevision: joined.projection!.revision,
+          layout: {
+            format: 'icarus.agent-group-machine-layout/1',
+            view: 'free',
+            nodes: {},
+          },
+        }),
+      ).rejects.toThrow(/Only the group creator/);
+    } finally {
+      owner.store.close();
+      reviewer.store.close();
+    }
+  });
+
+  it('revises a FORMING Machine and persists creator layout without changing its business hash or epoch', async () => {
+    const testRoot = root();
+    const remoteUrl = remote(testRoot);
+    const owner = service(testRoot, 'owner');
+    const signingKeyPath = key(testRoot, 'machine-key');
+    try {
+      const created = await owner.groupService.createGroup({
+        ...createInput(remoteUrl, signingKeyPath),
+        layout: {
+          format: 'icarus.agent-group-machine-layout/1',
+          view: 'free',
+          nodes: { development: { x: 80, y: 120 } },
+        },
+      });
+      const revisedMachine = structuredClone(skeleton().machine);
+      revisedMachine.states.development!.description = 'Graph editor revision';
+      const revised = await owner.groupService.reviseMachine({
+        groupId: 'ag_service',
+        machine: revisedMachine,
+        roles: skeleton().roles,
+        expectedRevision: created.projection!.revision,
+      });
+      expect(revised.lifecycle).toBe('FORMING');
+      expect(revised.projection!.epoch).toBe(2);
+      const machineHash = collaborationCanonicalHash(revisedMachine);
+
+      const laidOut = await owner.groupService.updateMachineLayout({
+        groupId: 'ag_service',
+        expectedRevision: revised.projection!.revision,
+        layout: {
+          format: 'icarus.agent-group-machine-layout/1',
+          view: 'roles',
+          nodes: {
+            development: { x: 440, y: 80 },
+            completed: { x: 720, y: 270 },
+          },
+        },
+      });
+      expect(laidOut.projection!.epoch).toBe(2);
+      const history = owner.groupService.getCachedHistory('ag_service')!;
+      expect(history.definition.machine.states.development?.description).toBe(
+        'Graph editor revision',
+      );
+      expect(history.definition.layout).toMatchObject({
+        view: 'roles',
+        nodes: { development: { x: 440, y: 80 } },
+      });
+      expect(collaborationCanonicalHash(history.definition.machine)).toBe(
+        machineHash,
+      );
+      expect(history.events.at(-1)?.event_type).toBe('machine_layout_updated');
+      expect(history.projection.sequence).toBe(3);
+      const replayed = await new CollaborationGitTransport().cloneAndValidate({
+        remoteUrl,
+        repositoryPath: path.join(testRoot, 'full-replay.git'),
+      });
+      expect(replayed.events.map((event) => event.event_type)).toEqual([
+        'group_initialized',
+        'machine_revised',
+        'machine_layout_updated',
+      ]);
+      expect(replayed.projection.epoch).toBe(2);
+      expect(replayed.definition.layout?.view).toBe('roles');
+    } finally {
+      owner.store.close();
+    }
+  });
+
+  it('removes materialized Role implementation data invalidated by a Machine revision', async () => {
+    const testRoot = root();
+    const remoteUrl = remote(testRoot);
+    const owner = service(testRoot, 'owner');
+    const signingKeyPath = key(testRoot, 'invalidation-key');
+    const initial = twoRoleSkeleton();
+    try {
+      const created = await owner.groupService.createGroup({
+        ...createInput(remoteUrl, signingKeyPath),
+        ...initial,
+      });
+      const implemented = await owner.groupService.publishStateImplementation({
+        groupId: 'ag_service',
+        stateId: 'development',
+        mode: 'manual',
+        expectedRevision: created.projection!.revision,
+      });
+      expect(implemented.lifecycle).toBe('FORMING');
+
+      const machine = structuredClone(initial.machine);
+      machine.states.development = {
+        label: 'Development complete',
+        terminal: true,
+        transitions: [],
+      };
+      const roles = structuredClone(initial.roles);
+      roles.developer!.owned_states = [];
+      const revised = await owner.groupService.reviseMachine({
+        groupId: 'ag_service',
+        machine,
+        roles,
+        expectedRevision: implemented.projection!.revision,
+      });
+
+      expect(revised.projection!.stateImplementations.development).toBe(
+        undefined,
+      );
+      const replayed = await new CollaborationGitTransport().cloneAndValidate({
+        remoteUrl,
+        repositoryPath: path.join(testRoot, 'invalidation-replay.git'),
+      });
+      expect(replayed.definition.implementations.development).toBeUndefined();
+      expect(replayed.events.at(-1)?.payload.invalidated_state_ids).toEqual([
+        'development',
+      ]);
+    } finally {
+      owner.store.close();
+    }
+  });
+
+  it('replays completed Turns against the Machine active before a paused revision', async () => {
+    const testRoot = root();
+    const remoteUrl = remote(testRoot);
+    const owner = service(testRoot, 'owner');
+    try {
+      const prepared = await prepareManualTurn(
+        owner.groupService,
+        remoteUrl,
+        key(testRoot, 'revision-replay-key'),
+      );
+      const completed = await owner.groupService.completeTurn({
+        groupId: 'ag_service',
+        turnId: prepared.turnId,
+        expectedRevision:
+          owner.store.getGroup('ag_service')!.projection!.revision,
+        outcome: 'completed',
+        summary: 'Completed under the original Machine.',
+      });
+      const paused = await owner.groupService.pause(
+        'ag_service',
+        completed.projection!.revision,
+      );
+      const machine = structuredClone(skeleton().machine);
+      machine.states.development!.transitions = [
+        { outcome: 'finished', target_state: 'completed' },
+      ];
+      const revised = await owner.groupService.reviseMachine({
+        groupId: 'ag_service',
+        machine,
+        roles: skeleton().roles,
+        expectedRevision: paused.projection!.revision,
+      });
+      expect(revised).toMatchObject({
+        lifecycle: 'PAUSED',
+        businessState: 'completed',
+      });
+
+      const replayed = await new CollaborationGitTransport().cloneAndValidate({
+        remoteUrl,
+        repositoryPath: path.join(testRoot, 'revision-replay.git'),
+      });
+      expect(replayed.projection.turns[prepared.turnId]).toMatchObject({
+        outcome: 'completed',
+        state: 'COMPLETED',
+      });
+      expect(
+        replayed.definition.machine.states.development?.transitions,
+      ).toEqual([{ outcome: 'finished', target_state: 'completed' }]);
+    } finally {
+      owner.store.close();
+    }
+  }, 30_000);
+
   it('records one concurrent timeout fact and rejects a stale recovered attempt', async () => {
     const testRoot = root();
     const remoteUrl = remote(testRoot);

@@ -27,6 +27,7 @@ import {
   dataUpdatePayloadSchema,
   groupDefinitionSchema,
   machineDefinitionSchema,
+  machineLayoutDefinitionSchema,
   memberDefinitionSchema,
   roleDefinitionSchema,
   roleClaimSchema,
@@ -161,12 +162,24 @@ export async function loadCollaborationRepositoryDefinition(
     );
     implementations[implementation.state_id] = implementation;
   }
+  const layoutFile = await git(
+    repositoryPath,
+    ['cat-file', '-e', `${commit}:layout.yaml`],
+    { allowFailure: true },
+  );
+  const layout =
+    layoutFile.exitCode === 0
+      ? machineLayoutDefinitionSchema.parse(
+          YAML.parse(await showFile(repositoryPath, commit, 'layout.yaml')),
+        )
+      : null;
   return validateRepositoryDefinition({
     group,
     machine,
     roles,
     actions,
     implementations,
+    layout,
   });
 }
 
@@ -283,6 +296,17 @@ function materializedPathAllowed(
   repositoryFile: string,
 ): boolean {
   if (repositoryFile === 'projection/state.json') return true;
+  if (event.event_type === 'machine_revised')
+    return (
+      repositoryFile === 'group.yaml' ||
+      repositoryFile === 'machine.yaml' ||
+      repositoryFile.startsWith('groups/roles/') ||
+      repositoryFile.startsWith('groups/implementations/') ||
+      repositoryFile.startsWith('actions/') ||
+      repositoryFile.startsWith('prompts/')
+    );
+  if (event.event_type === 'machine_layout_updated')
+    return repositoryFile === 'layout.yaml';
   if (event.event_type === 'member_registered')
     return repositoryFile.startsWith('groups/members/');
   if (
@@ -380,6 +404,124 @@ async function validateDataUpdateMaterialization(
       'PROTOCOL_QUARANTINED',
       `Materialized data does not match event hash and size: ${payload.path}`,
     );
+}
+
+async function validateDefinitionRevisionMaterialization(
+  repositoryPath: string,
+  commit: string,
+  event: CollaborationEvent,
+  eventFile: string,
+  changedFiles: readonly string[],
+  projection: CollaborationProjection | null,
+  previousDefinition: CollaborationRepositoryDefinition,
+): Promise<CollaborationRepositoryDefinition | null> {
+  if (event.event_type === 'machine_layout_updated') {
+    const layout = machineLayoutDefinitionSchema.parse(event.payload.layout);
+    const unknownStateId = Object.keys(layout.nodes).find(
+      (stateId) => !previousDefinition.machine.states[stateId],
+    );
+    if (unknownStateId)
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Machine layout references an unknown State: ${unknownStateId}`,
+      );
+    if (
+      collaborationCanonicalHash(layout) !== event.payload.layout_hash ||
+      !changedFiles.includes('layout.yaml')
+    )
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        'Machine layout event does not match layout.yaml',
+      );
+    const materialized = machineLayoutDefinitionSchema.parse(
+      YAML.parse(await showFile(repositoryPath, commit, 'layout.yaml')),
+    );
+    if (
+      collaborationCanonicalHash(materialized) !==
+      collaborationCanonicalHash(layout)
+    )
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        'Materialized Machine layout is invalid',
+      );
+    return null;
+  }
+  if (event.event_type !== 'machine_revised') return null;
+  const definition = await loadCollaborationRepositoryDefinition(
+    repositoryPath,
+    commit,
+  );
+  const machine = machineDefinitionSchema.parse(event.payload.machine);
+  const roles = Object.fromEntries(
+    Object.entries(event.payload.roles as Record<string, unknown>).map(
+      ([roleId, role]) => [roleId, roleDefinitionSchema.parse(role)],
+    ),
+  );
+  const normalizedRequirements = Object.values(roles)
+    .map((role) => ({
+      role: role.role,
+      min_members: role.cardinality.min,
+      max_members: role.cardinality.max,
+    }))
+    .sort((left, right) => left.role.localeCompare(right.role));
+  const expectedGroup = groupDefinitionSchema.parse({
+    ...previousDefinition.group,
+    required_roles: normalizedRequirements,
+  });
+  const materializedGroup = {
+    ...definition.group,
+    required_roles: [...definition.group.required_roles].sort((left, right) =>
+      left.role.localeCompare(right.role),
+    ),
+  };
+  if (
+    collaborationCanonicalHash(definition.machine) !==
+      collaborationCanonicalHash(machine) ||
+    collaborationCanonicalHash(definition.roles) !==
+      collaborationCanonicalHash(roles) ||
+    collaborationCanonicalHash(materializedGroup) !==
+      collaborationCanonicalHash(expectedGroup)
+  )
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      'Machine revision event does not match its creator-owned materialized definition',
+    );
+  const invalidated = Array.isArray(event.payload.invalidated_state_ids)
+    ? event.payload.invalidated_state_ids.map(String)
+    : [];
+  for (const stateId of invalidated) {
+    const active = projection?.stateImplementations[stateId];
+    if (!active) continue;
+    const removed = [
+      active.implementationRef,
+      active.implementation.action_ref,
+      active.action?.input.prompt_ref,
+    ].filter((value): value is string => Boolean(value));
+    for (const repositoryFile of removed) {
+      const exists = await git(
+        repositoryPath,
+        ['cat-file', '-e', `${commit}:${repositoryFile}`],
+        { allowFailure: true },
+      );
+      if (exists.exitCode === 0)
+        throw new CollaborationProtocolError(
+          'PROTOCOL_QUARANTINED',
+          `Machine revision did not remove invalidated implementation data: ${repositoryFile}`,
+        );
+    }
+  }
+  const unrelated = changedFiles.find(
+    (file) =>
+      file !== eventFile &&
+      file !== 'projection/state.json' &&
+      !materializedPathAllowed(event, file),
+  );
+  if (unrelated)
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      `Machine revision modified unrelated file: ${unrelated}`,
+    );
+  return definition;
 }
 
 async function validateTurnCompletionMaterialization(
@@ -670,7 +812,7 @@ export async function validateCollaborationGitHistory(input: {
       'PROTOCOL_QUARANTINED',
       'The collaboration control branch is empty',
     );
-  const definition = await loadCollaborationRepositoryDefinition(
+  let definition = await loadCollaborationRepositoryDefinition(
     input.repositoryPath,
     useCheckpoint ? input.checkpoint!.head : commits[0]!,
   );
@@ -718,6 +860,15 @@ export async function validateCollaborationGitHistory(input: {
       eventFile,
       changedFiles,
     );
+    const revisedDefinition = await validateDefinitionRevisionMaterialization(
+      input.repositoryPath,
+      commit,
+      event,
+      eventFile,
+      changedFiles,
+      projection,
+      definition,
+    );
     await validateTurnCompletionMaterialization(
       input.repositoryPath,
       commit,
@@ -733,7 +884,12 @@ export async function validateCollaborationGitHistory(input: {
       projection,
     );
     authorizeCollaborationEvent(event, projection, signer);
-    projection = reduceCollaborationEvent(projection, event, definition);
+    projection = reduceCollaborationEvent(
+      projection,
+      event,
+      revisedDefinition ?? definition,
+    );
+    if (revisedDefinition) definition = revisedDefinition;
     events.push(event);
   }
   if (!projection)

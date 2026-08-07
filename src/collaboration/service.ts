@@ -42,6 +42,7 @@ import {
   type CollaborationValidationMetrics,
   type FilesystemAccess,
   type MachineDefinition,
+  type MachineLayoutDefinition,
   type MemberDefinition,
   type RoleDefinition,
   type StateExecutionMode,
@@ -71,8 +72,22 @@ export interface CreateCollaborationGroupInput {
   readonly initialRole: string;
   readonly machine: MachineDefinition;
   readonly roles: Readonly<Record<string, RoleDefinition>>;
+  readonly layout?: MachineLayoutDefinition | null;
   readonly groupId?: string;
   readonly pollIntervalMs?: number;
+}
+
+export interface ReviseCollaborationMachineInput {
+  readonly groupId: string;
+  readonly machine: MachineDefinition;
+  readonly roles: Readonly<Record<string, RoleDefinition>>;
+  readonly expectedRevision: number;
+}
+
+export interface UpdateCollaborationMachineLayoutInput {
+  readonly groupId: string;
+  readonly layout: MachineLayoutDefinition;
+  readonly expectedRevision: number;
 }
 
 export interface JoinCollaborationGroupInput {
@@ -202,6 +217,11 @@ export class CollaborationGroupService {
       roles: input.roles,
       actions: {},
       implementations: {},
+      layout: input.layout ?? {
+        format: 'icarus.agent-group-machine-layout/1',
+        view: 'free',
+        nodes: {},
+      },
     });
     const eventId = identifier('evt');
     const member: MemberDefinition = {
@@ -278,6 +298,120 @@ export class CollaborationGroupService {
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
+  }
+
+  async reviseMachine(
+    input: ReviseCollaborationMachineInput,
+  ): Promise<CollaborationGroupRecord> {
+    const group = this.requireCreator(input.groupId);
+    await this.append(
+      input.groupId,
+      await this.identityFor(group),
+      (history) => {
+        const requiredRoles = Object.values(input.roles).map((role) => ({
+          role: role.role,
+          min_members: role.cardinality.min,
+          max_members: role.cardinality.max,
+        }));
+        const revised = validateRepositoryDefinition({
+          group: {
+            ...history.definition.group,
+            required_roles: requiredRoles,
+          },
+          machine: input.machine,
+          roles: input.roles,
+          actions: {},
+          implementations: {},
+          layout: history.definition.layout,
+        });
+        const invalidatedStateIds = Object.entries(
+          history.projection.stateImplementations,
+        )
+          .filter(([stateId, active]) => {
+            const state = revised.machine.states[stateId];
+            return (
+              !state ||
+              state.terminal ||
+              state.owner_role !== active.implementation.role
+            );
+          })
+          .map(([stateId]) => stateId)
+          .sort();
+        const files: CollaborationMaterializedFile[] = [
+          {
+            path: 'group.yaml',
+            contents: YAML.stringify(revised.group),
+          },
+          {
+            path: revised.group.machine_ref,
+            contents: YAML.stringify(revised.machine),
+          },
+          ...Object.values(revised.roles).map((role) => ({
+            path: `groups/roles/${role.role}.yaml`,
+            contents: YAML.stringify(role),
+          })),
+          ...Object.keys(history.definition.roles)
+            .filter((role) => !revised.roles[role])
+            .map((role) => ({
+              path: `groups/roles/${role}.yaml`,
+              contents: null,
+            })),
+        ];
+        for (const stateId of invalidatedStateIds) {
+          const active = history.projection.stateImplementations[stateId];
+          if (!active) continue;
+          files.push({ path: active.implementationRef, contents: null });
+          if (active.implementation.action_ref)
+            files.push({
+              path: active.implementation.action_ref,
+              contents: null,
+            });
+          if (active.action?.input.prompt_ref)
+            files.push({
+              path: active.action.input.prompt_ref,
+              contents: null,
+            });
+        }
+        return {
+          type: 'machine_revised',
+          payload: {
+            machine: revised.machine,
+            roles: revised.roles,
+            machine_hash: collaborationCanonicalHash(revised.machine),
+            definition_hash: collaborationCanonicalHash({
+              machine: revised.machine,
+              roles: revised.roles,
+            }),
+            invalidated_state_ids: invalidatedStateIds,
+          },
+          files,
+        };
+      },
+      input.expectedRevision,
+    );
+    return this.requireGroup(input.groupId);
+  }
+
+  async updateMachineLayout(
+    input: UpdateCollaborationMachineLayoutInput,
+  ): Promise<CollaborationGroupRecord> {
+    const group = this.requireCreator(input.groupId);
+    await this.append(
+      input.groupId,
+      await this.identityFor(group),
+      () => ({
+        type: 'machine_layout_updated',
+        payload: {
+          layout: input.layout,
+          layout_hash: collaborationCanonicalHash(input.layout),
+        },
+        files: [
+          { path: 'layout.yaml', contents: YAML.stringify(input.layout) },
+        ],
+      }),
+      input.expectedRevision,
+    );
+    return this.requireGroup(input.groupId);
   }
 
   async joinGroup(
@@ -1377,7 +1511,7 @@ export class CollaborationGroupService {
             type: next.type,
             payload: next.payload,
             epoch:
-              next.type === 'group_resumed'
+              next.type === 'group_resumed' || next.type === 'machine_revised'
                 ? current.projection.epoch + 1
                 : current.projection.epoch,
             occurredAt,

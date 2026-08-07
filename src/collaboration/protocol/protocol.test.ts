@@ -473,6 +473,164 @@ describe('Collaboration protocol v2', () => {
     );
   });
 
+  it('revises the creator-owned Machine in a new epoch while layout stays hash-isolated', () => {
+    const base = definition();
+    let projection = reduceCollaborationEvent(null, genesis(), base);
+    const machine = structuredClone(base.machine);
+    machine.states.development!.description = 'Revised creator description';
+    const revision = event({
+      type: 'machine_revised',
+      id: 'evt_machine_revision',
+      sequence: 2,
+      revision: 1,
+      epoch: 2,
+      payload: {
+        machine,
+        roles: base.roles,
+        machine_hash: collaborationCanonicalHash(machine),
+        definition_hash: collaborationCanonicalHash({
+          machine,
+          roles: base.roles,
+        }),
+        invalidated_state_ids: [],
+      },
+    });
+    projection = reduceCollaborationEvent(projection, revision, base);
+    expect(projection.epoch).toBe(2);
+    expect(projection.businessState).toBe('development');
+
+    const layout = {
+      format: 'icarus.agent-group-machine-layout/1' as const,
+      view: 'roles' as const,
+      nodes: { development: { x: 420, y: 120 } },
+    };
+    const machineHash = collaborationCanonicalHash(machine);
+    projection = reduceCollaborationEvent(
+      projection,
+      event({
+        type: 'machine_layout_updated',
+        id: 'evt_layout',
+        sequence: 3,
+        revision: 2,
+        epoch: 2,
+        payload: {
+          layout,
+          layout_hash: collaborationCanonicalHash(layout),
+        },
+      }),
+      { ...base, machine, layout: null },
+    );
+    expect(projection.epoch).toBe(2);
+    expect(collaborationCanonicalHash(machine)).toBe(machineHash);
+  });
+
+  it('restricts Machine and layout revisions to the creator', () => {
+    const projection = reduceCollaborationEvents(readyEvents(), definition());
+    const revised = structuredClone(definition().machine);
+    revised.states.review!.description = 'Unauthorized';
+    const candidate = event({
+      type: 'machine_revised',
+      id: 'evt_unauthorized_machine',
+      sequence: 6,
+      revision: 5,
+      epoch: 2,
+      actor: 'bob',
+      agent: 'agent_bob',
+      payload: {
+        machine: revised,
+        roles: definition().roles,
+        machine_hash: collaborationCanonicalHash(revised),
+        definition_hash: collaborationCanonicalHash({
+          machine: revised,
+          roles: definition().roles,
+        }),
+        invalidated_state_ids: [],
+      },
+    });
+    expect(() =>
+      authorizeCollaborationEvent(candidate, projection, {
+        principalId: 'bob',
+        signingKeyRef: 'ssh-ed25519:SHA256:bob',
+      }),
+    ).toThrow(/restricted to the group creator/);
+  });
+
+  it('allows definition editing while PAUSED and rejects it while RUNNING', () => {
+    let projection = reduceCollaborationEvents(readyEvents(), definition());
+    projection = apply(
+      projection,
+      event({
+        type: 'group_started',
+        id: 'evt_edit_lifecycle_started',
+        sequence: 6,
+        revision: 5,
+        payload: { initial_handoff: null, initial_handoff_hash: null },
+      }),
+    );
+    const layout = {
+      format: 'icarus.agent-group-machine-layout/1' as const,
+      view: 'free' as const,
+      nodes: { development: { x: 180, y: 120 } },
+    };
+    expect(() =>
+      apply(
+        projection,
+        event({
+          type: 'machine_layout_updated',
+          id: 'evt_running_layout',
+          sequence: 7,
+          revision: 6,
+          payload: {
+            layout,
+            layout_hash: collaborationCanonicalHash(layout),
+          },
+        }),
+      ),
+    ).toThrow(/invalid while lifecycle is RUNNING/);
+
+    projection = apply(
+      projection,
+      event({
+        type: 'group_pause_requested',
+        id: 'evt_edit_lifecycle_pause_requested',
+        sequence: 7,
+        revision: 6,
+      }),
+    );
+    projection = apply(
+      projection,
+      event({
+        type: 'group_paused',
+        id: 'evt_edit_lifecycle_paused',
+        sequence: 8,
+        revision: 7,
+      }),
+    );
+    const machine = structuredClone(definition().machine);
+    machine.states.development!.description = 'Edited while paused';
+    projection = apply(
+      projection,
+      event({
+        type: 'machine_revised',
+        id: 'evt_paused_machine',
+        sequence: 9,
+        revision: 8,
+        epoch: 2,
+        payload: {
+          machine,
+          roles: definition().roles,
+          machine_hash: collaborationCanonicalHash(machine),
+          definition_hash: collaborationCanonicalHash({
+            machine,
+            roles: definition().roles,
+          }),
+          invalidated_state_ids: [],
+        },
+      }),
+    );
+    expect(projection).toMatchObject({ lifecycle: 'PAUSED', epoch: 2 });
+  });
+
   it('stays FORMING until every claimed role publishes its State Implementation', () => {
     const events = readyEvents();
     const beforeReview = reduceCollaborationEvents(

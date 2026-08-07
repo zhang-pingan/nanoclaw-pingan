@@ -11,10 +11,14 @@ import {
   dataUpdatePayloadSchema,
   handoffEnvelopeSchema,
   memberDefinitionSchema,
+  machineDefinitionSchema,
+  machineLayoutDefinitionSchema,
   roleClaimSchema,
+  roleDefinitionSchema,
   sha256,
   stateImplementationSchema,
   timeoutPolicySchema,
+  validateRepositoryDefinition,
   type ActionDefinition,
   type ArtifactMetadata,
   type CollaborationEvent,
@@ -152,6 +156,21 @@ export interface CollaborationProjection {
 
 const genesisPayloadSchema = z
   .object({ member: memberDefinitionSchema, role_claim: roleClaimSchema })
+  .strict();
+const machineRevisionPayloadSchema = z
+  .object({
+    machine: machineDefinitionSchema,
+    roles: z.record(z.string(), roleDefinitionSchema),
+    machine_hash: sha256,
+    definition_hash: sha256,
+    invalidated_state_ids: z.array(z.string()),
+  })
+  .strict();
+const machineLayoutPayloadSchema = z
+  .object({
+    layout: machineLayoutDefinitionSchema,
+    layout_hash: sha256,
+  })
   .strict();
 const memberPayloadSchema = z
   .object({ member: memberDefinitionSchema })
@@ -535,9 +554,12 @@ export function reduceCollaborationEvent(
   if (current.integrityStatus !== 'OK')
     conflict('Quarantined projections cannot accept normal events');
   if (event.group_id !== current.groupId) conflict('Event group id changed');
-  const resumeEpoch =
-    event.event_type === 'group_resumed' ? current.epoch + 1 : current.epoch;
-  if (event.epoch !== resumeEpoch) conflict('Event epoch is invalid');
+  const expectedEpoch =
+    event.event_type === 'group_resumed' ||
+    event.event_type === 'machine_revised'
+      ? current.epoch + 1
+      : current.epoch;
+  if (event.epoch !== expectedEpoch) conflict('Event epoch is invalid');
   if (event.sequence !== current.sequence + 1)
     conflict('Event sequence is not contiguous');
   if (event.expected.state_revision !== current.revision)
@@ -551,9 +573,76 @@ export function reduceCollaborationEvent(
     conflict('Closed groups are immutable');
 
   const next = structuredClone(current);
+  let activeDefinition = definition;
   switch (event.event_type) {
     case 'group_initialized':
       conflict('group_initialized may only be the genesis event');
+    case 'machine_revised': {
+      assertLifecycle(next, ['FORMING', 'PAUSED'], event);
+      const payload = machineRevisionPayloadSchema.parse(event.payload);
+      const roles = Object.fromEntries(
+        Object.entries(payload.roles).map(([roleId, role]) => {
+          if (roleId !== role.role)
+            conflict(`Role key disagrees with definition: ${roleId}`);
+          return [roleId, role];
+        }),
+      );
+      activeDefinition = validateRepositoryDefinition({
+        group: {
+          ...definition.group,
+          required_roles: Object.values(roles).map((role) => ({
+            role: role.role,
+            min_members: role.cardinality.min,
+            max_members: role.cardinality.max,
+          })),
+        },
+        machine: payload.machine,
+        roles,
+        actions: {},
+        implementations: {},
+        layout: definition.layout,
+      });
+      if (collaborationCanonicalHash(payload.machine) !== payload.machine_hash)
+        conflict('Machine revision hash is invalid');
+      if (
+        collaborationCanonicalHash({ machine: payload.machine, roles }) !==
+        payload.definition_hash
+      )
+        conflict('Machine definition revision hash is invalid');
+      if (
+        next.lifecycle === 'PAUSED' &&
+        !payload.machine.states[next.businessState]
+      )
+        conflict('A paused Machine revision must retain the business state');
+      if (next.lifecycle === 'FORMING')
+        next.businessState = payload.machine.initial_state;
+      const expectedInvalidated = Object.entries(next.stateImplementations)
+        .filter(([stateId, implementation]) => {
+          const state = payload.machine.states[stateId];
+          return (
+            !state ||
+            state.terminal ||
+            state.owner_role !== implementation.implementation.role
+          );
+        })
+        .map(([stateId]) => stateId)
+        .sort();
+      if (
+        JSON.stringify([...payload.invalidated_state_ids].sort()) !==
+        JSON.stringify(expectedInvalidated)
+      )
+        conflict('Machine revision invalidation list is stale');
+      for (const stateId of expectedInvalidated)
+        delete next.stateImplementations[stateId];
+      break;
+    }
+    case 'machine_layout_updated': {
+      assertLifecycle(next, ['FORMING', 'PAUSED'], event);
+      const payload = machineLayoutPayloadSchema.parse(event.payload);
+      if (collaborationCanonicalHash(payload.layout) !== payload.layout_hash)
+        conflict('Machine layout hash is invalid');
+      break;
+    }
     case 'member_registered': {
       assertLifecycle(next, ['FORMING', 'READY', 'PAUSED'], event);
       const { member } = memberPayloadSchema.parse(event.payload);
@@ -1261,7 +1350,7 @@ export function reduceCollaborationEvent(
       reasonPayloadSchema.parse(event.payload);
       break;
   }
-  recomputeFormation(next, definition);
+  recomputeFormation(next, activeDefinition);
   next.epoch = event.epoch;
   next.sequence = event.sequence;
   next.revision += 1;

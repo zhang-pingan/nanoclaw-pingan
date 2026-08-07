@@ -17,6 +17,8 @@ export interface VerifiedCommitSigner {
 }
 
 const creatorOnly = new Set<CollaborationEvent['event_type']>([
+  'machine_revised',
+  'machine_layout_updated',
   'group_started',
   'group_pause_requested',
   'group_paused',

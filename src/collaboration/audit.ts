@@ -233,6 +233,24 @@ function eventSummary(event: CollaborationEvent): Record<string, unknown> {
         role: claim ? stringValue(claim.role) : null,
       };
     }
+    case 'machine_revised':
+      return {
+        machineHash: stringValue(value.machine_hash),
+        definitionHash: stringValue(value.definition_hash),
+        stateCount: Object.keys(
+          ((value.machine as Record<string, unknown> | undefined)?.states as
+            | Record<string, unknown>
+            | undefined) ?? {},
+        ).length,
+        roleCount: Object.keys(
+          (value.roles as Record<string, unknown> | undefined) ?? {},
+        ).length,
+        invalidatedStateIds: Array.isArray(value.invalidated_state_ids)
+          ? value.invalidated_state_ids.map(String)
+          : [],
+      };
+    case 'machine_layout_updated':
+      return { layoutHash: stringValue(value.layout_hash) };
     case 'member_registered': {
       const member = value.member as Record<string, unknown> | undefined;
       return {

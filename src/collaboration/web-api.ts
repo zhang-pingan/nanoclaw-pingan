@@ -546,6 +546,49 @@ export class CollaborationWebApi {
       return;
     }
     if (
+      segments[1] === 'machine' &&
+      segments.length === 2 &&
+      req.method === 'PUT'
+    ) {
+      const body = object(await jsonBody(req));
+      rejectSystemIdentityOverrides(body);
+      if (body.actions !== undefined || body.prompts !== undefined)
+        throw new Error(
+          'Machine editing accepts only the creator-owned workflow skeleton',
+        );
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.reviseMachine({
+            groupId,
+            machine: body.machine,
+            roles: body.roles,
+            expectedRevision: requiredExpectedRevision(body),
+          } as Parameters<CollaborationRuntime['groups']['reviseMachine']>[0]),
+        ),
+      });
+      return;
+    }
+    if (
+      segments[1] === 'machine-layout' &&
+      segments.length === 2 &&
+      req.method === 'PUT'
+    ) {
+      const body = object(await jsonBody(req));
+      rejectSystemIdentityOverrides(body);
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.updateMachineLayout({
+            groupId,
+            layout: body.layout,
+            expectedRevision: requiredExpectedRevision(body),
+          } as Parameters<
+            CollaborationRuntime['groups']['updateMachineLayout']
+          >[0]),
+        ),
+      });
+      return;
+    }
+    if (
       segments[1] === 'roles' &&
       segments.length === 2 &&
       req.method === 'GET'

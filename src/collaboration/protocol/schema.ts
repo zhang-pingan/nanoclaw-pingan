@@ -156,7 +156,11 @@ export const roleClaimSchema = z
 export type RoleClaim = z.infer<typeof roleClaimSchema>;
 
 const transitionSchema = z
-  .object({ outcome: identifier, target_state: identifier })
+  .object({
+    outcome: identifier,
+    label: z.string().min(1).max(160).optional(),
+    target_state: identifier,
+  })
   .strict();
 
 export const timeoutPolicySchema = z
@@ -178,6 +182,7 @@ export const machineDefinitionSchema = z
       z
         .object({
           label: z.string().min(1).max(160),
+          description: z.string().max(2_000).optional(),
           owner_role: identifier.optional(),
           terminal: z.boolean().default(false),
           transitions: z.array(transitionSchema).default([]),
@@ -238,6 +243,25 @@ export const machineDefinitionSchema = z
     }
   });
 export type MachineDefinition = z.infer<typeof machineDefinitionSchema>;
+
+export const machineLayoutDefinitionSchema = z
+  .object({
+    format: z.literal('icarus.agent-group-machine-layout/1'),
+    view: z.enum(['free', 'roles']).default('free'),
+    nodes: z.record(
+      identifier,
+      z
+        .object({
+          x: z.number().finite().min(-100_000).max(100_000),
+          y: z.number().finite().min(-100_000).max(100_000),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type MachineLayoutDefinition = z.infer<
+  typeof machineLayoutDefinitionSchema
+>;
 
 export const executionModeSchema = z.enum(['manual', 'assisted', 'automatic']);
 export type StateExecutionMode = z.infer<typeof executionModeSchema>;
@@ -368,6 +392,8 @@ export type HandoffEnvelope = z.infer<typeof handoffEnvelopeSchema>;
 
 export const collaborationEventTypes = [
   'group_initialized',
+  'machine_revised',
+  'machine_layout_updated',
   'member_registered',
   'role_claimed',
   'role_released',
@@ -423,6 +449,7 @@ export interface CollaborationRepositoryDefinition {
   readonly roles: Readonly<Record<string, RoleDefinition>>;
   readonly actions: Readonly<Record<string, ActionDefinition>>;
   readonly implementations: Readonly<Record<string, StateImplementation>>;
+  readonly layout?: MachineLayoutDefinition | null;
 }
 
 export function parseProtocolVersion(value: unknown): number {
@@ -457,6 +484,9 @@ export function validateRepositoryDefinition(
       stateImplementationSchema.parse(value),
     ]),
   );
+  const layout = input.layout
+    ? machineLayoutDefinitionSchema.parse(input.layout)
+    : null;
   const required = new Map(
     group.required_roles.map((role) => [role.role, role]),
   );
@@ -510,7 +540,7 @@ export function validateRepositoryDefinition(
         throw new Error(`Action ownership is invalid for state ${stateId}`);
     }
   }
-  return { group, machine, roles, actions, implementations };
+  return { group, machine, roles, actions, implementations, layout };
 }
 
 export { identifier, relativeRepositoryPath, sha256 };

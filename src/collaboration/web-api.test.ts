@@ -510,6 +510,90 @@ describe('Collaboration Web API v2 authority boundaries', () => {
     },
   );
 
+  it('routes creator-owned Machine and layout updates without accepting executor fields', async () => {
+    const group = apiGroup();
+    const reviseMachine = vi.fn(async () => group);
+    const updateMachineLayout = vi.fn(async () => group);
+    const runtime = {
+      status: () => ({
+        available: true,
+        databasePath: '/tmp/collaboration.db',
+        repositoryRoot: '/tmp/repositories',
+        error: null,
+        scheduler: null,
+      }),
+      store: { getGroup: () => group },
+      groups: {
+        getCachedHistory: () => apiHistory(),
+        reviseMachine,
+        updateMachineLayout,
+      },
+    } as unknown as CollaborationRuntime;
+    await withApiServer(new CollaborationWebApi(runtime), async (baseUrl) => {
+      const machine = await fetch(
+        `${baseUrl}/api/collaboration/groups/ag_test/machine`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 7,
+            machine: { initial_state: 'development', states: {} },
+            roles: { developer: {} },
+          }),
+        },
+      );
+      expect(machine.status).toBe(200);
+      expect(reviseMachine).toHaveBeenCalledWith({
+        groupId: 'ag_test',
+        expectedRevision: 7,
+        machine: { initial_state: 'development', states: {} },
+        roles: { developer: {} },
+      });
+
+      const layout = await fetch(
+        `${baseUrl}/api/collaboration/groups/ag_test/machine-layout`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 8,
+            layout: {
+              format: 'icarus.agent-group-machine-layout/1',
+              view: 'free',
+              nodes: {},
+            },
+          }),
+        },
+      );
+      expect(layout.status).toBe(200);
+      expect(updateMachineLayout).toHaveBeenCalledWith({
+        groupId: 'ag_test',
+        expectedRevision: 8,
+        layout: {
+          format: 'icarus.agent-group-machine-layout/1',
+          view: 'free',
+          nodes: {},
+        },
+      });
+
+      const rejected = await fetch(
+        `${baseUrl}/api/collaboration/groups/ag_test/machine`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 9,
+            machine: {},
+            roles: {},
+            actions: {},
+          }),
+        },
+      );
+      expect(rejected.status).toBe(400);
+      expect(reviseMachine).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it.each(['executorKind', 'adapter', 'promptOverride'])(
     'rejects local Binding override field %s',
     async (field) => {

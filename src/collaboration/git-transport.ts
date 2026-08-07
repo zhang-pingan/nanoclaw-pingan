@@ -226,6 +226,30 @@ function validateMaterializedFiles(
   event: CollaborationEvent,
   files: readonly CollaborationMaterializedFile[],
 ): void {
+  if (event.event_type === 'machine_revised') {
+    if (
+      !files.some(
+        (file) => file.path === 'machine.yaml' && file.contents !== null,
+      ) ||
+      !files.some(
+        (file) => file.path === 'group.yaml' && file.contents !== null,
+      ) ||
+      files.some((file) => !materializedMachineRevisionPath(file.path))
+    )
+      throw new Error('machine_revised materialized paths are invalid');
+    return;
+  }
+  if (event.event_type === 'machine_layout_updated') {
+    if (
+      files.length !== 1 ||
+      files[0]?.path !== 'layout.yaml' ||
+      files[0].contents === null
+    )
+      throw new Error(
+        'machine_layout_updated must materialize exactly layout.yaml',
+      );
+    return;
+  }
   if (
     event.event_type === 'state_implementation_published' ||
     event.event_type === 'state_implementation_revised'
@@ -326,6 +350,17 @@ function validateMaterializedFiles(
     dataFileHash(contents) !== payload.content_sha256
   )
     throw new Error('data_updated content does not match its size and hash');
+}
+
+function materializedMachineRevisionPath(repositoryFile: string): boolean {
+  return (
+    repositoryFile === 'group.yaml' ||
+    repositoryFile === 'machine.yaml' ||
+    repositoryFile.startsWith('groups/roles/') ||
+    repositoryFile.startsWith('groups/implementations/') ||
+    repositoryFile.startsWith('actions/') ||
+    repositoryFile.startsWith('prompts/')
+  );
 }
 
 export class CollaborationGitTransport {
@@ -634,6 +669,12 @@ export class CollaborationGitTransport {
       definition.group.machine_ref,
       YAML.stringify(definition.machine),
     );
+    if (definition.layout)
+      writeRepositoryFile(
+        checkoutPath,
+        'layout.yaml',
+        YAML.stringify(definition.layout),
+      );
     for (const role of Object.values(definition.roles))
       writeRepositoryFile(
         checkoutPath,
@@ -684,6 +725,7 @@ export class CollaborationGitTransport {
       const allowed = [
         'group.yaml',
         'machine.yaml',
+        'layout.yaml',
         'groups/',
         'actions/',
         'prompts/',
