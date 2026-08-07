@@ -596,6 +596,57 @@ export interface CollaborationNotificationV3 {
   readonly payload: Record<string, unknown>;
 }
 
+export interface CollaborationActionExecutionV3 {
+  readonly executionId: string;
+  readonly groupId: string;
+  readonly instanceId: string;
+  readonly turnId: string;
+  readonly epoch: number;
+  readonly attempt: number;
+  readonly claimantClientId: string;
+  readonly fencingToken: string;
+  readonly operationKey: string;
+  readonly executorId: string;
+  readonly executorKind: string;
+  readonly state: string;
+  readonly executionRef: string | null;
+  readonly providerMetadata: Record<string, unknown> | null;
+  readonly receipt: Record<string, unknown> | null;
+  readonly observation: Record<string, unknown> | null;
+  readonly recoveryRequiredReason: string | null;
+  readonly dispatchStartedAtMs: number | null;
+  readonly receiptRecordedAtMs: number | null;
+  readonly providerCompletedAtMs: number | null;
+  readonly createdAtMs: number;
+  readonly updatedAtMs: number;
+}
+
+export interface CollaborationTimeoutScheduleV3 {
+  readonly scheduleId: string;
+  readonly groupId: string;
+  readonly instanceId: string;
+  readonly turnId: string;
+  readonly attempt: number;
+  readonly deadlineKind: 'start' | 'execution';
+  readonly deadlineAtMs: number;
+  readonly reminderIntervalMs: number | null;
+  readonly nextReminderAtMs: number;
+  readonly reminderOrdinal: number;
+  readonly active: boolean;
+}
+
+export interface CollaborationSyncAttemptV3 {
+  readonly id: number;
+  readonly groupId: string;
+  readonly startedAtMs: number;
+  readonly completedAtMs: number | null;
+  readonly outcome: string;
+  readonly headBefore: string | null;
+  readonly headAfter: string | null;
+  readonly error: string | null;
+  readonly errorClass: string | null;
+}
+
 function groupFromRow(
   row: Record<string, unknown>,
 ): CollaborationProjectSpaceGroupRecord {
@@ -1368,6 +1419,335 @@ export class CollaborationProjectSpaceStore {
     };
   }
 
+  claimActionExecution(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly turnId: string;
+    readonly epoch: number;
+    readonly attempt: number;
+    readonly claimantClientId: string;
+    readonly fencingToken: string;
+    readonly operationKey: string;
+    readonly executorId: string;
+    readonly executorKind: string;
+    readonly nowMs?: number;
+  }): {
+    readonly execution: CollaborationActionExecutionV3;
+    readonly acquired: boolean;
+  } {
+    this.assertOpen();
+    const nowMs = input.nowMs ?? Date.now();
+    const executionId = `execution_${crypto.randomUUID()}`;
+    const result = this.database
+      .prepare(
+        `INSERT OR IGNORE INTO collaboration_action_executions (
+           execution_id, group_id, instance_id, turn_id, epoch, attempt,
+           claimant_client_id, fencing_token, operation_key, executor_id,
+           executor_kind, state, created_at_ms, updated_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'dispatching', ?, ?)`,
+      )
+      .run(
+        executionId,
+        input.groupId,
+        input.instanceId,
+        input.turnId,
+        input.epoch,
+        input.attempt,
+        input.claimantClientId,
+        input.fencingToken,
+        input.operationKey,
+        input.executorId,
+        input.executorKind,
+        nowMs,
+        nowMs,
+      );
+    const execution = this.getActionExecution({
+      groupId: input.groupId,
+      turnId: input.turnId,
+      attempt: input.attempt,
+    });
+    if (!execution) throw new Error('Action execution claim was not persisted');
+    return { execution, acquired: result.changes === 1 };
+  }
+
+  getActionExecution(input: {
+    readonly groupId: string;
+    readonly turnId: string;
+    readonly attempt: number;
+  }): CollaborationActionExecutionV3 | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT * FROM collaboration_action_executions
+          WHERE group_id = ? AND turn_id = ? AND attempt = ?`,
+      )
+      .get(input.groupId, input.turnId, input.attempt) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? this.actionExecutionFromRow(row) : null;
+  }
+
+  markActionDispatchStarted(
+    executionId: string,
+    claimantClientId: string,
+    fencingToken: string,
+    nowMs = Date.now(),
+  ): boolean {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `UPDATE collaboration_action_executions
+              SET dispatch_started_at_ms = COALESCE(dispatch_started_at_ms, ?),
+                  updated_at_ms = ?
+            WHERE execution_id = ? AND claimant_client_id = ?
+              AND fencing_token = ? AND state = 'dispatching'`,
+        )
+        .run(nowMs, nowMs, executionId, claimantClientId, fencingToken)
+        .changes === 1
+    );
+  }
+
+  recordActionDispatchReceipt(input: {
+    readonly executionId: string;
+    readonly claimantClientId: string;
+    readonly fencingToken: string;
+    readonly executionRef: string;
+    readonly providerMetadata: Record<string, unknown>;
+    readonly receipt: Record<string, unknown>;
+    readonly nowMs?: number;
+  }): boolean {
+    this.assertOpen();
+    const nowMs = input.nowMs ?? Date.now();
+    return (
+      this.database
+        .prepare(
+          `UPDATE collaboration_action_executions
+              SET state = 'running', execution_ref = ?,
+                  provider_metadata_json = ?, receipt_json = ?,
+                  receipt_recorded_at_ms = ?, updated_at_ms = ?
+            WHERE execution_id = ? AND claimant_client_id = ?
+              AND fencing_token = ? AND receipt_json IS NULL`,
+        )
+        .run(
+          input.executionRef,
+          JSON.stringify(input.providerMetadata),
+          JSON.stringify(input.receipt),
+          nowMs,
+          nowMs,
+          input.executionId,
+          input.claimantClientId,
+          input.fencingToken,
+        ).changes === 1
+    );
+  }
+
+  recordActionObservation(input: {
+    readonly executionId: string;
+    readonly claimantClientId: string;
+    readonly fencingToken: string;
+    readonly state: string;
+    readonly observation: Record<string, unknown>;
+    readonly providerCompleted?: boolean;
+    readonly recoveryRequiredReason?: string | null;
+    readonly nowMs?: number;
+  }): boolean {
+    this.assertOpen();
+    const nowMs = input.nowMs ?? Date.now();
+    return (
+      this.database
+        .prepare(
+          `UPDATE collaboration_action_executions
+              SET state = ?, observation_json = ?,
+                  recovery_required_reason = ?,
+                  provider_completed_at_ms = CASE WHEN ? THEN ?
+                    ELSE provider_completed_at_ms END,
+                  updated_at_ms = ?
+            WHERE execution_id = ? AND claimant_client_id = ?
+              AND fencing_token = ?`,
+        )
+        .run(
+          input.state,
+          JSON.stringify(input.observation),
+          input.recoveryRequiredReason ?? null,
+          input.providerCompleted ? 1 : 0,
+          nowMs,
+          nowMs,
+          input.executionId,
+          input.claimantClientId,
+          input.fencingToken,
+        ).changes === 1
+    );
+  }
+
+  private actionExecutionFromRow(
+    row: Record<string, unknown>,
+  ): CollaborationActionExecutionV3 {
+    const parseObject = (value: unknown): Record<string, unknown> | null =>
+      value == null
+        ? null
+        : (JSON.parse(String(value)) as Record<string, unknown>);
+    return {
+      executionId: String(row.execution_id),
+      groupId: String(row.group_id),
+      instanceId: String(row.instance_id),
+      turnId: String(row.turn_id),
+      epoch: Number(row.epoch),
+      attempt: Number(row.attempt),
+      claimantClientId: String(row.claimant_client_id),
+      fencingToken: String(row.fencing_token),
+      operationKey: String(row.operation_key),
+      executorId: String(row.executor_id),
+      executorKind: String(row.executor_kind),
+      state: String(row.state),
+      executionRef:
+        row.execution_ref == null ? null : String(row.execution_ref),
+      providerMetadata: parseObject(row.provider_metadata_json),
+      receipt: parseObject(row.receipt_json),
+      observation: parseObject(row.observation_json),
+      recoveryRequiredReason:
+        row.recovery_required_reason == null
+          ? null
+          : String(row.recovery_required_reason),
+      dispatchStartedAtMs:
+        row.dispatch_started_at_ms == null
+          ? null
+          : Number(row.dispatch_started_at_ms),
+      receiptRecordedAtMs:
+        row.receipt_recorded_at_ms == null
+          ? null
+          : Number(row.receipt_recorded_at_ms),
+      providerCompletedAtMs:
+        row.provider_completed_at_ms == null
+          ? null
+          : Number(row.provider_completed_at_ms),
+      createdAtMs: Number(row.created_at_ms),
+      updatedAtMs: Number(row.updated_at_ms),
+    };
+  }
+
+  syncTimeoutSchedules(
+    groupId: string,
+    turns: readonly CollaborationTurnV3[],
+  ): void {
+    this.assertOpen();
+    const deactivate = this.database.prepare(
+      `UPDATE collaboration_timeout_schedules SET active = 0
+        WHERE group_id = ?`,
+    );
+    const upsert = this.database.prepare(
+      `INSERT INTO collaboration_timeout_schedules (
+         schedule_id, group_id, instance_id, turn_id, attempt, deadline_kind,
+         deadline_at_ms, reminder_interval_ms, next_reminder_at_ms,
+         reminder_ordinal, active
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1)
+       ON CONFLICT(group_id, turn_id, attempt, deadline_kind) DO UPDATE SET
+         instance_id = excluded.instance_id,
+         deadline_at_ms = excluded.deadline_at_ms,
+         reminder_interval_ms = excluded.reminder_interval_ms,
+         next_reminder_at_ms = CASE
+           WHEN collaboration_timeout_schedules.deadline_at_ms != excluded.deadline_at_ms
+             THEN excluded.next_reminder_at_ms
+           ELSE collaboration_timeout_schedules.next_reminder_at_ms END,
+         reminder_ordinal = CASE
+           WHEN collaboration_timeout_schedules.deadline_at_ms != excluded.deadline_at_ms
+             THEN 0 ELSE collaboration_timeout_schedules.reminder_ordinal END,
+         active = 1`,
+    );
+    this.database.transaction(() => {
+      deactivate.run(groupId);
+      for (const turn of turns) {
+        const pending = turn.state === 'pending';
+        const activeExecution = [
+          'running',
+          'waiting_input',
+          'waiting_approval',
+        ].includes(turn.state);
+        const deadlineKind = pending
+          ? ('start' as const)
+          : activeExecution
+            ? ('execution' as const)
+            : null;
+        const deadline = pending
+          ? turn.start_deadline_at
+          : activeExecution
+            ? turn.execution_deadline_at
+            : null;
+        if (!deadlineKind || !deadline) continue;
+        upsert.run(
+          `timeout_${crypto.randomUUID()}`,
+          groupId,
+          turn.workflow_instance_id,
+          turn.turn_id,
+          turn.attempt,
+          deadlineKind,
+          Date.parse(deadline),
+          turn.timeout_policy_snapshot?.reminder_interval_ms ?? null,
+          Date.parse(deadline),
+        );
+      }
+    })();
+  }
+
+  listDueTimeoutSchedules(
+    nowMs: number,
+    groupId?: string,
+  ): CollaborationTimeoutScheduleV3[] {
+    this.assertOpen();
+    const rows = groupId
+      ? this.database
+          .prepare(
+            `SELECT * FROM collaboration_timeout_schedules
+              WHERE active = 1 AND next_reminder_at_ms <= ? AND group_id = ?
+              ORDER BY next_reminder_at_ms, schedule_id`,
+          )
+          .all(nowMs, groupId)
+      : this.database
+          .prepare(
+            `SELECT * FROM collaboration_timeout_schedules
+              WHERE active = 1 AND next_reminder_at_ms <= ?
+              ORDER BY next_reminder_at_ms, schedule_id`,
+          )
+          .all(nowMs);
+    return (rows as Record<string, unknown>[]).map((row) => ({
+      scheduleId: String(row.schedule_id),
+      groupId: String(row.group_id),
+      instanceId: String(row.instance_id),
+      turnId: String(row.turn_id),
+      attempt: Number(row.attempt),
+      deadlineKind: String(row.deadline_kind) as 'start' | 'execution',
+      deadlineAtMs: Number(row.deadline_at_ms),
+      reminderIntervalMs:
+        row.reminder_interval_ms == null
+          ? null
+          : Number(row.reminder_interval_ms),
+      nextReminderAtMs: Number(row.next_reminder_at_ms),
+      reminderOrdinal: Number(row.reminder_ordinal),
+      active: Number(row.active) === 1,
+    }));
+  }
+
+  advanceTimeoutSchedule(
+    scheduleId: string,
+    expectedOrdinal: number,
+    nowMs = Date.now(),
+  ): boolean {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `UPDATE collaboration_timeout_schedules
+              SET reminder_ordinal = reminder_ordinal + 1,
+                  active = CASE WHEN reminder_interval_ms IS NULL THEN 0 ELSE 1 END,
+                  next_reminder_at_ms = CASE
+                    WHEN reminder_interval_ms IS NULL THEN next_reminder_at_ms
+                    ELSE ? + reminder_interval_ms END
+            WHERE schedule_id = ? AND active = 1 AND reminder_ordinal = ?`,
+        )
+        .run(nowMs, scheduleId, expectedOrdinal).changes === 1
+    );
+  }
+
   enqueueNotification(input: {
     readonly groupId: string;
     readonly recipientPrincipalId: string;
@@ -1464,6 +1844,134 @@ export class CollaborationProjectSpaceStore {
               AND recipient_client_id = ? AND delivered_at_ms IS NULL`,
         )
         .run(nowMs, notificationId, principalId, clientId).changes === 1
+    );
+  }
+
+  startSyncAttempt(
+    groupId: string,
+    headBefore: string | null,
+    nowMs = Date.now(),
+  ): number {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `INSERT INTO collaboration_sync_attempts
+           (group_id, started_at_ms, outcome, head_before)
+         VALUES (?, ?, 'running', ?)`,
+      )
+      .run(groupId, nowMs, headBefore);
+    return Number(result.lastInsertRowid);
+  }
+
+  finishSyncAttempt(input: {
+    readonly id: number;
+    readonly groupId: string;
+    readonly outcome: 'succeeded' | 'failed';
+    readonly headAfter: string | null;
+    readonly error?: string | null;
+    readonly errorClass?: string | null;
+    readonly nowMs?: number;
+  }): void {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_sync_attempts
+            SET completed_at_ms = ?, outcome = ?, head_after = ?, error = ?,
+                error_class = ?
+          WHERE id = ? AND group_id = ? AND completed_at_ms IS NULL`,
+      )
+      .run(
+        input.nowMs ?? Date.now(),
+        input.outcome,
+        input.headAfter,
+        input.error ?? null,
+        input.errorClass ?? null,
+        input.id,
+        input.groupId,
+      );
+    if (result.changes !== 1)
+      throw new Error(`Sync attempt cannot be completed: ${String(input.id)}`);
+  }
+
+  listSyncAttempts(groupId: string, limit = 50): CollaborationSyncAttemptV3[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_sync_attempts
+            WHERE group_id = ? ORDER BY started_at_ms DESC, id DESC LIMIT ?`,
+        )
+        .all(groupId, Math.min(200, Math.max(1, limit))) as Record<
+        string,
+        unknown
+      >[]
+    ).map((row) => ({
+      id: Number(row.id),
+      groupId: String(row.group_id),
+      startedAtMs: Number(row.started_at_ms),
+      completedAtMs:
+        row.completed_at_ms == null ? null : Number(row.completed_at_ms),
+      outcome: String(row.outcome),
+      headBefore: row.head_before == null ? null : String(row.head_before),
+      headAfter: row.head_after == null ? null : String(row.head_after),
+      error: row.error == null ? null : String(row.error),
+      errorClass: row.error_class == null ? null : String(row.error_class),
+    }));
+  }
+
+  acquireProcessLock(input: {
+    readonly groupId: string;
+    readonly ownerId: string;
+    readonly nowMs?: number;
+    readonly staleAfterMs?: number;
+  }): boolean {
+    this.assertOpen();
+    const nowMs = input.nowMs ?? Date.now();
+    const staleBefore = nowMs - (input.staleAfterMs ?? 120_000);
+    return this.database.transaction(() => {
+      this.database
+        .prepare(
+          `DELETE FROM collaboration_process_locks
+            WHERE group_id = ? AND heartbeat_at_ms < ?`,
+        )
+        .run(input.groupId, staleBefore);
+      return (
+        this.database
+          .prepare(
+            `INSERT OR IGNORE INTO collaboration_process_locks
+               (group_id, owner_id, acquired_at_ms, heartbeat_at_ms)
+             VALUES (?, ?, ?, ?)`,
+          )
+          .run(input.groupId, input.ownerId, nowMs, nowMs).changes === 1
+      );
+    })();
+  }
+
+  heartbeatProcessLock(
+    groupId: string,
+    ownerId: string,
+    nowMs = Date.now(),
+  ): boolean {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `UPDATE collaboration_process_locks SET heartbeat_at_ms = ?
+            WHERE group_id = ? AND owner_id = ?`,
+        )
+        .run(nowMs, groupId, ownerId).changes === 1
+    );
+  }
+
+  releaseProcessLock(groupId: string, ownerId: string): boolean {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `DELETE FROM collaboration_process_locks
+            WHERE group_id = ? AND owner_id = ?`,
+        )
+        .run(groupId, ownerId).changes === 1
     );
   }
 

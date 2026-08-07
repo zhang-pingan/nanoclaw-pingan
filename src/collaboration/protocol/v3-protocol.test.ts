@@ -10,6 +10,7 @@ import {
   collaborationCanonicalHashV3,
   collaborationDeadlineSnapshotHashV3,
   collaborationIdempotencyKeyV3,
+  collaborationWorkflowDefinitionHashV3,
   reduceCollaborationEventV3,
   type CollaborationProjectionV3,
 } from './v3-reducer.js';
@@ -366,10 +367,10 @@ describe('Collaboration project space v3 contract', () => {
       instance_id: 'wfi_201',
       definition_id: 'delivery',
       definition_version: 1,
-      definition_hash: collaborationCanonicalHashV3({
-        definition: storedDefinition.definition,
-        machine: storedDefinition.machine,
-      }),
+      definition_hash: collaborationWorkflowDefinitionHashV3(
+        storedDefinition.definition,
+        storedDefinition.machine,
+      ),
       scope: { type: 'group' as const },
       related_work_item_refs: [],
       participant_bindings: { developer: ALICE },

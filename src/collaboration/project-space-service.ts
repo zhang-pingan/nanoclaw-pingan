@@ -12,7 +12,14 @@ import {
 } from './project-space-store.js';
 import {
   buildCollaborationEventV3,
+  collaborationCanonicalHashV3,
+  collaborationDeadlineAtV3,
+  collaborationDeadlineSnapshotHashV3,
+  collaborationFencingTokenV3,
+  collaborationIdempotencyKeyV3,
+  collaborationWorkflowDefinitionHashV3,
   reduceCollaborationEventV3,
+  workflowDefinitionVersionKey,
   type CollaborationProjectionV3,
 } from './protocol/v3-reducer.js';
 import { COLLABORATION_CONTROL_BRANCH } from './protocol/version.js';
@@ -22,8 +29,15 @@ import {
   discussionMessageSchema,
   discussionSchema,
   executorDescriptorSchema,
+  machineDefinitionV3Schema,
   memberDefinitionV3Schema,
   permissionGrantSchema,
+  handoffEnvelopeV3Schema,
+  stateExecutionSchema,
+  collaborationTurnV3Schema,
+  workflowDefinitionSchema,
+  workflowInstanceSchema,
+  workflowLayoutSchema,
   workItemProgressSchema,
   workItemSchema,
   type CollaborationAggregateType,
@@ -32,8 +46,14 @@ import {
   type CollaborationPermission,
   type Discussion,
   type FileMetadata,
+  type MachineDefinitionV3,
   type MemberDefinitionV3,
   type ObserverSubscription,
+  type HandoffEnvelopeV3,
+  type ExecutionModeV3,
+  type WorkflowDefinition,
+  type WorkflowInstance,
+  type WorkflowLayout,
   type WorkItem,
   type WorkItemStatus,
 } from './protocol/v3-schema.js';
@@ -1094,6 +1114,805 @@ export class CollaborationProjectSpaceService {
     });
   }
 
+  async proposeWorkflowDefinition(input: {
+    readonly groupId: string;
+    readonly definitionId: string;
+    readonly expectedRevision: number;
+    readonly version: number;
+    readonly name: string;
+    readonly description?: string;
+    readonly launchPolicy?: {
+      readonly group_admin: boolean;
+      readonly work_item_owner: boolean;
+      readonly principals: readonly string[];
+    };
+    readonly machine: MachineDefinitionV3;
+    readonly layout: WorkflowLayout;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const history = await this.sync(input.groupId);
+    const key = workflowDefinitionVersionKey(input.definitionId, input.version);
+    const previous = history.projection.workflowDefinitions[key];
+    const latest =
+      history.projection.latestWorkflowDefinitionVersions[input.definitionId] ??
+      0;
+    if (!previous && input.version !== latest + 1)
+      throw new Error('Workflow Definition versions must be sequential');
+    if (previous?.definition.status === 'published')
+      throw new Error('Published Workflow Definition versions are immutable');
+    const machine = machineDefinitionV3Schema.parse(input.machine);
+    const layout = workflowLayoutSchema.parse(input.layout);
+    const now = new Date(this.now()).toISOString();
+    const definition = workflowDefinitionSchema.parse({
+      format: 'icarus.collaboration-workflow-definition/1',
+      definition_id: input.definitionId,
+      name: input.name,
+      description: input.description ?? '',
+      version: input.version,
+      created_by_principal_id:
+        previous?.definition.created_by_principal_id ?? group.localPrincipalId,
+      published_by_principal_id: null,
+      status: 'proposed',
+      launch_policy: input.launchPolicy ?? {
+        group_admin: true,
+        work_item_owner: true,
+        principals: [],
+      },
+      machine_ref: `workflows/definitions/${input.definitionId}/machine.json`,
+      layout_ref: `workflows/definitions/${input.definitionId}/layout.json`,
+      machine_hash: collaborationCanonicalHashV3(machine),
+      layout_hash: collaborationCanonicalHashV3(layout),
+      revision: input.expectedRevision + 1,
+      created_at: previous?.definition.created_at ?? now,
+      updated_at: now,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_definition',
+      aggregateId: input.definitionId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'workflow_definition_proposed',
+      payload: { definition, machine, layout },
+    });
+  }
+
+  async publishWorkflowDefinition(input: {
+    readonly groupId: string;
+    readonly definitionId: string;
+    readonly version: number;
+    readonly expectedRevision: number;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const history = await this.sync(input.groupId);
+    const current =
+      history.projection.workflowDefinitions[
+        workflowDefinitionVersionKey(input.definitionId, input.version)
+      ];
+    if (!current || current.definition.status !== 'proposed')
+      throw new Error('Proposed Workflow Definition version does not exist');
+    const definition = workflowDefinitionSchema.parse({
+      ...current.definition,
+      status: 'published',
+      published_by_principal_id: group.localPrincipalId,
+      revision: input.expectedRevision + 1,
+      updated_at: new Date(this.now()).toISOString(),
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_definition',
+      aggregateId: input.definitionId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'workflow_definition_published',
+      payload: {
+        definition,
+        machine: current.machine,
+        layout: current.layout,
+      },
+    });
+  }
+
+  async updateWorkflowLayout(input: {
+    readonly groupId: string;
+    readonly definitionId: string;
+    readonly version: number;
+    readonly expectedRevision: number;
+    readonly view: WorkflowLayout['view'];
+    readonly nodes: WorkflowLayout['nodes'];
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const history = await this.sync(input.groupId);
+    const current =
+      history.projection.workflowDefinitions[
+        workflowDefinitionVersionKey(input.definitionId, input.version)
+      ];
+    if (!current) throw new Error('Workflow Definition does not exist');
+    const layout = workflowLayoutSchema.parse({
+      format: 'icarus.collaboration-workflow-layout/1',
+      view: input.view,
+      nodes: input.nodes,
+      revision: current.layout.revision + 1,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_definition',
+      aggregateId: input.definitionId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'workflow_layout_updated',
+      payload: {
+        definition_id: input.definitionId,
+        version: input.version,
+        layout,
+        layout_hash: collaborationCanonicalHashV3(layout),
+      },
+    });
+  }
+
+  async retireWorkflowDefinition(input: {
+    readonly groupId: string;
+    readonly definitionId: string;
+    readonly expectedRevision: number;
+    readonly reason: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_definition',
+      aggregateId: input.definitionId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'workflow_definition_retired',
+      payload: { reason: input.reason },
+    });
+  }
+
+  async createWorkflowInstance(input: {
+    readonly groupId: string;
+    readonly definitionId: string;
+    readonly definitionVersion: number;
+    readonly instanceId?: string;
+    readonly scope: WorkflowInstance['scope'];
+    readonly relatedWorkItemRefs?: readonly string[];
+    readonly participantBindings?: Readonly<Record<string, string>>;
+    readonly stateAssignments?: Readonly<Record<string, string>>;
+    readonly workItemStatusMapping?: Readonly<Record<string, WorkItemStatus>>;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const history = await this.sync(input.groupId);
+    const selected =
+      history.projection.workflowDefinitions[
+        workflowDefinitionVersionKey(
+          input.definitionId,
+          input.definitionVersion,
+        )
+      ];
+    if (!selected || selected.definition.status !== 'published')
+      throw new Error('Published Workflow Definition does not exist');
+    const participantBindings = { ...(input.participantBindings ?? {}) };
+    const resolvedAssignments = { ...(input.stateAssignments ?? {}) };
+    for (const [stateId, state] of Object.entries(selected.machine.states)) {
+      if (state.terminal || resolvedAssignments[stateId]) continue;
+      if (state.assignee?.type === 'principal')
+        resolvedAssignments[stateId] = state.assignee.principal_id;
+      else if (
+        state.assignee?.type === 'participant_slot' &&
+        participantBindings[state.assignee.slot]
+      )
+        resolvedAssignments[stateId] =
+          participantBindings[state.assignee.slot]!;
+    }
+    const executableStateIds = Object.entries(selected.machine.states)
+      .filter(([, state]) => !state.terminal)
+      .map(([stateId]) => stateId);
+    const ready = executableStateIds.every(
+      (stateId) => resolvedAssignments[stateId],
+    );
+    const now = new Date(this.now()).toISOString();
+    const instance = workflowInstanceSchema.parse({
+      format: 'icarus.collaboration-workflow-instance/1',
+      instance_id: input.instanceId ?? newId('wfi'),
+      definition_id: input.definitionId,
+      definition_version: input.definitionVersion,
+      definition_hash: collaborationWorkflowDefinitionHashV3(
+        selected.definition,
+        selected.machine,
+      ),
+      scope: input.scope,
+      related_work_item_refs: [...(input.relatedWorkItemRefs ?? [])],
+      participant_bindings: participantBindings,
+      resolved_assignments: resolvedAssignments,
+      work_item_status_mapping: { ...(input.workItemStatusMapping ?? {}) },
+      lifecycle: ready ? 'ready' : 'draft',
+      business_state: selected.machine.initial_state,
+      active_turn_id: null,
+      epoch: 1,
+      revision: 1,
+      created_by_principal_id: group.localPrincipalId,
+      created_at: now,
+      updated_at: now,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: instance.instance_id,
+      expectedRevision: 0,
+      eventType: 'workflow_instance_created',
+      payload: { instance },
+    });
+  }
+
+  async startWorkflowInstance(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly expectedRevision: number;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: input.instanceId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'workflow_instance_started',
+      payload: {},
+    });
+  }
+
+  async setWorkflowInstancePaused(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly expectedRevision: number;
+    readonly paused: boolean;
+    readonly reason?: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: input.instanceId,
+      expectedRevision: input.expectedRevision,
+      eventType: input.paused
+        ? 'workflow_instance_paused'
+        : 'workflow_instance_resumed',
+      payload: input.paused ? { reason: input.reason ?? 'paused' } : {},
+    });
+  }
+
+  async closeWorkflowInstance(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly expectedRevision: number;
+    readonly reason: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: input.instanceId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'workflow_instance_closed',
+      payload: { reason: input.reason },
+    });
+  }
+
+  async reassignWorkflowState(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly expectedRevision: number;
+    readonly stateId: string;
+    readonly principalId: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: input.instanceId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'workflow_state_assignee_changed',
+      payload: {
+        state_id: input.stateId,
+        principal_id: input.principalId,
+      },
+    });
+  }
+
+  async publishStateExecution(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly stateId: string;
+    readonly expectedRevision: number;
+    readonly mode: ExecutionModeV3;
+    readonly actionId?: string | null;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const history = await this.sync(input.groupId);
+    const current =
+      history.projection.stateExecutions[input.instanceId]?.[input.stateId];
+    const action = input.actionId
+      ? history.projection.actions[
+          `${group.localPrincipalId}:${input.actionId}`
+        ]
+      : null;
+    if (input.mode !== 'manual' && !action)
+      throw new Error('Assisted/automatic execution requires an owned Action');
+    if (input.mode === 'manual' && input.actionId)
+      throw new Error('Manual execution cannot reference an Action');
+    const eventId = newId('evt');
+    const execution = stateExecutionSchema.parse({
+      format: 'icarus.collaboration-state-execution/1',
+      instance_id: input.instanceId,
+      state_id: input.stateId,
+      principal_id: group.localPrincipalId,
+      mode: input.mode,
+      action_ref: action
+        ? `workspace/principals/${group.localPrincipalId}/automations/actions/${action.action_id}.json`
+        : null,
+      action_hash: action ? collaborationCanonicalHashV3(action) : null,
+      prompt_hash: action?.prompt_hash ?? null,
+      published_at_event: eventId,
+      revision: (current?.revision ?? 0) + 1,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: input.instanceId,
+      expectedRevision: input.expectedRevision,
+      eventType: current
+        ? 'state_execution_revised'
+        : 'state_execution_published',
+      payload: { execution },
+      eventId,
+    });
+  }
+
+  async withdrawStateExecution(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly stateId: string;
+    readonly expectedRevision: number;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: input.instanceId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'state_execution_withdrawn',
+      payload: { state_id: input.stateId },
+    });
+  }
+
+  async createTurn(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly expectedRevision: number;
+    readonly turnId?: string;
+    readonly incomingHandoff?: HandoffEnvelopeV3 | null;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const history = await this.sync(input.groupId);
+    const instance = history.projection.workflowInstances[input.instanceId];
+    if (!instance) throw new Error('Workflow Instance does not exist');
+    const definition =
+      history.projection.workflowDefinitions[
+        workflowDefinitionVersionKey(
+          instance.definition_id,
+          instance.definition_version,
+        )
+      ];
+    const state = definition?.machine.states[instance.business_state];
+    if (!definition || !state || state.terminal)
+      throw new Error('Workflow Instance is not on an executable State');
+    const execution =
+      history.projection.stateExecutions[input.instanceId]?.[
+        instance.business_state
+      ];
+    const turnId = input.turnId ?? newId('turn');
+    const incomingHandoff = input.incomingHandoff
+      ? handoffEnvelopeV3Schema.parse(input.incomingHandoff)
+      : null;
+    const incomingHandoffHash = incomingHandoff
+      ? collaborationCanonicalHashV3(incomingHandoff)
+      : null;
+    const createdAt = new Date(this.now()).toISOString();
+    const timeoutPolicy = state.timeout_policy ?? null;
+    const startDeadlineAt = collaborationDeadlineAtV3(
+      createdAt,
+      timeoutPolicy?.start_timeout_ms,
+    );
+    const inputHash = collaborationCanonicalHashV3({
+      group_id: input.groupId,
+      instance_id: input.instanceId,
+      epoch: instance.epoch,
+      state_id: instance.business_state,
+      assignee_principal_id:
+        instance.resolved_assignments[instance.business_state],
+      execution: execution ?? null,
+      incoming_handoff_hash: incomingHandoffHash,
+      work_item:
+        instance.scope.type === 'work_item'
+          ? history.projection.workItems[instance.scope.work_item_id]
+          : null,
+    });
+    const attempt = 1;
+    const turn = collaborationTurnV3Schema.parse({
+      format: 'icarus.collaboration-turn/1',
+      turn_id: turnId,
+      workflow_instance_id: input.instanceId,
+      state_id: instance.business_state,
+      assignee_principal_id:
+        instance.resolved_assignments[instance.business_state],
+      claimant_principal_id: null,
+      claimant_client_id: null,
+      executor_id: null,
+      attempt,
+      fencing_token: null,
+      execution_mode: execution?.mode ?? 'manual',
+      state: 'pending',
+      action_ref: execution?.action_ref ?? null,
+      action_hash: execution?.action_hash ?? null,
+      prompt_hash: execution?.prompt_hash ?? null,
+      input_hash: inputHash,
+      idempotency_key: collaborationIdempotencyKeyV3({
+        groupId: input.groupId,
+        instanceId: input.instanceId,
+        epoch: instance.epoch,
+        turnId,
+        attempt,
+        inputHash,
+      }),
+      incoming_handoff: incomingHandoff,
+      incoming_handoff_hash: incomingHandoffHash,
+      timeout_policy_snapshot: timeoutPolicy,
+      start_deadline_at: startDeadlineAt,
+      execution_deadline_at: null,
+      deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+        turnId,
+        attempt,
+        timeoutPolicy,
+        startDeadlineAt,
+        startedAt: null,
+        executionDeadlineAt: null,
+      }),
+      created_at: createdAt,
+      started_at: null,
+      completed_at: null,
+      outcome: null,
+      handoff: null,
+      handoff_hash: null,
+      recovery_reason: null,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: input.instanceId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'turn_created',
+      payload: { turn },
+    });
+  }
+
+  async startTurn(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly turnId: string;
+    readonly expectedRevision: number;
+    readonly executorId?: string | null;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const history = await this.sync(input.groupId);
+    const instance = history.projection.workflowInstances[input.instanceId];
+    const turn = history.projection.turns[input.turnId];
+    if (!instance || !turn) throw new Error('Workflow Turn does not exist');
+    if (turn.assignee_principal_id !== group.localPrincipalId)
+      throw new Error('Only the assigned Principal may start this Turn');
+    if (turn.execution_mode === 'manual' && input.executorId)
+      throw new Error('Manual Turns do not use an Executor');
+    if (turn.execution_mode !== 'manual') {
+      if (!input.executorId || !turn.action_hash || !turn.prompt_hash)
+        throw new Error(
+          'Assisted/automatic Turns require an Executor and Action snapshot',
+        );
+      const binding = this.store.getExecutorBinding({
+        groupId: input.groupId,
+        instanceId: input.instanceId,
+        stateId: turn.state_id,
+        principalId: group.localPrincipalId!,
+        clientId: group.localClientId!,
+        actionHash: turn.action_hash,
+        promptHash: turn.prompt_hash,
+      });
+      if (!binding?.enabled || binding.executorId !== input.executorId)
+        throw new Error('No enabled local Executor Binding matches this Turn');
+    }
+    const eventId = newId('evt');
+    const startedAt = new Date(this.now()).toISOString();
+    const executionDeadlineAt = collaborationDeadlineAtV3(
+      startedAt,
+      turn.timeout_policy_snapshot?.execution_timeout_ms,
+    );
+    const fencingToken = collaborationFencingTokenV3({
+      groupId: input.groupId,
+      instanceId: input.instanceId,
+      epoch: instance.epoch,
+      turnId: input.turnId,
+      attempt: turn.attempt,
+      claimantClientId: group.localClientId!,
+      claimEventId: eventId,
+      expectedRevision: input.expectedRevision,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: input.instanceId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'turn_started',
+      payload: {
+        turn_id: input.turnId,
+        attempt: turn.attempt,
+        fencing_token: fencingToken,
+        executor_id: input.executorId ?? null,
+        execution_deadline_at: executionDeadlineAt,
+        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+          turnId: input.turnId,
+          attempt: turn.attempt,
+          timeoutPolicy: turn.timeout_policy_snapshot,
+          startDeadlineAt: turn.start_deadline_at,
+          startedAt,
+          executionDeadlineAt,
+        }),
+      },
+      eventId,
+      executorId: input.executorId ?? null,
+    });
+  }
+
+  async recordActionState(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly turnId: string;
+    readonly expectedRevision: number;
+    readonly attempt: number;
+    readonly fencingToken: string;
+    readonly state:
+      | 'dispatched'
+      | 'waiting_input'
+      | 'waiting_approval'
+      | 'completed';
+    readonly executionRef?: string;
+    readonly resultHash?: string;
+    readonly executorId?: string | null;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const eventType =
+      input.state === 'dispatched'
+        ? 'action_dispatched'
+        : input.state === 'waiting_input'
+          ? 'action_waiting_input'
+          : input.state === 'waiting_approval'
+            ? 'action_waiting_approval'
+            : 'action_completed';
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: input.instanceId,
+      expectedRevision: input.expectedRevision,
+      eventType,
+      payload: {
+        turn_id: input.turnId,
+        attempt: input.attempt,
+        fencing_token: input.fencingToken,
+        ...(input.state === 'dispatched'
+          ? { execution_ref: input.executionRef }
+          : {}),
+        ...(input.state === 'completed'
+          ? { result_hash: input.resultHash }
+          : {}),
+      },
+      executorId: input.executorId ?? null,
+    });
+  }
+
+  async completeTurn(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly turnId: string;
+    readonly expectedRevision: number;
+    readonly attempt: number;
+    readonly fencingToken: string;
+    readonly outcome: string;
+    readonly summary: string;
+    readonly instruction?: string;
+    readonly markers?: readonly string[];
+    readonly dataRefs?: readonly string[];
+    readonly artifactRefs?: readonly string[];
+    readonly data?: Readonly<Record<string, unknown>>;
+    readonly result?: unknown;
+    readonly executorId?: string | null;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const handoff = handoffEnvelopeV3Schema.parse({
+      format: 'icarus.collaboration-handoff/1',
+      source_turn_id: input.turnId,
+      outcome: input.outcome,
+      summary: input.summary,
+      instruction: input.instruction ?? '',
+      markers: [...(input.markers ?? [])],
+      data_refs: [...(input.dataRefs ?? [])],
+      artifact_refs: [...(input.artifactRefs ?? [])],
+      data: { ...(input.data ?? {}) },
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: input.instanceId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'turn_completed',
+      payload: {
+        turn_id: input.turnId,
+        attempt: input.attempt,
+        fencing_token: input.fencingToken,
+        outcome: input.outcome,
+        result_hash: collaborationCanonicalHashV3(input.result ?? handoff.data),
+        handoff,
+        handoff_hash: collaborationCanonicalHashV3(handoff),
+        artifact_refs: [...(input.artifactRefs ?? [])],
+      },
+      executorId: input.executorId ?? null,
+    });
+  }
+
+  async cancelTurn(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly turnId: string;
+    readonly expectedRevision: number;
+    readonly attempt: number;
+    readonly fencingToken?: string | null;
+    readonly reason: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: input.instanceId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'turn_cancelled',
+      payload: {
+        turn_id: input.turnId,
+        attempt: input.attempt,
+        fencing_token: input.fencingToken ?? null,
+        reason: input.reason,
+      },
+    });
+  }
+
+  async requestTurnRecovery(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly turnId: string;
+    readonly expectedRevision: number;
+    readonly attempt: number;
+    readonly fencingToken?: string | null;
+    readonly reason: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: input.instanceId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'turn_recovery_requested',
+      payload: {
+        turn_id: input.turnId,
+        attempt: input.attempt,
+        fencing_token: input.fencingToken ?? null,
+        reason: input.reason,
+      },
+    });
+  }
+
+  async recoverTurn(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly turnId: string;
+    readonly expectedRevision: number;
+    readonly previousAttempt: number;
+    readonly reason: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const history = await this.sync(input.groupId);
+    const turn = history.projection.turns[input.turnId];
+    if (!turn || turn.attempt !== input.previousAttempt)
+      throw new Error('Turn recovery attempt is stale');
+    const nextAttempt = input.previousAttempt + 1;
+    const startDeadlineAt = collaborationDeadlineAtV3(
+      new Date(this.now()).toISOString(),
+      turn.timeout_policy_snapshot?.start_timeout_ms,
+    );
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workflow_instance',
+      aggregateId: input.instanceId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'turn_recovered',
+      payload: {
+        turn_id: input.turnId,
+        previous_attempt: input.previousAttempt,
+        next_attempt: nextAttempt,
+        reason: input.reason,
+        start_deadline_at: startDeadlineAt,
+        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+          turnId: input.turnId,
+          attempt: nextAttempt,
+          timeoutPolicy: turn.timeout_policy_snapshot,
+          startDeadlineAt,
+          startedAt: null,
+          executionDeadlineAt: null,
+        }),
+      },
+    });
+  }
+
+  async observeDueTimeouts(groupId: string): Promise<{
+    readonly observed: number;
+    readonly notifications: number;
+  }> {
+    const group = this.requireLocalMember(groupId);
+    let observed = 0;
+    let notifications = 0;
+    const due = this.store.listDueTimeoutSchedules(this.now(), groupId);
+    for (const schedule of due) {
+      const history = await this.sync(groupId);
+      const turn = history.projection.turns[schedule.turnId];
+      const instance =
+        history.projection.workflowInstances[schedule.instanceId];
+      if (
+        !turn ||
+        !instance ||
+        turn.attempt !== schedule.attempt ||
+        (schedule.deadlineKind === 'start'
+          ? turn.state !== 'pending' ||
+            Date.parse(turn.start_deadline_at ?? '') !== schedule.deadlineAtMs
+          : !['running', 'waiting_input', 'waiting_approval'].includes(
+              turn.state,
+            ) ||
+            Date.parse(turn.execution_deadline_at ?? '') !==
+              schedule.deadlineAtMs)
+      ) {
+        this.store.advanceTimeoutSchedule(
+          schedule.scheduleId,
+          schedule.reminderOrdinal,
+          this.now(),
+        );
+        continue;
+      }
+      const prior = history.projection.timeoutObservations[turn.turn_id]?.some(
+        (candidate) =>
+          candidate.attempt === turn.attempt &&
+          candidate.deadlineKind === schedule.deadlineKind,
+      );
+      if (!prior) {
+        const revision =
+          history.projection.aggregateHeads[
+            `workflow_instance:${instance.instance_id}`
+          ]!.revision;
+        await this.appendLocal(groupId, {
+          aggregateType: 'workflow_instance',
+          aggregateId: instance.instance_id,
+          expectedRevision: revision,
+          eventType: 'turn_timeout_observed',
+          payload: {
+            turn_id: turn.turn_id,
+            attempt: turn.attempt,
+            deadline_kind: schedule.deadlineKind,
+            deadline_at: new Date(schedule.deadlineAtMs).toISOString(),
+            observed_at: new Date(this.now()).toISOString(),
+            turn_snapshot_hash: turn.deadline_snapshot_hash,
+          },
+        });
+        observed += 1;
+      }
+      const recipient = group.localPrincipalId!;
+      if (
+        recipient === turn.assignee_principal_id ||
+        recipient === instance.created_by_principal_id
+      ) {
+        const result = this.store.enqueueNotification({
+          groupId,
+          recipientPrincipalId: recipient,
+          recipientClientId: group.localClientId!,
+          kind: 'workflow_state_timeout',
+          resourceType: 'workflow_instance',
+          resourceId: instance.instance_id,
+          reason: `${schedule.deadlineKind}_timeout`,
+          dedupeKey: `workflow-timeout:${groupId}:${turn.turn_id}:${String(turn.attempt)}:${schedule.deadlineKind}:${String(schedule.reminderOrdinal)}:${recipient}`,
+          reminderOrdinal: schedule.reminderOrdinal,
+          dueAtMs: schedule.deadlineAtMs,
+          payload: {
+            turn_id: turn.turn_id,
+            state_id: turn.state_id,
+            deadline_kind: schedule.deadlineKind,
+          },
+          nowMs: this.now(),
+        });
+        if (result.enqueued) notifications += 1;
+      }
+      this.store.advanceTimeoutSchedule(
+        schedule.scheduleId,
+        schedule.reminderOrdinal,
+        this.now(),
+      );
+    }
+    return { observed, notifications };
+  }
+
   refreshDueNotifications(groupId: string): number {
     const group = this.requireLocalMember(groupId);
     const projection = group.projection;
@@ -1152,6 +1971,11 @@ export class CollaborationProjectSpaceService {
   async sync(groupId: string): Promise<ValidatedProjectSpaceHistory> {
     const group = this.store.getGroup(groupId);
     if (!group) throw new Error(`Collaboration Group not found: ${groupId}`);
+    const attemptId = this.store.startSyncAttempt(
+      groupId,
+      group.lastVerifiedHead,
+      this.now(),
+    );
     try {
       const history = await this.transport.inspect({
         remoteUrl: group.remoteUrl,
@@ -1159,8 +1983,24 @@ export class CollaborationProjectSpaceService {
         previousHead: group.lastVerifiedHead,
       });
       this.saveHistory(groupId, history);
+      this.store.finishSyncAttempt({
+        id: attemptId,
+        groupId,
+        outcome: 'succeeded',
+        headAfter: history.head,
+        nowMs: this.now(),
+      });
       return history;
     } catch (error) {
+      this.store.finishSyncAttempt({
+        id: attemptId,
+        groupId,
+        outcome: 'failed',
+        headAfter: group.lastVerifiedHead,
+        error: error instanceof Error ? error.message : String(error),
+        errorClass: error instanceof Error ? error.name : 'Error',
+        nowMs: this.now(),
+      });
       this.store.recordIntegrityIncident({
         groupId,
         code: 'SYNC_VALIDATION_FAILED',
@@ -1396,6 +2236,10 @@ export class CollaborationProjectSpaceService {
       eventRecords: history.eventRecords,
       nowMs: this.now(),
     });
+    this.store.syncTimeoutSchedules(
+      groupId,
+      Object.values(history.projection.turns),
+    );
     const group = this.store.getGroup(groupId);
     if (
       group?.subscriptionMode !== 'member' ||

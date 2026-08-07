@@ -23,6 +23,55 @@ const ALICE: CollaborationPrincipalIdentity = {
   keyRef: 'ssh-ed25519:SHA256:alice',
 };
 
+const DELIVERY_MACHINE = {
+  format: 'icarus.collaboration-machine/3' as const,
+  initial_state: 'implementation',
+  states: {
+    implementation: {
+      label: 'Implementation',
+      description: 'Implement the accepted scope.',
+      assignee: {
+        type: 'participant_slot' as const,
+        slot: 'implementer',
+      },
+      terminal: false,
+      timeout_policy: {
+        start_timeout_ms: 60_000,
+        execution_timeout_ms: 120_000,
+        reminder_interval_ms: 30_000,
+        on_timeout: 'notify_only' as const,
+      },
+      transitions: [
+        { outcome: 'complete', label: 'Complete', target_state: 'completed' },
+        { outcome: 'cancel', label: 'Cancel', target_state: 'cancelled' },
+      ],
+    },
+    completed: {
+      label: 'Completed',
+      description: '',
+      terminal: true,
+      transitions: [],
+    },
+    cancelled: {
+      label: 'Cancelled',
+      description: '',
+      terminal: true,
+      transitions: [],
+    },
+  },
+};
+
+const DELIVERY_LAYOUT = {
+  format: 'icarus.collaboration-workflow-layout/1' as const,
+  view: 'participants' as const,
+  nodes: {
+    implementation: { x: 80, y: 120 },
+    completed: { x: 420, y: 60 },
+    cancelled: { x: 420, y: 220 },
+  },
+  revision: 1,
+};
+
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0))
     rmSync(directory, { recursive: true, force: true });
@@ -118,6 +167,7 @@ function service(
   root: string,
   transport: MemoryTransport,
   identity: CollaborationPrincipalIdentity,
+  now: () => number = () => Date.parse('2026-08-06T12:00:00.000Z'),
 ) {
   const store = new CollaborationProjectSpaceStore(path.join(root, 'store.db'));
   const identities = {
@@ -130,7 +180,7 @@ function service(
       transport,
       path.join(root, 'repos'),
       identities,
-      () => Date.parse('2026-08-06T12:00:00.000Z'),
+      now,
     ),
   };
 }
@@ -601,5 +651,531 @@ describe('Collaboration project space v3 Group and identity service', () => {
     );
     owner.store.close();
     bob.store.close();
+  });
+
+  it('versions Outcome-first Definitions while isolating layout from the business hash', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/project.git',
+      name: 'Project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_project',
+    });
+    const proposed = await owner.service.proposeWorkflowDefinition({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Delivery',
+      launchPolicy: {
+        group_admin: true,
+        work_item_owner: true,
+        principals: [],
+      },
+      machine: DELIVERY_MACHINE,
+      layout: DELIVERY_LAYOUT,
+    });
+    expect(
+      proposed.projection?.workflowDefinitions['delivery@1'].definition.status,
+    ).toBe('proposed');
+    const published = await owner.service.publishWorkflowDefinition({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      version: 1,
+      expectedRevision: 1,
+    });
+    const before =
+      published.projection?.workflowDefinitions['delivery@1'].definition;
+    const laidOut = await owner.service.updateWorkflowLayout({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      version: 1,
+      expectedRevision: 2,
+      view: 'free',
+      nodes: {
+        implementation: { x: 160, y: 180 },
+        completed: { x: 560, y: 80 },
+        cancelled: { x: 560, y: 260 },
+      },
+    });
+    const after = laidOut.projection?.workflowDefinitions['delivery@1'];
+    expect(after?.definition.machine_hash).toBe(before?.machine_hash);
+    expect(after?.definition.version).toBe(1);
+    expect(after?.definition.layout_hash).not.toBe(before?.layout_hash);
+    await expect(
+      owner.service.proposeWorkflowDefinition({
+        groupId: 'group_project',
+        definitionId: 'delivery',
+        expectedRevision: 3,
+        version: 1,
+        name: 'Rewrite published version',
+        machine: DELIVERY_MACHINE,
+        layout: DELIVERY_LAYOUT,
+      }),
+    ).rejects.toThrow(/immutable/u);
+    owner.store.close();
+  });
+
+  it('runs independent Group and Work Item Workflow Instances with participant resolution', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/project.git',
+      name: 'Project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_project',
+    });
+    await owner.service.proposeWorkflowDefinition({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Delivery',
+      machine: DELIVERY_MACHINE,
+      layout: DELIVERY_LAYOUT,
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkItem({
+      groupId: 'group_project',
+      workItemId: 'wi_delivery',
+      type: 'task',
+      title: 'Deliver the release',
+    });
+
+    const draft = await owner.service.createWorkflowInstance({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      definitionVersion: 1,
+      instanceId: 'wfi_draft',
+      scope: { type: 'group' },
+    });
+    expect(draft.projection?.workflowInstances.wfi_draft.lifecycle).toBe(
+      'draft',
+    );
+    await expect(
+      owner.service.startWorkflowInstance({
+        groupId: 'group_project',
+        instanceId: 'wfi_draft',
+        expectedRevision: 1,
+      }),
+    ).rejects.toThrow(/lifecycle transition/u);
+    const resolved = await owner.service.reassignWorkflowState({
+      groupId: 'group_project',
+      instanceId: 'wfi_draft',
+      expectedRevision: 1,
+      stateId: 'implementation',
+      principalId: ALICE.principalId,
+    });
+    expect(resolved.projection?.workflowInstances.wfi_draft.lifecycle).toBe(
+      'ready',
+    );
+    const groupRunning = await owner.service.startWorkflowInstance({
+      groupId: 'group_project',
+      instanceId: 'wfi_draft',
+      expectedRevision: 2,
+    });
+    expect(groupRunning.projection?.workflowInstances.wfi_draft).toMatchObject({
+      lifecycle: 'running',
+      business_state: 'implementation',
+      active_turn_id: null,
+    });
+
+    const itemInstance = await owner.service.createWorkflowInstance({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      definitionVersion: 1,
+      instanceId: 'wfi_item',
+      scope: { type: 'work_item', work_item_id: 'wi_delivery' },
+      participantBindings: { implementer: ALICE.principalId },
+      workItemStatusMapping: {
+        completed: 'done',
+        cancelled: 'cancelled',
+      },
+    });
+    expect(itemInstance.projection?.workflowInstances.wfi_item.lifecycle).toBe(
+      'ready',
+    );
+    expect(
+      itemInstance.projection?.workItems.wi_delivery
+        .primary_workflow_instance_id,
+    ).toBe('wfi_item');
+    await expect(
+      owner.service.createWorkflowInstance({
+        groupId: 'group_project',
+        definitionId: 'delivery',
+        definitionVersion: 1,
+        instanceId: 'wfi_duplicate',
+        scope: { type: 'work_item', work_item_id: 'wi_delivery' },
+        participantBindings: { implementer: ALICE.principalId },
+        workItemStatusMapping: {
+          completed: 'done',
+          cancelled: 'cancelled',
+        },
+      }),
+    ).rejects.toThrow(/active primary Workflow/u);
+    const running = await owner.service.startWorkflowInstance({
+      groupId: 'group_project',
+      instanceId: 'wfi_item',
+      expectedRevision: 1,
+    });
+    expect(running.projection?.workItems.wi_delivery.status).toBe(
+      'in_progress',
+    );
+    owner.store.close();
+  });
+
+  it('defaults to manual execution, fences competing Clients, and maps a terminal Outcome atomically', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/project.git',
+      name: 'Project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_project',
+    });
+    await owner.service.proposeWorkflowDefinition({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Delivery',
+      machine: DELIVERY_MACHINE,
+      layout: DELIVERY_LAYOUT,
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkItem({
+      groupId: 'group_project',
+      workItemId: 'wi_delivery',
+      type: 'task',
+      title: 'Deliver release',
+    });
+    await owner.service.createWorkflowInstance({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      definitionVersion: 1,
+      instanceId: 'wfi_delivery',
+      scope: { type: 'work_item', work_item_id: 'wi_delivery' },
+      participantBindings: { implementer: ALICE.principalId },
+      workItemStatusMapping: {
+        completed: 'done',
+        cancelled: 'cancelled',
+      },
+    });
+    await owner.service.startWorkflowInstance({
+      groupId: 'group_project',
+      instanceId: 'wfi_delivery',
+      expectedRevision: 1,
+    });
+    const pending = await owner.service.createTurn({
+      groupId: 'group_project',
+      instanceId: 'wfi_delivery',
+      expectedRevision: 2,
+      turnId: 'turn_delivery',
+    });
+    expect(pending.projection?.turns.turn_delivery).toMatchObject({
+      state: 'pending',
+      execution_mode: 'manual',
+      action_hash: null,
+      claimant_client_id: null,
+    });
+
+    const secondIdentity = { ...ALICE, clientId: 'client_alice_studio' };
+    const second = service(tempDirectory(), transport, secondIdentity);
+    await second.service.joinGroup({
+      remoteUrl: '/tmp/project.git',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice Studio',
+    });
+    const ownerSynced = await owner.service.sync('group_project');
+    const currentRevision =
+      ownerSynced.projection.aggregateHeads['workflow_instance:wfi_delivery']!
+        .revision;
+    const claimed = await owner.service.startTurn({
+      groupId: 'group_project',
+      instanceId: 'wfi_delivery',
+      turnId: 'turn_delivery',
+      expectedRevision: currentRevision,
+    });
+    const claimedTurn = claimed.projection?.turns.turn_delivery;
+    expect(claimedTurn).toMatchObject({
+      state: 'running',
+      claimant_principal_id: ALICE.principalId,
+      claimant_client_id: ALICE.clientId,
+    });
+    await expect(
+      second.service.startTurn({
+        groupId: 'group_project',
+        instanceId: 'wfi_delivery',
+        turnId: 'turn_delivery',
+        expectedRevision: currentRevision,
+      }),
+    ).rejects.toThrow(/revision conflict/u);
+    await expect(
+      second.service.completeTurn({
+        groupId: 'group_project',
+        instanceId: 'wfi_delivery',
+        turnId: 'turn_delivery',
+        expectedRevision: currentRevision + 1,
+        attempt: 1,
+        fencingToken: claimedTurn!.fencing_token!,
+        outcome: 'complete',
+        summary: 'Attempted from a stale Client.',
+      }),
+    ).rejects.toThrow(/fenced claimant Client/u);
+
+    const completed = await owner.service.completeTurn({
+      groupId: 'group_project',
+      instanceId: 'wfi_delivery',
+      turnId: 'turn_delivery',
+      expectedRevision: currentRevision + 1,
+      attempt: 1,
+      fencingToken: claimedTurn!.fencing_token!,
+      outcome: 'complete',
+      summary: 'Release delivered.',
+      instruction: 'Verify the published artifacts.',
+    });
+    expect(completed.projection?.workflowInstances.wfi_delivery).toMatchObject({
+      lifecycle: 'closed',
+      business_state: 'completed',
+      active_turn_id: null,
+    });
+    expect(completed.projection?.workItems.wi_delivery).toMatchObject({
+      status: 'done',
+      primary_workflow_instance_id: null,
+    });
+    owner.store.close();
+    second.store.close();
+  });
+
+  it('requires a Principal and Client scoped local Binding for assisted execution', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/project.git',
+      name: 'Project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_project',
+    });
+    await owner.service.registerExecutor({
+      groupId: 'group_project',
+      expectedRevision: 0,
+      executorId: 'executor_codex',
+      displayName: 'Codex',
+      kind: 'codex',
+    });
+    await owner.service.publishAction({
+      groupId: 'group_project',
+      expectedRevision: 0,
+      actionId: 'implement',
+      name: 'Implement',
+      version: 1,
+      kind: 'run_once',
+      prompt: 'Implement the current State.\n',
+      filesystemAccess: 'workspace_write',
+    });
+    await owner.service.proposeWorkflowDefinition({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Delivery',
+      machine: DELIVERY_MACHINE,
+      layout: DELIVERY_LAYOUT,
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkflowInstance({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      definitionVersion: 1,
+      instanceId: 'wfi_assisted',
+      scope: { type: 'group' },
+      participantBindings: { implementer: ALICE.principalId },
+    });
+    await owner.service.startWorkflowInstance({
+      groupId: 'group_project',
+      instanceId: 'wfi_assisted',
+      expectedRevision: 1,
+    });
+    const configured = await owner.service.publishStateExecution({
+      groupId: 'group_project',
+      instanceId: 'wfi_assisted',
+      stateId: 'implementation',
+      expectedRevision: 2,
+      mode: 'assisted',
+      actionId: 'implement',
+    });
+    const pending = await owner.service.createTurn({
+      groupId: 'group_project',
+      instanceId: 'wfi_assisted',
+      expectedRevision: 3,
+      turnId: 'turn_assisted',
+    });
+    const turn = pending.projection?.turns.turn_assisted;
+    expect(turn?.execution_mode).toBe('assisted');
+    await expect(
+      owner.service.startTurn({
+        groupId: 'group_project',
+        instanceId: 'wfi_assisted',
+        turnId: 'turn_assisted',
+        expectedRevision: 4,
+        executorId: 'executor_codex',
+      }),
+    ).rejects.toThrow(/local Executor Binding/u);
+    owner.store.saveExecutorBinding({
+      groupId: 'group_project',
+      instanceId: 'wfi_assisted',
+      stateId: 'implementation',
+      principalId: ALICE.principalId,
+      clientId: ALICE.clientId,
+      actionHash: turn!.action_hash!,
+      promptHash: turn!.prompt_hash!,
+      executorId: 'executor_codex',
+      executorKind: 'codex',
+      workspacePath: '/tmp/project-workspace',
+      filesystemAccess: 'workspace_write',
+      approvalPolicy: 'on-request',
+      config: {},
+      enabled: true,
+    });
+    const started = await owner.service.startTurn({
+      groupId: 'group_project',
+      instanceId: 'wfi_assisted',
+      turnId: 'turn_assisted',
+      expectedRevision: 4,
+      executorId: 'executor_codex',
+    });
+    expect(started.projection?.turns.turn_assisted).toMatchObject({
+      state: 'running',
+      executor_id: 'executor_codex',
+    });
+    expect(
+      configured.projection?.stateExecutions.wfi_assisted.implementation,
+    ).toBeDefined();
+    owner.store.close();
+  });
+
+  it('observes start timeout reminders without changing Workflow or Work Item state', async () => {
+    const transport = new MemoryTransport();
+    let nowMs = Date.parse('2026-08-06T12:00:00.000Z');
+    const owner = service(tempDirectory(), transport, ALICE, () => nowMs);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/project.git',
+      name: 'Project',
+      signingKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_project',
+    });
+    await owner.service.proposeWorkflowDefinition({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Delivery',
+      machine: DELIVERY_MACHINE,
+      layout: DELIVERY_LAYOUT,
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkItem({
+      groupId: 'group_project',
+      workItemId: 'wi_timeout',
+      type: 'task',
+      title: 'Timeout remains notify-only',
+    });
+    await owner.service.createWorkflowInstance({
+      groupId: 'group_project',
+      definitionId: 'delivery',
+      definitionVersion: 1,
+      instanceId: 'wfi_timeout',
+      scope: { type: 'work_item', work_item_id: 'wi_timeout' },
+      participantBindings: { implementer: ALICE.principalId },
+      workItemStatusMapping: {
+        completed: 'done',
+        cancelled: 'cancelled',
+      },
+    });
+    await owner.service.startWorkflowInstance({
+      groupId: 'group_project',
+      instanceId: 'wfi_timeout',
+      expectedRevision: 1,
+    });
+    await owner.service.createTurn({
+      groupId: 'group_project',
+      instanceId: 'wfi_timeout',
+      expectedRevision: 2,
+      turnId: 'turn_timeout',
+    });
+
+    nowMs += 60_000;
+    await expect(
+      owner.service.observeDueTimeouts('group_project'),
+    ).resolves.toEqual({ observed: 1, notifications: 1 });
+    let projection = owner.store.getGroup('group_project')!.projection!;
+    expect(projection.turns.turn_timeout.state).toBe('pending');
+    expect(projection.workflowInstances.wfi_timeout.lifecycle).toBe('running');
+    expect(projection.workItems.wi_timeout.status).toBe('in_progress');
+
+    await expect(
+      owner.service.observeDueTimeouts('group_project'),
+    ).resolves.toEqual({ observed: 0, notifications: 0 });
+    nowMs += 30_000;
+    await expect(
+      owner.service.observeDueTimeouts('group_project'),
+    ).resolves.toEqual({ observed: 0, notifications: 1 });
+    projection = owner.store.getGroup('group_project')!.projection!;
+    expect(projection.timeoutObservations.turn_timeout).toHaveLength(1);
+    expect(
+      owner.store
+        .listPendingNotifications({
+          principalId: ALICE.principalId,
+          clientId: ALICE.clientId,
+          groupId: 'group_project',
+        })
+        .map((notification) => notification.dedupeKey),
+    ).toEqual([
+      expect.stringContaining('workflow-timeout:'),
+      expect.stringContaining('workflow-timeout:'),
+    ]);
+    owner.store.close();
   });
 });

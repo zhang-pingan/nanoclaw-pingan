@@ -527,6 +527,15 @@ function automaticMaterialization(
           projection.workflowInstances[event.aggregate_id],
         ),
       );
+      {
+        const instance = projection.workflowInstances[event.aggregate_id];
+        if (instance?.scope.type !== 'work_item') break;
+        const workItemId = instance.scope.work_item_id;
+        files.set(
+          `work-items/${workItemId}/item.json`,
+          prettyCollaborationJson(projection.workItems[workItemId]),
+        );
+      }
       break;
     case 'state_execution_published':
     case 'state_execution_revised': {
@@ -543,6 +552,15 @@ function automaticMaterialization(
           projection.workflowInstances[event.aggregate_id],
         ),
       );
+      {
+        const instance = projection.workflowInstances[event.aggregate_id];
+        if (instance?.scope.type !== 'work_item') break;
+        const workItemId = instance.scope.work_item_id;
+        files.set(
+          `work-items/${workItemId}/item.json`,
+          prettyCollaborationJson(projection.workItems[workItemId]),
+        );
+      }
       break;
     }
     case 'state_execution_withdrawn':
@@ -582,6 +600,15 @@ function automaticMaterialization(
           projection.workflowInstances[event.aggregate_id],
         ),
       );
+      {
+        const instance = projection.workflowInstances[event.aggregate_id];
+        if (instance?.scope.type !== 'work_item') break;
+        const workItemId = instance.scope.work_item_id;
+        files.set(
+          `work-items/${workItemId}/item.json`,
+          prettyCollaborationJson(projection.workItems[workItemId]),
+        );
+      }
       break;
     }
   }

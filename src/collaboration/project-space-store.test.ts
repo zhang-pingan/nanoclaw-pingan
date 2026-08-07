@@ -266,4 +266,108 @@ describe('Collaboration project space v3 store', () => {
     ).toHaveLength(1);
     store.close();
   });
+
+  it('persists the first fenced action claim and records one durable receipt', () => {
+    const store = new CollaborationProjectSpaceStore(
+      temporaryPath('executions.db'),
+    );
+    store.registerGroup({
+      subscription: {
+        format: 'icarus.collaboration-subscription/1',
+        group_id: 'group_test',
+        remote_url: '/tmp/group.git',
+        subscription_mode: 'member',
+        poll_interval_ms: 60_000,
+        last_verified_head: null,
+        notifications_enabled: true,
+        created_at: NOW,
+      },
+      name: 'Test group',
+      lifecycle: 'active',
+      ownerPrincipalId: PRINCIPAL,
+      repositoryPath: '/tmp/cache.git',
+      localPrincipalId: PRINCIPAL,
+      localClientId: CLIENT,
+      signingKeyPath: '/tmp/id_ed25519',
+      signingPublicKey: 'ssh-ed25519 test',
+      signingKeyRef: 'ssh-ed25519:SHA256:alice',
+    });
+    const first = store.claimActionExecution({
+      groupId: 'group_test',
+      instanceId: 'wfi_1',
+      turnId: 'turn_1',
+      epoch: 1,
+      attempt: 1,
+      claimantClientId: CLIENT,
+      fencingToken: `sha256:${'a'.repeat(64)}`,
+      operationKey: `sha256:${'b'.repeat(64)}`,
+      executorId: 'executor_codex',
+      executorKind: 'codex',
+      nowMs: 100,
+    });
+    const duplicate = store.claimActionExecution({
+      groupId: 'group_test',
+      instanceId: 'wfi_1',
+      turnId: 'turn_1',
+      epoch: 1,
+      attempt: 1,
+      claimantClientId: 'client_other',
+      fencingToken: `sha256:${'c'.repeat(64)}`,
+      operationKey: `sha256:${'d'.repeat(64)}`,
+      executorId: 'executor_other',
+      executorKind: 'external',
+      nowMs: 101,
+    });
+    expect(first.acquired).toBe(true);
+    expect(duplicate).toMatchObject({
+      acquired: false,
+      execution: {
+        executionId: first.execution.executionId,
+        claimantClientId: CLIENT,
+      },
+    });
+    expect(
+      store.recordActionDispatchReceipt({
+        executionId: first.execution.executionId,
+        claimantClientId: CLIENT,
+        fencingToken: `sha256:${'c'.repeat(64)}`,
+        executionRef: 'provider:1',
+        providerMetadata: {},
+        receipt: { accepted: true },
+      }),
+    ).toBe(false);
+    expect(
+      store.recordActionDispatchReceipt({
+        executionId: first.execution.executionId,
+        claimantClientId: CLIENT,
+        fencingToken: first.execution.fencingToken,
+        executionRef: 'provider:1',
+        providerMetadata: { opaque: true },
+        receipt: { accepted: true },
+        nowMs: 102,
+      }),
+    ).toBe(true);
+    expect(
+      store.recordActionDispatchReceipt({
+        executionId: first.execution.executionId,
+        claimantClientId: CLIENT,
+        fencingToken: first.execution.fencingToken,
+        executionRef: 'provider:duplicate',
+        providerMetadata: {},
+        receipt: {},
+      }),
+    ).toBe(false);
+    expect(
+      store.getActionExecution({
+        groupId: 'group_test',
+        turnId: 'turn_1',
+        attempt: 1,
+      }),
+    ).toMatchObject({
+      state: 'running',
+      executionRef: 'provider:1',
+      receipt: { accepted: true },
+    });
+    store.close();
+  });
 });
