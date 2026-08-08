@@ -33,7 +33,7 @@ describe('Collaboration project-space request builders', () => {
     const request = buildCollaborationCreateRequest({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: '/tmp/id_ed25519',
+      gitSshKeyPath: '/tmp/id_ed25519',
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'approval',
@@ -44,7 +44,7 @@ describe('Collaboration project-space request builders', () => {
     expect(request).toEqual({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: '/tmp/id_ed25519',
+      gitSshKeyPath: '/tmp/id_ed25519',
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'approval',
@@ -54,43 +54,43 @@ describe('Collaboration project-space request builders', () => {
     expect(request).not.toHaveProperty('principalId');
   });
 
-  it('omits the SSH signing key when create and join use the Host default', () => {
+  it('omits the Git transport SSH key when create and join use the Host default', () => {
     expect(
       buildCollaborationCreateRequest({
         remoteUrl: '/tmp/project.git',
         name: 'Project',
-        signingKeyPath: '  ',
+        gitSshKeyPath: '  ',
         displayName: 'Alice',
         clientDisplayName: 'Alice MacBook',
         membershipPolicy: 'approval',
         observerAccess: 'allowed',
       }),
-    ).not.toHaveProperty('signingKeyPath');
+    ).not.toHaveProperty('gitSshKeyPath');
     expect(
       buildCollaborationJoinRequest({
         displayName: 'Alice',
         clientDisplayName: 'Alice laptop',
       }),
-    ).not.toHaveProperty('signingKeyPath');
+    ).not.toHaveProperty('gitSshKeyPath');
   });
 
   it('builds Principal/Client join input without caller identity overrides', () => {
     expect(
       buildCollaborationJoinRequest({
-        signingKeyPath: '/tmp/id_ed25519',
+        gitSshKeyPath: '/tmp/id_ed25519',
         displayName: 'Alice',
         clientDisplayName: 'Alice laptop',
         principalId: 'principal_attacker',
         clientId: 'client_attacker',
       }),
     ).toEqual({
-      signingKeyPath: '/tmp/id_ed25519',
+      gitSshKeyPath: '/tmp/id_ed25519',
       displayName: 'Alice',
       clientDisplayName: 'Alice laptop',
     });
     expect(
       buildCollaborationJoinRequest({
-        signingKeyPath: '/tmp/id_ed25519',
+        gitSshKeyPath: '/tmp/id_ed25519',
         displayName: 'Bob',
         clientDisplayName: 'Bob laptop',
         inviteId: 'invite_bob',

@@ -93,11 +93,11 @@ export function defaultCollaborationWorkflowDraft() {
 }
 
 export function buildCollaborationCreateRequest(input) {
-  const signingKeyPath = String(input.signingKeyPath ?? '').trim();
+  const gitSshKeyPath = String(input.gitSshKeyPath ?? '').trim();
   return {
     remoteUrl: requiredString(input.remoteUrl, 'Git 远程仓库'),
     name: requiredString(input.name, '群组名称'),
-    ...(signingKeyPath ? { signingKeyPath } : {}),
+    ...(gitSshKeyPath ? { gitSshKeyPath } : {}),
     displayName: requiredString(input.displayName, '成员显示名'),
     clientDisplayName: requiredString(input.clientDisplayName, '客户端名称'),
     membershipPolicy: ['open', 'approval', 'invite_only'].includes(
@@ -117,9 +117,9 @@ export function buildCollaborationObserveRequest(input) {
 }
 
 export function buildCollaborationJoinRequest(input) {
-  const signingKeyPath = String(input.signingKeyPath ?? '').trim();
+  const gitSshKeyPath = String(input.gitSshKeyPath ?? '').trim();
   return {
-    ...(signingKeyPath ? { signingKeyPath } : {}),
+    ...(gitSshKeyPath ? { gitSshKeyPath } : {}),
     displayName: requiredString(input.displayName, '成员显示名'),
     clientDisplayName: requiredString(input.clientDisplayName, '客户端名称'),
     ...(String(input.inviteId || '').trim()

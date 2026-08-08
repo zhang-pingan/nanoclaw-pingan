@@ -15,6 +15,7 @@ import {
   collaborationArtifactName,
   collaborationAuditEventTimeline,
   collaborationCanApproveMembers,
+  collaborationCanDecideRecovery,
   collaborationCanCreateTurn,
   collaborationCanMutate,
   collaborationCurrentTurn,
@@ -22,9 +23,11 @@ import {
   collaborationEligibleTurnExecutors,
   collaborationIsObserver,
   collaborationLocalMembershipStatus,
+  collaborationLocalCredential,
   collaborationOutcomeRoutes,
   collaborationPendingNotifications,
   collaborationPrincipalName,
+  collaborationShortId,
   stageCollaborationArtifactFiles,
   collaborationTurnAccess,
   collaborationTurnDeadline,
@@ -208,6 +211,71 @@ describe('Collaboration project-space v3 UI helpers', () => {
     ).toBe(true);
     expect(
       collaborationCanApproveMembers({ subscriptionMode: 'observer' }),
+    ).toBe(false);
+  });
+
+  it('uses stable short IDs and Credential state for recovery authority', () => {
+    const principalId = 'principal_00000000-0000-4000-8000-000000000001';
+    const group = {
+      subscriptionMode: 'member',
+      lifecycle: 'active',
+      ownerPrincipalId: principalId,
+      localPrincipalId: principalId,
+      localClientId: 'client_owner',
+      icarusIdentity: {
+        credentialId: 'credential_owner',
+        recoveryCredentialAvailable: true,
+      },
+      projection: {
+        members: { [principalId]: { status: 'active' } },
+        credentials: {
+          [principalId]: {
+            credential_owner: { status: 'active' },
+          },
+        },
+        permissionGrants: {},
+      },
+    };
+    expect(collaborationShortId(principalId)).toBe(
+      'principal_00000000...0001',
+    );
+    expect(collaborationLocalCredential(group)).toMatchObject({
+      status: 'active',
+    });
+    expect(
+      collaborationCanDecideRecovery(group, {
+        status: 'pending',
+        type: 'identity_recovery',
+        target_principal_id: principalId,
+      }),
+    ).toBe(true);
+    expect(
+      collaborationCanDecideRecovery(
+        {
+          ...group,
+          subscriptionMode: 'observer',
+          projection: {
+            ...group.projection,
+            credentials: {
+              [principalId]: {
+                credential_owner: { status: 'revoked' },
+              },
+            },
+          },
+        },
+        {
+          status: 'pending',
+          type: 'owner_recovery',
+          target_principal_id: principalId,
+        },
+      ),
+    ).toBe(true);
+    expect(
+      collaborationCanDecideRecovery(group, {
+        status: 'approved',
+        type: 'owner_recovery',
+        target_principal_id: principalId,
+      }),
     ).toBe(false);
   });
 

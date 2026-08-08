@@ -10,13 +10,17 @@ import {
   collaborationCanonicalHashV3,
   collaborationDeadlineSnapshotHashV3,
   collaborationIdempotencyKeyV3,
+  collaborationRecoveryRequestHashV3,
+  collaborationRecoveryVerificationCodeV3,
   collaborationTurnInputHashV3,
   collaborationWorkflowDefinitionHashV3,
   reduceCollaborationEventV3,
   type CollaborationProjectionV3,
 } from './v3-reducer.js';
 import {
+  collaborationEventV3Schema,
   groupDefinitionV3Schema,
+  collaborationCredentialFingerprintV3,
   machineDefinitionV3Schema,
   parseV3ProtocolVersion,
   type CollaborationAggregateType,
@@ -25,9 +29,12 @@ import {
 } from './v3-schema.js';
 
 const NOW = '2026-08-06T12:00:00.000Z';
-const ALICE = 'principal_sha256_alice';
+const ALICE = 'principal_00000000-0000-4000-8000-000000000001';
 const CLIENT = 'client_alice_mac';
+const CREDENTIAL = 'credential_alice_mac';
+const RECOVERY_CREDENTIAL = 'credential_alice_recovery';
 const KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice';
+const FINGERPRINT = collaborationCredentialFingerprintV3(KEY);
 
 function event(input: {
   projection?: CollaborationProjectionV3 | null;
@@ -36,6 +43,11 @@ function event(input: {
   eventType: CollaborationEventTypeV3;
   payload: Record<string, unknown>;
   id?: string;
+  actor?: {
+    principalId: string;
+    clientId: string;
+    credentialId: string;
+  };
 }): CollaborationEventV3 {
   const head =
     input.projection?.aggregateHeads[
@@ -50,8 +62,9 @@ function event(input: {
     previousEventHash: head?.eventHash ?? null,
     eventType: input.eventType,
     actor: {
-      principal_id: ALICE,
-      client_id: CLIENT,
+      principal_id: input.actor?.principalId ?? ALICE,
+      client_id: input.actor?.clientId ?? CLIENT,
+      credential_id: input.actor?.credentialId ?? CREDENTIAL,
       executor_id: null,
     },
     occurredAt: NOW,
@@ -73,7 +86,6 @@ function genesis(): CollaborationEventV3 {
         name: 'Payment project',
         creator: {
           principal_id: ALICE,
-          signing_key_ref: 'ssh-ed25519:SHA256:alice',
         },
         owner_principal_id: ALICE,
         control_branch: 'refs/heads/icarus/control',
@@ -87,8 +99,6 @@ function genesis(): CollaborationEventV3 {
         format: 'icarus.collaboration-member/3',
         principal_id: ALICE,
         display_name: 'Alice',
-        signing_key_ref: 'ssh-ed25519:SHA256:alice',
-        signing_public_key: KEY,
         status: 'active',
         joined_at_event: 'evt_genesis',
       },
@@ -100,6 +110,30 @@ function genesis(): CollaborationEventV3 {
         capabilities: [],
         status: 'active',
         registered_at_event: 'evt_genesis',
+      },
+      credential: {
+        format: 'icarus.collaboration-credential/1',
+        credential_id: CREDENTIAL,
+        principal_id: ALICE,
+        client_id: CLIENT,
+        public_key: KEY,
+        fingerprint: FINGERPRINT,
+        purpose: 'event_signing',
+        status: 'active',
+        created_at_event: 'evt_genesis',
+        revoked_at_event: null,
+      },
+      recovery_credential: {
+        format: 'icarus.collaboration-credential/1',
+        credential_id: RECOVERY_CREDENTIAL,
+        principal_id: ALICE,
+        client_id: CLIENT,
+        public_key: KEY,
+        fingerprint: FINGERPRINT,
+        purpose: 'group_recovery',
+        status: 'active',
+        created_at_event: 'evt_genesis',
+        revoked_at_event: null,
       },
       owner_permissions: {
         format: 'icarus.collaboration-permission-grant/1',
@@ -165,6 +199,12 @@ describe('Collaboration project space v3 contract', () => {
       groupDefinitionV3Schema.parse({
         ...(genesis().payload.group as Record<string, unknown>),
         format: 'icarus.agent-group/2',
+      }),
+    ).toThrow();
+    expect(() =>
+      collaborationEventV3Schema.parse({
+        ...genesis(),
+        event_type: 'client_registered',
       }),
     ).toThrow();
 
@@ -268,6 +308,262 @@ describe('Collaboration project space v3 contract', () => {
         event_id: 'evt_stale',
       }),
     ).toThrow(/Aggregate revision conflict/u);
+  });
+
+  it('binds rotation, multi-client recovery, revocation, and offline Owner recovery to Credentials', () => {
+    let projection = reduceCollaborationEventV3(null, genesis());
+    const rotatedCredentialId = 'credential_alice_rotated';
+    projection = reduceCollaborationEventV3(
+      projection,
+      event({
+        projection,
+        aggregateType: 'membership',
+        aggregateId: ALICE,
+        eventType: 'credential_rotated',
+        id: 'evt_credential_rotated',
+        payload: {
+          credential: {
+            format: 'icarus.collaboration-credential/1',
+            credential_id: rotatedCredentialId,
+            principal_id: ALICE,
+            client_id: CLIENT,
+            public_key: KEY,
+            fingerprint: FINGERPRINT,
+            purpose: 'event_signing',
+            status: 'active',
+            created_at_event: 'evt_credential_rotated',
+            revoked_at_event: null,
+          },
+          revoke_credential_id: null,
+        },
+      }),
+    );
+    expect(projection.credentials[ALICE]?.[CREDENTIAL]?.status).toBe('active');
+    expect(
+      projection.credentials[ALICE]?.[rotatedCredentialId]?.principal_id,
+    ).toBe(ALICE);
+
+    const phoneClient = 'client_alice_phone';
+    const phoneCredential = 'credential_alice_phone';
+    const recoveryId = 'recovery_alice_phone';
+    const recoveryImmutable = {
+      format: 'icarus.collaboration-recovery-request/1' as const,
+      request_id: recoveryId,
+      type: 'identity_recovery' as const,
+      target_principal_id: ALICE,
+      requested_client: {
+        format: 'icarus.collaboration-client/1' as const,
+        principal_id: ALICE,
+        client_id: phoneClient,
+        display_name: 'Alice phone',
+        capabilities: [],
+        status: 'active' as const,
+        registered_at_event: 'evt_phone_recovery',
+      },
+      requested_credential: {
+        format: 'icarus.collaboration-credential/1' as const,
+        credential_id: phoneCredential,
+        principal_id: ALICE,
+        client_id: phoneClient,
+        public_key: KEY,
+        fingerprint: FINGERPRINT,
+        purpose: 'event_signing' as const,
+        status: 'active' as const,
+        created_at_event: 'evt_phone_recovery',
+        revoked_at_event: null,
+      },
+      reason: null,
+      created_at: NOW,
+      expires_at: '2026-08-07T12:00:00.000Z',
+    };
+    const recoveryHash = collaborationRecoveryRequestHashV3(recoveryImmutable);
+    projection = reduceCollaborationEventV3(
+      projection,
+      event({
+        projection,
+        aggregateType: 'recovery',
+        aggregateId: recoveryId,
+        eventType: 'identity_recovery_requested',
+        id: 'evt_phone_recovery',
+        actor: {
+          principalId: ALICE,
+          clientId: phoneClient,
+          credentialId: phoneCredential,
+        },
+        payload: {
+          request: {
+            ...recoveryImmutable,
+            request_hash: recoveryHash,
+            status: 'pending',
+            decided_at_event: null,
+            decided_by_principal_id: null,
+            decision_reason: null,
+            approval_kind: null,
+            revoked_credential_ids: [],
+          },
+        },
+      }),
+    );
+    expect(projection.clients[ALICE]?.[phoneClient]).toBeUndefined();
+    expect(collaborationRecoveryVerificationCodeV3(recoveryHash)).toMatch(
+      /^\d{6}$/u,
+    );
+    projection = reduceCollaborationEventV3(
+      projection,
+      event({
+        projection,
+        aggregateType: 'recovery',
+        aggregateId: recoveryId,
+        eventType: 'recovery_approved',
+        id: 'evt_phone_approved',
+        actor: {
+          principalId: ALICE,
+          clientId: CLIENT,
+          credentialId: rotatedCredentialId,
+        },
+        payload: {
+          request_hash: recoveryHash,
+          reason: 'Verification code matched',
+          revoke_previous_credentials: false,
+          revoke_credential_ids: [],
+        },
+      }),
+    );
+    expect(projection.clients[ALICE]?.[phoneClient]?.status).toBe('active');
+    expect(projection.recoveryRequests[recoveryId]?.approval_kind).toBe(
+      'self_device',
+    );
+
+    projection = reduceCollaborationEventV3(
+      projection,
+      event({
+        projection,
+        aggregateType: 'membership',
+        aggregateId: ALICE,
+        eventType: 'credential_revoked',
+        id: 'evt_original_revoked',
+        actor: {
+          principalId: ALICE,
+          clientId: CLIENT,
+          credentialId: rotatedCredentialId,
+        },
+        payload: {
+          credential_id: CREDENTIAL,
+          reason: 'Old key retired',
+        },
+      }),
+    );
+    expect(projection.credentials[ALICE]?.[CREDENTIAL]).toMatchObject({
+      status: 'revoked',
+      revoked_at_event: 'evt_original_revoked',
+    });
+
+    const rescueClient = 'client_alice_rescue';
+    const rescueCredential = 'credential_alice_rescue';
+    const ownerRecoveryId = 'recovery_alice_owner';
+    const ownerImmutable = {
+      ...recoveryImmutable,
+      request_id: ownerRecoveryId,
+      type: 'owner_recovery' as const,
+      requested_client: {
+        ...recoveryImmutable.requested_client,
+        client_id: rescueClient,
+        display_name: 'Alice rescue laptop',
+        registered_at_event: 'evt_owner_recovery',
+      },
+      requested_credential: {
+        ...recoveryImmutable.requested_credential,
+        credential_id: rescueCredential,
+        client_id: rescueClient,
+        created_at_event: 'evt_owner_recovery',
+      },
+      reason: 'All online signing Credentials are unavailable',
+    };
+    const ownerHash = collaborationRecoveryRequestHashV3(ownerImmutable);
+    projection = reduceCollaborationEventV3(
+      projection,
+      event({
+        projection,
+        aggregateType: 'recovery',
+        aggregateId: ownerRecoveryId,
+        eventType: 'owner_recovery_requested',
+        id: 'evt_owner_recovery',
+        actor: {
+          principalId: ALICE,
+          clientId: rescueClient,
+          credentialId: rescueCredential,
+        },
+        payload: {
+          request: {
+            ...ownerImmutable,
+            request_hash: ownerHash,
+            status: 'pending',
+            decided_at_event: null,
+            decided_by_principal_id: null,
+            decision_reason: null,
+            approval_kind: null,
+            revoked_credential_ids: [],
+          },
+        },
+      }),
+    );
+    projection = reduceCollaborationEventV3(
+      projection,
+      event({
+        projection,
+        aggregateType: 'recovery',
+        aggregateId: ownerRecoveryId,
+        eventType: 'recovery_approved',
+        id: 'evt_owner_recovery_approved',
+        actor: {
+          principalId: ALICE,
+          clientId: CLIENT,
+          credentialId: RECOVERY_CREDENTIAL,
+        },
+        payload: {
+          request_hash: ownerHash,
+          reason: 'Offline identity verification completed',
+          revoke_previous_credentials: false,
+          revoke_credential_ids: [phoneCredential],
+        },
+      }),
+    );
+    expect(projection.recoveryRequests[ownerRecoveryId]).toMatchObject({
+      status: 'approved',
+      approval_kind: 'offline_owner',
+      revoked_credential_ids: [phoneCredential],
+    });
+    expect(projection.credentials[ALICE]?.[phoneCredential]?.status).toBe(
+      'revoked',
+    );
+    expect(projection.credentials[ALICE]?.[rotatedCredentialId]?.status).toBe(
+      'active',
+    );
+    expect(projection.credentials[ALICE]?.[rescueCredential]?.status).toBe(
+      'active',
+    );
+    expect(() =>
+      reduceCollaborationEventV3(
+        projection,
+        event({
+          projection,
+          aggregateType: 'recovery',
+          aggregateId: ownerRecoveryId,
+          eventType: 'recovery_rejected',
+          actor: {
+            principalId: ALICE,
+            clientId: CLIENT,
+            credentialId: rotatedCredentialId,
+          },
+          payload: {
+            request_hash: ownerHash,
+            reason: 'second terminal decision',
+            revoke_previous_credentials: false,
+            revoke_credential_ids: [],
+          },
+        }),
+      ),
+    ).toThrow(/not pending/u);
   });
 
   it('preserves layout isolation and defaults an unconfigured State to manual', () => {

@@ -12,7 +12,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-import { collaborationPrincipalIdFromSshFingerprintV3 } from './project-space-identity.js';
 import type {
   CollaborationProjectSpaceTransport,
   ValidatedProjectSpaceHistory,
@@ -31,17 +30,19 @@ import {
 } from './protocol/canonical-json.js';
 import {
   artifactMetadataV3Schema,
+  credentialDefinitionSchema,
   fileMetadataSchema,
-  memberDefinitionV3Schema,
+  recoveryRequestSchema,
   type ArtifactMetadataV3,
   type CollaborationEventV3,
+  type CredentialDefinition,
   type FileMetadata,
 } from './protocol/v3-schema.js';
 import {
   COLLABORATION_CONTROL_BRANCH,
   CollaborationProtocolError,
 } from './protocol/version.js';
-import type { CollaborationPrincipalIdentity } from './project-space-identity.js';
+import type { CollaborationEventSigningIdentity } from './project-space-identity.js';
 
 const execFileAsync = promisify(execFile);
 const CONTROL_REMOTE_REF = 'refs/remotes/origin/icarus/control';
@@ -70,12 +71,19 @@ async function execute(
   binary: string,
   args: readonly string[],
   allowFailure = false,
+  gitSshKeyPath?: string,
 ): Promise<CommandResult> {
   try {
     const result = await execFileAsync(binary, [...args], {
       cwd,
       encoding: 'utf8',
       maxBuffer: MAX_GIT_OUTPUT_BYTES,
+      env: gitSshKeyPath
+        ? {
+            ...process.env,
+            GIT_SSH_COMMAND: `ssh -i '${gitSshKeyPath.replaceAll("'", "'\\''")}' -o IdentitiesOnly=yes`,
+          }
+        : process.env,
     });
     return { stdout: result.stdout, stderr: result.stderr, exitCode: 0 };
   } catch (error) {
@@ -185,6 +193,7 @@ const EVENT_DIRECTORIES = {
   group: 'group',
   invite: 'invites',
   membership: 'members',
+  recovery: 'recovery-requests',
   workspace: 'workspace',
   work_item: 'work-items',
   discussion: 'discussions',
@@ -209,6 +218,8 @@ function aggregateProjectionPath(event: CollaborationEventV3): string {
       return `projections/invites/${event.aggregate_id}.json`;
     case 'membership':
       return `projections/members/${event.aggregate_id}.json`;
+    case 'recovery':
+      return `projections/recovery-requests/${event.aggregate_id}.json`;
     case 'workspace':
       return `projections/workspace/${event.aggregate_id}.json`;
     case 'work_item':
@@ -236,10 +247,13 @@ function aggregateProjectionValue(
         format: 'icarus.collaboration-member-projection/1',
         member: projection.members[event.aggregate_id] ?? null,
         clients: projection.clients[event.aggregate_id] ?? {},
+        credentials: projection.credentials[event.aggregate_id] ?? {},
         executors: projection.executors[event.aggregate_id] ?? {},
         permission_grant:
           projection.permissionGrants[event.aggregate_id] ?? null,
       };
+    case 'recovery':
+      return projection.recoveryRequests[event.aggregate_id] ?? null;
     case 'workspace':
       return {
         format: 'icarus.collaboration-workspace-projection/1',
@@ -345,6 +359,13 @@ function automaticMaterialization(
             `members/${principalId}/clients/${client.client_id}.json`,
             prettyCollaborationJson(client),
           );
+        for (const credential of Object.values(
+          projection.credentials[principalId] ?? {},
+        ))
+          files.set(
+            `members/${principalId}/credentials/${credential.credential_id}.json`,
+            prettyCollaborationJson(credential),
+          );
         const grant = projection.permissionGrants[principalId];
         if (grant)
           files.set(
@@ -375,6 +396,29 @@ function automaticMaterialization(
           `members/${event.aggregate_id}/member.json`,
           prettyCollaborationJson(member),
         );
+      if (
+        event.event_type === 'membership_requested' ||
+        (event.event_type === 'member_registered' && event.payload.client)
+      ) {
+        const client = event.payload.client as { client_id: string };
+        const credential = event.payload.credential as {
+          credential_id: string;
+        };
+        files.set(
+          `members/${event.aggregate_id}/clients/${client.client_id}.json`,
+          prettyCollaborationJson(
+            projection.clients[event.aggregate_id]?.[client.client_id],
+          ),
+        );
+        files.set(
+          `members/${event.aggregate_id}/credentials/${credential.credential_id}.json`,
+          prettyCollaborationJson(
+            projection.credentials[event.aggregate_id]?.[
+              credential.credential_id
+            ],
+          ),
+        );
+      }
       if (event.event_type === 'membership_requested') {
         const inviteId = event.payload.invite_id;
         if (typeof inviteId === 'string') {
@@ -393,16 +437,6 @@ function automaticMaterialization(
       }
       break;
     }
-    case 'client_registered': {
-      const client = event.payload.client as { client_id: string };
-      files.set(
-        `members/${event.aggregate_id}/clients/${client.client_id}.json`,
-        prettyCollaborationJson(
-          projection.clients[event.aggregate_id]?.[client.client_id],
-        ),
-      );
-      break;
-    }
     case 'client_revoked': {
       const clientId = String(event.payload.client_id);
       files.set(
@@ -411,6 +445,75 @@ function automaticMaterialization(
           projection.clients[event.aggregate_id]?.[clientId],
         ),
       );
+      for (const credential of Object.values(
+        projection.credentials[event.aggregate_id] ?? {},
+      ))
+        if (credential.client_id === clientId)
+          files.set(
+            `members/${event.aggregate_id}/credentials/${credential.credential_id}.json`,
+            prettyCollaborationJson(credential),
+          );
+      break;
+    }
+    case 'credential_rotated': {
+      const credential = credentialDefinitionSchema.parse(
+        event.payload.credential,
+      );
+      files.set(
+        `members/${event.aggregate_id}/credentials/${credential.credential_id}.json`,
+        prettyCollaborationJson(credential),
+      );
+      const revoked = event.payload.revoke_credential_id;
+      if (typeof revoked === 'string')
+        files.set(
+          `members/${event.aggregate_id}/credentials/${revoked}.json`,
+          prettyCollaborationJson(
+            projection.credentials[event.aggregate_id]?.[revoked],
+          ),
+        );
+      break;
+    }
+    case 'credential_revoked': {
+      const credentialId = String(event.payload.credential_id);
+      files.set(
+        `members/${event.aggregate_id}/credentials/${credentialId}.json`,
+        prettyCollaborationJson(
+          projection.credentials[event.aggregate_id]?.[credentialId],
+        ),
+      );
+      break;
+    }
+    case 'identity_recovery_requested':
+    case 'owner_recovery_requested':
+    case 'recovery_rejected':
+    case 'recovery_expired':
+    case 'recovery_cancelled':
+      files.set(
+        `recovery-requests/${event.aggregate_id}.json`,
+        prettyCollaborationJson(
+          projection.recoveryRequests[event.aggregate_id],
+        ),
+      );
+      break;
+    case 'recovery_approved': {
+      const request = projection.recoveryRequests[event.aggregate_id];
+      files.set(
+        `recovery-requests/${event.aggregate_id}.json`,
+        prettyCollaborationJson(request),
+      );
+      if (request) {
+        files.set(
+          `members/${request.target_principal_id}/clients/${request.requested_client.client_id}.json`,
+          prettyCollaborationJson(request.requested_client),
+        );
+        for (const credential of Object.values(
+          projection.credentials[request.target_principal_id] ?? {},
+        ))
+          files.set(
+            `members/${request.target_principal_id}/credentials/${credential.credential_id}.json`,
+            prettyCollaborationJson(credential),
+          );
+      }
       break;
     }
     case 'executor_registered': {
@@ -827,20 +930,36 @@ function eventFileFromChanges(
   return eventFiles[0]!.file;
 }
 
-function candidateMember(
+function candidateCredential(
   event: CollaborationEventV3,
   projection: CollaborationProjectionV3 | null,
-) {
+): CredentialDefinition | null {
   if (event.event_type === 'group_initialized')
-    return memberDefinitionV3Schema.parse(event.payload.member);
+    return credentialDefinitionSchema.parse(event.payload.credential);
   if (
     event.event_type === 'membership_requested' ||
     (event.event_type === 'member_registered' &&
       event.actor.principal_id ===
-        (event.payload.member as { principal_id?: unknown }).principal_id)
+        (event.payload.member as { principal_id?: unknown }).principal_id) ||
+    event.event_type === 'identity_recovery_requested' ||
+    event.event_type === 'owner_recovery_requested'
   )
-    return memberDefinitionV3Schema.parse(event.payload.member);
-  return projection?.members[event.actor.principal_id] ?? null;
+    return credentialDefinitionSchema.parse(
+      event.event_type.endsWith('_recovery_requested')
+        ? recoveryRequestSchema.parse(event.payload.request)
+            .requested_credential
+        : event.payload.credential,
+    );
+  if (event.event_type === 'recovery_cancelled')
+    return (
+      projection?.recoveryRequests[event.aggregate_id]?.requested_credential ??
+      null
+    );
+  return (
+    projection?.credentials[event.actor.principal_id]?.[
+      event.actor.credential_id
+    ] ?? null
+  );
 }
 
 async function verifyCommitSigner(
@@ -849,29 +968,24 @@ async function verifyCommitSigner(
   event: CollaborationEventV3,
   projection: CollaborationProjectionV3 | null,
 ): Promise<void> {
-  const signers = new Map<
-    string,
-    { readonly keyRef: string; readonly publicKey: string }
-  >();
-  for (const member of Object.values(projection?.members ?? {}))
-    signers.set(member.principal_id, {
-      keyRef: member.signing_key_ref,
-      publicKey: member.signing_public_key,
-    });
-  const candidate = candidateMember(event, projection);
-  if (candidate)
-    signers.set(candidate.principal_id, {
-      keyRef: candidate.signing_key_ref,
-      publicKey: candidate.signing_public_key,
-    });
+  const candidate = candidateCredential(event, projection);
+  if (
+    !candidate ||
+    candidate.status !== 'active' ||
+    candidate.credential_id !== event.actor.credential_id ||
+    candidate.principal_id !== event.actor.principal_id ||
+    candidate.client_id !== event.actor.client_id
+  )
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      `No active Credential matches event actor at ${commit}`,
+    );
   const directory = await mkdtemp(path.join(os.tmpdir(), 'icarus-v3-signers-'));
   const allowedSignersPath = path.join(directory, 'allowed_signers');
   try {
     await writeFile(
       allowedSignersPath,
-      `${[...signers.entries()]
-        .map(([principalId, signer]) => `${principalId} ${signer.publicKey}`)
-        .join('\n')}\n`,
+      `${candidate.principal_id} ${candidate.public_key}\n`,
       { mode: 0o600 },
     );
     const verification = await git(
@@ -910,15 +1024,13 @@ async function verifyCommitSigner(
         'PROTOCOL_QUARANTINED',
         `Git signer does not match event actor at ${commit}`,
       );
-    const signer = signers.get(principalId);
     if (
-      !signer ||
-      !signer.keyRef.endsWith(fingerprint) ||
-      collaborationPrincipalIdFromSshFingerprintV3(fingerprint) !== principalId
+      candidate.principal_id !== principalId ||
+      candidate.fingerprint !== fingerprint
     )
       throw new CollaborationProtocolError(
         'PROTOCOL_QUARANTINED',
-        `Git signature fingerprint does not match Principal ${principalId}`,
+        `Git signature fingerprint does not match Credential ${candidate.credential_id}`,
       );
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -934,6 +1046,7 @@ async function assertSafeTree(
     'group.json',
     'invites/',
     'members/',
+    'recovery-requests/',
     'permissions/',
     'workspace/',
     'work-items/',
@@ -1270,8 +1383,13 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     readonly remoteUrl: string;
     readonly repositoryPath: string;
     readonly previousHead?: string | null;
+    readonly gitSshKeyPath?: string;
   }): Promise<ValidatedProjectSpaceHistory> {
-    await this.ensureBareCache(input.remoteUrl, input.repositoryPath);
+    await this.ensureBareCache(
+      input.remoteUrl,
+      input.repositoryPath,
+      input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
+    );
     const fetch = await execute(
       input.repositoryPath,
       this.gitBinary,
@@ -1282,6 +1400,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         `+${COLLABORATION_CONTROL_BRANCH}:${CONTROL_REMOTE_REF}`,
       ],
       true,
+      input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
     );
     if (fetch.exitCode !== 0)
       throw new Error(`Collaboration fetch failed: ${fetch.stderr.trim()}`);
@@ -1301,7 +1420,8 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
   async create(input: {
     readonly remoteUrl: string;
     readonly repositoryPath: string;
-    readonly identity: CollaborationPrincipalIdentity;
+    readonly gitSshKeyPath?: string;
+    readonly identity: CollaborationEventSigningIdentity;
     readonly genesisEvent: CollaborationEventV3;
     readonly genesisProjection: CollaborationProjectionV3;
   }): Promise<ValidatedProjectSpaceHistory> {
@@ -1310,6 +1430,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
       this.gitBinary,
       ['ls-remote', '--heads', input.remoteUrl, COLLABORATION_CONTROL_BRANCH],
       true,
+      input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
     );
     if (remoteHead.exitCode !== 0)
       throw new Error(
@@ -1345,6 +1466,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         this.gitBinary,
         ['push', 'origin', `HEAD:${COLLABORATION_CONTROL_BRANCH}`],
         true,
+        input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
       );
       if (push.exitCode !== 0)
         throw new CollaborationProjectSpaceGitConflictError(
@@ -1353,11 +1475,17 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     } finally {
       rmSync(checkoutPath, { recursive: true, force: true });
     }
-    await this.cloneBare(input.remoteUrl, input.repositoryPath);
+    await this.cloneBare(
+      input.remoteUrl,
+      input.repositoryPath,
+      input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
+    );
     return this.inspect({
       remoteUrl: input.remoteUrl,
       repositoryPath: input.repositoryPath,
       previousHead: null,
+      gitSshKeyPath:
+        input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
     });
   }
 
@@ -1365,7 +1493,8 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     readonly remoteUrl: string;
     readonly repositoryPath: string;
     readonly previousHead: string | null;
-    readonly identity: CollaborationPrincipalIdentity;
+    readonly gitSshKeyPath?: string;
+    readonly identity: CollaborationEventSigningIdentity;
     readonly buildEvent: (history: ValidatedProjectSpaceHistory) =>
       | CollaborationEventV3
       | {
@@ -1379,7 +1508,8 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     const extra = 'event' in built ? built.materializedFiles : [];
     if (
       input.identity.principalId !== event.actor.principal_id ||
-      input.identity.clientId !== event.actor.client_id
+      input.identity.clientId !== event.actor.client_id ||
+      input.identity.credentialId !== event.actor.credential_id
     )
       throw new Error('Local signing identity does not match event actor');
     const projection = reduceCollaborationEventV3(history.projection, event);
@@ -1414,6 +1544,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         this.gitBinary,
         ['push', 'origin', `HEAD:${COLLABORATION_CONTROL_BRANCH}`],
         true,
+        input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
       );
       if (push.exitCode !== 0) {
         if (/non-fast-forward|fetch first|rejected/iu.test(push.stderr))
@@ -1429,6 +1560,8 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
       remoteUrl: input.remoteUrl,
       repositoryPath: input.repositoryPath,
       previousHead: history.head,
+      gitSshKeyPath:
+        input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
     });
   }
 
@@ -1463,7 +1596,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
 
   private async configureSigner(
     checkoutPath: string,
-    identity: CollaborationPrincipalIdentity,
+    identity: CollaborationEventSigningIdentity,
   ): Promise<void> {
     for (const args of [
       ['config', 'user.name', identity.principalId],
@@ -1501,6 +1634,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
   private async cloneBare(
     remoteUrl: string,
     repositoryPath: string,
+    gitSshKeyPath: string,
   ): Promise<void> {
     if (existsSync(repositoryPath))
       throw new Error(`Collaboration cache already exists: ${repositoryPath}`);
@@ -1510,6 +1644,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
       this.gitBinary,
       ['clone', '-q', '--bare', remoteUrl, repositoryPath],
       true,
+      gitSshKeyPath,
     );
     if (result.exitCode !== 0)
       throw new Error(`Collaboration clone failed: ${result.stderr.trim()}`);
@@ -1518,9 +1653,10 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
   private async ensureBareCache(
     remoteUrl: string,
     repositoryPath: string,
+    gitSshKeyPath: string,
   ): Promise<void> {
     if (!existsSync(repositoryPath)) {
-      await this.cloneBare(remoteUrl, repositoryPath);
+      await this.cloneBare(remoteUrl, repositoryPath, gitSshKeyPath);
       return;
     }
     const bare = await execute(

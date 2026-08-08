@@ -3,11 +3,11 @@
 ## 文档状态
 
 - 状态：Implemented（current-only）
-- 日期：2026-08-06
-- 实施完成：2026-08-07
+- 日期：2026-08-08
+- 实施完成：2026-08-08
 - 当前协议：`icarus.collaboration-group/3`
 - 实施前代码基线：`main@3eff5302`（历史）
-- 当前实现：Collaboration Project Space v3、SQLite v6
+- 当前实现：Collaboration Project Space v3、SQLite v7
 - 适用范围：Group、Principal、Client、Executor、Observer、Workspace、Work Item、Discussion、Workflow Definition、Workflow Instance、图形化 FSM、Git 协议、权限、同步和审计
 - 前提：方案仍处于开发迭代期，没有真实群组、不可丢弃业务数据或旧签名历史；每次迭代发布的新协议直接成为唯一 current version，不实现旧版本迁移、双写、兼容读取或兼容回放
 - 相关文档：
@@ -34,6 +34,10 @@ v3 将 Group 提升为长期存在的协作项目空间：
 10. Git 原始路径在客户端映射为友好的虚拟项目树，支持定时同步和手动刷新；稳定 ID 不因显示名称变化而改写。
 11. v3 机器协议和结构化事实统一使用 JSON；人类文档和 Prompt 使用 Markdown；业务文件保持自身格式并使用 JSON sidecar 描述。
 12. 开发期采用 latest-only：新 schema、事件或 API 版本落地后立即替换旧版本，不保留兼容分支和迁移链。
+13. Principal 是 Group 内系统生成的 `principal_<uuid>`，不由 Git SSH key 或 Credential fingerprint 派生；每个安装持久化一个 `client_<uuid>`。
+14. 每个 Client 自动生成独立的 Icarus event-signing Credential。公钥和系统校验的 fingerprint 进入共享投影，私钥只留在本机安全目录；轮换或撤销 Credential 不改变 Principal。
+15. Git Remote 账号/SSH 仅控制 clone、fetch、push；Icarus Group Permission 由 Host API、签名验证和 Reducer 决定。拥有 Git push 权限不等于拥有业务写权限。
+16. 新设备先以 Observer 同步，然后通过 Git Remote 提交严格受限的身份恢复请求。旧 Client、Owner 或 offline Group recovery Credential 批准后，才原子绑定新 Client/Credential 并升级为 Member。
 
 核心关系：
 
@@ -49,6 +53,7 @@ Group
 
 Principal
   -> Icarus Clients (one or more while participating)
+  -> per-Client event Credentials
   -> Local Executors (zero or more)
 
 Work Item
@@ -65,11 +70,11 @@ Workflow Instance State
 
 v3 已按本文的 current-only 边界端到端落地：
 
-- Git 控制分支只接受 v3 Group/Event/Projection 和 JSON materialization，按 canonical JSON hash、SSH signature、aggregate revision、previous hash、commit order、路径、sidecar 和文件 hash/size 完整校验；
-- 本地 SQLite v6 保存 Observer/Member subscription、Principal/Client、直接权限、投影、file index、精确 Action revision/commit 索引、Executor Binding、execution receipt/observation、notification、audit evidence 和 staged Artifact，非 v6 store 启动时 fail closed；
-- Group、Workspace、Work Item、Discussion、Workflow Definition/Instance、State Execution、Turn、timeout、Artifact、审计、备份/恢复和 verified virtual file tree 已进入 service 与 Web API；
+- Git 控制分支只接受 v3 Group/Event/Projection 和 JSON materialization，按 canonical JSON hash、active Credential signature、Credential/Principal/Client actor mapping、aggregate revision、previous hash、commit order、路径、sidecar 和文件 hash/size 完整校验；
+- 本地 SQLite v7 保存 Observer/Member subscription、Principal/Client/Credential、身份恢复请求、直接权限、投影、file index、精确 Action revision/commit 索引、Executor Binding、execution receipt/observation、notification、audit evidence 和 staged Artifact，非 v7 store 启动时 fail closed；
+- Group、Credential rotation/revocation、Client revocation、identity/owner/offline recovery、Workspace、Work Item、Discussion、Workflow Definition/Instance、State Execution、Turn、timeout、Artifact、审计、备份/恢复和 verified virtual file tree 已进入 service 与 Web API；
 - Work Item progress 与 Turn completion 通过 staged upload 在一个签名事件和 Git commit 中物化原始业务文件及 `metadata.json`，同时验证 scope、Principal/Client、attempt 和 fence；`/3` 备份联合保护 DB 与尚未提交的 staged bytes；
-- Web/Electron `/groups` 已提供十个项目空间页面、Observer 只读状态、Work Item board/list、Discussion、文件树、Principal/Client/权限、Workflow Definition/Instance、Outcome-first 编辑器、Turn、Artifact、审计和诊断；
+- Web/Electron `/groups` 已提供项目空间页面、Observer 受限申请状态、Work Item board/list、Discussion、文件树、Principal/Client/Credential/权限、恢复请求审批、Git Remote SSH 设置、offline recovery Credential 备份/导入、Workflow Definition/Instance、Outcome-first 编辑器、Turn、Artifact、审计和诊断；
 - v2 Role/Claim、Group-level Machine/active Turn、YAML machine/layout、旧 API、旧 store、兼容 reducer、迁移、双写和旧事件回放均已从当前实现与正向测试删除。
 
 ## 1. 实施前代码基线（历史）
@@ -79,7 +84,7 @@ v3 已按本文的 current-only 边界端到端落地：
 截至 `main@3eff5302`，当前 Collaboration Runtime 已完成：
 
 - 系统派生 Principal 和本机持久 Agent ID；
-- Git SSH 签名事件、严格线性回放、revision/CAS、增量验证、quarantine 和恢复；
+- Git SSH key 同时承担 transport 与事件签名的旧耦合、严格线性回放、revision/CAS、增量验证、quarantine 和恢复；
 - 强制 Machine、Role、Role Claim 和 Role-owned State Implementation；
 - Manual、Assisted、Automatic 三种 Turn；
 - Handoff、Artifact、共享 `data/`、Executor Binding 和 durable receipt；
@@ -150,7 +155,7 @@ v3 实施应优先演进而不是重复实现这些模块：
 | Git 签名回放和 materialization 校验                   | `src/collaboration/protocol/git-chain.ts`       |
 | Group command、Machine/Layout revision、Artifact/Data | `src/collaboration/service.ts`                  |
 | Scheduler、Executor、通知和 timeout observation       | `src/collaboration/scheduler.ts`                |
-| SQLite v4 和本地 evidence                             | `src/collaboration/store.ts`                    |
+| 历史 SQLite v4 store 和本地 evidence                  | `src/collaboration/store.ts`                    |
 | Web API                                               | `src/collaboration/web-api.ts`                  |
 | 图模型、校验、自动布局和 draft conversion             | `electron/renderer/collaboration-fsm.js`        |
 | 图画布和 State Inspector                              | `electron/renderer/collaboration-fsm-editor.js` |
@@ -201,31 +206,36 @@ Group 不再要求：
 
 ## 3. 核心设计原则
 
-### 3.1 Principal 是人的稳定身份
+### 3.1 Principal 是 Group 内的稳定业务身份
 
-`principal_id` 继续由 SSH 签名公钥 fingerprint 稳定派生：
+`principal_id` 由 Host 生成，格式为 `principal_<uuid>`：
 
-- 同一个人在不同 Group 中使用同一个 Principal；
-- 加入 Group 是注册已有 Principal，不是创建一个 Group 内随机 Principal；
-- display name 可以改变和重名，不能用于路径、权限和签名验证；
+- Principal 的稳定范围是 Group；创建 Group 时生成 Owner Principal，新成员首次加入时生成该 Group 内的新 Principal；
+- Git Remote 账号、SSH key、Credential 公钥和 fingerprint 都不是 Principal ID；
+- 更换设备或轮换 Credential 保持同一 Principal；身份恢复只能选择 verified Projection 中已存在的 Principal；
+- display name 可以改变和重名，UI 必须同时显示稳定短 ID，且 display name 不能用于路径、权限、Actor 或恢复授权；
 - Group Membership、Work Item ownership、Workflow State assignment 和权限 grant 都绑定 Principal。
 
 ### 3.2 Client 与 Executor 分离
 
 v2 的 `agent_id` 同时接近“本机 Icarus 安装”和“执行 Agent”两个语义。v3 明确拆分：
 
-| 概念      | 含义                                     | 是否进入共享 Git                               |
-| --------- | ---------------------------------------- | ---------------------------------------------- |
-| Principal | 人、成员和权限主体                       | 是                                             |
-| Client    | Principal 使用的某个 Icarus 安装实例     | 公开描述进入，私有配置不进入                   |
-| Executor  | Codex、Workflow、Run-once 等可选执行工具 | 仅可选公开 descriptor 进入，Binding/凭据留本地 |
+| 概念      | 含义                                         | 是否进入共享 Git                                  |
+| --------- | -------------------------------------------- | ------------------------------------------------- |
+| Principal | Group 内稳定成员和权限主体                   | 是                                                |
+| Client    | 持久 `client_<uuid>` 标识的 Icarus 安装实例 | 公开描述进入，私有配置不进入                      |
+| Credential | Client 的 Icarus event-signing 验证材料      | ID、绑定、公钥、fingerprint、purpose/status 进入 |
+| Executor  | Codex、Workflow、Run-once 等可选执行工具     | 仅可选公开 descriptor 进入，Binding/凭据留本地    |
 
 一个 Principal 可以：
 
 - 有多个 Client；
+- 每个 Client 有一个或多个可轮换 Credential；
 - 有零个 Executor，只进行人工协作；
 - 有多个 Executor，并按 Workflow State 选择；
 - 在不同 Client 上接收通知，但一个 Turn attempt 只能由一个 Client claim。
+
+Client ID 由安装级 Identity Service 生成并持久化，不由用户填写。Credential 使用系统生成的 `credential_<uuid>`；私钥文件存放在本机安全目录并使用仅当前用户可访问的权限，绝不写入 Git、审计导出或 API 响应。共享 Credential 的 fingerprint 必须由 Host 从公钥重新计算并校验，不能接受调用方声明值。
 
 ### 3.3 Group 默认可用，Workflow 默认可选
 
@@ -340,10 +350,8 @@ Membership 只以 Principal 为唯一成员键：
 ```json
 {
   "format": "icarus.collaboration-member/3",
-  "principal_id": "principal_sha256_xxx",
+  "principal_id": "principal_2d9023b8-73e3-41bf-bb96-d52c0cb15bb3",
   "display_name": "Alice",
-  "signing_key_ref": "ssh-ed25519:SHA256:...",
-  "signing_public_key": "ssh-ed25519 ...",
   "status": "active",
   "joined_at_event": "evt_xxx"
 }
@@ -354,15 +362,33 @@ Client 单独注册：
 ```json
 {
   "format": "icarus.collaboration-client/1",
-  "principal_id": "principal_sha256_xxx",
-  "client_id": "client_uuid",
+  "principal_id": "principal_2d9023b8-73e3-41bf-bb96-d52c0cb15bb3",
+  "client_id": "client_c27e7db4-6e5a-4d61-8109-3487dcec56f0",
   "display_name": "Alice MacBook",
   "capabilities": [],
+  "status": "active",
   "registered_at_event": "evt_xxx"
 }
 ```
 
-Client ID 是本机 Icarus 安装标识，不由用户填写。Client 的本地路径、通知系统句柄、Provider 配置和凭据不得进入 Git。
+每个 Client 使用独立 Credential 签署 Icarus control commit：
+
+```json
+{
+  "format": "icarus.collaboration-credential/1",
+  "credential_id": "credential_e5680d84-bba6-4bba-b244-cbdd914ac77b",
+  "principal_id": "principal_2d9023b8-73e3-41bf-bb96-d52c0cb15bb3",
+  "client_id": "client_c27e7db4-6e5a-4d61-8109-3487dcec56f0",
+  "public_key": "ssh-ed25519 AAAA...",
+  "fingerprint": "SHA256:...",
+  "purpose": "event_signing",
+  "status": "active",
+  "created_at_event": "evt_xxx",
+  "revoked_at_event": null
+}
+```
+
+Client ID 是本机 Icarus 安装标识，不由用户填写。Credential ID 和 Ed25519 keypair 也由 Host 生成；fingerprint 必须从 `public_key` 计算并校验。Client 的本地路径、Credential 私钥、通知系统句柄、Provider 配置和 token 不得进入 Git、API 响应或审计导出。
 
 ### 5.2 Observer
 
@@ -380,11 +406,12 @@ local notification preference
 Observer：
 
 - 不出现在 `members/`；
-- 不发布 Principal、Client 或 Executor；
-- 不能写签名业务事件；
+- 默认不拥有 Principal、Client 或 Credential 绑定；
+- 不能写 Work Item、Workflow、Discussion、Permission、Workspace 等业务事件；
 - 可以 fetch、验签、增量归约、浏览文件和审计；
 - 可以设置本地自动刷新和只读通知；
-- 后续可以原地升级为正式 Member。
+- 即使 Git 账号有 push 权限，也只允许发布 schema 严格限定的新成员请求、身份恢复请求和请求取消；
+- 请求批准并同步后可以原地升级为正式 Member。
 
 ### 5.3 加入流程
 
@@ -409,9 +436,9 @@ Inspect remote
 
 `join` 的合法枚举为 `open`、`approval` 和 `invite_only`。
 
-- `open`：候选 Principal 自签注册，协议验证 Principal 与公钥 fingerprint 一致；
+- `open`：Host 生成新 Principal/Client/Credential，候选 Credential 自签注册，Reducer 原子建立绑定；
 - `approval`：候选提交申请，Owner/Admin 签名批准；
-- `invite_only`：申请必须引用面向该 Principal 的有效一次性 Invite，随后仍进入 requested 状态等待批准；
+- `invite_only`：申请必须引用有效一次性 Invite，随后仍进入 requested 状态等待批准；
 - transport 写权限与协议 Membership 是两层独立授权。
 
 Invite 是独立 Aggregate 和经 Schema 校验的 JSON 对象，不使用可转发 bearer token：
@@ -420,8 +447,7 @@ Invite 是独立 Aggregate 和经 Schema 校验的 JSON 对象，不使用可转
 {
   "format": "icarus.collaboration-invite/1",
   "invite_id": "invite_uuid",
-  "principal_id": "principal_sha256_xxx",
-  "issued_by_principal_id": "principal_sha256_owner",
+  "issued_by_principal_id": "principal_owner_uuid",
   "status": "active",
   "issued_at": "2026-08-06T12:00:00.000Z",
   "expires_at": null,
@@ -431,9 +457,9 @@ Invite 是独立 Aggregate 和经 Schema 校验的 JSON 对象，不使用可转
 ```
 
 - 只有 Owner、`group:admin` 或 `member:approve` Principal 可以签发和撤销；
-- `invite_issued` 创建 ACTIVE Invite，目标 Principal 和签发 Actor/provenance 必须一致；
-- `membership_requested` 必须由目标 Principal 自签并引用 `invite_id`，同一事件把 Invite 原子变为 USED；
-- `approval`/`invite_only` 的候选 Principal 在 request 后立即追加自签 `client_registered`，保留申请时的 Client display name；requested Principal 的 Client 可以同步和恢复申请，但在 `member_registered` 批准前仍不能写任何其他业务事件；
+- 新成员 Invite 不包含 Principal 字段，因为 Principal 只能由加入方 Host 在提交请求时生成；已有 Principal 的新设备必须使用身份恢复；
+- `membership_requested` 必须由请求中携带的新 Credential 自签并引用 `invite_id`，同一事件原子注册 requested Member、Client、Credential 并把 Invite 变为 USED；
+- requested Principal 的 Client 可以同步和处理自己的申请，但在 `member_registered` 批准前仍不能写任何其他业务事件；
 - 已过期、已撤销、已使用、目标不匹配或不存在的 Invite fail closed；
 - Invite 只能在 ACTIVE 时撤销，不能撤销 USED Invite，也不能复用；
 - `approval` request 的 `invite_id` 固定为 `null`，`open` 注册不携带该字段。
@@ -452,7 +478,29 @@ Invite 是独立 Aggregate 和经 Schema 校验的 JSON 对象，不使用可转
 
 `observer_access` 的合法枚举为 `allowed` 和 `members_only`。
 
-`members_only` 必须由 Git 服务 read ACL 配合实现；已经 clone 的内容无法远程收回。任何凭据、私有 Prompt override、本地绝对路径和完整 Agent transcript 都不得写入 Group Git。
+`members_only` 必须由 Git 服务 read ACL 配合实现；已经 clone 的内容无法远程收回。Credential 公钥/fingerprint/status 是必要的共享验证材料；Git transport key、任何私钥/token、私有 Prompt override、本地绝对路径和完整 Agent transcript 都不得写入 Group Git。
+
+### 5.5 多设备身份恢复
+
+新设备先 Observe 并从 verified Member 列表选择原 Principal；名称重名时必须显示稳定短 ID。Host 为当前安装生成新的 event Credential，然后通过 Git Remote 提交 `identity_recovery_requested` 或 `owner_recovery_requested`。请求包含新 Client/Credential 的公开材料、创建/过期时间和按不可变字段计算的 `request_hash`，状态机固定为：
+
+```text
+pending -> approved | rejected | expired | cancelled
+```
+
+- pending 请求不注册新 Client/Credential，也不授予任何业务权限；只有请求 Credential 可以取消自己的 pending 请求；
+- request hash 派生六位短验证码，新旧设备展示同一值；验证码只用于防止批准错请求，不证明现实身份；
+- `identity_recovery` 由目标 Principal 的现有 active Client/Credential 批准或拒绝，批准者必须属于同一 Principal；
+- `owner_recovery` 要求申请原因，由 Group Owner 在完成线下核实后填写必填决策原因；批准默认撤销目标 Principal 的全部旧 event Credentials，也可显式选择撤销范围；
+- 批准事件原子添加新 Client/Credential并终结请求，CAS、request hash 和 pending 状态保证只能终结一次；新设备下一次 verified replay 后由 Observer 升级为该 Principal 的 Member Client；
+- Group genesis 自动生成 purpose 为 `group_recovery` 的 offline Credential。私钥只在 Owner 本机保存，可显式安全导出/导入；它只能批准 Owner recovery，不能替代普通业务 Credential；
+- Owner 丢失全部在线 Credential 时必须使用预先备份的 offline Credential。没有 active approver 或有效备份时 fail closed，不能按 Principal ID 或 display name 恢复。
+
+同步调度器为目标 Principal 的 active Clients 和 Group Owner 生成本地通知，详情显示请求类型、新设备名称、Credential fingerprint、申请/过期时间、request hash 和验证码，并明确区分 self-device approval、Owner recovery 和 offline Owner recovery。
+
+### 5.6 Git Remote Access 与本地 SSH Key
+
+Git Remote 服务账号与 SSH key 只决定 clone、fetch、push 能否成功。创建、观察、加入和恢复表单中的 `gitSshKeyPath` 都是可选本地 transport 设置：显式值优先，其次 `SSH_KEY_PATH`，最后 `~/.ssh/id_rsa`；`~` 必须展开。设置页可查看、修改或清除该值，清除后重新解析默认值。本地绝对路径不写入 Group Git 或审计导出，也不参与 Principal、Client、Credential 或 event actor 的生成。
 
 ## 6. 权限模型
 
@@ -1402,9 +1450,11 @@ artifacts/{turn}/                         -> artifacts/workflows/{instance}/{tur
 | ------------------------------------- | ----------------------------------- | ---------------------------------- |
 | `group.json`                          | Owner/Admin                         | Group event 物化                   |
 | `invites/{invite}.json`               | member approval authority           | 目标 Principal、有效期、一次性状态 |
-| `members/{principal}/member.json`     | 本人注册、Admin 状态管理            | Principal 与签名 fingerprint 一致  |
-| `members/{principal}/clients/`        | 对应 Principal                      | Client ID 与事件一致               |
+| `members/{principal}/member.json`     | 受限加入请求、Admin 状态管理        | 系统生成 Principal 与 Aggregate 一致 |
+| `members/{principal}/clients/`        | 受限加入/恢复、对应 Principal       | Client、Credential 与 Actor 一致   |
+| `members/{principal}/credentials/`    | 受限加入/恢复、对应 Principal       | 公钥 fingerprint、purpose、状态校验 |
 | `members/{principal}/executors/`      | 对应 Principal                      | 只允许公开 descriptor              |
+| `recovery-requests/{request}.json`    | 请求方、同 Principal 或 Owner       | request hash、CAS、单次终结         |
 | `permissions/{principal}.json`        | permission grant authority          | 禁止自我提权                       |
 | `workspace/principals/{principal}/`   | 对应 Principal                      | actor path ownership               |
 | `workspace/shared/`                   | `workspace:write_shared`            | revision、hash、size               |
@@ -1486,8 +1536,15 @@ member_registered
 member_suspended
 member_reactivated
 member_removed
-client_registered
 client_revoked
+credential_rotated
+credential_revoked
+identity_recovery_requested
+owner_recovery_requested
+recovery_approved
+recovery_rejected
+recovery_expired
+recovery_cancelled
 permission_granted
 permission_revoked
 ```
@@ -1574,7 +1631,7 @@ turn_recovered
 底层仍使用：
 
 ```text
-workspace/principals/principal_sha256_a83f.../
+workspace/principals/principal_2d9023b8-73e3-41bf-bb96-d52c0cb15bb3/
 ```
 
 display name：
@@ -1583,7 +1640,7 @@ display name：
 - 可以修改和重名；
 - 重名时附短 Principal ID；
 - 不能用于路径、授权、事件 Actor 或引用；
-- 详情页可查看完整 Principal、签名 key ref 和验证状态。
+- 详情页可查看完整 Principal、Client、公开 Credential fingerprint/status 和验证状态。
 
 ### 17.2 文件能力
 
@@ -1640,11 +1697,11 @@ manual refresh
 
 Observer 使用同一个只读 fetch/verify/project 流程，但：
 
-- 不创建签名写入命令；
-- 不显示成员操作按钮；
+- 只创建 schema 限定的加入、恢复或取消请求，不能创建其他签名业务命令；
+- 不显示普通成员业务 mutation 控件；
 - 可以设置本地刷新频率；
 - 可以订阅 Group 级公开活动提醒；
-- 不能接收只面向某个 Member 的任务或 State 通知；
+- pending recovery Client 可以接收自己的请求状态，普通 Observer 不能接收只面向某个 Member 的任务或 State 通知；
 - 升级为 Member 后复用已验证本地 cache，不重复全量 clone。
 
 ## 18. 生命周期
@@ -1762,7 +1819,8 @@ workflow_recovery_required
 JSON 导出至少包含：
 
 - Group definition、Membership 和 Permission history；
-- Principal/Client/optional Executor public identity；
+- Principal/Client/Credential/optional Executor public identity，以及 Credential rotation/revocation；
+- identity/owner recovery request hash、验证码所需材料、状态、批准类型、决策原因和撤销范围；
 - Work Item 全部字段、assignment、status、progress、relations 和 Artifact refs；
 - Discussion message/revision/tombstone；
 - Workflow Definition version、Machine/layout hash；
@@ -1771,7 +1829,7 @@ JSON 导出至少包含：
 - 缺号、断链、未知 signer、hash mismatch、clock skew、missing local evidence；
 - raw UTC time 和可派生 duration。
 
-默认导出只提供摘要、metadata 和 hash。Prompt、Handoff data、Discussion 内容、文件内容和 Executor log 使用独立 `include_content` 授权；凭据、本地绝对路径和 Provider secret 永不导出。
+默认导出只提供摘要、metadata 和 hash。Prompt、Handoff data、Discussion 内容、文件内容和 Executor log 使用独立 `include_content` 授权；共享 Credential 公钥/fingerprint/status 属于验证材料并保留，Credential 私钥、Git SSH path、本地绝对路径、token 和 Provider secret 永不导出。
 
 ## 21. API 草案
 
@@ -1791,7 +1849,7 @@ POST /api/collaboration/groups/{groupId}/invites
 POST /api/collaboration/groups/{groupId}/invites/{inviteId}/revoke
 ```
 
-Observer subscription 是本地记录，不写 Group Git。Join API 不接受调用方覆盖 `principal_id/client_id`，Host 从本机 Identity Service 解析。`invite_only` 的 Join body 只提交 `inviteId` 引用；目标 Principal 仍由 Host Identity 派生并由 reducer 与 Invite 比对。
+Observer subscription 是本地记录，不写 Group Git。Join API 不接受调用方覆盖 `principal_id/client_id/credential_id`，Host 生成 Group Principal 并解析持久 Client。`invite_only` 的 Join body 只提交 `inviteId` 引用；默认未绑定 Invite 不预先决定 Principal。
 
 ### 21.2 Group、Members 和 Permissions
 
@@ -1802,7 +1860,16 @@ POST /api/collaboration/groups/{groupId}/sync
 POST /api/collaboration/groups/{groupId}/archive
 
 GET  /api/collaboration/groups/{groupId}/members
-POST /api/collaboration/groups/{groupId}/clients
+POST /api/collaboration/groups/{groupId}/clients/{clientId}/revoke
+POST /api/collaboration/groups/{groupId}/credentials/rotate
+POST /api/collaboration/groups/{groupId}/credentials/{credentialId}/revoke
+POST /api/collaboration/groups/{groupId}/recovery-requests
+POST /api/collaboration/groups/{groupId}/recovery-requests/{requestId}/approve
+POST /api/collaboration/groups/{groupId}/recovery-requests/{requestId}/reject
+POST /api/collaboration/groups/{groupId}/recovery-requests/{requestId}/cancel
+POST /api/collaboration/groups/{groupId}/recovery-credential/export
+POST /api/collaboration/groups/{groupId}/recovery-credential/import
+PUT  /api/collaboration/groups/{groupId}/settings/git-remote
 PUT  /api/collaboration/groups/{groupId}/permissions/{principalId}
 ```
 
@@ -1875,6 +1942,8 @@ collaboration_subscriptions
 collaboration_groups
 collaboration_principals
 collaboration_clients
+collaboration_credentials
+collaboration_recovery_requests
 collaboration_permission_grants
 
 collaboration_aggregate_checkpoints
@@ -1907,8 +1976,8 @@ collaboration_local_audit_evidence
 
 关键边界：
 
-- subscription、Client private state、Executor Binding、receipt、staged upload、notification 和 local evidence 不能依赖 Git 重建；
-- Group/Member/Work Item/Discussion/Workflow Projection 和 file index 可以从 verified Git 重建；
+- subscription、Client private state、Credential 私钥路径、Git SSH path、Executor Binding、receipt、staged upload、notification 和 local evidence 不能依赖 Git 重建；
+- Group/Member/Client/Credential public record、Recovery Request、Work Item、Discussion、Workflow Projection 和 file index 可以从 verified Git 重建；
 - 每个 Aggregate checkpoint 保存 last revision/hash/commit；
 - 每个 Action publish/revise 保存 group + owner + action id/hash + prompt hash + commit 的精确索引；Scheduler 和 verified historical read 不依赖任意最近事件窗口；
 - global activity feed 是 SQLite read model，不回写一个全局 Git 文件；
@@ -1940,7 +2009,9 @@ Group 创建表单只配置：
 ```text
 name
 Git remote
-signing key
+Git Remote SSH key path (optional, local only)
+owner display name
+current Client display name
 membership policy
 visibility hint
 poll interval
@@ -2001,8 +2072,11 @@ Observer 使用相同浏览和验证界面，但：
 
 ### 24.1 身份与授权
 
-- Principal 必须由 signing public key fingerprint 派生；
-- Client 必须由 Principal 签名注册；
+- Principal 必须是 Host 生成的 Group-scoped `principal_<uuid>`，不得从 Git SSH key 或 fingerprint 派生；
+- Client ID 必须由安装级 Identity Service 生成并持久化；Client 只能经 genesis、受限加入或批准的恢复事件注册；
+- 每个事件 Actor 必须携带 `credential_id`。Replay 使用 Credential 公钥验证 commit signature，定位 active Credential，校验 Credential 的 Principal/Client 与 Actor 完全一致，再执行 Reducer 业务授权；
+- 未注册 Credential 只能签署严格 schema 限定的 membership/recovery request 或自己的 recovery cancellation；
+- Credential fingerprint 必须由公钥计算；轮换和单 Credential/Client 撤销不改变 Principal；
 - Executor descriptor 不授予权限；
 - 所有 mutation 在 Host 和 Git replay 两个边界都验证权限；
 - 不能依赖 UI 隐藏按钮；
@@ -2024,9 +2098,9 @@ Observer 使用相同浏览和验证界面，但：
 ### 24.3 Git Remote
 
 - read ACL 决定保密边界；
-- write ACL 不替代协议授权；
+- 账号/SSH key 只控制 clone/fetch/push，write ACL 不替代协议授权；Observer 即使可以 push 也不能写 Icarus 业务事件；
 - control branch 保持 fast-forward 和签名验证；
-- direct manual push 若不能解释为合法 event/materialization，进入 quarantine；
+- direct manual push 若不能解释为合法 event/materialization 或 Actor 没有业务权限，进入 quarantine 并保留最后 verified head；
 - 不在产品代码主分支混入 Group control event；
 - 本地 uncommitted file、其他 branch 和 working tree 不构成协议事实。
 
@@ -2110,15 +2184,20 @@ Observer 使用相同浏览和验证界面，但：
 
 ### 26.1 Identity、Join 和 Observer
 
-- 同一 signing key 在多个 Group 派生同一 Principal；
+- 创建与普通加入均生成 `principal_<uuid>`，调用方不能指定 Principal/Client/Credential ID；
+- Git SSH key 或 Credential fingerprint 变化不改变已存在 Principal；
+- 每个安装持久化稳定 Client ID，每个 Client 自动生成独立 Credential；
 - 同一 Principal 可以注册多个 Client；
+- Credential rotation、单独 revoke、Client revoke 连带 Credential revoke 分别通过正反例；
 - 不配置 Executor 仍可加入和人工协作；
-- API 不能覆盖 Principal/Client ID；
-- Observer 不写 members/event，不需要 signing identity；
+- API 不能覆盖 Principal/Client/Credential ID、fingerprint 或 Actor；
+- Observer 没有业务写权限，但可以使用未注册 Credential 发送受限 membership/recovery 请求；
 - Observer 升级 Member 复用 cache；
 - open/approval/invite-only 分别通过正反例；
-- Invite 未授权签发、错绑、过期、撤销、消费和复用分别通过正反例，Git materialization 可从事件重建；
-- Git read ACL 与协议 Membership 在诊断中明确区分。
+- 未绑定 Invite 的未授权签发、过期、撤销、消费和复用分别通过正反例，Git materialization 可从事件重建；
+- identity recovery、Owner recovery、offline Owner recovery、取消、过期、CAS 冲突、二次终结和默认/选择性撤销分别覆盖；
+- 旧 Client/Owner 通知、request hash 与双方验证码、审计批准类型、Electron request builder/UI helper 分别覆盖；
+- Git read/write ACL 与协议 Membership/Permission 在诊断中明确区分，越权 direct push 保持 verified head 并 quarantine。
 
 ### 26.2 Permission 和路径
 
@@ -2211,13 +2290,17 @@ Observer 使用相同浏览和验证界面，但：
 - start/execution timeout 提醒 assignee 和 Instance creator，不自动流转；
 - Work Item due 不触发 Turn timeout event；
 - Audit 能串联 Group、Work Item、Workflow、Turn 和 local evidence；
-- 默认导出严格脱敏本地路径、凭据和 Provider metadata。
+- 默认导出保留共享 Credential 验证材料，并严格脱敏本地路径、私钥/token 和 Provider metadata。
 
 ### 26.10 UI
 
 - Group 创建不出现 Role/Machine 必填；
+- 创建、观察、加入和恢复不强制填写 Git SSH key，设置页可查看、修改和清除本地 transport path；
 - 创建后立即发布进度、Work Item 和文件；
-- Observer 明确只读且可以申请加入；
+- Observer 明确业务只读且可以申请加入或恢复已有身份；
+- Members 页面分层展示 Principal、Client、Credential 和直接 Permission，重名 Principal 显示稳定短 ID；
+- Recovery 列表/详情展示状态、request hash、验证码、设备名、fingerprint、时间和冲突/过期错误，并支持批准、拒绝、取消；
+- Owner recovery 显示高风险说明、必填理由和默认撤销全部旧 Credential，offline recovery Credential 可显式导出/导入；
 - Work Item Board/List/Detail 在桌面和窄窗口无重叠；
 - 图编辑器 Outcome-first 全路径可用；
 - Principal/participant lane 正确；
@@ -2232,9 +2315,11 @@ Observer 使用相同浏览和验证界面，但：
 ## 27. 验收标准
 
 - 用户可以创建没有 Role、Machine 和 Workflow 的 Group，并立即进入 ACTIVE。
-- Observer 可以只读订阅、定时/手动刷新、验签和浏览全部 Git 可见内容，但不会出现在成员列表或产生写事件。
+- Observer 可以只读订阅、定时/手动刷新、验签和浏览全部 Git 可见内容，不会出现在成员列表；它只能产生严格限制的加入/恢复请求，不能产生业务事件。
 - 正式加入只注册系统派生 Principal；一个 Principal 可以使用多个 Client，也可以不配置 Executor。
-- invite-only 群组使用面向 Principal、可撤销/过期、一次性消费的签名 Invite，并在 UI 中完成签发、申请和审批闭环。
+- Principal、Client 与 Credential 完全分离；Credential 可轮换/撤销且不改变 Principal，Git Remote SSH key 只负责 transport。
+- 新设备可经旧 Client、Owner 或预先备份的 offline Group recovery Credential 恢复原 Principal；没有 active approver/有效恢复凭据时 fail closed。
+- invite-only 群组使用不绑定 Principal、可撤销/过期、一次性消费的签名 Invite，并在 UI 中完成签发、申请和审批闭环。
 - 客户端将 Principal ID、Work Item ID 和 Workflow ID 映射为友好项目树，同时保留稳定 raw identity。
 - 每个 Principal 可以在自己的 Group-visible space 发布进度和文件，不能修改其他 Principal 空间。
 - Group 可以创建和并行管理多个 Work Item，支持负责人、进度、阻塞、依赖、Discussion、due date 和 Artifact。
@@ -2263,10 +2348,13 @@ Observer 使用相同浏览和验证界面，但：
 | Group 是否需要 Workflow | 否，零到多个                                      |
 | Group 生命周期          | ACTIVE/ARCHIVED                                   |
 | 成员主体                | Principal                                         |
-| Principal 来源          | SSH signing key fingerprint                       |
-| Client                  | Principal 的 Icarus 安装，可多个                  |
+| Principal 来源          | Host 在 Group 内生成 `principal_<uuid>`           |
+| Client                  | 安装级持久 `client_<uuid>`，Principal 可有多个    |
+| Credential              | 每 Client 自动生成、可轮换/撤销的事件签名密钥     |
+| Git Remote SSH key      | 仅本地 transport 设置，不参与业务身份或授权       |
+| 身份恢复                | 旧 Client、Owner 或 offline Group Credential 审批 |
 | Executor                | Principal 的可选执行工具，可为零                  |
-| Observer                | 本地只读订阅，不注册 Membership                   |
+| Observer                | 业务只读订阅，仅可提交受限加入/恢复请求           |
 | Group Role/Claim        | 删除                                              |
 | 群组权限                | 直接 grant 到 Principal                           |
 | 个人空间                | Group-visible、Principal-owned                    |
@@ -2287,6 +2375,7 @@ Observer 使用相同浏览和验证界面，但：
 | 文件体验                | verified virtual tree + friendly identity mapping |
 | 刷新                    | 定时增量同步 + 手动立即刷新                       |
 | 保密边界                | Git Remote read ACL，不是客户端 Membership        |
+| 业务授权边界            | Host API + Credential verification + Reducer      |
 | Work Item due           | 业务日期，独立于 State timeout                    |
 | State timeout           | notify-only，不自动改变 Outcome/Work Item         |
 | 审计                    | Git chain + Aggregate chain + local evidence      |

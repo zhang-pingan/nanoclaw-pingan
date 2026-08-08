@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import { z } from 'zod';
 
 import {
@@ -23,6 +25,19 @@ export const collaborationSshPublicKeySchema = z
   .regex(
     /^(?:ssh-ed25519|ecdsa-sha2-[A-Za-z0-9@._+-]+|sk-ssh-[A-Za-z0-9@._+-]+) [A-Za-z0-9+/]+={0,3}(?: [^\r\n]{1,1024})?$/u,
   );
+
+export function collaborationCredentialFingerprintV3(
+  publicKey: string,
+): string {
+  const parsed = collaborationSshPublicKeySchema.parse(publicKey);
+  const encoded = parsed.split(/\s+/u)[1];
+  if (!encoded) throw new Error('Credential public key payload is missing');
+  return `SHA256:${crypto
+    .createHash('sha256')
+    .update(Buffer.from(encoded, 'base64'))
+    .digest('base64')
+    .replace(/=+$/u, '')}`;
+}
 
 export const collaborationRelativePathSchema = z
   .string()
@@ -50,10 +65,25 @@ export const collaborationBasenameSchema = z
   );
 
 const extensionsSchema = z.record(z.string(), z.unknown()).optional();
-const principalIdSchema = collaborationIdentifierSchema.refine(
-  (value) => value.startsWith('principal_'),
-  'must be a Principal id',
-);
+export const principalIdSchema = z
+  .string()
+  .regex(
+    /^principal_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu,
+    'must be a system-generated Principal id',
+  );
+export const clientIdSchema = z
+  .string()
+  .min(8)
+  .max(160)
+  .regex(/^client_[A-Za-z0-9][A-Za-z0-9._:@-]*$/u, 'must be a Client id');
+export const credentialIdSchema = z
+  .string()
+  .min(12)
+  .max(160)
+  .regex(
+    /^credential_[A-Za-z0-9][A-Za-z0-9._:@-]*$/u,
+    'must be a Credential id',
+  );
 const actorOriginSchema = z.enum(['human', 'agent', 'workflow']);
 
 export const membershipPolicySchema = z
@@ -72,7 +102,6 @@ export const groupDefinitionV3Schema = z
     creator: z
       .object({
         principal_id: principalIdSchema,
-        signing_key_ref: z.string().min(1).max(255),
       })
       .strict(),
     owner_principal_id: principalIdSchema,
@@ -95,8 +124,6 @@ export const memberDefinitionV3Schema = z
     format: z.literal('icarus.collaboration-member/3'),
     principal_id: principalIdSchema,
     display_name: z.string().min(1).max(160),
-    signing_key_ref: z.string().min(1).max(255),
-    signing_public_key: collaborationSshPublicKeySchema,
     status: z.enum(['requested', 'active', 'rejected', 'suspended', 'removed']),
     joined_at_event: collaborationIdentifierSchema.nullable(),
     extensions: extensionsSchema,
@@ -104,11 +131,46 @@ export const memberDefinitionV3Schema = z
   .strict();
 export type MemberDefinitionV3 = z.infer<typeof memberDefinitionV3Schema>;
 
+export const credentialDefinitionSchema = z
+  .object({
+    format: z.literal('icarus.collaboration-credential/1'),
+    credential_id: credentialIdSchema,
+    principal_id: principalIdSchema,
+    client_id: clientIdSchema,
+    public_key: collaborationSshPublicKeySchema,
+    fingerprint: z.string().regex(/^SHA256:[A-Za-z0-9+/]+={0,2}$/u),
+    purpose: z.enum(['event_signing', 'group_recovery']),
+    status: z.enum(['active', 'revoked']),
+    created_at_event: collaborationIdentifierSchema,
+    revoked_at_event: collaborationIdentifierSchema.nullable(),
+    extensions: extensionsSchema,
+  })
+  .strict()
+  .superRefine((credential, context) => {
+    if (
+      collaborationCredentialFingerprintV3(credential.public_key) !==
+      credential.fingerprint
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['fingerprint'],
+        message: 'Credential fingerprint does not match its public key',
+      });
+    if (
+      (credential.status === 'active') !==
+      (credential.revoked_at_event === null)
+    )
+      context.addIssue({
+        code: 'custom',
+        message: 'Credential status and revocation event are inconsistent',
+      });
+  });
+export type CredentialDefinition = z.infer<typeof credentialDefinitionSchema>;
+
 export const inviteDefinitionV3Schema = z
   .object({
     format: z.literal('icarus.collaboration-invite/1'),
     invite_id: collaborationIdentifierSchema,
-    principal_id: principalIdSchema,
     issued_by_principal_id: principalIdSchema,
     status: z.enum(['active', 'used', 'revoked']),
     issued_at: collaborationIsoTimeSchema,
@@ -151,7 +213,7 @@ export const clientDefinitionSchema = z
   .object({
     format: z.literal('icarus.collaboration-client/1'),
     principal_id: principalIdSchema,
-    client_id: collaborationIdentifierSchema,
+    client_id: clientIdSchema,
     display_name: z.string().min(1).max(160),
     capabilities: z.array(collaborationIdentifierSchema).max(100),
     status: z.enum(['active', 'revoked']).default('active'),
@@ -160,6 +222,68 @@ export const clientDefinitionSchema = z
   })
   .strict();
 export type ClientDefinition = z.infer<typeof clientDefinitionSchema>;
+
+export const recoveryRequestSchema = z
+  .object({
+    format: z.literal('icarus.collaboration-recovery-request/1'),
+    request_id: collaborationIdentifierSchema,
+    request_hash: collaborationSha256Schema,
+    type: z.enum(['identity_recovery', 'owner_recovery']),
+    target_principal_id: principalIdSchema,
+    requested_client: clientDefinitionSchema,
+    requested_credential: credentialDefinitionSchema,
+    status: z.enum(['pending', 'approved', 'rejected', 'expired', 'cancelled']),
+    reason: z.string().min(1).max(4000).nullable(),
+    created_at: collaborationIsoTimeSchema,
+    expires_at: collaborationIsoTimeSchema,
+    decided_at_event: collaborationIdentifierSchema.nullable(),
+    decided_by_principal_id: principalIdSchema.nullable(),
+    decision_reason: z.string().min(1).max(4000).nullable(),
+    approval_kind: z.enum(['self_device', 'owner', 'offline_owner']).nullable(),
+    revoked_credential_ids: z.array(credentialIdSchema).max(1000),
+    extensions: extensionsSchema,
+  })
+  .strict()
+  .superRefine((request, context) => {
+    if (
+      request.requested_client.principal_id !== request.target_principal_id ||
+      request.requested_credential.principal_id !==
+        request.target_principal_id ||
+      request.requested_client.client_id !==
+        request.requested_credential.client_id ||
+      request.requested_credential.purpose !== 'event_signing'
+    )
+      context.addIssue({
+        code: 'custom',
+        message: 'Recovery Principal, Client, and Credential must agree',
+      });
+    if (Date.parse(request.expires_at) <= Date.parse(request.created_at))
+      context.addIssue({
+        code: 'custom',
+        path: ['expires_at'],
+        message: 'Recovery request expiry must follow creation',
+      });
+    if (request.type === 'owner_recovery' && request.reason === null)
+      context.addIssue({
+        code: 'custom',
+        path: ['reason'],
+        message: 'Owner recovery requires a reason',
+      });
+    const pending = request.status === 'pending';
+    if (
+      pending !==
+      (request.decided_at_event === null &&
+        request.decided_by_principal_id === null &&
+        request.decision_reason === null &&
+        request.approval_kind === null &&
+        request.revoked_credential_ids.length === 0)
+    )
+      context.addIssue({
+        code: 'custom',
+        message: 'Recovery request decision fields do not match its status',
+      });
+  });
+export type RecoveryRequest = z.infer<typeof recoveryRequestSchema>;
 
 export const executorDescriptorSchema = z
   .object({
@@ -982,6 +1106,7 @@ export const collaborationAggregateTypeSchema = z.enum([
   'group',
   'invite',
   'membership',
+  'recovery',
   'workspace',
   'work_item',
   'discussion',
@@ -1005,8 +1130,15 @@ export const collaborationEventTypesV3 = [
   'member_suspended',
   'member_reactivated',
   'member_removed',
-  'client_registered',
   'client_revoked',
+  'credential_rotated',
+  'credential_revoked',
+  'identity_recovery_requested',
+  'owner_recovery_requested',
+  'recovery_approved',
+  'recovery_rejected',
+  'recovery_expired',
+  'recovery_cancelled',
   'executor_registered',
   'executor_revoked',
   'permission_granted',
@@ -1074,7 +1206,8 @@ export const collaborationEventV3Schema = z
     actor: z
       .object({
         principal_id: principalIdSchema,
-        client_id: collaborationIdentifierSchema,
+        client_id: clientIdSchema,
+        credential_id: credentialIdSchema,
         executor_id: collaborationIdentifierSchema.nullable(),
       })
       .strict(),

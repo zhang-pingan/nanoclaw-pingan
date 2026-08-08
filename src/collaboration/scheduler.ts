@@ -185,6 +185,7 @@ export class CollaborationScheduler {
       !group.localClientId
     )
       return;
+    await this.groups.expireRecoveryRequests(groupId);
     await this.groups.observeDueTimeouts(groupId);
     for (const turn of Object.values(history.projection.turns)) {
       if (

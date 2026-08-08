@@ -11,7 +11,7 @@ import {
   type RunOnceService,
 } from './executors/run-once.js';
 
-import type { CollaborationPrincipalIdentity } from './project-space-identity.js';
+import type { CollaborationEventSigningIdentity } from './project-space-identity.js';
 import { CollaborationProjectSpaceIdentityService } from './project-space-identity.js';
 import {
   CollaborationProjectSpaceService,
@@ -27,21 +27,30 @@ import {
   collaborationCanonicalHashV3,
   reduceCollaborationEventV3,
 } from './protocol/v3-reducer.js';
+import { collaborationCredentialFingerprintV3 } from './protocol/v3-schema.js';
 
 const temporaryDirectories: string[] = [];
-const ALICE: CollaborationPrincipalIdentity = {
-  principalId: 'principal_sha256_alice',
+const ALICE: CollaborationEventSigningIdentity = {
+  principalId: 'principal_00000000-0000-4000-8000-000000000001',
   clientId: 'client_alice_mac',
+  credentialId: 'credential_alice_mac',
   privateKeyPath: '/tmp/alice',
   publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice',
-  keyRef: 'ssh-ed25519:SHA256:alice',
+  fingerprint: collaborationCredentialFingerprintV3(
+    'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice',
+  ),
+  purpose: 'event_signing',
 };
-const BOB: CollaborationPrincipalIdentity = {
-  principalId: 'principal_sha256_bob',
+const BOB: CollaborationEventSigningIdentity = {
+  principalId: 'principal_00000000-0000-4000-8000-000000000002',
   clientId: 'client_bob_mac',
+  credentialId: 'credential_bob_mac',
   privateKeyPath: '/tmp/bob',
   publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXQfKE4hE1m3sXEXAMPLEreview',
-  keyRef: 'ssh-ed25519:SHA256:bob',
+  fingerprint: collaborationCredentialFingerprintV3(
+    'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXQfKE4hE1m3sXEXAMPLEreview',
+  ),
+  purpose: 'event_signing',
 };
 
 const DELIVERY_MACHINE = {
@@ -208,12 +217,24 @@ class OverlapDetectingMemoryTransport extends MemoryTransport {
 function service(
   root: string,
   transport: MemoryTransport,
-  identity: CollaborationPrincipalIdentity,
+  identity: CollaborationEventSigningIdentity,
   now: () => number = () => Date.parse('2026-08-06T12:00:00.000Z'),
 ) {
   const store = new CollaborationProjectSpaceStore(path.join(root, 'store.db'));
   const identities = {
-    resolveSigningIdentity: async () => identity,
+    createPrincipalIdentity: async () => identity,
+    createCredentialIdentity: async (input: { purpose?: string }) => ({
+      ...identity,
+      credentialId:
+        input.purpose === 'group_recovery'
+          ? `${identity.credentialId}_recovery`
+          : identity.credentialId,
+      purpose:
+        input.purpose === 'group_recovery'
+          ? ('group_recovery' as const)
+          : ('event_signing' as const),
+    }),
+    resolveGitSshKeyPath: (value?: string) => value || '/tmp/git-transport',
   } as unknown as CollaborationProjectSpaceIdentityService;
   return {
     store,
@@ -262,6 +283,38 @@ async function withServiceApi(
   }
 }
 
+async function recoverClient(input: {
+  owner: ReturnType<typeof service>;
+  recovering: ReturnType<typeof service>;
+  remoteUrl: string;
+  groupId: string;
+  principalId: string;
+  clientDisplayName: string;
+}) {
+  await input.recovering.service.observeGroup({
+    remoteUrl: input.remoteUrl,
+    gitSshKeyPath: '/tmp/git-transport',
+  });
+  const requested = await input.recovering.service.requestIdentityRecovery({
+    groupId: input.groupId,
+    targetPrincipalId: input.principalId,
+    type: 'identity_recovery',
+    clientDisplayName: input.clientDisplayName,
+  });
+  const ownerHistory = await input.owner.service.sync(input.groupId);
+  const revision =
+    ownerHistory.projection.aggregateHeads[`recovery:${requested.requestId}`]
+      ?.revision ?? 0;
+  await input.owner.service.decideRecovery({
+    groupId: input.groupId,
+    requestId: requested.requestId,
+    expectedRevision: revision,
+    decision: 'approve',
+    reason: 'Verification code matched on the existing device',
+  });
+  return input.recovering.service.sync(input.groupId);
+}
+
 describe('Collaboration project space v3 Group and identity service', () => {
   it('issues and consumes a one-time Invite before membership approval', async () => {
     const transport = new MemoryTransport();
@@ -269,7 +322,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/invite-project.git',
       name: 'Invite project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'invite_only',
@@ -279,7 +332,6 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.issueInvite({
       groupId: 'group_invite',
       inviteId: 'invite_bob',
-      principalId: BOB.principalId,
       expiresAt: '2026-08-07T12:00:00.000Z',
       expectedRevision: 0,
     });
@@ -288,14 +340,14 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await expect(
       bob.service.joinGroup({
         remoteUrl: '/tmp/invite-project.git',
-        signingKeyPath: BOB.privateKeyPath,
+        gitSshKeyPath: BOB.privateKeyPath,
         displayName: 'Bob',
         clientDisplayName: 'Bob MacBook',
       }),
     ).rejects.toThrow(/Invite/iu);
     const requested = await bob.service.joinGroup({
       remoteUrl: '/tmp/invite-project.git',
-      signingKeyPath: BOB.privateKeyPath,
+      gitSshKeyPath: BOB.privateKeyPath,
       displayName: 'Bob',
       clientDisplayName: 'Bob MacBook',
       inviteId: 'invite_bob',
@@ -315,7 +367,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
         expectedRevision: 0,
         summary: 'Must remain blocked before approval.',
       }),
-    ).rejects.toThrow(/active Group member|not active/u);
+    ).rejects.toThrow(/Observer subscriptions|active Group member|not active/u);
     expect(requested.projection?.invites.invite_bob).toMatchObject({
       status: 'used',
       used_at_event: expect.stringMatching(/^evt_/u),
@@ -324,7 +376,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     const approved = await owner.service.approveMembership(
       'group_invite',
       BOB.principalId,
-      2,
+      1,
     );
     expect(approved.projection?.members[BOB.principalId]?.status).toBe(
       'active',
@@ -351,7 +403,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/approval-project.git',
       name: 'Approval project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'approval',
@@ -361,7 +413,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     const bob = service(tempDirectory(), transport, BOB);
     const requested = await bob.service.joinGroup({
       remoteUrl: '/tmp/approval-project.git',
-      signingKeyPath: BOB.privateKeyPath,
+      gitSshKeyPath: BOB.privateKeyPath,
       displayName: 'Bob',
       clientDisplayName: 'Bob MacBook',
     });
@@ -378,9 +430,9 @@ describe('Collaboration project space v3 Group and identity service', () => {
         type: 'task',
         title: 'Must not be created before approval',
       }),
-    ).rejects.toThrow(/active Group member|not active/u);
+    ).rejects.toThrow(/Observer subscriptions|active Group member|not active/u);
 
-    await owner.service.approveMembership('group_approval', BOB.principalId, 2);
+    await owner.service.approveMembership('group_approval', BOB.principalId, 1);
     const synced = await bob.service.sync('group_approval');
     expect(synced.projection.members[BOB.principalId]?.status).toBe('active');
     const firstWrite = await bob.service.postProgress({
@@ -404,7 +456,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     const group = await local.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -431,7 +483,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await local.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -462,7 +514,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -494,34 +546,25 @@ describe('Collaboration project space v3 Group and identity service', () => {
     const created = await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
       observerAccess: 'allowed',
       groupId: 'group_project',
     });
-    const refreshed = await owner.service.registerCurrentClient({
-      groupId: 'group_project',
-      expectedRevision: 0,
-      displayName: 'Alice MacBook Pro',
-      capabilities: ['desktop_notifications'],
-    });
-    expect(
-      refreshed.projection?.clients[ALICE.principalId]?.[ALICE.clientId],
-    ).toMatchObject({
-      principal_id: created.localPrincipalId,
-      client_id: created.localClientId,
-      display_name: 'Alice MacBook Pro',
-      capabilities: ['desktop_notifications'],
-      status: 'active',
-    });
-    const secondIdentity = { ...ALICE, clientId: 'client_alice_studio' };
+    const secondIdentity = {
+      ...ALICE,
+      clientId: 'client_alice_studio',
+      credentialId: 'credential_alice_studio',
+    };
     const second = service(tempDirectory(), transport, secondIdentity);
-    const joined = await second.service.joinGroup({
+    const joined = await recoverClient({
+      owner,
+      recovering: second,
       remoteUrl: '/tmp/project.git',
-      signingKeyPath: ALICE.privateKeyPath,
-      displayName: 'Alice',
+      groupId: 'group_project',
+      principalId: created.localPrincipalId!,
       clientDisplayName: 'Alice Studio',
     });
     expect(
@@ -530,8 +573,180 @@ describe('Collaboration project space v3 Group and identity service', () => {
       expect.arrayContaining([ALICE.clientId, secondIdentity.clientId]),
     );
     expect(joined.projection?.executors[ALICE.principalId]).toBeUndefined();
+    const revoked = await owner.service.revokeClient({
+      groupId: 'group_project',
+      clientId: secondIdentity.clientId,
+      expectedRevision: 0,
+      reason: 'Studio device was lost',
+    });
+    expect(
+      revoked.projection?.clients[ALICE.principalId]?.[secondIdentity.clientId],
+    ).toMatchObject({ status: 'revoked' });
+    expect(
+      revoked.projection?.credentials[ALICE.principalId]?.[
+        secondIdentity.credentialId
+      ],
+    ).toMatchObject({ status: 'revoked' });
     owner.store.close();
     second.store.close();
+  });
+
+  it('cancels a pending recovery once with the requesting Credential', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/recovery-cancel.git',
+      name: 'Recovery cancel',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_recovery_cancel',
+    });
+    const recoveryIdentity = {
+      ...ALICE,
+      clientId: 'client_alice_recovery_cancel',
+      credentialId: 'credential_alice_recovery_cancel',
+    };
+    const recovering = service(tempDirectory(), transport, recoveryIdentity);
+    await recovering.service.observeGroup({
+      remoteUrl: '/tmp/recovery-cancel.git',
+    });
+    const requested = await recovering.service.requestIdentityRecovery({
+      groupId: 'group_recovery_cancel',
+      targetPrincipalId: ALICE.principalId,
+      type: 'identity_recovery',
+      clientDisplayName: 'Alice replacement',
+    });
+    const cancelled = await recovering.service.cancelRecovery({
+      groupId: 'group_recovery_cancel',
+      requestId: requested.requestId,
+      expectedRevision: 1,
+      reason: 'Replacement device is no longer trusted',
+    });
+    expect(
+      cancelled.projection?.recoveryRequests[requested.requestId],
+    ).toMatchObject({
+      status: 'cancelled',
+      decision_reason: 'Replacement device is no longer trusted',
+    });
+    await owner.service.sync('group_recovery_cancel');
+    expect(
+      owner.store.listPendingNotifications({
+        groupId: 'group_recovery_cancel',
+        principalId: ALICE.principalId,
+        clientId: ALICE.clientId,
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'recovery_cancelled',
+          resourceId: requested.requestId,
+          reason: 'cancelled',
+        }),
+      ]),
+    );
+    await expect(
+      owner.service.decideRecovery({
+        groupId: 'group_recovery_cancel',
+        requestId: requested.requestId,
+        expectedRevision: 2,
+        decision: 'approve',
+        reason: 'too late',
+      }),
+    ).rejects.toThrow(/not pending/u);
+    owner.store.close();
+    recovering.store.close();
+  });
+
+  it('notifies the Owner and revokes old Credentials by default for Owner recovery', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/owner-recovery.git',
+      name: 'Owner recovery',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_owner_recovery',
+    });
+    const bob = service(tempDirectory(), transport, BOB);
+    await bob.service.joinGroup({
+      remoteUrl: '/tmp/owner-recovery.git',
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    await owner.service.sync('group_owner_recovery');
+
+    const replacementIdentity = {
+      ...BOB,
+      clientId: 'client_bob_replacement',
+      credentialId: 'credential_bob_replacement',
+    };
+    const replacement = service(
+      tempDirectory(),
+      transport,
+      replacementIdentity,
+    );
+    await replacement.service.observeGroup({
+      remoteUrl: '/tmp/owner-recovery.git',
+    });
+    const requested = await replacement.service.requestIdentityRecovery({
+      groupId: 'group_owner_recovery',
+      targetPrincipalId: BOB.principalId,
+      type: 'owner_recovery',
+      clientDisplayName: 'Bob replacement',
+      reason: "All of Bob's previous devices are unavailable",
+    });
+    const ownerHistory = await owner.service.sync('group_owner_recovery');
+    expect(
+      owner.store.listPendingNotifications({
+        groupId: 'group_owner_recovery',
+        principalId: ALICE.principalId,
+        clientId: ALICE.clientId,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        kind: 'owner_recovery',
+        resourceId: requested.requestId,
+        payload: expect.objectContaining({
+          verification_code: requested.verificationCode,
+        }),
+      }),
+    ]);
+    const revision =
+      ownerHistory.projection.aggregateHeads[`recovery:${requested.requestId}`]!
+        .revision;
+    const approved = await owner.service.decideRecovery({
+      groupId: 'group_owner_recovery',
+      requestId: requested.requestId,
+      expectedRevision: revision,
+      decision: 'approve',
+      reason: 'Offline identity verification completed',
+    });
+    expect(
+      approved.projection?.recoveryRequests[requested.requestId],
+    ).toMatchObject({
+      status: 'approved',
+      approval_kind: 'owner',
+      revoked_credential_ids: [BOB.credentialId],
+    });
+    expect(
+      approved.projection?.credentials[BOB.principalId]?.[BOB.credentialId],
+    ).toMatchObject({ status: 'revoked' });
+    const recovered = await replacement.service.sync('group_owner_recovery');
+    expect(
+      recovered.projection.credentials[BOB.principalId]?.[
+        replacementIdentity.credentialId
+      ],
+    ).toMatchObject({ status: 'active' });
+    expect(
+      replacement.store.getGroup('group_owner_recovery')?.subscriptionMode,
+    ).toBe('member');
+    owner.store.close();
+    bob.store.close();
+    replacement.store.close();
   });
 
   it('uses direct grants and rejects self-elevation in the reducer', async () => {
@@ -540,25 +755,29 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
       observerAccess: 'allowed',
       groupId: 'group_project',
     });
-    const bobIdentity: CollaborationPrincipalIdentity = {
+    const bobIdentity: CollaborationEventSigningIdentity = {
       ...ALICE,
-      principalId: 'principal_sha256_bob',
+      principalId: 'principal_00000000-0000-4000-8000-000000000002',
+      credentialId: 'credential_00000000-0000-4000-8000-000000000002',
+      fingerprint: collaborationCredentialFingerprintV3(
+        'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXQfKE4hE1m3sXEXAMPLEreview',
+      ),
+      purpose: 'event_signing',
       clientId: 'client_bob',
       publicKey:
         'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXQfKE4hE1m3sXEXAMPLEreview',
-      keyRef: 'ssh-ed25519:SHA256:bob',
     };
     const bob = service(tempDirectory(), transport, bobIdentity);
     const joined = await bob.service.joinGroup({
       remoteUrl: '/tmp/project.git',
-      signingKeyPath: '/tmp/bob',
+      gitSshKeyPath: '/tmp/bob',
       displayName: 'Bob',
       clientDisplayName: 'Bob MacBook',
     });
@@ -585,7 +804,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     const created = await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -668,7 +887,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -696,7 +915,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -799,7 +1018,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -835,25 +1054,29 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
       observerAccess: 'allowed',
       groupId: 'group_project',
     });
-    const bobIdentity: CollaborationPrincipalIdentity = {
+    const bobIdentity: CollaborationEventSigningIdentity = {
       ...ALICE,
-      principalId: 'principal_sha256_bob',
+      principalId: 'principal_00000000-0000-4000-8000-000000000002',
+      credentialId: 'credential_00000000-0000-4000-8000-000000000002',
+      fingerprint: collaborationCredentialFingerprintV3(
+        'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXQfKE4hE1m3sXEXAMPLEreview',
+      ),
+      purpose: 'event_signing',
       clientId: 'client_bob',
       publicKey:
         'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXQfKE4hE1m3sXEXAMPLEreview',
-      keyRef: 'ssh-ed25519:SHA256:bob',
     };
     const bob = service(tempDirectory(), transport, bobIdentity);
     const joined = await bob.service.joinGroup({
       remoteUrl: '/tmp/project.git',
-      signingKeyPath: '/tmp/bob',
+      gitSshKeyPath: '/tmp/bob',
       displayName: 'Bob',
       clientDisplayName: 'Bob MacBook',
     });
@@ -942,7 +1165,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -1010,7 +1233,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -1127,7 +1350,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -1185,12 +1408,18 @@ describe('Collaboration project space v3 Group and identity service', () => {
       claimant_client_id: null,
     });
 
-    const secondIdentity = { ...ALICE, clientId: 'client_alice_studio' };
+    const secondIdentity = {
+      ...ALICE,
+      clientId: 'client_alice_studio',
+      credentialId: 'credential_alice_studio',
+    };
     const second = service(tempDirectory(), transport, secondIdentity);
-    await second.service.joinGroup({
+    await recoverClient({
+      owner,
+      recovering: second,
       remoteUrl: '/tmp/project.git',
-      signingKeyPath: ALICE.privateKeyPath,
-      displayName: 'Alice',
+      groupId: 'group_project',
+      principalId: ALICE.principalId,
       clientDisplayName: 'Alice Studio',
     });
     const ownerSynced = await owner.service.sync('group_project');
@@ -1277,7 +1506,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -1470,7 +1699,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/automatic-project.git',
       name: 'Automatic project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -1696,7 +1925,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/handoff-project.git',
       name: 'Handoff project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -1881,6 +2110,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
         actor: {
           principal_id: ALICE.principalId,
           client_id: ALICE.clientId,
+          credential_id: ALICE.credentialId,
           executor_id: null,
         },
         occurredAt: '2026-08-06T12:05:00.000Z',
@@ -2052,7 +2282,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/turn-authority.git',
       name: 'Turn authority',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',
@@ -2101,7 +2331,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     const bob = service(tempDirectory(), transport, BOB);
     await bob.service.joinGroup({
       remoteUrl: '/tmp/turn-authority.git',
-      signingKeyPath: BOB.privateKeyPath,
+      gitSshKeyPath: BOB.privateKeyPath,
       displayName: 'Bob',
       clientDisplayName: 'Bob MacBook',
     });
@@ -2137,7 +2367,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.createGroup({
       remoteUrl: '/tmp/project.git',
       name: 'Project',
-      signingKeyPath: ALICE.privateKeyPath,
+      gitSshKeyPath: ALICE.privateKeyPath,
       displayName: 'Alice',
       clientDisplayName: 'Alice MacBook',
       membershipPolicy: 'open',

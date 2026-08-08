@@ -92,11 +92,13 @@ Web 工作台由 `src/channels/web.ts` 启动本地 HTTP/WebSocket 服务，默�
 
 ### Collaboration Project Space Runtime
 
-Collaboration Project Space 是与本地 Dynamic Workflow Runtime 分离的跨机器协作模式。Group 创建后立即可用，不要求预先创建 Workflow。共享事实只存在于 Git 控制分支上的 SSH 签名事件和物化文件；SQLite 保存本机订阅、Executor Binding、durable receipt、staged upload、通知投递、Provider observation、诊断和可重建缓存。
+Collaboration Project Space 是与本地 Dynamic Workflow Runtime 分离的跨机器协作模式。Group 创建后立即可用，不要求预先创建 Workflow。共享事实只存在于 Git 控制分支上的 Icarus Credential 签名事件和物化文件；SQLite 保存本机订阅、Credential 私钥引用、Executor Binding、durable receipt、staged upload、通知投递、Provider observation、诊断和可重建缓存。
 
-- Principal 是成员与权限主体；`principal_id` 从 SSH 公钥 fingerprint 稳定派生。Client ID 由本机 Identity Service 生成，一个 Principal 可注册多个 Client，Executor 为可选本地能力描述。
-- 创建或加入 Group 时 SSH signing key 路径可省略；Host 优先使用 `SSH_KEY_PATH`，未配置时读取 `~/.ssh/id_rsa`。
-- Observer 是不进入 Group Membership 的只读本地订阅，可以 fetch、验签、浏览 verified virtual file tree 和审计，但不能发布事件。
+- Principal 是 Group 内的稳定成员与权限主体，使用系统生成的 `principal_<uuid>`，不从 SSH key 或 Credential fingerprint 派生。每个 Icarus 安装持久化一个 `client_<uuid>`，同一 Principal 可通过批准的身份恢复绑定多个 Client。
+- 每个 Client 的 Icarus event-signing Credential 由 Host 自动生成；共享 Git 只保存 `credential_id`、Principal/Client 绑定、公钥、系统校验的 fingerprint、purpose、status 和生命周期事件，私钥仅保存在本机安全目录。Credential 可以轮换或单独撤销而不改变 Principal。
+- Git Remote 账号/SSH 只控制 clone、fetch、push。Git SSH Key 路径是可选本地 transport 设置，优先使用显式值或 `SSH_KEY_PATH`，否则使用 `~/.ssh/id_rsa`，并支持后续修改或清除；它不参与 Principal 或 event Credential 的生成。
+- Observer 是不进入 Group Membership 的 Icarus 业务只读订阅，可以 fetch、验签、浏览 verified virtual file tree 和审计。即使拥有 Git push 权限，也只能提交 schema 严格限制的新成员申请、身份恢复申请及申请取消；Work Item、Workflow、Discussion、Permission 等业务事件会在 replay 时被拒绝并 quarantine，界面继续保留最后 verified head。
+- 身份恢复通过同一 Git Remote 异步传输。新 Client 使用新 Credential 提交 pending 请求；旧 Client 或 Owner 核对请求 hash 派生的相同验证码后批准或拒绝。Owner recovery 默认撤销目标 Principal 的旧 event Credentials；Owner 全部在线 Credential 丢失时只能使用预先生成并显式备份的 offline Group recovery Credential，否则 fail closed。
 - 每个 Principal 拥有可发布进度、文件、Prompt 和 Action 的 Workspace；Group 还提供 Shared Workspace、Work Item、Discussion 和直接权限。
 - Workflow Definition/Instance 均为可选且可多实例。State 可直接指派 Principal，也可在启动 Instance 时把 participant slot 解析为 Principal；Group 不再包含 Role、Role Claim 或单一 active Turn。
 - Outcome-first 编辑器生成 v3 JSON Machine 和独立 JSON layout；Outcome 只负责路由，移动节点不改变 Machine hash。运行视图显示当前 State、历史路径、合法 Outcome 和 deadline。
@@ -104,7 +106,7 @@ Collaboration Project Space 是与本地 Dynamic Workflow Runtime 分离的跨�
 - Work Item progress 与 Turn completion 可先暂存原始业务文件，再在同一个签名事件和 Git commit 中物化 Artifact 原文件与 `metadata.json` sidecar；命令冲突不会自动重传已暂存文件。
 - Completion 只提交合法 Outcome，Reducer 根据固定 Workflow snapshot 路由；Handoff 和 Group 内容始终是不可信上下文，不能覆盖系统指令、权限或 FSM。
 - start/execution deadline 固定在 Turn snapshot 中，超时只产生幂等通知和审计 observation，不依据本地时钟自动推进状态。
-- 协议当前唯一版本为 v3，本地 SQLite 唯一版本为 v5；旧版本、旧备份和旧事件均 fail closed，不提供迁移、双写或兼容回放。
+- 协议当前唯一版本为 v3，本地 SQLite 唯一版本为 v7；旧版本、旧备份和旧事件均 fail closed，不提供迁移、双写或兼容回放。
 
 功能入口为 Web/Electron 工作台的“群组”导航或 `/groups`；当前协议和领域模型见 [`docs/collaboration-project-space-v3-plan.md`](docs/collaboration-project-space-v3-plan.md)。
 
@@ -158,7 +160,7 @@ Collaboration Project Space 是与本地 Dynamic Workflow Runtime 分离的跨�
 - **消息路由**：接收频道消息，按已注册 Agent、触发词和权限规则进入队列。
 - **工作流引擎**：读取 `container/workflow-definitions/*.json` 和卡片配置，驱动流程状态、委派、审批、中断恢复和产物索引。
 - **工作台同步**：把 workflow、delegation、interrupt、artifact、evaluation 等运行态同步为工作台任务视图。
-- **群组协作**：验证 Git SSH 签名链并归约 v3 Project Space Projection，调度 Principal-owned Workflow Turn，并管理本地 Binding、receipt、通知、staged Artifact 和联合备份/恢复。
+- **群组协作**：验证 Icarus Credential 签署的 Git control commit 与 Principal/Client/权限映射并归约 v3 Project Space Projection，调度 Principal-owned Workflow Turn，并管理本地 Credential、Binding、receipt、通知、staged Artifact 和联合备份/恢复。
 - **主动助手运行时**：运行 proactive scan、Agent Inbox 和动作日志。
 - **任务调度**：支持 cron、interval、once 类型定时任务，并复用容器执行链路。
 - **容器队列**：限制并发容器数，复用活跃会话，通过 IPC 推送后续消息。

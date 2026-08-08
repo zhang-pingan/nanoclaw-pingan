@@ -15,6 +15,11 @@ const hash = (value: string) => `sha256:${value.repeat(64)}`;
 
 function projection(): CollaborationProjectionV3 {
   return {
+    format: 'icarus.collaboration-projection/3',
+    protocolVersion: 3,
+    groupId: 'group_test',
+    aggregateHeads: {},
+    invites: {},
     workItems: {
       work_1: { work_item_id: 'work_1', title: 'Ship v3', revision: 2 },
     },
@@ -26,8 +31,44 @@ function projection(): CollaborationProjectionV3 {
     stateExecutions: {},
     turns: {},
     activity: [],
-    members: {},
-    clients: {},
+    members: {
+      principal_alice: {
+        principal_id: 'principal_alice',
+        display_name: 'Alice',
+        status: 'active',
+      },
+    },
+    clients: {
+      principal_alice: {
+        client_alice: {
+          client_id: 'client_alice',
+          display_name: 'Alice MacBook',
+          status: 'active',
+        },
+      },
+    },
+    credentials: {
+      principal_alice: {
+        credential_alice: {
+          credential_id: 'credential_alice',
+          principal_id: 'principal_alice',
+          client_id: 'client_alice',
+          public_key: 'ssh-ed25519 AAAA-public-verification-material',
+          fingerprint: 'SHA256:publicFingerprint',
+          purpose: 'event_signing',
+          status: 'active',
+        },
+      },
+    },
+    recoveryRequests: {
+      recovery_phone: {
+        request_id: 'recovery_phone',
+        request_hash: `sha256:${'1'.repeat(64)}`,
+        type: 'identity_recovery',
+        target_principal_id: 'principal_alice',
+        status: 'pending',
+      },
+    },
     executors: {},
     permissionGrants: {},
   } as unknown as CollaborationProjectionV3;
@@ -47,10 +88,15 @@ function group(
     remoteUrl:
       'https://private-token@example.test/group.git?access_token=query-secret&ref=main',
     repositoryPath: '/private/collaboration/repository.git',
-    signingKeyPath:
-      subscriptionMode === 'member' ? '/private/keys/id_ed25519' : null,
-    signingPublicKey: null,
-    signingKeyRef: null,
+    gitSshKeyPath: '/private/keys/id_ed25519',
+    localCredentialId:
+      subscriptionMode === 'member' ? 'credential_alice' : null,
+    eventPrivateKeyPath:
+      subscriptionMode === 'member' ? '/private/keys/event' : null,
+    eventPublicKey: null,
+    eventFingerprint: null,
+    recoveryCredentialId: null,
+    recoveryPrivateKeyPath: null,
     protocolStatus: 'verified',
     protocolError:
       'fetch https://private-token@example.test/group.git?access_token=query-secret failed',
@@ -182,13 +228,30 @@ describe('Collaboration project-space v3 Web API', () => {
       const body = (await response.json()) as Record<string, unknown>;
       const serialized = JSON.stringify(body);
       expect(response.status).toBe(200);
-      expect(serialized).not.toContain('/private/');
+      expect(
+        (
+          body.group as {
+            gitRemoteAccess: { sshKeyPath: string };
+          }
+        ).gitRemoteAccess.sshKeyPath,
+      ).toBe('/private/keys/id_ed25519');
+      expect(serialized).not.toContain('/private/collaboration');
       expect(serialized).not.toContain('private-token');
       expect(serialized).not.toContain('query-secret');
       expect(serialized).not.toContain('provider-secret');
       expect(serialized).not.toContain('must-not-leak');
       expect(serialized).toContain('redacted');
       expect(body).not.toHaveProperty('repositoryPath');
+      expect(body).toMatchObject({
+        group: {
+          icarusIdentity: {
+            principalId: 'principal_alice',
+            clientId: 'client_alice',
+            credentialId: 'credential_alice',
+            recoveryCredentialAvailable: false,
+          },
+        },
+      });
     });
   });
 
@@ -197,8 +260,13 @@ describe('Collaboration project-space v3 Web API', () => {
       group(),
     );
     const joinGroup = vi.fn(async (_input: Record<string, unknown>) => group());
+    const observeGroup = vi.fn(async (_input: Record<string, unknown>) =>
+      group('observer'),
+    );
     await withApiServer(
-      new CollaborationWebApi(runtime({ groups: { createGroup, joinGroup } })),
+      new CollaborationWebApi(
+        runtime({ groups: { createGroup, joinGroup, observeGroup } }),
+      ),
       async (baseUrl) => {
         const headers = { 'content-type': 'application/json' };
         const created = await fetch(`${baseUrl}/api/collaboration/groups`, {
@@ -233,6 +301,23 @@ describe('Collaboration project-space v3 Web API', () => {
         expect(joinGroup.mock.calls[0]?.[0]).not.toHaveProperty(
           'signingKeyPath',
         );
+
+        const observed = await fetch(
+          `${baseUrl}/api/collaboration/subscriptions`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              remoteUrl: '/tmp/observed.git',
+              gitSshKeyPath: '~/keys/git-remote',
+            }),
+          },
+        );
+        expect(observed.status).toBe(201);
+        expect(observeGroup).toHaveBeenCalledWith({
+          remoteUrl: '/tmp/observed.git',
+          gitSshKeyPath: '~/keys/git-remote',
+        });
       },
     );
   });
@@ -269,7 +354,7 @@ describe('Collaboration project-space v3 Web API', () => {
     );
   });
 
-  it('routes targeted Invite issuance, revocation, and join references', async () => {
+  it('routes unbound Invite issuance, revocation, and join references', async () => {
     const joinGroup = vi.fn(async () => group());
     const issueInvite = vi.fn(async () => group());
     const revokeInvite = vi.fn(async () => group());
@@ -285,7 +370,6 @@ describe('Collaboration project-space v3 Web API', () => {
             method: 'POST',
             headers,
             body: JSON.stringify({
-              principalId: 'principal_bob',
               expiresAt: '2026-08-08T12:00:00.000Z',
               expectedRevision: 0,
             }),
@@ -295,7 +379,6 @@ describe('Collaboration project-space v3 Web API', () => {
         expect(issueInvite).toHaveBeenCalledWith(
           expect.objectContaining({
             groupId: 'group_test',
-            principalId: 'principal_bob',
           }),
         );
 
@@ -305,7 +388,7 @@ describe('Collaboration project-space v3 Web API', () => {
             method: 'POST',
             headers,
             body: JSON.stringify({
-              signingKeyPath: '/tmp/bob',
+              gitSshKeyPath: '/tmp/bob',
               displayName: 'Bob',
               clientDisplayName: 'Bob MacBook',
               inviteId: 'invite_bob',
@@ -332,6 +415,215 @@ describe('Collaboration project-space v3 Web API', () => {
           expectedRevision: 1,
           reason: 'Expired',
         });
+      },
+    );
+  });
+
+  it('routes recovery, Credential, Client, and local Git transport administration', async () => {
+    const requestIdentityRecovery = vi.fn(async () => ({
+      group: group('observer'),
+      requestId: 'recovery_phone',
+      requestHash: `sha256:${'1'.repeat(64)}`,
+      verificationCode: '123456',
+    }));
+    const decideRecovery = vi.fn(async () => group());
+    const cancelRecovery = vi.fn(async () => group('observer'));
+    const rotateCredential = vi.fn(async () => group());
+    const revokeCredential = vi.fn(async () => group());
+    const revokeClient = vi.fn(async () => group());
+    const updateGitSshKeyPath = vi.fn(() => '/default/id_rsa');
+    const exportGroupRecoveryCredential = vi.fn(
+      async () => '/backup/recovery.key',
+    );
+    const importGroupRecoveryCredential = vi.fn(async () => undefined);
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({
+          groups: {
+            requestIdentityRecovery,
+            decideRecovery,
+            cancelRecovery,
+            rotateCredential,
+            revokeCredential,
+            revokeClient,
+            updateGitSshKeyPath,
+            exportGroupRecoveryCredential,
+            importGroupRecoveryCredential,
+          },
+        }),
+      ),
+      async (baseUrl) => {
+        const members = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/members`,
+        );
+        expect(members.status).toBe(200);
+        expect(await members.json()).toMatchObject({
+          credentials: {
+            principal_alice: {
+              credential_alice: {
+                public_key: 'ssh-ed25519 AAAA-public-verification-material',
+              },
+            },
+          },
+          recoveryRequests: {
+            recovery_phone: {
+              verification_code: expect.stringMatching(/^\d{6}$/u),
+            },
+          },
+        });
+
+        const request = async (
+          route: string,
+          body: Record<string, unknown>,
+          method = 'POST',
+        ) =>
+          fetch(`${baseUrl}/api/collaboration${route}`, {
+            method,
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+        expect(
+          (
+            await request('/groups/group_test/recovery-requests', {
+              targetPrincipalId: 'principal_alice',
+              type: 'owner_recovery',
+              clientDisplayName: 'Alice replacement Mac',
+              reason: 'All existing devices are unavailable',
+              expiresInMs: 86_400_000,
+            })
+          ).status,
+        ).toBe(201);
+        expect(requestIdentityRecovery).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          targetPrincipalId: 'principal_alice',
+          type: 'owner_recovery',
+          clientDisplayName: 'Alice replacement Mac',
+          reason: 'All existing devices are unavailable',
+          expiresInMs: 86_400_000,
+        });
+
+        expect(
+          (
+            await request(
+              '/groups/group_test/recovery-requests/recovery_phone/approve',
+              {
+                expectedRevision: 1,
+                reason: 'Offline identity verification complete',
+                useOfflineOwnerCredential: true,
+                revokeCredentialIds: ['credential_lost'],
+              },
+            )
+          ).status,
+        ).toBe(200);
+        expect(decideRecovery).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          requestId: 'recovery_phone',
+          decision: 'approve',
+          expectedRevision: 1,
+          reason: 'Offline identity verification complete',
+          useOfflineOwnerCredential: true,
+          revokeCredentialIds: ['credential_lost'],
+        });
+
+        expect(
+          (
+            await request(
+              '/groups/group_test/recovery-requests/recovery_phone/reject',
+              { expectedRevision: 1, reason: 'Identity could not be verified' },
+            )
+          ).status,
+        ).toBe(200);
+        expect(decideRecovery).toHaveBeenLastCalledWith(
+          expect.objectContaining({ decision: 'reject' }),
+        );
+        expect(
+          (
+            await request(
+              '/groups/group_test/recovery-requests/recovery_phone/cancel',
+              { expectedRevision: 1, reason: 'Replacement device recovered' },
+            )
+          ).status,
+        ).toBe(200);
+        expect(cancelRecovery).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          requestId: 'recovery_phone',
+          expectedRevision: 1,
+          reason: 'Replacement device recovered',
+        });
+
+        expect(
+          (
+            await request('/groups/group_test/credentials/rotate', {
+              expectedRevision: 4,
+              revokeCurrent: true,
+            })
+          ).status,
+        ).toBe(201);
+        expect(rotateCredential).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          expectedRevision: 4,
+          revokeCurrent: true,
+        });
+        expect(
+          (
+            await request(
+              '/groups/group_test/credentials/credential_lost/revoke',
+              { expectedRevision: 5, reason: 'Device lost' },
+            )
+          ).status,
+        ).toBe(200);
+        expect(revokeCredential).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          credentialId: 'credential_lost',
+          expectedRevision: 5,
+          reason: 'Device lost',
+        });
+        expect(
+          (
+            await request('/groups/group_test/clients/client_lost/revoke', {
+              expectedRevision: 6,
+              reason: 'Device lost',
+            })
+          ).status,
+        ).toBe(200);
+        expect(revokeClient).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          clientId: 'client_lost',
+          expectedRevision: 6,
+          reason: 'Device lost',
+        });
+
+        const setting = await request(
+          '/groups/group_test/settings/git-remote',
+          { sshKeyPath: null },
+          'PUT',
+        );
+        expect(setting.status).toBe(200);
+        expect(await setting.json()).toEqual({ sshKeyPath: '/default/id_rsa' });
+        expect(updateGitSshKeyPath).toHaveBeenCalledWith('group_test', null);
+
+        expect(
+          (
+            await request('/groups/group_test/recovery-credential/export', {
+              path: '/backup/recovery.key',
+            })
+          ).status,
+        ).toBe(201);
+        expect(exportGroupRecoveryCredential).toHaveBeenCalledWith(
+          'group_test',
+          '/backup/recovery.key',
+        );
+        expect(
+          (
+            await request('/groups/group_test/recovery-credential/import', {
+              path: '/backup/recovery.key',
+            })
+          ).status,
+        ).toBe(200);
+        expect(importGroupRecoveryCredential).toHaveBeenCalledWith(
+          'group_test',
+          '/backup/recovery.key',
+        );
       },
     );
   });
@@ -609,7 +901,6 @@ describe('Collaboration project-space v3 Web API', () => {
     const groups = Object.fromEntries(
       [
         'reopenGroup',
-        'registerCurrentClient',
         'answerWorkItemAssignment',
         'archiveWorkItem',
         'setDiscussionResolved',
@@ -626,14 +917,6 @@ describe('Collaboration project-space v3 Web API', () => {
           [
             '/groups/group_test/reopen',
             { expectedRevision: 2, reason: 'resume' },
-          ],
-          [
-            '/groups/group_test/clients',
-            {
-              expectedRevision: 1,
-              displayName: 'Alice MacBook',
-              capabilities: ['desktop_notifications'],
-            },
           ],
           [
             '/groups/group_test/work-items/work_1/assignment/acknowledge',
@@ -685,12 +968,6 @@ describe('Collaboration project-space v3 Web API', () => {
           });
           expect(response.status, route).toBeLessThan(300);
         }
-        expect(groups.registerCurrentClient).toHaveBeenCalledWith({
-          groupId: 'group_test',
-          expectedRevision: 1,
-          displayName: 'Alice MacBook',
-          capabilities: ['desktop_notifications'],
-        });
         expect(groups.answerWorkItemAssignment).toHaveBeenNthCalledWith(
           2,
           expect.objectContaining({ accepted: false, reason: 'capacity' }),

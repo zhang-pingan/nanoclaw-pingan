@@ -11,6 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 
 import Database from 'better-sqlite3';
 import { z } from 'zod';
@@ -33,9 +34,9 @@ import type {
   CollaborationAggregateHeadV3,
 } from './protocol/v3-reducer.js';
 
-export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 6;
+export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 7;
 export const COLLABORATION_PROJECT_SPACE_STORE_FORMAT =
-  'icarus.collaboration-local-store/6';
+  'icarus.collaboration-local-store/7';
 
 export function deterministicCollaborationPollDelay(
   groupId: string,
@@ -70,7 +71,7 @@ export class CollaborationProjectSpaceStoreError extends Error {
   }
 }
 
-const SCHEMA_V6 = `
+const SCHEMA_V7 = `
 CREATE TABLE collaboration_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -96,9 +97,13 @@ CREATE TABLE collaboration_groups (
   local_principal_id TEXT,
   local_client_id TEXT,
   repository_path TEXT NOT NULL,
-  signing_key_path TEXT,
-  signing_public_key TEXT,
-  signing_key_ref TEXT,
+  git_ssh_key_path TEXT NOT NULL,
+  local_credential_id TEXT,
+  event_private_key_path TEXT,
+  event_public_key TEXT,
+  event_fingerprint TEXT,
+  recovery_credential_id TEXT,
+  recovery_private_key_path TEXT,
   protocol_status TEXT NOT NULL,
   protocol_error TEXT,
   projection_json TEXT,
@@ -120,6 +125,28 @@ CREATE TABLE collaboration_clients (
   status TEXT NOT NULL,
   client_json TEXT NOT NULL,
   PRIMARY KEY (group_id, principal_id, client_id)
+);
+CREATE TABLE collaboration_credentials (
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
+  principal_id TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  credential_id TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  status TEXT NOT NULL,
+  fingerprint TEXT NOT NULL,
+  credential_json TEXT NOT NULL,
+  PRIMARY KEY (group_id, credential_id)
+);
+CREATE TABLE collaboration_recovery_requests (
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  target_principal_id TEXT NOT NULL,
+  request_type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  request_json TEXT NOT NULL,
+  PRIMARY KEY (group_id, request_id)
 );
 CREATE TABLE collaboration_permission_grants (
   group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
@@ -442,10 +469,26 @@ const REQUIRED_TABLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
     'name',
     'local_principal_id',
     'local_client_id',
+    'git_ssh_key_path',
+    'local_credential_id',
     'projection_json',
   ],
   collaboration_principals: ['group_id', 'principal_id', 'member_json'],
   collaboration_clients: ['group_id', 'principal_id', 'client_id'],
+  collaboration_credentials: [
+    'group_id',
+    'principal_id',
+    'client_id',
+    'credential_id',
+    'fingerprint',
+  ],
+  collaboration_recovery_requests: [
+    'group_id',
+    'request_id',
+    'target_principal_id',
+    'status',
+    'request_hash',
+  ],
   collaboration_permission_grants: ['group_id', 'principal_id', 'grant_json'],
   collaboration_aggregate_checkpoints: [
     'group_id',
@@ -555,7 +598,7 @@ function initialize(database: Database.Database): void {
     );
   if (version === 0)
     database.transaction(() => {
-      database.exec(SCHEMA_V6);
+      database.exec(SCHEMA_V7);
       database
         .prepare('INSERT INTO collaboration_meta (key, value) VALUES (?, ?)')
         .run('format', COLLABORATION_PROJECT_SPACE_STORE_FORMAT);
@@ -607,9 +650,13 @@ export interface CollaborationProjectSpaceGroupRecord {
   readonly localClientId: string | null;
   readonly remoteUrl: string;
   readonly repositoryPath: string;
-  readonly signingKeyPath: string | null;
-  readonly signingPublicKey: string | null;
-  readonly signingKeyRef: string | null;
+  readonly gitSshKeyPath: string;
+  readonly localCredentialId: string | null;
+  readonly eventPrivateKeyPath: string | null;
+  readonly eventPublicKey: string | null;
+  readonly eventFingerprint: string | null;
+  readonly recoveryCredentialId: string | null;
+  readonly recoveryPrivateKeyPath: string | null;
   readonly protocolStatus: string;
   readonly protocolError: string | null;
   readonly projection: CollaborationProjectionV3 | null;
@@ -756,12 +803,25 @@ function groupFromRow(
       row.local_client_id == null ? null : String(row.local_client_id),
     remoteUrl: String(row.remote_url),
     repositoryPath: String(row.repository_path),
-    signingKeyPath:
-      row.signing_key_path == null ? null : String(row.signing_key_path),
-    signingPublicKey:
-      row.signing_public_key == null ? null : String(row.signing_public_key),
-    signingKeyRef:
-      row.signing_key_ref == null ? null : String(row.signing_key_ref),
+    gitSshKeyPath: String(row.git_ssh_key_path),
+    localCredentialId:
+      row.local_credential_id == null ? null : String(row.local_credential_id),
+    eventPrivateKeyPath:
+      row.event_private_key_path == null
+        ? null
+        : String(row.event_private_key_path),
+    eventPublicKey:
+      row.event_public_key == null ? null : String(row.event_public_key),
+    eventFingerprint:
+      row.event_fingerprint == null ? null : String(row.event_fingerprint),
+    recoveryCredentialId:
+      row.recovery_credential_id == null
+        ? null
+        : String(row.recovery_credential_id),
+    recoveryPrivateKeyPath:
+      row.recovery_private_key_path == null
+        ? null
+        : String(row.recovery_private_key_path),
     protocolStatus: String(row.protocol_status),
     protocolError:
       row.protocol_error == null ? null : String(row.protocol_error),
@@ -816,26 +876,36 @@ export class CollaborationProjectSpaceStore {
     readonly lifecycle: string;
     readonly ownerPrincipalId: string;
     readonly repositoryPath: string;
+    readonly gitSshKeyPath?: string;
     readonly localPrincipalId?: string | null;
     readonly localClientId?: string | null;
-    readonly signingKeyPath?: string | null;
-    readonly signingPublicKey?: string | null;
-    readonly signingKeyRef?: string | null;
+    readonly localCredentialId?: string | null;
+    readonly eventPrivateKeyPath?: string | null;
+    readonly eventPublicKey?: string | null;
+    readonly eventFingerprint?: string | null;
+    readonly recoveryCredentialId?: string | null;
+    readonly recoveryPrivateKeyPath?: string | null;
     readonly nowMs?: number;
   }): void {
     this.assertOpen();
     const subscription = observerSubscriptionSchema.parse(input.subscription);
-    const isMember = subscription.subscription_mode === 'member';
-    if (
-      isMember !== Boolean(input.localPrincipalId && input.localClientId) ||
-      isMember !==
-        Boolean(
-          input.signingKeyPath && input.signingPublicKey && input.signingKeyRef,
-        )
-    )
+    const identityParts = [
+      input.localPrincipalId,
+      input.localClientId,
+      input.localCredentialId,
+      input.eventPrivateKeyPath,
+      input.eventPublicKey,
+      input.eventFingerprint,
+    ];
+    if (identityParts.some(Boolean) && !identityParts.every(Boolean))
       throw new Error(
-        'Member subscription requires local Principal, Client, and signing identity; Observer requires none',
+        'Local Collaboration identity must include Principal, Client, and complete event Credential',
       );
+    if (
+      Boolean(input.recoveryCredentialId) !==
+      Boolean(input.recoveryPrivateKeyPath)
+    )
+      throw new Error('Group recovery Credential id and key path are atomic');
     const nowMs = input.nowMs ?? Date.now();
     this.database.transaction(() => {
       this.database
@@ -861,10 +931,12 @@ export class CollaborationProjectSpaceStore {
           `INSERT INTO collaboration_groups (
              group_id, name, lifecycle, owner_principal_id,
              local_principal_id, local_client_id, repository_path,
-             signing_key_path, signing_public_key, signing_key_ref,
+             git_ssh_key_path, local_credential_id, event_private_key_path,
+             event_public_key, event_fingerprint, recovery_credential_id,
+             recovery_private_key_path,
              protocol_status, protocol_error, projection_json,
              created_at_ms, updated_at_ms
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNC_PENDING', NULL, NULL, ?, ?)`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNC_PENDING', NULL, NULL, ?, ?)`,
         )
         .run(
           subscription.group_id,
@@ -874,22 +946,30 @@ export class CollaborationProjectSpaceStore {
           input.localPrincipalId ?? null,
           input.localClientId ?? null,
           input.repositoryPath,
-          input.signingKeyPath ?? null,
-          input.signingPublicKey ?? null,
-          input.signingKeyRef ?? null,
+          input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
+          input.localCredentialId ?? null,
+          input.eventPrivateKeyPath ?? null,
+          input.eventPublicKey ?? null,
+          input.eventFingerprint ?? null,
+          input.recoveryCredentialId ?? null,
+          input.recoveryPrivateKeyPath ?? null,
           nowMs,
           nowMs,
         );
     })();
   }
 
-  updateSubscriptionMode(input: {
+  updateLocalIdentity(input: {
     readonly groupId: string;
+    readonly subscriptionMode: 'observer' | 'member';
     readonly localPrincipalId: string;
     readonly localClientId: string;
-    readonly signingKeyPath: string;
-    readonly signingPublicKey: string;
-    readonly signingKeyRef: string;
+    readonly localCredentialId: string;
+    readonly eventPrivateKeyPath: string;
+    readonly eventPublicKey: string;
+    readonly eventFingerprint: string;
+    readonly recoveryCredentialId?: string | null;
+    readonly recoveryPrivateKeyPath?: string | null;
   }): void {
     this.assertOpen();
     this.database.transaction(() => {
@@ -898,31 +978,50 @@ export class CollaborationProjectSpaceStore {
           'SELECT subscription_mode FROM collaboration_subscriptions WHERE group_id = ?',
         )
         .get(input.groupId) as { subscription_mode?: unknown } | undefined;
-      if (subscription?.subscription_mode !== 'observer')
-        throw new Error('Only an Observer subscription can upgrade to Member');
+      if (!subscription)
+        throw new Error('Collaboration subscription does not exist');
       this.database
         .prepare(
-          `UPDATE collaboration_subscriptions SET subscription_mode = 'member'
+          `UPDATE collaboration_subscriptions SET subscription_mode = ?
             WHERE group_id = ?`,
         )
-        .run(input.groupId);
+        .run(input.subscriptionMode, input.groupId);
       this.database
         .prepare(
           `UPDATE collaboration_groups
-              SET local_principal_id = ?, local_client_id = ?, signing_key_path = ?,
-                  signing_public_key = ?, signing_key_ref = ?, updated_at_ms = ?
+              SET local_principal_id = ?, local_client_id = ?,
+                  local_credential_id = ?, event_private_key_path = ?,
+                  event_public_key = ?, event_fingerprint = ?,
+                  recovery_credential_id = COALESCE(?, recovery_credential_id),
+                  recovery_private_key_path = COALESCE(?, recovery_private_key_path),
+                  updated_at_ms = ?
             WHERE group_id = ?`,
         )
         .run(
           input.localPrincipalId,
           input.localClientId,
-          input.signingKeyPath,
-          input.signingPublicKey,
-          input.signingKeyRef,
+          input.localCredentialId,
+          input.eventPrivateKeyPath,
+          input.eventPublicKey,
+          input.eventFingerprint,
+          input.recoveryCredentialId ?? null,
+          input.recoveryPrivateKeyPath ?? null,
           Date.now(),
           input.groupId,
         );
     })();
+  }
+
+  updateGitSshKeyPath(groupId: string, gitSshKeyPath: string): void {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_groups SET git_ssh_key_path = ?, updated_at_ms = ?
+          WHERE group_id = ?`,
+      )
+      .run(gitSshKeyPath, Date.now(), groupId);
+    if (result.changes !== 1)
+      throw new Error(`Collaboration Group not found: ${groupId}`);
   }
 
   deleteSubscription(groupId: string): boolean {
@@ -1105,6 +1204,8 @@ export class CollaborationProjectSpaceStore {
     const tables = [
       'collaboration_principals',
       'collaboration_clients',
+      'collaboration_credentials',
+      'collaboration_recovery_requests',
       'collaboration_permission_grants',
       'collaboration_file_index',
       'collaboration_progress_updates',
@@ -1150,6 +1251,41 @@ export class CollaborationProjectSpaceStore {
           client.status,
           JSON.stringify(client),
         );
+    const credentialStatement = this.database.prepare(
+      `INSERT INTO collaboration_credentials
+       (group_id, principal_id, client_id, credential_id, purpose, status,
+        fingerprint, credential_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    for (const [principalId, credentials] of Object.entries(
+      projection.credentials,
+    ))
+      for (const credential of Object.values(credentials))
+        credentialStatement.run(
+          groupId,
+          principalId,
+          credential.client_id,
+          credential.credential_id,
+          credential.purpose,
+          credential.status,
+          credential.fingerprint,
+          JSON.stringify(credential),
+        );
+    const recoveryStatement = this.database.prepare(
+      `INSERT INTO collaboration_recovery_requests
+       (group_id, request_id, target_principal_id, request_type, status,
+        expires_at, request_hash, request_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    for (const request of Object.values(projection.recoveryRequests))
+      recoveryStatement.run(
+        groupId,
+        request.request_id,
+        request.target_principal_id,
+        request.type,
+        request.status,
+        request.expires_at,
+        request.request_hash,
+        JSON.stringify(request),
+      );
     const grantStatement = this.database.prepare(
       `INSERT INTO collaboration_permission_grants
        (group_id, principal_id, revision, grant_json) VALUES (?, ?, ?, ?)`,

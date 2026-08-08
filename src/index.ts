@@ -2904,7 +2904,7 @@ async function main(): Promise<void> {
 
   const collaborationRuntime = new CollaborationRuntime({
     storeDir: STORE_DIR,
-    defaultSigningKeyPath: SSH_KEY_PATH ?? undefined,
+    defaultGitSshKeyPath: SSH_KEY_PATH ?? undefined,
     runOnceService: internalRunOnceService,
     workflowHost: workflowRuntimeStore
       ? new WorkflowExecutionHostService(workflowRuntimeStore)
