@@ -8,6 +8,7 @@ import {
   artifactMetadataV3Schema,
   clientDefinitionSchema,
   collaborationActionResultV3Schema,
+  credentialDefinitionSchema,
   collaborationEventV3Schema,
   collaborationIdentifierSchema,
   collaborationSha256Schema,
@@ -23,6 +24,7 @@ import {
   memberDefinitionV3Schema,
   permissionGrantSchema,
   progressUpdateSchema,
+  recoveryRequestSchema,
   stateExecutionSchema,
   workflowDefinitionSchema,
   workflowInstanceSchema,
@@ -34,6 +36,7 @@ import {
   type ArtifactMetadataV3,
   type CollaborationActionResultV3,
   type ClientDefinition,
+  type CredentialDefinition,
   type CollaborationAggregateType,
   type CollaborationEventTypeV3,
   type CollaborationEventV3,
@@ -49,6 +52,7 @@ import {
   type MemberDefinitionV3,
   type PermissionGrant,
   type ProgressUpdate,
+  type RecoveryRequest,
   type StateExecution,
   type WorkflowDefinition,
   type WorkflowInstance,
@@ -65,20 +69,64 @@ const reasonPayloadSchema = z
   .object({ reason: z.string().min(1).max(4000) })
   .strict();
 const memberPayloadSchema = z
-  .object({ member: memberDefinitionV3Schema })
-  .strict();
+  .object({
+    member: memberDefinitionV3Schema,
+    client: clientDefinitionSchema.optional(),
+    credential: credentialDefinitionSchema.optional(),
+  })
+  .strict()
+  .superRefine((payload, context) => {
+    if ((payload.client === undefined) !== (payload.credential === undefined))
+      context.addIssue({
+        code: 'custom',
+        message: 'Member registration Client and Credential are atomic',
+      });
+  });
 const membershipRequestPayloadSchema = z
   .object({
     member: memberDefinitionV3Schema,
+    client: clientDefinitionSchema,
+    credential: credentialDefinitionSchema,
     invite_id: collaborationIdentifierSchema.nullable(),
   })
   .strict();
 const invitePayloadSchema = z
   .object({ invite: inviteDefinitionV3Schema })
   .strict();
-const clientPayloadSchema = z
-  .object({ client: clientDefinitionSchema })
+const credentialRotationPayloadSchema = z
+  .object({
+    credential: credentialDefinitionSchema,
+    revoke_credential_id: credentialDefinitionSchema.shape.credential_id
+      .nullable()
+      .default(null),
+  })
   .strict();
+const credentialIdPayloadSchema = z
+  .object({
+    credential_id: credentialDefinitionSchema.shape.credential_id,
+    reason: z.string().min(1).max(4000),
+  })
+  .strict();
+const recoveryRequestPayloadSchema = z
+  .object({ request: recoveryRequestSchema })
+  .strict();
+const recoveryDecisionPayloadSchema = z
+  .object({
+    request_hash: collaborationSha256Schema,
+    reason: z.string().min(1).max(4000),
+    revoke_previous_credentials: z.boolean().default(false),
+    revoke_credential_ids: z
+      .array(credentialDefinitionSchema.shape.credential_id)
+      .max(1000)
+      .default([]),
+  })
+  .strict()
+  .refine(
+    (decision) =>
+      new Set(decision.revoke_credential_ids).size ===
+      decision.revoke_credential_ids.length,
+    'Credential revocation scope must be unique',
+  );
 const executorPayloadSchema = z
   .object({ executor: executorDescriptorSchema })
   .strict();
@@ -97,6 +145,8 @@ const genesisPayloadSchema = z
     group: groupDefinitionV3Schema,
     member: memberDefinitionV3Schema,
     client: clientDefinitionSchema,
+    credential: credentialDefinitionSchema,
+    recovery_credential: credentialDefinitionSchema,
     owner_permissions: permissionGrantSchema,
   })
   .strict();
@@ -264,8 +314,15 @@ const payloadSchemas: Record<CollaborationEventTypeV3, z.ZodType> = {
   member_suspended: principalPayloadSchema,
   member_reactivated: principalPayloadSchema,
   member_removed: principalPayloadSchema,
-  client_registered: clientPayloadSchema,
   client_revoked: clientIdPayloadSchema,
+  credential_rotated: credentialRotationPayloadSchema,
+  credential_revoked: credentialIdPayloadSchema,
+  identity_recovery_requested: recoveryRequestPayloadSchema,
+  owner_recovery_requested: recoveryRequestPayloadSchema,
+  recovery_approved: recoveryDecisionPayloadSchema,
+  recovery_rejected: recoveryDecisionPayloadSchema,
+  recovery_expired: recoveryDecisionPayloadSchema,
+  recovery_cancelled: recoveryDecisionPayloadSchema,
   executor_registered: executorPayloadSchema,
   executor_revoked: executorIdPayloadSchema,
   permission_granted: grantPayloadSchema,
@@ -345,6 +402,8 @@ export interface CollaborationProjectionV3 {
   invites: Record<string, InviteDefinitionV3>;
   members: Record<string, MemberDefinitionV3>;
   clients: Record<string, Record<string, ClientDefinition>>;
+  credentials: Record<string, Record<string, CredentialDefinition>>;
+  recoveryRequests: Record<string, RecoveryRequest>;
   executors: Record<string, Record<string, ExecutorDescriptor>>;
   permissionGrants: Record<string, PermissionGrant>;
   progressUpdates: Record<string, ProgressUpdate>;
@@ -408,6 +467,42 @@ export function collaborationCanonicalHashV3(value: unknown): string {
     .createHash('sha256')
     .update(canonicalJsonStringify(value), 'utf8')
     .digest('hex')}`;
+}
+
+export function collaborationRecoveryRequestHashV3(
+  request: Omit<
+    RecoveryRequest,
+    | 'request_hash'
+    | 'status'
+    | 'decided_at_event'
+    | 'decided_by_principal_id'
+    | 'decision_reason'
+    | 'approval_kind'
+    | 'revoked_credential_ids'
+  >,
+): string {
+  return collaborationCanonicalHashV3({
+    format: request.format,
+    request_id: request.request_id,
+    type: request.type,
+    target_principal_id: request.target_principal_id,
+    requested_client: request.requested_client,
+    requested_credential: request.requested_credential,
+    reason: request.reason,
+    created_at: request.created_at,
+    expires_at: request.expires_at,
+    ...(request.extensions ? { extensions: request.extensions } : {}),
+  });
+}
+
+export function collaborationRecoveryVerificationCodeV3(
+  requestHash: string,
+): string {
+  const digest = crypto
+    .createHash('sha256')
+    .update(`icarus-recovery-code\0${requestHash}`, 'utf8')
+    .digest();
+  return String(digest.readUInt32BE(0) % 1_000_000).padStart(6, '0');
 }
 
 export function collaborationTurnCompletionHashV3(input: {
@@ -657,6 +752,27 @@ function assertMemberAndClient(
 ): void {
   if (!activeCollaborationMemberV3(projection, event.actor.principal_id))
     conflict('Event actor is not an active Group member');
+  const credential =
+    projection.credentials[event.actor.principal_id]?.[
+      event.actor.credential_id
+    ];
+  if (
+    !credential ||
+    credential.status !== 'active' ||
+    credential.principal_id !== event.actor.principal_id ||
+    credential.client_id !== event.actor.client_id
+  )
+    conflict(
+      'Event actor Credential is not active for its Principal and Client',
+    );
+  if (
+    credential.purpose === 'group_recovery' &&
+    event.event_type === 'recovery_approved' &&
+    event.actor.principal_id === projection.group.owner_principal_id
+  )
+    return;
+  if (credential.purpose !== 'event_signing')
+    conflict('This operation requires an event-signing Credential');
   const client =
     projection.clients[event.actor.principal_id]?.[event.actor.client_id];
   if (!client || client.status !== 'active')
@@ -901,6 +1017,13 @@ function reduceGenesis(event: CollaborationEventV3): CollaborationProjectionV3 {
     payload.group.group_id !== event.group_id ||
     payload.member.principal_id !== payload.group.owner_principal_id ||
     payload.client.principal_id !== payload.member.principal_id ||
+    payload.credential.principal_id !== payload.member.principal_id ||
+    payload.credential.client_id !== payload.client.client_id ||
+    payload.credential.credential_id !== event.actor.credential_id ||
+    payload.credential.purpose !== 'event_signing' ||
+    payload.recovery_credential.principal_id !== payload.member.principal_id ||
+    payload.recovery_credential.client_id !== payload.client.client_id ||
+    payload.recovery_credential.purpose !== 'group_recovery' ||
     payload.owner_permissions.principal_id !== payload.member.principal_id ||
     payload.member.status !== 'active' ||
     payload.member.joined_at_event !== event.event_id ||
@@ -931,6 +1054,14 @@ function reduceGenesis(event: CollaborationEventV3): CollaborationProjectionV3 {
         [payload.client.client_id]: payload.client,
       },
     },
+    credentials: {
+      [payload.member.principal_id]: {
+        [payload.credential.credential_id]: payload.credential,
+        [payload.recovery_credential.credential_id]:
+          payload.recovery_credential,
+      },
+    },
+    recoveryRequests: {},
     executors: {},
     permissionGrants: {
       [payload.member.principal_id]: payload.owner_permissions,
@@ -986,8 +1117,15 @@ export function reduceCollaborationEventV3(
     conflict('Archived Groups reject business writes');
   if (
     event.event_type !== 'membership_requested' &&
-    event.event_type !== 'member_registered' &&
-    event.event_type !== 'client_registered'
+    event.event_type !== 'identity_recovery_requested' &&
+    event.event_type !== 'owner_recovery_requested' &&
+    event.event_type !== 'recovery_cancelled' &&
+    !(
+      event.event_type === 'member_registered' &&
+      event.actor.principal_id ===
+        (event.payload.member as { principal_id?: unknown }).principal_id &&
+      !current.members[event.actor.principal_id]
+    )
   )
     assertMemberAndClient(current, event);
 
@@ -1091,8 +1229,12 @@ export function reduceCollaborationEventV3(
       break;
     }
     case 'membership_requested': {
-      const { member, invite_id: inviteId } =
-        membershipRequestPayloadSchema.parse(payload);
+      const {
+        member,
+        client,
+        credential,
+        invite_id: inviteId,
+      } = membershipRequestPayloadSchema.parse(payload);
       if (
         event.aggregate_type !== 'membership' ||
         event.aggregate_id !== member.principal_id
@@ -1100,6 +1242,15 @@ export function reduceCollaborationEventV3(
         conflict('Membership event Aggregate does not match Principal');
       if (
         member.principal_id !== event.actor.principal_id ||
+        client.principal_id !== member.principal_id ||
+        credential.principal_id !== member.principal_id ||
+        credential.client_id !== client.client_id ||
+        credential.credential_id !== event.actor.credential_id ||
+        event.actor.client_id !== client.client_id ||
+        credential.purpose !== 'event_signing' ||
+        credential.status !== 'active' ||
+        credential.created_at_event !== event.event_id ||
+        client.registered_at_event !== event.event_id ||
         member.status !== 'requested' ||
         member.joined_at_event !== null
       )
@@ -1114,8 +1265,6 @@ export function reduceCollaborationEventV3(
           conflict('Invite-only membership requires an Invite');
         const invite = next.invites[inviteId];
         if (!invite) conflict('Invite does not exist');
-        if (invite.principal_id !== member.principal_id)
-          conflict('Invite targets a different Principal');
         if (invite.status !== 'active')
           conflict('Invite is not active and cannot be reused');
         if (
@@ -1133,6 +1282,9 @@ export function reduceCollaborationEventV3(
       if (existingMember && existingMember.status !== 'rejected')
         conflict('Principal already has an existing Membership');
       next.members[member.principal_id] = member;
+      (next.clients[member.principal_id] ??= {})[client.client_id] = client;
+      (next.credentials[member.principal_id] ??= {})[credential.credential_id] =
+        credential;
       break;
     }
     case 'membership_rejected': {
@@ -1153,7 +1305,7 @@ export function reduceCollaborationEventV3(
       break;
     }
     case 'member_registered': {
-      const { member } = memberPayloadSchema.parse(payload);
+      const { member, client, credential } = memberPayloadSchema.parse(payload);
       if (
         event.aggregate_type !== 'membership' ||
         event.aggregate_id !== member.principal_id
@@ -1174,6 +1326,32 @@ export function reduceCollaborationEventV3(
         member.joined_at_event !== event.event_id
       )
         conflict('Registered member must be active and reference this event');
+      if (selfOpen) {
+        if (
+          !client ||
+          !credential ||
+          client.principal_id !== member.principal_id ||
+          credential.principal_id !== member.principal_id ||
+          credential.client_id !== client.client_id ||
+          event.actor.client_id !== client.client_id ||
+          event.actor.credential_id !== credential.credential_id ||
+          client.registered_at_event !== event.event_id ||
+          credential.created_at_event !== event.event_id ||
+          credential.purpose !== 'event_signing' ||
+          credential.status !== 'active'
+        )
+          conflict(
+            'Open membership registration must atomically bind its Client and Credential',
+          );
+        (next.clients[member.principal_id] ??= {})[client.client_id] = client;
+        (next.credentials[member.principal_id] ??= {})[
+          credential.credential_id
+        ] = credential;
+      } else if (client || credential) {
+        conflict(
+          'Approved Membership must use its requested Client and Credential',
+        );
+      }
       next.members[member.principal_id] = member;
       break;
     }
@@ -1202,29 +1380,234 @@ export function reduceCollaborationEventV3(
             : 'active';
       break;
     }
-    case 'client_registered': {
-      const { client } = clientPayloadSchema.parse(payload);
-      const member = next.members[client.principal_id];
-      if (
-        client.principal_id !== event.actor.principal_id ||
-        event.aggregate_type !== 'membership' ||
-        event.aggregate_id !== client.principal_id ||
-        !member ||
-        !['requested', 'active'].includes(member.status) ||
-        client.status !== 'active' ||
-        client.registered_at_event !== event.event_id
-      )
-        conflict(
-          'A requested or active Principal may only register its own active Client',
-        );
-      (next.clients[client.principal_id] ??= {})[client.client_id] = client;
-      break;
-    }
     case 'client_revoked': {
       const { client_id: clientId } = clientIdPayloadSchema.parse(payload);
       const client = next.clients[event.actor.principal_id]?.[clientId];
       if (!client) conflict('Client does not exist for actor Principal');
       client.status = 'revoked';
+      for (const credential of Object.values(
+        next.credentials[event.actor.principal_id] ?? {},
+      ))
+        if (
+          credential.client_id === clientId &&
+          credential.status === 'active' &&
+          credential.purpose === 'event_signing'
+        ) {
+          credential.status = 'revoked';
+          credential.revoked_at_event = event.event_id;
+        }
+      break;
+    }
+    case 'credential_rotated': {
+      const { credential, revoke_credential_id: revokeCredentialId } =
+        credentialRotationPayloadSchema.parse(payload);
+      if (
+        event.aggregate_type !== 'membership' ||
+        event.aggregate_id !== event.actor.principal_id ||
+        credential.principal_id !== event.actor.principal_id ||
+        credential.client_id !== event.actor.client_id ||
+        credential.purpose !== 'event_signing' ||
+        credential.status !== 'active' ||
+        credential.created_at_event !== event.event_id
+      )
+        conflict(
+          'Credential rotation may only add an event Credential for this Client',
+        );
+      const credentials = (next.credentials[event.actor.principal_id] ??= {});
+      if (credentials[credential.credential_id])
+        conflict('Credential already exists');
+      credentials[credential.credential_id] = credential;
+      if (revokeCredentialId) {
+        const previous = credentials[revokeCredentialId];
+        if (
+          !previous ||
+          previous.status !== 'active' ||
+          previous.purpose !== 'event_signing' ||
+          previous.client_id !== event.actor.client_id ||
+          previous.credential_id === credential.credential_id
+        )
+          conflict(
+            'Credential selected for rotation is not active on this Client',
+          );
+        previous.status = 'revoked';
+        previous.revoked_at_event = event.event_id;
+      }
+      break;
+    }
+    case 'credential_revoked': {
+      const { credential_id: credentialId } =
+        credentialIdPayloadSchema.parse(payload);
+      const credential =
+        next.credentials[event.actor.principal_id]?.[credentialId];
+      if (!credential || credential.status !== 'active')
+        conflict('Credential is not active for actor Principal');
+      if (credential.purpose === 'group_recovery')
+        conflict('Group recovery Credential cannot be revoked online');
+      const remaining = Object.values(
+        next.credentials[event.actor.principal_id] ?? {},
+      ).filter(
+        (candidate) =>
+          candidate.status === 'active' &&
+          candidate.purpose === 'event_signing' &&
+          candidate.credential_id !== credentialId,
+      );
+      if (remaining.length === 0)
+        conflict('Cannot revoke the Principal last event-signing Credential');
+      credential.status = 'revoked';
+      credential.revoked_at_event = event.event_id;
+      break;
+    }
+    case 'identity_recovery_requested':
+    case 'owner_recovery_requested': {
+      const { request } = recoveryRequestPayloadSchema.parse(payload);
+      if (
+        event.aggregate_type !== 'recovery' ||
+        event.aggregate_id !== request.request_id ||
+        request.target_principal_id !== event.actor.principal_id ||
+        request.requested_client.client_id !== event.actor.client_id ||
+        request.requested_credential.credential_id !==
+          event.actor.credential_id ||
+        request.created_at !== event.occurred_at ||
+        request.status !== 'pending' ||
+        request.type !==
+          (event.event_type === 'identity_recovery_requested'
+            ? 'identity_recovery'
+            : 'owner_recovery')
+      )
+        conflict(
+          'Recovery request identity, type, Aggregate, and actor must agree',
+        );
+      const target = next.members[request.target_principal_id];
+      if (!target || target.status !== 'active')
+        conflict('Recovery target must be an active Principal');
+      const expectedHash = collaborationRecoveryRequestHashV3(request);
+      if (request.request_hash !== expectedHash)
+        conflict('Recovery request hash does not match its immutable identity');
+      if (Date.parse(request.expires_at) <= Date.parse(event.occurred_at))
+        conflict('Recovery request is already expired');
+      if (next.recoveryRequests[request.request_id])
+        conflict('Recovery request already exists');
+      next.recoveryRequests[request.request_id] = request;
+      break;
+    }
+    case 'recovery_approved':
+    case 'recovery_rejected':
+    case 'recovery_expired':
+    case 'recovery_cancelled': {
+      const decision = recoveryDecisionPayloadSchema.parse(payload);
+      if (
+        event.aggregate_type !== 'recovery' ||
+        event.aggregate_id === next.groupId
+      )
+        conflict('Recovery decision must use its request Aggregate');
+      const request = next.recoveryRequests[event.aggregate_id];
+      if (!request || request.status !== 'pending')
+        conflict('Recovery request is not pending');
+      if (decision.request_hash !== request.request_hash)
+        conflict('Recovery request hash changed before decision');
+      const expired =
+        Date.parse(request.expires_at) <= Date.parse(event.occurred_at);
+      if (event.event_type === 'recovery_cancelled') {
+        if (
+          event.actor.principal_id !== request.target_principal_id ||
+          event.actor.client_id !== request.requested_client.client_id ||
+          event.actor.credential_id !==
+            request.requested_credential.credential_id
+        )
+          conflict('Only the requesting Client may cancel recovery');
+      } else if (event.event_type === 'recovery_expired') {
+        if (!expired) conflict('Recovery request has not expired');
+        const expiryAuthority =
+          request.type === 'identity_recovery'
+            ? request.target_principal_id
+            : next.group.owner_principal_id;
+        if (event.actor.principal_id !== expiryAuthority)
+          conflict(
+            request.type === 'identity_recovery'
+              ? 'Identity recovery expiry requires the target Principal'
+              : 'Owner recovery expiry requires the Group Owner',
+          );
+      } else {
+        if (expired) conflict('Expired recovery request cannot be decided');
+        if (request.type === 'identity_recovery') {
+          if (event.actor.principal_id !== request.target_principal_id)
+            conflict('Identity recovery requires the same Principal approval');
+        } else if (event.actor.principal_id !== next.group.owner_principal_id)
+          conflict('Owner recovery requires the Group Owner approval');
+      }
+      if (
+        request.type === 'owner_recovery' &&
+        ['recovery_approved', 'recovery_rejected'].includes(event.event_type) &&
+        decision.reason.trim().length === 0
+      )
+        conflict('Owner recovery decisions require a reason');
+
+      request.status =
+        event.event_type === 'recovery_approved'
+          ? 'approved'
+          : event.event_type === 'recovery_rejected'
+            ? 'rejected'
+            : event.event_type === 'recovery_expired'
+              ? 'expired'
+              : 'cancelled';
+      request.decided_at_event = event.event_id;
+      request.decided_by_principal_id = event.actor.principal_id;
+      request.decision_reason = decision.reason;
+      request.approval_kind =
+        event.event_type !== 'recovery_approved'
+          ? null
+          : request.type === 'identity_recovery'
+            ? 'self_device'
+            : next.credentials[event.actor.principal_id]?.[
+                  event.actor.credential_id
+                ]?.purpose === 'group_recovery'
+              ? 'offline_owner'
+              : 'owner';
+      if (event.event_type === 'recovery_approved') {
+        const principalId = request.target_principal_id;
+        (next.clients[principalId] ??= {})[request.requested_client.client_id] =
+          request.requested_client;
+        (next.credentials[principalId] ??= {})[
+          request.requested_credential.credential_id
+        ] = request.requested_credential;
+        if (request.type === 'owner_recovery') {
+          const credentials = Object.values(
+            next.credentials[principalId] ?? {},
+          );
+          const selectedIds = decision.revoke_previous_credentials
+            ? credentials
+                .filter(
+                  (credential) =>
+                    credential.credential_id !==
+                      request.requested_credential.credential_id &&
+                    credential.purpose === 'event_signing',
+                )
+                .map((credential) => credential.credential_id)
+            : decision.revoke_credential_ids;
+          for (const credentialId of selectedIds) {
+            const credential = next.credentials[principalId]?.[credentialId];
+            if (
+              !credential ||
+              credential.credential_id ===
+                request.requested_credential.credential_id ||
+              credential.purpose !== 'event_signing'
+            )
+              conflict(
+                'Owner recovery revocation scope must contain old target Principal event Credentials',
+              );
+            if (credential.status === 'active') {
+              credential.status = 'revoked';
+              credential.revoked_at_event = event.event_id;
+              request.revoked_credential_ids.push(credential.credential_id);
+            }
+          }
+        } else if (
+          decision.revoke_previous_credentials ||
+          decision.revoke_credential_ids.length > 0
+        ) {
+          conflict('Self device recovery cannot revoke other Credentials');
+        }
+      }
       break;
     }
     case 'executor_registered': {

@@ -41,13 +41,13 @@ function action(): ActionDefinitionV3 {
     format: 'icarus.collaboration-action/1',
     action_id: 'implement',
     name: 'Implement',
-    owner_principal_id: 'principal_alice',
+    owner_principal_id: 'principal_00000000-0000-4000-8000-000000000001',
     version: 1,
     kind: 'run_once',
     adapter: null,
     workflow_ref: null,
     prompt_ref:
-      'workspace/principals/principal_alice/automations/prompts/implement.md',
+      'workspace/principals/principal_00000000-0000-4000-8000-000000000001/automations/prompts/implement.md',
     prompt_hash: PROMPT_HASH,
     executor_policy: 'principal_selected',
     filesystem_access: 'workspace_write',
@@ -62,8 +62,10 @@ function turn(state: CollaborationTurnV3['state']): CollaborationTurnV3 {
     turn_id: 'turn_1',
     workflow_instance_id: 'instance_1',
     state_id: 'implementation',
-    assignee_principal_id: 'principal_alice',
-    claimant_principal_id: claimed ? 'principal_alice' : null,
+    assignee_principal_id: 'principal_00000000-0000-4000-8000-000000000001',
+    claimant_principal_id: claimed
+      ? 'principal_00000000-0000-4000-8000-000000000001'
+      : null,
     claimant_client_id: claimed ? 'client_alice' : null,
     executor_id: claimed ? 'executor_local' : null,
     attempt: 1,
@@ -71,7 +73,7 @@ function turn(state: CollaborationTurnV3['state']): CollaborationTurnV3 {
     execution_mode: 'automatic',
     state,
     action_ref:
-      'workspace/principals/principal_alice/automations/actions/implement.json',
+      'workspace/principals/principal_00000000-0000-4000-8000-000000000001/automations/actions/implement.json',
     action_hash: collaborationCanonicalHashV3(action()),
     prompt_hash: PROMPT_HASH,
     input_hash: hash('i'),
@@ -105,7 +107,9 @@ function instance(): WorkflowInstance {
     scope: { type: 'group' },
     related_work_item_refs: [],
     participant_bindings: {},
-    resolved_assignments: { implementation: 'principal_alice' },
+    resolved_assignments: {
+      implementation: 'principal_00000000-0000-4000-8000-000000000001',
+    },
     work_item_status_mapping: {},
     lifecycle: 'running',
     business_state: 'implementation',
@@ -114,7 +118,7 @@ function instance(): WorkflowInstance {
     last_handoff_hash: null,
     epoch: 1,
     revision: 1,
-    created_by_principal_id: 'principal_alice',
+    created_by_principal_id: 'principal_00000000-0000-4000-8000-000000000001',
     created_at: '2026-08-06T12:00:00.000Z',
     updated_at: '2026-08-06T12:00:00.000Z',
   };
@@ -125,7 +129,7 @@ function binding(): CollaborationExecutorBindingV3 {
     groupId: 'group_test',
     instanceId: 'instance_1',
     stateId: 'implementation',
-    principalId: 'principal_alice',
+    principalId: 'principal_00000000-0000-4000-8000-000000000001',
     clientId: 'client_alice',
     actionHash: collaborationCanonicalHashV3(action()),
     promptHash: PROMPT_HASH,
@@ -207,6 +211,7 @@ function actionRecord(
       actor: {
         principal_id: selectedAction.owner_principal_id,
         client_id: 'client_alice',
+        credential_id: 'credential_alice',
         executor_id: null,
       },
       occurredAt: '2026-08-06T12:00:00.000Z',
@@ -242,7 +247,8 @@ function harness(input: {
     turns: { turn_1: currentTurn },
     workflowInstances: { instance_1: selectedInstance },
     actions: input.projectionActions ?? {
-      'principal_alice:implement': selectedAction,
+      'principal_00000000-0000-4000-8000-000000000001:implement':
+        selectedAction,
     },
     workflowDefinitions: {
       'definition_1@1': {
@@ -277,7 +283,10 @@ function harness(input: {
   const group = {
     groupId: 'group_test',
     subscriptionMode: input.groupMode ?? 'member',
-    localPrincipalId: input.groupMode === 'observer' ? null : 'principal_alice',
+    localPrincipalId:
+      input.groupMode === 'observer'
+        ? null
+        : 'principal_00000000-0000-4000-8000-000000000001',
     localClientId: input.groupMode === 'observer' ? null : 'client_alice',
     projection,
     nextSyncAtMs: 0,
@@ -330,6 +339,7 @@ function harness(input: {
   } as unknown as CollaborationProjectSpaceStore;
   const groups = {
     sync: vi.fn(async () => ({ projection })),
+    expireRecoveryRequests: vi.fn(async () => 0),
     observeDueTimeouts: vi.fn(),
     startTurn: vi.fn(async () => {
       currentTurn = turn('running');
@@ -415,14 +425,14 @@ describe('Collaboration project-space v3 Scheduler', () => {
     const aliceAction = action();
     const bobAction = {
       ...action(),
-      owner_principal_id: 'principal_bob',
+      owner_principal_id: 'principal_00000000-0000-4000-8000-000000000002',
       prompt_ref:
-        'workspace/principals/principal_bob/automations/prompts/implement.md',
+        'workspace/principals/principal_00000000-0000-4000-8000-000000000002/automations/prompts/implement.md',
     };
     const selected = harness({
       projectionActions: {
-        'principal_bob:implement': bobAction,
-        'principal_alice:implement': aliceAction,
+        'principal_00000000-0000-4000-8000-000000000002:implement': bobAction,
+        'principal_00000000-0000-4000-8000-000000000001:implement': aliceAction,
       },
       eventRecords: [actionRecord(aliceAction)],
     });
@@ -432,7 +442,7 @@ describe('Collaboration project-space v3 Scheduler', () => {
     expect(selected.executor.prepare).toHaveBeenCalledWith(
       expect.objectContaining({
         action: expect.objectContaining({
-          owner_principal_id: 'principal_alice',
+          owner_principal_id: 'principal_00000000-0000-4000-8000-000000000001',
         }),
       }),
     );
@@ -450,7 +460,9 @@ describe('Collaboration project-space v3 Scheduler', () => {
     const originalCommit = 'a'.repeat(40);
     const revisedCommit = 'b'.repeat(40);
     const selected = harness({
-      projectionActions: { 'principal_alice:implement': revised },
+      projectionActions: {
+        'principal_00000000-0000-4000-8000-000000000001:implement': revised,
+      },
       eventRecords: [
         actionRecord(revised, 2, revisedCommit),
         actionRecord(original, 1, originalCommit),

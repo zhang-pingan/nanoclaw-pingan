@@ -3,12 +3,16 @@ import crypto from 'node:crypto';
 import { constants } from 'node:fs';
 import {
   chmod,
+  copyFile,
   lstat,
   link,
   mkdir,
+  mkdtemp,
   open,
   readFile,
+  rm,
   unlink,
+  writeFile,
 } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,17 +25,27 @@ import {
 
 const execFileAsync = promisify(execFile);
 const IDENTITY_DIRECTORY = 'collaboration-identity';
+const CREDENTIAL_DIRECTORY = 'credentials';
 const CLIENT_ID_FILE = 'client.json';
 const CLIENT_ID_FORMAT = 'icarus.collaboration-local-client/1';
+const CREDENTIAL_METADATA_FORMAT = 'icarus.collaboration-local-credential/1';
 const CLIENT_ID_PATTERN =
   /^client_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const PRINCIPAL_ID_PATTERN =
+  /^principal_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const CREDENTIAL_ID_PATTERN =
+  /^credential_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
-export interface CollaborationPrincipalIdentity {
+export type CollaborationCredentialPurpose = 'event_signing' | 'group_recovery';
+
+export interface CollaborationEventSigningIdentity {
   readonly principalId: string;
   readonly clientId: string;
+  readonly credentialId: string;
   readonly privateKeyPath: string;
   readonly publicKey: string;
-  readonly keyRef: string;
+  readonly fingerprint: string;
+  readonly purpose: CollaborationCredentialPurpose;
 }
 
 interface StoredClientIdentity {
@@ -39,17 +53,27 @@ interface StoredClientIdentity {
   readonly client_id: string;
 }
 
-export function collaborationPrincipalIdFromSshFingerprintV3(
-  fingerprint: string,
-): string {
-  if (!/^SHA256:[A-Za-z0-9+/]+={0,2}$/u.test(fingerprint))
-    throw new Error(`Unsupported SSH public key fingerprint: ${fingerprint}`);
-  const digest = fingerprint
-    .slice('SHA256:'.length)
-    .replaceAll('+', '-')
-    .replaceAll('/', '_')
-    .replace(/=+$/u, '');
-  return `principal_ssh_sha256_${digest}`;
+interface StoredCredentialIdentity {
+  readonly format: typeof CREDENTIAL_METADATA_FORMAT;
+  readonly credential_id: string;
+  readonly principal_id: string;
+  readonly client_id: string;
+  readonly public_key: string;
+  readonly fingerprint: string;
+  readonly purpose: CollaborationCredentialPurpose;
+}
+
+function expandLocalPath(value: string): string {
+  return path.resolve(value.replace(/^~(?=$|[\\/])/u, os.homedir()));
+}
+
+function publicKeyMaterial(value: string, filePath: string): string {
+  const [algorithm, encoded] = value.trim().split(/\s+/u);
+  if (!algorithm || !encoded)
+    throw new Error(
+      `Collaboration Credential public key is invalid: ${filePath}`,
+    );
+  return `${algorithm} ${encoded}`;
 }
 
 function parseStoredClientIdentity(contents: string, filePath: string): string {
@@ -66,22 +90,55 @@ function parseStoredClientIdentity(contents: string, filePath: string): string {
   return parsed.client_id;
 }
 
+function parseStoredCredentialIdentity(
+  contents: string,
+  filePath: string,
+): StoredCredentialIdentity {
+  const parsed = strictParseJson(contents);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+    throw new Error(
+      `Collaboration Credential metadata is invalid: ${filePath}`,
+    );
+  const value = parsed as Record<string, unknown>;
+  if (
+    value.format !== CREDENTIAL_METADATA_FORMAT ||
+    typeof value.credential_id !== 'string' ||
+    !CREDENTIAL_ID_PATTERN.test(value.credential_id) ||
+    typeof value.principal_id !== 'string' ||
+    !PRINCIPAL_ID_PATTERN.test(value.principal_id) ||
+    typeof value.client_id !== 'string' ||
+    !CLIENT_ID_PATTERN.test(value.client_id) ||
+    typeof value.public_key !== 'string' ||
+    typeof value.fingerprint !== 'string' ||
+    !/^SHA256:[A-Za-z0-9+/]+={0,2}$/u.test(value.fingerprint) ||
+    (value.purpose !== 'event_signing' && value.purpose !== 'group_recovery')
+  )
+    throw new Error(
+      `Collaboration Credential metadata is invalid: ${filePath}`,
+    );
+  return value as unknown as StoredCredentialIdentity;
+}
+
 export class CollaborationProjectSpaceIdentityService {
   readonly identityDirectory: string;
-  readonly clientIdentityPath: string;
-  readonly defaultSigningKeyPath: string;
+  readonly credentialDirectory: string;
+  readonly defaultGitSshKeyPath: string;
   private clientIdPromise: Promise<string> | null = null;
 
   constructor(
     storeDirectory: string,
-    defaultSigningKeyPath = path.join(os.homedir(), '.ssh', 'id_rsa'),
+    defaultGitSshKeyPath = process.env.SSH_KEY_PATH ||
+      path.join(os.homedir(), '.ssh', 'id_rsa'),
   ) {
-    const configuredDefault =
-      defaultSigningKeyPath.trim() || path.join(os.homedir(), '.ssh', 'id_rsa');
     this.identityDirectory = path.join(storeDirectory, IDENTITY_DIRECTORY);
-    this.clientIdentityPath = path.join(this.identityDirectory, CLIENT_ID_FILE);
-    this.defaultSigningKeyPath = path.resolve(
-      configuredDefault.replace(/^~(?=$|[\\/])/u, os.homedir()),
+    this.credentialDirectory = path.join(
+      this.identityDirectory,
+      CREDENTIAL_DIRECTORY,
+    );
+    this.defaultGitSshKeyPath = expandLocalPath(
+      defaultGitSshKeyPath.trim() ||
+        process.env.SSH_KEY_PATH?.trim() ||
+        path.join(os.homedir(), '.ssh', 'id_rsa'),
     );
   }
 
@@ -93,44 +150,307 @@ export class CollaborationProjectSpaceIdentityService {
     return this.clientIdPromise;
   }
 
-  async resolveSigningIdentity(
-    signingKeyPath?: string,
-  ): Promise<CollaborationPrincipalIdentity> {
-    const configuredPath = signingKeyPath?.trim() || this.defaultSigningKeyPath;
-    const privateKeyPath = path.resolve(
-      configuredPath.replace(/^~(?=$|[\\/])/u, os.homedir()),
+  resolveGitSshKeyPath(configured?: string | null): string {
+    return expandLocalPath(
+      configured?.trim() ||
+        process.env.SSH_KEY_PATH?.trim() ||
+        this.defaultGitSshKeyPath,
     );
-    const publicKeyPath = `${privateKeyPath}.pub`;
-    const [clientId, publicKey, sshResult] = await Promise.all([
-      this.clientId(),
-      readFile(publicKeyPath, 'utf8').then((value) => value.trim()),
-      execFileAsync('ssh-keygen', ['-lf', publicKeyPath, '-E', 'sha256'], {
-        encoding: 'utf8',
-      }),
-    ]);
-    const fingerprint = sshResult.stdout.match(/SHA256:[^\s]+/u)?.[0];
-    const keyType = publicKey.split(/\s+/u, 1)[0];
-    if (!fingerprint || !keyType)
+  }
+
+  async createPrincipalIdentity(): Promise<CollaborationEventSigningIdentity> {
+    return this.createCredentialIdentity({
+      principalId: `principal_${crypto.randomUUID()}`,
+      purpose: 'event_signing',
+    });
+  }
+
+  async createCredentialIdentity(input: {
+    readonly principalId: string;
+    readonly purpose?: CollaborationCredentialPurpose;
+    readonly clientId?: string;
+  }): Promise<CollaborationEventSigningIdentity> {
+    if (!PRINCIPAL_ID_PATTERN.test(input.principalId))
       throw new Error(
-        `Cannot derive SSH signing identity from ${publicKeyPath}`,
+        `Invalid Collaboration Principal id: ${input.principalId}`,
       );
-    return {
-      principalId: collaborationPrincipalIdFromSshFingerprintV3(fingerprint),
-      clientId,
+    const clientId = input.clientId ?? (await this.clientId());
+    if (!CLIENT_ID_PATTERN.test(clientId))
+      throw new Error(`Invalid Collaboration Client id: ${clientId}`);
+    const credentialId = `credential_${crypto.randomUUID()}`;
+    const directory = path.join(this.credentialDirectory, credentialId);
+    await this.ensurePrivateDirectory(directory);
+    const privateKeyPath = path.join(directory, 'credential');
+    await execFileAsync(
+      'ssh-keygen',
+      ['-q', '-t', 'ed25519', '-N', '', '-f', privateKeyPath],
+      { encoding: 'utf8' },
+    );
+    await chmod(privateKeyPath, 0o600);
+    await chmod(`${privateKeyPath}.pub`, 0o600);
+    const publicKey = (await readFile(`${privateKeyPath}.pub`, 'utf8')).trim();
+    const fingerprint = await this.fingerprintPublicKey(
+      `${privateKeyPath}.pub`,
+    );
+    const metadata: StoredCredentialIdentity = {
+      format: CREDENTIAL_METADATA_FORMAT,
+      credential_id: credentialId,
+      principal_id: input.principalId,
+      client_id: clientId,
+      public_key: publicKey,
+      fingerprint,
+      purpose: input.purpose ?? 'event_signing',
+    };
+    await writeFile(
+      path.join(directory, 'metadata.json'),
+      prettyCollaborationJson(metadata),
+      { mode: 0o600 },
+    );
+    return this.localCredential(metadata, privateKeyPath);
+  }
+
+  async loadCredentialIdentity(
+    credentialId: string,
+  ): Promise<CollaborationEventSigningIdentity> {
+    if (!CREDENTIAL_ID_PATTERN.test(credentialId))
+      throw new Error(`Invalid Collaboration Credential id: ${credentialId}`);
+    const directory = path.join(this.credentialDirectory, credentialId);
+    const metadataPath = path.join(directory, 'metadata.json');
+    const privateKeyPath = path.join(directory, 'credential');
+    const publicKeyPath = `${privateKeyPath}.pub`;
+    const [
+      directoryMetadata,
+      keyMetadata,
+      publicKeyMetadata,
+      metadataMetadata,
+      metadata,
+    ] = await Promise.all([
+      lstat(directory),
+      lstat(privateKeyPath),
+      lstat(publicKeyPath),
+      lstat(metadataPath),
+      readFile(metadataPath, 'utf8').then((contents) =>
+        parseStoredCredentialIdentity(contents, metadataPath),
+      ),
+    ]);
+    if (
+      !directoryMetadata.isDirectory() ||
+      directoryMetadata.isSymbolicLink() ||
+      !keyMetadata.isFile() ||
+      keyMetadata.isSymbolicLink() ||
+      !publicKeyMetadata.isFile() ||
+      publicKeyMetadata.isSymbolicLink() ||
+      !metadataMetadata.isFile() ||
+      metadataMetadata.isSymbolicLink()
+    )
+      throw new Error(
+        `Collaboration Credential storage is unsafe: ${directory}`,
+      );
+    await chmod(directory, 0o700);
+    await chmod(privateKeyPath, 0o600);
+    await chmod(publicKeyPath, 0o600);
+    await chmod(metadataPath, 0o600);
+    await this.validateCredentialKeypair(
+      metadata,
       privateKeyPath,
-      publicKey,
-      keyRef: `${keyType}:${fingerprint}`,
+      publicKeyPath,
+    );
+    return this.localCredential(metadata, privateKeyPath);
+  }
+
+  async exportRecoveryCredential(
+    credentialId: string,
+    destinationPath: string,
+  ): Promise<string> {
+    const identity = await this.loadCredentialIdentity(credentialId);
+    if (identity.purpose !== 'group_recovery')
+      throw new Error('Only a Group recovery Credential can be exported');
+    const destination = expandLocalPath(destinationPath);
+    const destinationDirectory = path.dirname(destination);
+    await mkdir(destinationDirectory, { recursive: true, mode: 0o700 });
+    const destinationDirectoryMetadata = await lstat(destinationDirectory);
+    if (
+      !destinationDirectoryMetadata.isDirectory() ||
+      destinationDirectoryMetadata.isSymbolicLink()
+    )
+      throw new Error(
+        `Group recovery export directory is unsafe: ${destinationDirectory}`,
+      );
+    const destinations = [
+      destination,
+      `${destination}.pub`,
+      `${destination}.icarus.json`,
+    ];
+    for (const target of destinations) {
+      try {
+        await lstat(target);
+        throw new Error(
+          `Group recovery export target already exists or is a symlink: ${target}`,
+        );
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    }
+    const metadata = await readFile(
+      path.join(this.credentialDirectory, credentialId, 'metadata.json'),
+      'utf8',
+    );
+    const stagingDirectory = await mkdtemp(
+      path.join(destinationDirectory, '.icarus-recovery-export-'),
+    );
+    await chmod(stagingDirectory, 0o700);
+    const staged = [
+      path.join(stagingDirectory, 'credential'),
+      path.join(stagingDirectory, 'credential.pub'),
+      path.join(stagingDirectory, 'credential.icarus.json'),
+    ];
+    const published: string[] = [];
+    try {
+      await copyFile(
+        identity.privateKeyPath,
+        staged[0]!,
+        constants.COPYFILE_EXCL,
+      );
+      await copyFile(
+        `${identity.privateKeyPath}.pub`,
+        staged[1]!,
+        constants.COPYFILE_EXCL,
+      );
+      await writeFile(staged[2]!, metadata, { flag: 'wx', mode: 0o600 });
+      await Promise.all(staged.map((file) => chmod(file, 0o600)));
+      for (const [index, target] of destinations.entries()) {
+        await link(staged[index]!, target);
+        published.push(target);
+      }
+      return destination;
+    } catch (error) {
+      for (const target of published.reverse())
+        await unlink(target).catch((cleanupError: NodeJS.ErrnoException) => {
+          if (cleanupError.code !== 'ENOENT') throw cleanupError;
+        });
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST')
+        throw new Error(
+          'Group recovery export refused because a destination appeared during publication',
+          { cause: error },
+        );
+      throw error;
+    } finally {
+      await rm(stagingDirectory, { recursive: true, force: true }).catch(
+        () => undefined,
+      );
+    }
+  }
+
+  async importRecoveryCredential(
+    sourcePath: string,
+  ): Promise<CollaborationEventSigningIdentity> {
+    const source = expandLocalPath(sourcePath);
+    const metadataPath = `${source}.icarus.json`;
+    const metadata = parseStoredCredentialIdentity(
+      await readFile(metadataPath, 'utf8'),
+      metadataPath,
+    );
+    if (metadata.purpose !== 'group_recovery')
+      throw new Error('Imported Credential is not a Group recovery Credential');
+    const sourcePublicKeyPath = `${source}.pub`;
+    const [sourceMetadata, publicKeyMetadata, metadataFileMetadata] =
+      await Promise.all([
+        lstat(source),
+        lstat(sourcePublicKeyPath),
+        lstat(metadataPath),
+      ]);
+    if (
+      !sourceMetadata.isFile() ||
+      sourceMetadata.isSymbolicLink() ||
+      !publicKeyMetadata.isFile() ||
+      publicKeyMetadata.isSymbolicLink() ||
+      !metadataFileMetadata.isFile() ||
+      metadataFileMetadata.isSymbolicLink()
+    )
+      throw new Error('Imported Group recovery Credential files are unsafe');
+    await this.validateCredentialKeypair(metadata, source, sourcePublicKeyPath);
+    const directory = path.join(
+      this.credentialDirectory,
+      metadata.credential_id,
+    );
+    await this.ensurePrivateDirectory(directory);
+    const privateKeyPath = path.join(directory, 'credential');
+    await copyFile(source, privateKeyPath);
+    await copyFile(sourcePublicKeyPath, `${privateKeyPath}.pub`);
+    await chmod(privateKeyPath, 0o600);
+    await chmod(`${privateKeyPath}.pub`, 0o600);
+    await writeFile(
+      path.join(directory, 'metadata.json'),
+      prettyCollaborationJson(metadata),
+      { mode: 0o600 },
+    );
+    return this.localCredential(metadata, privateKeyPath);
+  }
+
+  private localCredential(
+    metadata: StoredCredentialIdentity,
+    privateKeyPath: string,
+  ): CollaborationEventSigningIdentity {
+    return {
+      principalId: metadata.principal_id,
+      clientId: metadata.client_id,
+      credentialId: metadata.credential_id,
+      privateKeyPath,
+      publicKey: metadata.public_key,
+      fingerprint: metadata.fingerprint,
+      purpose: metadata.purpose,
     };
   }
 
-  private async loadOrCreateClientId(): Promise<string> {
-    await mkdir(this.identityDirectory, { recursive: true, mode: 0o700 });
-    const directory = await lstat(this.identityDirectory);
-    if (!directory.isDirectory() || directory.isSymbolicLink())
+  private async fingerprintPublicKey(publicKeyPath: string): Promise<string> {
+    const result = await execFileAsync(
+      'ssh-keygen',
+      ['-lf', publicKeyPath, '-E', 'sha256'],
+      { encoding: 'utf8' },
+    );
+    const fingerprint = result.stdout.match(/SHA256:[^\s]+/u)?.[0];
+    if (!fingerprint)
       throw new Error(
-        `Collaboration identity directory is unsafe: ${this.identityDirectory}`,
+        `Cannot fingerprint Collaboration Credential: ${publicKeyPath}`,
       );
-    await chmod(this.identityDirectory, 0o700);
+    return fingerprint;
+  }
+
+  private async validateCredentialKeypair(
+    metadata: StoredCredentialIdentity,
+    privateKeyPath: string,
+    publicKeyPath: string,
+  ): Promise<void> {
+    const [storedPublicKey, derived, fingerprint] = await Promise.all([
+      readFile(publicKeyPath, 'utf8'),
+      execFileAsync('ssh-keygen', ['-y', '-f', privateKeyPath], {
+        encoding: 'utf8',
+      }),
+      this.fingerprintPublicKey(publicKeyPath),
+    ]);
+    const expected = publicKeyMaterial(metadata.public_key, publicKeyPath);
+    if (
+      publicKeyMaterial(storedPublicKey, publicKeyPath) !== expected ||
+      publicKeyMaterial(derived.stdout, privateKeyPath) !== expected ||
+      fingerprint !== metadata.fingerprint
+    )
+      throw new Error(
+        `Collaboration Credential keypair or fingerprint mismatches: ${metadata.credential_id}`,
+      );
+  }
+
+  private async ensurePrivateDirectory(directory: string): Promise<void> {
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    const metadata = await lstat(directory);
+    if (!metadata.isDirectory() || metadata.isSymbolicLink())
+      throw new Error(
+        `Collaboration identity directory is unsafe: ${directory}`,
+      );
+    await chmod(directory, 0o700);
+  }
+
+  private async loadOrCreateClientId(): Promise<string> {
+    await this.ensurePrivateDirectory(this.identityDirectory);
     try {
       return await this.readClientId();
     } catch (error) {
@@ -174,6 +494,10 @@ export class CollaborationProjectSpaceIdentityService {
           if (error.code !== 'ENOENT') throw error;
         });
     }
+  }
+
+  private get clientIdentityPath(): string {
+    return path.join(this.identityDirectory, CLIENT_ID_FILE);
   }
 
   private async readClientId(): Promise<string> {

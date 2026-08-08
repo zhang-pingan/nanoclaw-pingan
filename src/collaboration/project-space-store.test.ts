@@ -19,12 +19,18 @@ import {
   collaborationCanonicalHashV3,
   reduceCollaborationEventV3,
 } from './protocol/v3-reducer.js';
+import { collaborationCredentialFingerprintV3 } from './protocol/v3-schema.js';
 
 const temporaryDirectories: string[] = [];
 const NOW = '2026-08-06T12:00:00.000Z';
 const NOW_MS = Date.parse(NOW);
-const PRINCIPAL = 'principal_sha256_alice';
+const PRINCIPAL = 'principal_00000000-0000-4000-8000-000000000001';
 const CLIENT = 'client_alice';
+const CREDENTIAL = 'credential_alice';
+const RECOVERY_CREDENTIAL = 'credential_alice_recovery';
+const PUBLIC_KEY =
+  'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice';
+const FINGERPRINT = collaborationCredentialFingerprintV3(PUBLIC_KEY);
 
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0))
@@ -46,7 +52,6 @@ function genesis() {
       name: 'Test group',
       creator: {
         principal_id: PRINCIPAL,
-        signing_key_ref: 'ssh-ed25519:SHA256:alice',
       },
       owner_principal_id: PRINCIPAL,
       control_branch: 'refs/heads/icarus/control' as const,
@@ -60,9 +65,6 @@ function genesis() {
       format: 'icarus.collaboration-member/3' as const,
       principal_id: PRINCIPAL,
       display_name: 'Alice',
-      signing_key_ref: 'ssh-ed25519:SHA256:alice',
-      signing_public_key:
-        'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice',
       status: 'active' as const,
       joined_at_event: 'evt_genesis',
     },
@@ -74,6 +76,30 @@ function genesis() {
       capabilities: [],
       status: 'active' as const,
       registered_at_event: 'evt_genesis',
+    },
+    credential: {
+      format: 'icarus.collaboration-credential/1' as const,
+      credential_id: CREDENTIAL,
+      principal_id: PRINCIPAL,
+      client_id: CLIENT,
+      public_key: PUBLIC_KEY,
+      fingerprint: FINGERPRINT,
+      purpose: 'event_signing' as const,
+      status: 'active' as const,
+      created_at_event: 'evt_genesis',
+      revoked_at_event: null,
+    },
+    recovery_credential: {
+      format: 'icarus.collaboration-credential/1' as const,
+      credential_id: RECOVERY_CREDENTIAL,
+      principal_id: PRINCIPAL,
+      client_id: CLIENT,
+      public_key: PUBLIC_KEY,
+      fingerprint: FINGERPRINT,
+      purpose: 'group_recovery' as const,
+      status: 'active' as const,
+      created_at_event: 'evt_genesis',
+      revoked_at_event: null,
     },
     owner_permissions: {
       format: 'icarus.collaboration-permission-grant/1' as const,
@@ -94,6 +120,7 @@ function genesis() {
     actor: {
       principal_id: PRINCIPAL,
       client_id: CLIENT,
+      credential_id: CREDENTIAL,
       executor_id: null,
     },
     occurredAt: NOW,
@@ -154,7 +181,7 @@ describe('Collaboration project space v3 store', () => {
       subscriptionMode: 'observer',
       localPrincipalId: null,
       localClientId: null,
-      signingKeyPath: null,
+      gitSshKeyPath: path.join(os.homedir(), '.ssh', 'id_rsa'),
     });
     expect(
       store
@@ -257,6 +284,43 @@ describe('Collaboration project space v3 store', () => {
       repositoryPath: '/tmp/cache.git',
     });
     const { event, projection } = genesis();
+    projection.recoveryRequests.recovery_phone = {
+      format: 'icarus.collaboration-recovery-request/1',
+      request_id: 'recovery_phone',
+      request_hash: `sha256:${'d'.repeat(64)}`,
+      type: 'identity_recovery',
+      target_principal_id: PRINCIPAL,
+      requested_client: {
+        format: 'icarus.collaboration-client/1',
+        principal_id: PRINCIPAL,
+        client_id: 'client_phone',
+        display_name: 'Alice Phone',
+        capabilities: [],
+        status: 'active',
+        registered_at_event: 'evt_recovery',
+      },
+      requested_credential: {
+        format: 'icarus.collaboration-credential/1',
+        credential_id: 'credential_phone',
+        principal_id: PRINCIPAL,
+        client_id: 'client_phone',
+        public_key: PUBLIC_KEY,
+        fingerprint: FINGERPRINT,
+        purpose: 'event_signing',
+        status: 'active',
+        created_at_event: 'evt_recovery',
+        revoked_at_event: null,
+      },
+      status: 'pending',
+      reason: null,
+      created_at: NOW,
+      expires_at: '2026-08-13T12:00:00.000Z',
+      decided_at_event: null,
+      decided_by_principal_id: null,
+      decision_reason: null,
+      approval_kind: null,
+      revoked_credential_ids: [],
+    };
     store.saveVerifiedProjection({
       groupId: 'group_test',
       verifiedHead: 'a'.repeat(40),
@@ -271,14 +335,53 @@ describe('Collaboration project space v3 store', () => {
     });
     expect(store.getGroup('group_test')?.lastVerifiedHead).toBe('a'.repeat(40));
     expect(store.listEventRecords('group_test')).toHaveLength(1);
+    expect(
+      store
+        .rawDatabaseForTests()
+        .prepare(
+          `SELECT credential_id, purpose, status, fingerprint
+             FROM collaboration_credentials
+            WHERE group_id = ? ORDER BY credential_id`,
+        )
+        .all('group_test'),
+    ).toEqual([
+      {
+        credential_id: CREDENTIAL,
+        purpose: 'event_signing',
+        status: 'active',
+        fingerprint: FINGERPRINT,
+      },
+      {
+        credential_id: RECOVERY_CREDENTIAL,
+        purpose: 'group_recovery',
+        status: 'active',
+        fingerprint: FINGERPRINT,
+      },
+    ]);
+    expect(
+      store
+        .rawDatabaseForTests()
+        .prepare(
+          `SELECT request_id, request_type, status, request_hash
+             FROM collaboration_recovery_requests WHERE group_id = ?`,
+        )
+        .get('group_test'),
+    ).toEqual({
+      request_id: 'recovery_phone',
+      request_type: 'identity_recovery',
+      status: 'pending',
+      request_hash: `sha256:${'d'.repeat(64)}`,
+    });
 
-    store.updateSubscriptionMode({
+    store.updateLocalIdentity({
       groupId: 'group_test',
+      subscriptionMode: 'member',
       localPrincipalId: PRINCIPAL,
       localClientId: CLIENT,
-      signingKeyPath: '/tmp/id_ed25519',
-      signingPublicKey: 'public',
-      signingKeyRef: 'ssh-ed25519:SHA256:alice',
+      localCredentialId: CREDENTIAL,
+      eventPrivateKeyPath: '/tmp/event-key',
+      eventPublicKey: PUBLIC_KEY,
+      eventFingerprint: FINGERPRINT,
     });
     expect(store.getGroup('group_test')).toMatchObject({
       subscriptionMode: 'member',
@@ -286,6 +389,10 @@ describe('Collaboration project space v3 store', () => {
       localPrincipalId: PRINCIPAL,
       localClientId: CLIENT,
     });
+    store.updateGitSshKeyPath('group_test', '/tmp/git-transport-key');
+    expect(store.getGroup('group_test')?.gitSshKeyPath).toBe(
+      '/tmp/git-transport-key',
+    );
     store.close();
   });
 
@@ -310,9 +417,11 @@ describe('Collaboration project space v3 store', () => {
       localPrincipalId: PRINCIPAL,
       localClientId: CLIENT,
       repositoryPath: '/tmp/cache.git',
-      signingKeyPath: '/tmp/id_ed25519',
-      signingPublicKey: 'ssh-ed25519 test',
-      signingKeyRef: 'ssh-ed25519:SHA256:alice',
+      gitSshKeyPath: '/tmp/id_ed25519',
+      localCredentialId: CREDENTIAL,
+      eventPrivateKeyPath: '/tmp/event-key',
+      eventPublicKey: PUBLIC_KEY,
+      eventFingerprint: FINGERPRINT,
     });
     const initial = genesis();
     const action = {
@@ -341,6 +450,7 @@ describe('Collaboration project space v3 store', () => {
       actor: {
         principal_id: PRINCIPAL,
         client_id: CLIENT,
+        credential_id: CREDENTIAL,
         executor_id: null,
       },
       occurredAt: NOW,
@@ -470,9 +580,11 @@ describe('Collaboration project space v3 store', () => {
       repositoryPath: '/tmp/cache.git',
       localPrincipalId: PRINCIPAL,
       localClientId: CLIENT,
-      signingKeyPath: '/tmp/id_ed25519',
-      signingPublicKey: 'ssh-ed25519 test',
-      signingKeyRef: 'ssh-ed25519:SHA256:alice',
+      gitSshKeyPath: '/tmp/id_ed25519',
+      localCredentialId: CREDENTIAL,
+      eventPrivateKeyPath: '/tmp/event-key',
+      eventPublicKey: PUBLIC_KEY,
+      eventFingerprint: FINGERPRINT,
     });
     const staged = store.stageArtifact({
       artifactId: 'artifact_committed',
@@ -542,9 +654,11 @@ describe('Collaboration project space v3 store', () => {
       repositoryPath: '/tmp/cache.git',
       localPrincipalId: PRINCIPAL,
       localClientId: CLIENT,
-      signingKeyPath: '/tmp/id_ed25519',
-      signingPublicKey: 'ssh-ed25519 test',
-      signingKeyRef: 'ssh-ed25519:SHA256:alice',
+      gitSshKeyPath: '/tmp/id_ed25519',
+      localCredentialId: CREDENTIAL,
+      eventPrivateKeyPath: '/tmp/event-key',
+      eventPublicKey: PUBLIC_KEY,
+      eventFingerprint: FINGERPRINT,
     });
     const backedUp = store.stageArtifact({
       artifactId: 'artifact_backed_up',
@@ -663,9 +777,11 @@ describe('Collaboration project space v3 store', () => {
       repositoryPath: '/tmp/cache.git',
       localPrincipalId: PRINCIPAL,
       localClientId: CLIENT,
-      signingKeyPath: '/tmp/id_ed25519',
-      signingPublicKey: 'ssh-ed25519 test',
-      signingKeyRef: 'ssh-ed25519:SHA256:alice',
+      gitSshKeyPath: '/tmp/id_ed25519',
+      localCredentialId: CREDENTIAL,
+      eventPrivateKeyPath: '/tmp/event-key',
+      eventPublicKey: PUBLIC_KEY,
+      eventFingerprint: FINGERPRINT,
     });
     const first = store.claimActionExecution({
       groupId: 'group_test',

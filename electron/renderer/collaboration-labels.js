@@ -108,7 +108,6 @@ const COLLABORATION_LABELS = Object.freeze({
   member_suspended: '成员已停用',
   member_reactivated: '成员已恢复',
   member_removed: '成员已移除',
-  client_registered: '客户端已注册',
   client_revoked: '客户端已撤销',
   executor_registered: '执行器已注册',
   executor_revoked: '执行器已撤销',

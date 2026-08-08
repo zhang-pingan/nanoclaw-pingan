@@ -1,6 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -11,9 +18,8 @@ import {
   CollaborationProjectSpaceGitTransport,
 } from './project-space-git.js';
 import {
-  collaborationPrincipalIdFromSshFingerprintV3,
   CollaborationProjectSpaceIdentityService,
-  type CollaborationPrincipalIdentity,
+  type CollaborationEventSigningIdentity,
 } from './project-space-identity.js';
 import { CollaborationProjectSpaceService } from './project-space-service.js';
 import { CollaborationProjectSpaceStore } from './project-space-store.js';
@@ -79,12 +85,14 @@ function fixture() {
     'sha256',
   ]).match(/SHA256:[^\s]+/u)?.[0];
   if (!fingerprint) throw new Error('SSH fingerprint missing');
-  const identity: CollaborationPrincipalIdentity = {
-    principalId: collaborationPrincipalIdFromSshFingerprintV3(fingerprint),
+  const identity: CollaborationEventSigningIdentity = {
+    principalId: 'principal_00000000-0000-4000-8000-000000000001',
     clientId: 'client_alice',
+    credentialId: 'credential_alice',
     privateKeyPath: key,
     publicKey,
-    keyRef: `ssh-ed25519:${fingerprint}`,
+    fingerprint,
+    purpose: 'event_signing',
   };
   const remote = path.join(root, 'remote.git');
   mkdirSync(remote);
@@ -97,7 +105,28 @@ function fixture() {
   };
 }
 
-function genesis(identity: CollaborationPrincipalIdentity) {
+function identityService(
+  identity: CollaborationEventSigningIdentity,
+): CollaborationProjectSpaceIdentityService {
+  return {
+    createPrincipalIdentity: async () => identity,
+    createCredentialIdentity: async (input: { purpose?: string }) => ({
+      ...identity,
+      credentialId:
+        input.purpose === 'group_recovery'
+          ? `${identity.credentialId}_recovery`
+          : identity.credentialId,
+      purpose:
+        input.purpose === 'group_recovery'
+          ? ('group_recovery' as const)
+          : ('event_signing' as const),
+    }),
+    resolveGitSshKeyPath: (configured?: string) =>
+      configured || identity.privateKeyPath,
+  } as unknown as CollaborationProjectSpaceIdentityService;
+}
+
+function genesis(identity: CollaborationEventSigningIdentity) {
   const eventId = 'evt_genesis';
   const payload = {
     group: {
@@ -107,7 +136,6 @@ function genesis(identity: CollaborationPrincipalIdentity) {
       name: 'Signed project',
       creator: {
         principal_id: identity.principalId,
-        signing_key_ref: identity.keyRef,
       },
       owner_principal_id: identity.principalId,
       control_branch: 'refs/heads/icarus/control' as const,
@@ -121,8 +149,6 @@ function genesis(identity: CollaborationPrincipalIdentity) {
       format: 'icarus.collaboration-member/3' as const,
       principal_id: identity.principalId,
       display_name: 'Alice',
-      signing_key_ref: identity.keyRef,
-      signing_public_key: identity.publicKey,
       status: 'active' as const,
       joined_at_event: eventId,
     },
@@ -134,6 +160,30 @@ function genesis(identity: CollaborationPrincipalIdentity) {
       capabilities: [],
       status: 'active' as const,
       registered_at_event: eventId,
+    },
+    credential: {
+      format: 'icarus.collaboration-credential/1' as const,
+      credential_id: identity.credentialId,
+      principal_id: identity.principalId,
+      client_id: identity.clientId,
+      public_key: identity.publicKey,
+      fingerprint: identity.fingerprint,
+      purpose: 'event_signing' as const,
+      status: 'active' as const,
+      created_at_event: eventId,
+      revoked_at_event: null,
+    },
+    recovery_credential: {
+      format: 'icarus.collaboration-credential/1' as const,
+      credential_id: `${identity.credentialId}_recovery`,
+      principal_id: identity.principalId,
+      client_id: identity.clientId,
+      public_key: identity.publicKey,
+      fingerprint: identity.fingerprint,
+      purpose: 'group_recovery' as const,
+      status: 'active' as const,
+      created_at_event: eventId,
+      revoked_at_event: null,
     },
     owner_permissions: {
       format: 'icarus.collaboration-permission-grant/1' as const,
@@ -154,6 +204,7 @@ function genesis(identity: CollaborationPrincipalIdentity) {
     actor: {
       principal_id: identity.principalId,
       client_id: identity.clientId,
+      credential_id: identity.credentialId,
       executor_id: null,
     },
     occurredAt: NOW,
@@ -163,7 +214,7 @@ function genesis(identity: CollaborationPrincipalIdentity) {
 }
 
 describe('Collaboration project space v3 Git protocol', () => {
-  it('materializes and replays targeted Invite issuance and consumption', async () => {
+  it('materializes and replays unbound Invite issuance and consumption', async () => {
     const test = fixture();
     const bobKey = path.join(test.root, 'bob-signing-key');
     run(test.root, [
@@ -185,12 +236,14 @@ describe('Collaboration project space v3 Git protocol', () => {
       'sha256',
     ]).match(/SHA256:[^\s]+/u)?.[0];
     if (!bobFingerprint) throw new Error('Bob SSH fingerprint missing');
-    const bobIdentity: CollaborationPrincipalIdentity = {
-      principalId: collaborationPrincipalIdFromSshFingerprintV3(bobFingerprint),
+    const bobIdentity: CollaborationEventSigningIdentity = {
+      principalId: 'principal_00000000-0000-4000-8000-000000000002',
       clientId: 'client_bob',
+      credentialId: 'credential_bob',
       privateKeyPath: bobKey,
       publicKey: bobPublicKey,
-      keyRef: `ssh-ed25519:${bobFingerprint}`,
+      fingerprint: bobFingerprint,
+      purpose: 'event_signing',
     };
     const ownerStore = new CollaborationProjectSpaceStore(
       path.join(test.root, 'owner.db'),
@@ -202,25 +255,21 @@ describe('Collaboration project space v3 Git protocol', () => {
       ownerStore,
       new CollaborationProjectSpaceGitTransport(),
       path.join(test.root, 'owner-repositories'),
-      {
-        resolveSigningIdentity: async () => test.identity,
-      } as unknown as CollaborationProjectSpaceIdentityService,
+      identityService(test.identity),
       () => Date.parse(NOW),
     );
     const bob = new CollaborationProjectSpaceService(
       bobStore,
       new CollaborationProjectSpaceGitTransport(),
       path.join(test.root, 'bob-repositories'),
-      {
-        resolveSigningIdentity: async () => bobIdentity,
-      } as unknown as CollaborationProjectSpaceIdentityService,
+      identityService(bobIdentity),
       () => Date.parse(NOW),
     );
     try {
       await owner.createGroup({
         remoteUrl: test.remote,
         name: 'Signed invite project',
-        signingKeyPath: test.identity.privateKeyPath,
+        gitSshKeyPath: test.identity.privateKeyPath,
         displayName: 'Alice',
         clientDisplayName: 'Alice MacBook',
         membershipPolicy: 'invite_only',
@@ -230,19 +279,17 @@ describe('Collaboration project space v3 Git protocol', () => {
       await owner.issueInvite({
         groupId: 'group_signed',
         inviteId: 'invite_bob',
-        principalId: bobIdentity.principalId,
         expectedRevision: 0,
       });
       await bob.joinGroup({
         remoteUrl: test.remote,
-        signingKeyPath: bobIdentity.privateKeyPath,
+        gitSshKeyPath: bobIdentity.privateKeyPath,
         displayName: 'Bob',
         clientDisplayName: 'Bob MacBook',
         inviteId: 'invite_bob',
       });
       const synced = await owner.sync('group_signed');
       expect(synced.projection.invites.invite_bob).toMatchObject({
-        principal_id: bobIdentity.principalId,
         status: 'used',
       });
       const repositoryPath =
@@ -319,6 +366,90 @@ describe('Collaboration project space v3 Git protocol', () => {
     expect(replayed.projection).toEqual(history.projection);
   }, 30_000);
 
+  it('passes the configured SSH key to the append checkout fetch process', async () => {
+    const test = fixture();
+    const logPath = path.join(test.root, 'git-wrapper.jsonl');
+    const wrapperPath = path.join(test.root, 'git-wrapper.cjs');
+    const realGit = run(test.root, ['which', 'git']);
+    writeFileSync(
+      wrapperPath,
+      `#!/usr/bin/env node
+const { appendFileSync } = require('node:fs');
+const { spawnSync } = require('node:child_process');
+appendFileSync(${JSON.stringify(logPath)}, JSON.stringify({
+  args: process.argv.slice(2),
+  gitSshCommand: process.env.GIT_SSH_COMMAND || null,
+}) + '\\n');
+const result = spawnSync(${JSON.stringify(realGit)}, process.argv.slice(2), {
+  env: process.env,
+  stdio: 'inherit',
+});
+if (result.error) throw result.error;
+process.exit(result.status === null ? 1 : result.status);
+`,
+      { mode: 0o700 },
+    );
+    chmodSync(wrapperPath, 0o700);
+    const transport = new CollaborationProjectSpaceGitTransport(wrapperPath);
+    const initial = genesis(test.identity);
+    const history = await transport.create({
+      remoteUrl: test.remote,
+      repositoryPath: test.cache,
+      gitSshKeyPath: test.identity.privateKeyPath,
+      identity: test.identity,
+      genesisEvent: initial.event,
+      genesisProjection: initial.projection,
+    });
+    writeFileSync(logPath, '');
+
+    await transport.append({
+      remoteUrl: test.remote,
+      repositoryPath: test.cache,
+      previousHead: history.head,
+      gitSshKeyPath: test.identity.privateKeyPath,
+      identity: test.identity,
+      buildEvent: (current) => {
+        const head = current.projection.aggregateHeads['group:group_signed']!;
+        return buildCollaborationEventV3({
+          groupId: 'group_signed',
+          eventId: 'evt_transport_key_check',
+          aggregateType: 'group',
+          aggregateId: 'group_signed',
+          aggregateRevision: head.revision + 1,
+          previousEventHash: head.eventHash,
+          eventType: 'group_settings_updated',
+          actor: {
+            principal_id: test.identity.principalId,
+            client_id: test.identity.clientId,
+            credential_id: test.identity.credentialId,
+            executor_id: null,
+          },
+          occurredAt: NOW,
+          payload: { name: 'SSH transport checked' },
+        });
+      },
+    });
+
+    const invocations = readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            args: string[];
+            gitSshCommand: string | null;
+          },
+      );
+    const appendFetch = invocations.find(
+      ({ args }) =>
+        args[0] === 'fetch' && args[1] === '-q' && args.at(-1) === history.head,
+    );
+    expect(appendFetch?.gitSshCommand).toContain(
+      `ssh -i '${test.identity.privateKeyPath}'`,
+    );
+    expect(appendFetch?.gitSshCommand).toContain('IdentitiesOnly=yes');
+  }, 30_000);
+
   it('materializes original business bytes with a verified JSON sidecar and virtual tree', async () => {
     const test = fixture();
     const transport = new CollaborationProjectSpaceGitTransport();
@@ -373,6 +504,7 @@ describe('Collaboration project space v3 Git protocol', () => {
             actor: {
               principal_id: test.identity.principalId,
               client_id: test.identity.clientId,
+              credential_id: test.identity.credentialId,
               executor_id: null,
             },
             occurredAt: NOW,
@@ -405,9 +537,7 @@ describe('Collaboration project space v3 Git protocol', () => {
     const store = new CollaborationProjectSpaceStore(
       path.join(test.root, 'collaboration.db'),
     );
-    const identities = {
-      resolveSigningIdentity: async () => test.identity,
-    } as unknown as CollaborationProjectSpaceIdentityService;
+    const identities = identityService(test.identity);
     const service = new CollaborationProjectSpaceService(
       store,
       transport,
@@ -419,7 +549,7 @@ describe('Collaboration project space v3 Git protocol', () => {
       await service.createGroup({
         remoteUrl: test.remote,
         name: 'Signed project',
-        signingKeyPath: test.identity.privateKeyPath,
+        gitSshKeyPath: test.identity.privateKeyPath,
         displayName: 'Alice',
         clientDisplayName: 'Alice MacBook',
         membershipPolicy: 'open',
@@ -490,9 +620,7 @@ describe('Collaboration project space v3 Git protocol', () => {
     const store = new CollaborationProjectSpaceStore(
       path.join(test.root, 'collaboration.db'),
     );
-    const identities = {
-      resolveSigningIdentity: async () => test.identity,
-    } as unknown as CollaborationProjectSpaceIdentityService;
+    const identities = identityService(test.identity);
     const service = new CollaborationProjectSpaceService(
       store,
       new CollaborationProjectSpaceGitTransport(),
@@ -504,7 +632,7 @@ describe('Collaboration project space v3 Git protocol', () => {
       await service.createGroup({
         remoteUrl: test.remote,
         name: 'Signed project',
-        signingKeyPath: test.identity.privateKeyPath,
+        gitSshKeyPath: test.identity.privateKeyPath,
         displayName: 'Alice',
         clientDisplayName: 'Alice MacBook',
         membershipPolicy: 'open',
@@ -586,6 +714,7 @@ describe('Collaboration project space v3 Git protocol', () => {
             actor: {
               principal_id: test.identity.principalId,
               client_id: test.identity.clientId,
+              credential_id: test.identity.credentialId,
               executor_id: null,
             },
             occurredAt: NOW,
@@ -636,9 +765,7 @@ describe('Collaboration project space v3 Git protocol', () => {
     const store = new CollaborationProjectSpaceStore(
       path.join(test.root, 'collaboration.db'),
     );
-    const identities = {
-      resolveSigningIdentity: async () => test.identity,
-    } as unknown as CollaborationProjectSpaceIdentityService;
+    const identities = identityService(test.identity);
     const service = new CollaborationProjectSpaceService(
       store,
       transport,
@@ -650,7 +777,7 @@ describe('Collaboration project space v3 Git protocol', () => {
       await service.createGroup({
         remoteUrl: test.remote,
         name: 'Signed project',
-        signingKeyPath: test.identity.privateKeyPath,
+        gitSshKeyPath: test.identity.privateKeyPath,
         displayName: 'Alice',
         clientDisplayName: 'Alice MacBook',
         membershipPolicy: 'open',
@@ -693,6 +820,7 @@ describe('Collaboration project space v3 Git protocol', () => {
               actor: {
                 principal_id: test.identity.principalId,
                 client_id: test.identity.clientId,
+                credential_id: test.identity.credentialId,
                 executor_id: null,
               },
               occurredAt: NOW,

@@ -9,12 +9,46 @@ export function collaborationLocalMembershipStatus(group) {
   );
 }
 
+export function collaborationShortId(value) {
+  const text = String(value || '');
+  const separator = text.indexOf('_');
+  const prefix = separator >= 0 ? text.slice(0, separator) : '';
+  const identifier = separator >= 0 ? text.slice(separator + 1) : text;
+  return identifier.length > 12
+    ? `${prefix ? `${prefix}_` : ''}${identifier.slice(0, 8)}...${identifier.slice(-4)}`
+    : text;
+}
+
+export function collaborationLocalCredential(group) {
+  const credentialId = group?.icarusIdentity?.credentialId;
+  const principalId = group?.localPrincipalId;
+  return credentialId && principalId
+    ? group?.projection?.credentials?.[principalId]?.[credentialId] || null
+    : null;
+}
+
+export function collaborationCanDecideRecovery(group, request) {
+  if (!group || !request || request.status !== 'pending') return false;
+  if (
+    request.type === 'owner_recovery' &&
+    group.localPrincipalId === group.ownerPrincipalId &&
+    group.icarusIdentity?.recoveryCredentialAvailable
+  )
+    return true;
+  if (!collaborationCanMutate(group)) return false;
+  return request.type === 'identity_recovery'
+    ? group.localPrincipalId === request.target_principal_id
+    : group.localPrincipalId === group.ownerPrincipalId;
+}
+
 export function collaborationCanMutate(group) {
+  const localCredential = collaborationLocalCredential(group);
   return Boolean(
     group?.subscriptionMode === 'member' &&
     group.localPrincipalId &&
     group.localClientId &&
     collaborationLocalMembershipStatus(group) === 'active' &&
+    (!group?.icarusIdentity?.credentialId || localCredential?.status === 'active') &&
     group.lifecycle !== 'archived',
   );
 }

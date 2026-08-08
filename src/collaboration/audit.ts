@@ -18,6 +18,8 @@ export interface CollaborationAuditExportV3 {
     readonly protocol_status: string;
   };
   readonly aggregates: CollaborationProjectionV3['aggregateHeads'];
+  readonly credentials: CollaborationProjectionV3['credentials'];
+  readonly recovery_requests: CollaborationProjectionV3['recoveryRequests'];
   readonly events: readonly Record<string, unknown>[];
   readonly local_evidence: readonly Record<string, unknown>[];
 }
@@ -35,9 +37,7 @@ function auditSafe(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, item]) => [
       key,
-      /token|secret|password|credential|authorization|private.?key|api.?key/iu.test(
-        key,
-      )
+      /token|secret|password|authorization|private.?key|api.?key/iu.test(key)
         ? '[redacted]'
         : auditSafe(item),
     ]),
@@ -114,6 +114,8 @@ export function buildCollaborationAuditV3(input: {
       protocol_status: input.group.protocolStatus,
     },
     aggregates: input.projection.aggregateHeads,
+    credentials: input.projection.credentials,
+    recovery_requests: input.projection.recoveryRequests,
     events: input.eventRecords
       .slice()
       .sort((left, right) => left.commitOrder - right.commitOrder)

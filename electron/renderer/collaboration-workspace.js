@@ -24,6 +24,7 @@ import {
   buildCollaborationCompleteTurnRequest,
   buildCollaborationStartTurnRequest,
   collaborationCanApproveMembers,
+  collaborationCanDecideRecovery,
   collaborationCanCreateTurn,
   collaborationCanMutate,
   collaborationCurrentTurn,
@@ -32,9 +33,11 @@ import {
   collaborationElapsed,
   collaborationIsObserver,
   collaborationLocalMembershipStatus,
+  collaborationLocalCredential,
   collaborationOutcomeRoutes,
   collaborationPendingNotifications,
   collaborationPrincipalName,
+  collaborationShortId,
   stageCollaborationArtifactFiles,
   collaborationTurnAccess,
   collaborationTurnCompletionDraft,
@@ -301,7 +304,7 @@ export function createCollaborationWorkspace(options) {
 
   const renderObserverBand = (group) => {
     if (collaborationIsObserver(group))
-      return `<section class="collaboration-observer-band"><div><strong>只读观察者</strong><span>${html(group.lastVerifiedHead ? `已验证 ${group.lastVerifiedHead.slice(0, 12)}` : '正在等待验证版本')}</span></div><button type="button" class="btn-primary" data-collaboration-action="request-join">申请加入群组</button></section>`;
+      return `<section class="collaboration-observer-band"><div><strong>Icarus 业务只读</strong><span>${html(group.lastVerifiedHead ? `已验证 ${group.lastVerifiedHead.slice(0, 12)}` : '正在等待验证版本')}</span></div><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="request-recovery">恢复已有身份</button><button type="button" class="btn-primary" data-collaboration-action="request-join">申请新成员身份</button></div></section>`;
     const membershipStatus = collaborationLocalMembershipStatus(group);
     return membershipStatus === 'active'
       ? ''
@@ -472,28 +475,80 @@ export function createCollaborationWorkspace(options) {
   const renderMembers = () => {
     const group = selectedGroup();
     const projection = group.projection;
+    const memberData = state.tabData.members || projection || {};
+    const members = memberData.members || projection?.members || {};
+    const clientsByPrincipal = memberData.clients || projection?.clients || {};
+    const credentialsByPrincipal =
+      memberData.credentials || projection?.credentials || {};
+    const recoveryRequests = Object.values(
+      memberData.recoveryRequests || projection?.recoveryRequests || {},
+    ).sort((left, right) =>
+      String(right.created_at).localeCompare(String(left.created_at)),
+    );
     const canApprove = collaborationCanApproveMembers(group);
     const invites = Object.values(projection?.invites || {});
     const inviteSection =
       projection?.group?.membership_policy?.join === 'invite_only'
-        ? `<section class="collaboration-section"><div class="collaboration-section-head"><h3>邀请</h3>${canApprove ? '<button type="button" class="btn-primary" data-collaboration-action="issue-invite">发放邀请</button>' : ''}</div><div class="collaboration-record-list">${invites.map((invite) => `<article class="collaboration-record"><div><strong>${html(collaborationPrincipalName(projection, invite.principal_id))}</strong><small>${html(invite.invite_id)} · ${html(invite.expires_at ? timestamp(invite.expires_at) : '永不过期')}</small></div>${status(invite.status)}${canApprove && invite.status === 'active' ? `<button type="button" class="btn-ghost" data-collaboration-action="revoke-invite" data-invite-id="${attr(invite.invite_id)}">撤销</button>` : ''}</article>`).join('') || empty('暂无邀请')}</div></section>`
+        ? `<section class="collaboration-section"><div class="collaboration-section-head"><h3>邀请</h3>${canApprove ? '<button type="button" class="btn-primary" data-collaboration-action="issue-invite">发放邀请</button>' : ''}</div><div class="collaboration-record-list">${invites.map((invite) => `<article class="collaboration-record"><div><strong>新成员邀请</strong><small>${html(invite.invite_id)} · ${html(invite.expires_at ? timestamp(invite.expires_at) : '永不过期')}</small></div>${status(invite.status)}${canApprove && invite.status === 'active' ? `<button type="button" class="btn-ghost" data-collaboration-action="revoke-invite" data-invite-id="${attr(invite.invite_id)}">撤销</button>` : ''}</article>`).join('') || empty('暂无邀请')}</div></section>`
         : '';
-    return `${inviteSection}<section class="collaboration-section"><div class="collaboration-section-head"><h3>成员</h3><span>${Object.keys(projection?.members || {}).length}</span></div><div class="collaboration-record-list">${Object.values(
-      projection?.members || {},
+    const memberSection = `<section class="collaboration-section"><div class="collaboration-section-head"><h3>Icarus Group Permission</h3><span>${Object.keys(members).length}</span></div><div class="collaboration-record-list">${Object.values(
+      members,
     )
       .map((member) => {
         const grants =
-          projection.permissionGrants?.[member.principal_id]?.grants || [];
-        const clients = Object.values(
-          projection.clients?.[member.principal_id] || {},
-        );
+          memberData.permissionGrants?.[member.principal_id]?.grants ||
+          projection.permissionGrants?.[member.principal_id]?.grants ||
+          [];
+        const clients = Object.values(clientsByPrincipal[member.principal_id] || {});
         const approvalActions =
           canApprove && member.status === 'requested'
             ? `<div class="collaboration-record-actions"><button type="button" class="btn-primary" data-collaboration-action="approve-member" data-principal-id="${attr(member.principal_id)}">批准</button><button type="button" class="btn-danger-soft" data-collaboration-action="reject-member" data-principal-id="${attr(member.principal_id)}">拒绝</button></div>`
             : '';
-        return `<article class="collaboration-record"><div><strong>${html(member.display_name)}</strong><small>${html(member.principal_id)} · ${clients.length} 个客户端</small><p>${grants.map((grant) => `<code title="${attr(grant)}">${html(collaborationPermissionLabel(grant))}</code>`).join(' ') || '无直接权限'}</p></div>${status(member.status)}${approvalActions}${group.localPrincipalId === group.ownerPrincipalId && collaborationCanMutate(group) && member.status === 'active' ? `<button type="button" class="btn-ghost" data-collaboration-action="edit-permissions" data-principal-id="${attr(member.principal_id)}">权限</button>` : ''}</article>`;
+        return `<article class="collaboration-record"><div class="collaboration-record-main"><strong>${html(member.display_name)}</strong><small title="${attr(member.principal_id)}">${html(collaborationShortId(member.principal_id))} · ${clients.length} 个 Client</small><p>${grants.map((grant) => `<code title="${attr(grant)}">${html(collaborationPermissionLabel(grant))}</code>`).join(' ') || '无直接权限'}</p></div>${status(member.status)}${approvalActions}${group.localPrincipalId === group.ownerPrincipalId && collaborationCanMutate(group) && member.status === 'active' ? `<button type="button" class="btn-ghost" data-collaboration-action="edit-permissions" data-principal-id="${attr(member.principal_id)}">权限</button>` : ''}</article>`;
       })
       .join('')}</div></section>`;
+    const clients = Object.values(clientsByPrincipal).flatMap((entries) =>
+      Object.values(entries || {}),
+    );
+    const clientSection = `<section class="collaboration-section"><div class="collaboration-section-head"><h3>Clients</h3><span>${clients.length}</span></div><div class="collaboration-record-list">${clients
+      .map((client) => {
+        const canRevoke =
+          collaborationCanMutate(group) &&
+          client.principal_id === group.localPrincipalId &&
+          client.client_id !== group.localClientId &&
+          client.status === 'active';
+        return `<article class="collaboration-record"><div class="collaboration-record-main"><strong>${html(client.display_name)}</strong><small title="${attr(client.client_id)}">${html(collaborationPrincipalName(projection, client.principal_id))} · ${html(collaborationShortId(client.client_id))}</small></div>${status(client.status)}${canRevoke ? `<button type="button" class="btn-danger-soft" data-collaboration-action="revoke-client" data-client-id="${attr(client.client_id)}">撤销 Client</button>` : ''}</article>`;
+      })
+      .join('') || empty('暂无 Client')}</div></section>`;
+    const credentials = Object.values(credentialsByPrincipal).flatMap((entries) =>
+      Object.values(entries || {}),
+    );
+    const credentialSection = `<section class="collaboration-section"><div class="collaboration-section-head"><h3>Event-signing Credentials</h3>${collaborationCanMutate(group) ? '<button type="button" class="btn-primary" data-collaboration-action="rotate-credential">轮换当前 Credential</button>' : ''}</div><div class="collaboration-record-list">${credentials
+      .map((credential) => {
+        const current =
+          credential.credential_id === group.icarusIdentity?.credentialId;
+        const canRevoke =
+          collaborationCanMutate(group) &&
+          credential.principal_id === group.localPrincipalId &&
+          credential.purpose === 'event_signing' &&
+          credential.status === 'active' &&
+          !current;
+        return `<article class="collaboration-record"><div class="collaboration-record-main"><strong>${html(credential.purpose === 'group_recovery' ? 'Offline Group recovery' : current ? '当前设备签名' : 'Icarus 事件签名')}</strong><small title="${attr(credential.credential_id)}">${html(collaborationShortId(credential.credential_id))} · ${html(collaborationShortId(credential.client_id))}</small><code title="${attr(credential.fingerprint)}">${html(credential.fingerprint)}</code></div>${status(credential.status)}${canRevoke ? `<button type="button" class="btn-danger-soft" data-collaboration-action="revoke-credential" data-credential-id="${attr(credential.credential_id)}">撤销</button>` : ''}</article>`;
+      })
+      .join('') || empty('暂无 Credential')}</div></section>`;
+    const recoverySection = `<section class="collaboration-section"><div class="collaboration-section-head"><h3>身份恢复请求</h3><span>${recoveryRequests.length}</span></div><div class="collaboration-record-list">${recoveryRequests
+      .map((request) => {
+        const canDecide = collaborationCanDecideRecovery(group, request);
+        const canCancel =
+          request.status === 'pending' &&
+          request.requested_client?.client_id === group.localClientId &&
+          request.requested_credential?.credential_id ===
+            group.icarusIdentity?.credentialId;
+        const code = request.verification_code || '------';
+        return `<article class="collaboration-record collaboration-recovery-record"><div class="collaboration-record-main"><div class="collaboration-record-title"><strong>${html(request.type === 'owner_recovery' ? '群主恢复' : '旧设备批准')}</strong><code class="collaboration-verification-code">${html(code)}</code></div><small>${html(collaborationPrincipalName(projection, request.target_principal_id))} · ${html(collaborationShortId(request.target_principal_id))}</small><span>${html(request.requested_client.display_name)} · ${html(request.requested_credential.fingerprint)}</span><small>${html(timestamp(request.created_at))} - ${html(timestamp(request.expires_at))}</small>${request.reason ? `<p>${html(request.reason)}</p>` : ''}</div>${status(request.status)}${canDecide ? `<div class="collaboration-record-actions"><button type="button" class="btn-primary" data-collaboration-action="approve-recovery" data-request-id="${attr(request.request_id)}">批准</button><button type="button" class="btn-danger-soft" data-collaboration-action="reject-recovery" data-request-id="${attr(request.request_id)}">拒绝</button></div>` : ''}${canCancel ? `<button type="button" class="btn-ghost" data-collaboration-action="cancel-recovery" data-request-id="${attr(request.request_id)}">取消</button>` : ''}</article>`;
+      })
+      .join('') || empty('暂无恢复请求')}</div></section>`;
+    return `${inviteSection}${recoverySection}${memberSection}${clientSection}${credentialSection}`;
   };
 
   const renderAudit = () => {
@@ -512,7 +567,9 @@ export function createCollaborationWorkspace(options) {
 
   const renderSettings = () => {
     const group = selectedGroup();
-    return `${renderObserverBand(group)}<section class="collaboration-section"><div class="collaboration-section-head"><h3>群组设置</h3></div><dl class="collaboration-definition-list"><div><dt>群组 ID</dt><dd>${html(group.groupId)}</dd></div><div><dt>Git 远程仓库</dt><dd>${html(group.remoteUrl)}</dd></div><div><dt>订阅模式</dt><dd>${html(collaborationLabel(group.subscriptionMode))}</dd></div><div><dt>协议状态</dt><dd>${html(collaborationStatusLabel(group.protocolStatus))}</dd></div><div><dt>已验证版本</dt><dd>${html(group.lastVerifiedHead || '-')}</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="backup">创建备份</button><button type="button" class="btn-ghost" data-collaboration-action="restore">恢复备份</button>${group.localPrincipalId === group.ownerPrincipalId && group.lifecycle === 'active' ? '<button type="button" class="btn-danger-soft" data-collaboration-action="archive-group">归档群组</button>' : ''}</div></section>`;
+    const identity = group.icarusIdentity || {};
+    const localCredential = collaborationLocalCredential(group);
+    return `${renderObserverBand(group)}<section class="collaboration-section"><div class="collaboration-section-head"><h3>Git Remote Access</h3><button type="button" class="btn-ghost" data-collaboration-action="edit-git-ssh-key">修改 SSH Key</button></div><dl class="collaboration-definition-list"><div><dt>Remote</dt><dd>${html(group.remoteUrl)}</dd></div><div><dt>本地 SSH Key</dt><dd>${html(group.gitRemoteAccess?.sshKeyPath || '-')}</dd></div><div><dt>权限边界</dt><dd>clone / fetch / push</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="clear-git-ssh-key">使用默认路径</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Icarus Group Permission 与身份</h3></div><dl class="collaboration-definition-list"><div><dt>业务身份</dt><dd title="${attr(identity.principalId || '')}">${html(identity.principalId ? collaborationShortId(identity.principalId) : '-')}</dd></div><div><dt>当前 Client</dt><dd title="${attr(identity.clientId || '')}">${html(identity.clientId ? collaborationShortId(identity.clientId) : '-')}</dd></div><div><dt>当前 Credential</dt><dd title="${attr(identity.credentialId || '')}">${html(identity.credentialId ? collaborationShortId(identity.credentialId) : '-')}</dd></div><div><dt>签名状态</dt><dd>${html(collaborationStatusLabel(localCredential?.status || (identity.credentialId ? 'unknown' : 'not_configured')))}</dd></div><div><dt>离线 Group recovery</dt><dd>${identity.recoveryCredentialAvailable ? '本机可用' : '本机未导入'}</dd></div><div><dt>权限边界</dt><dd>Host API / 协议验证 / Reducer</dd></div></dl><div class="collaboration-record-actions">${collaborationCanMutate(group) ? '<button type="button" class="btn-ghost" data-collaboration-action="rotate-credential">轮换 Credential</button>' : ''}${identity.recoveryCredentialAvailable ? '<button type="button" class="btn-ghost" data-collaboration-action="export-recovery-credential">导出离线恢复凭据</button>' : ''}<button type="button" class="btn-ghost" data-collaboration-action="import-recovery-credential">导入离线恢复凭据</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>群组与本地数据</h3></div><dl class="collaboration-definition-list"><div><dt>群组 ID</dt><dd>${html(group.groupId)}</dd></div><div><dt>订阅模式</dt><dd>${html(collaborationLabel(group.subscriptionMode))}</dd></div><div><dt>协议状态</dt><dd>${html(collaborationStatusLabel(group.protocolStatus))}</dd></div><div><dt>已验证版本</dt><dd>${html(group.lastVerifiedHead || '-')}</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="backup">创建备份</button><button type="button" class="btn-ghost" data-collaboration-action="restore">恢复备份</button>${group.localPrincipalId === group.ownerPrincipalId && group.lifecycle === 'active' ? '<button type="button" class="btn-danger-soft" data-collaboration-action="archive-group">归档群组</button>' : ''}</div></section>`;
   };
 
   const renderDiagnostics = () => {
@@ -549,7 +606,11 @@ export function createCollaborationWorkspace(options) {
         `/groups/${encodeURIComponent(groupId)}/files`,
       );
       state.tabData.files = data.files || [];
-    } else if (state.activeTab === 'audit')
+    } else if (state.activeTab === 'members')
+      state.tabData.members = await options.request(
+        `/groups/${encodeURIComponent(groupId)}/members`,
+      );
+    else if (state.activeTab === 'audit')
       state.tabData.audit = await options.request(
         `/groups/${encodeURIComponent(groupId)}/audit`,
       );
@@ -640,7 +701,7 @@ export function createCollaborationWorkspace(options) {
     openDialog({
       title: '创建群组',
       submitText: '创建',
-      body: `<div class="collaboration-form-grid">${field('群组名称', 'name')}${field('Git 远程仓库', 'remoteUrl')}${field('SSH 签名密钥（可选）', 'signingKeyPath', '', { required: false })}${field('成员显示名', 'displayName')}${field('客户端名称', 'clientDisplayName')}${field(
+      body: `<div class="collaboration-form-grid">${field('群组名称', 'name')}${field('Git 远程仓库', 'remoteUrl')}${field('Git Remote SSH Key（可选）', 'gitSshKeyPath', '', { required: false })}${field('成员显示名', 'displayName')}${field('客户端名称', 'clientDisplayName')}${field(
         '加入方式',
         'membershipPolicy',
         'approval',
@@ -673,11 +734,15 @@ export function createCollaborationWorkspace(options) {
     openDialog({
       title: '加入或观察群组',
       submitText: '添加群组',
-      body: field('Git 远程仓库', 'remoteUrl'),
+      body: `<div class="collaboration-form-grid">${field('Git 远程仓库', 'remoteUrl')}${field('Git Remote SSH Key（可选）', 'gitSshKeyPath', '', { required: false })}</div>`,
       onSubmit: async (formData) => {
+        const gitSshKeyPath = String(formData.get('gitSshKeyPath') || '').trim();
         const data = await options.request('/subscriptions', {
           method: 'POST',
-          body: JSON.stringify({ remoteUrl: formData.get('remoteUrl') }),
+          body: JSON.stringify({
+            remoteUrl: formData.get('remoteUrl'),
+            ...(gitSshKeyPath ? { gitSshKeyPath } : {}),
+          }),
         });
         closeDialog();
         await loadGroups();
@@ -692,7 +757,7 @@ export function createCollaborationWorkspace(options) {
     openDialog({
       title: '申请加入群组',
       submitText: '提交申请',
-      body: `<div class="collaboration-form-grid">${field('SSH 签名密钥（可选）', 'signingKeyPath', '', { required: false })}${field('成员显示名', 'displayName')}${field('客户端名称', 'clientDisplayName')}${inviteOnly ? field('邀请 ID', 'inviteId') : ''}</div>`,
+      body: `<div class="collaboration-form-grid">${field('Git Remote SSH Key（可选）', 'gitSshKeyPath', group.gitRemoteAccess?.sshKeyPath || '', { required: false })}${field('成员显示名', 'displayName')}${field('客户端名称', 'clientDisplayName')}${inviteOnly ? field('邀请 ID', 'inviteId') : ''}</div>`,
       onSubmit: async (formData) => {
         await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/join-requests`,
@@ -700,7 +765,11 @@ export function createCollaborationWorkspace(options) {
             method: 'POST',
             body: JSON.stringify(
               buildCollaborationJoinRequest(
-                Object.fromEntries(formData.entries()),
+                {
+                  ...Object.fromEntries(formData.entries()),
+                  configuredGitSshKeyPath:
+                    group.gitRemoteAccess?.sshKeyPath || '',
+                },
               ),
             ),
           },
@@ -711,19 +780,267 @@ export function createCollaborationWorkspace(options) {
     });
   };
 
+  const requestRecovery = () => {
+    const group = selectedGroup();
+    const principals = Object.values(group.projection?.members || {}).filter(
+      (member) => member.status === 'active',
+    );
+    if (!principals.length) throw new Error('群组中没有可恢复的 Principal');
+    openDialog({
+      title: '恢复已有身份',
+      submitText: '提交恢复请求',
+      body: `<div class="collaboration-form-grid">${field(
+        '原 Principal',
+        'targetPrincipalId',
+        principals[0].principal_id,
+        {
+          options: principals.map((member) => [
+            member.principal_id,
+            `${member.display_name} · ${collaborationShortId(member.principal_id)}`,
+          ]),
+        },
+      )}${field('新设备名称', 'clientDisplayName')}${field(
+        '恢复方式',
+        'type',
+        'identity_recovery',
+        {
+          options: [
+            ['identity_recovery', '旧设备可批准'],
+            ['owner_recovery', '旧设备和密钥均不可用'],
+          ],
+        },
+      )}${field('申请原因', 'reason', '', {
+        multiline: true,
+        required: false,
+      })}</div>`,
+      onSubmit: async (formData) => {
+        const values = Object.fromEntries(formData.entries());
+        const reason = String(values.reason || '').trim();
+        if (values.type === 'owner_recovery' && !reason)
+          throw new Error('群主恢复必须填写申请原因');
+        const result = await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/recovery-requests`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              targetPrincipalId: values.targetPrincipalId,
+              type: values.type,
+              clientDisplayName: values.clientDisplayName,
+              reason: reason || null,
+            }),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+        openDialog({
+          title: '恢复请求已提交',
+          body: `<dl class="collaboration-definition-list"><div><dt>验证码</dt><dd><code class="collaboration-verification-code">${html(result.verificationCode)}</code></dd></div><div><dt>请求 ID</dt><dd>${html(result.requestId)}</dd></div><div><dt>请求 Hash</dt><dd>${html(result.requestHash)}</dd></div></dl>`,
+        });
+      },
+    });
+  };
+
+  const decideRecovery = (requestId, decision) => {
+    const group = selectedGroup();
+    const requests =
+      state.tabData.members?.recoveryRequests ||
+      group.projection?.recoveryRequests ||
+      {};
+    const request = requests[requestId];
+    if (!request) throw new Error('恢复请求不存在');
+    const offlineOnly =
+      decision === 'approve' &&
+      request.type === 'owner_recovery' &&
+      !collaborationCanMutate(group) &&
+      group.icarusIdentity?.recoveryCredentialAvailable;
+    const ownerApproval =
+      decision === 'approve' && request.type === 'owner_recovery';
+    const revocableCredentialIds = Object.values(
+      group.projection?.credentials?.[request.target_principal_id] || {},
+    )
+      .filter(
+        (credential) =>
+          credential.purpose === 'event_signing' &&
+          credential.status === 'active' &&
+          credential.credential_id !== request.requested_credential.credential_id,
+      )
+      .map((credential) => credential.credential_id);
+    openDialog({
+      title: decision === 'approve' ? '批准身份恢复' : '拒绝身份恢复',
+      submitText: decision === 'approve' ? '确认批准' : '确认拒绝',
+      danger: decision === 'reject',
+      body: `<dl class="collaboration-definition-list"><div><dt>新设备</dt><dd>${html(request.requested_client.display_name)}</dd></div><div><dt>Credential</dt><dd>${html(request.requested_credential.fingerprint)}</dd></div><div><dt>申请时间</dt><dd>${html(timestamp(request.created_at))}</dd></div><div><dt>过期时间</dt><dd>${html(timestamp(request.expires_at))}</dd></div><div><dt>验证码</dt><dd><code class="collaboration-verification-code">${html(request.verification_code || '------')}</code></dd></div></dl><div class="collaboration-form-grid">${field(decision === 'approve' ? '核验与批准原因' : '拒绝原因', 'reason', '', { multiline: true })}${ownerApproval ? `${field('旧 Credential 撤销范围', 'credentialScope', 'all', { options: [['all', '全部旧 event-signing Credentials'], ['selected', '仅指定 Credentials']] })}${field('指定 Credential IDs', 'revokeCredentialIds', revocableCredentialIds.join(', '), { multiline: true, required: false })}` : ''}${offlineOnly ? '<label class="collaboration-field collaboration-check-field"><input type="checkbox" name="useOfflineOwnerCredential" checked><span>使用已导入的离线 Group recovery Credential</span></label>' : ''}</div>`,
+      onSubmit: async (formData) => {
+        const credentialScope = formData.get('credentialScope');
+        const revokeCredentialIds = String(
+          formData.get('revokeCredentialIds') || '',
+        )
+          .split(/[\s,]+/u)
+          .map((value) => value.trim())
+          .filter(Boolean);
+        if (
+          ownerApproval &&
+          credentialScope === 'selected' &&
+          revokeCredentialIds.length === 0
+        )
+          throw new Error('指定撤销范围至少需要一个 Credential ID');
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/recovery-requests/${encodeURIComponent(requestId)}/${decision === 'approve' ? 'approve' : 'reject'}`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              expectedRevision: aggregateRevision(
+                group.projection,
+                'recovery',
+                requestId,
+              ),
+              reason: formData.get('reason'),
+              ...(offlineOnly
+                ? {
+                    useOfflineOwnerCredential: Boolean(
+                      formData.get('useOfflineOwnerCredential'),
+                    ),
+                  }
+                : {}),
+              ...(ownerApproval && credentialScope === 'selected'
+                ? { revokeCredentialIds }
+                : {}),
+            }),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+        await loadTabData();
+      },
+    });
+  };
+
+  const cancelRecovery = (requestId) => {
+    const group = selectedGroup();
+    openDialog({
+      title: '取消身份恢复',
+      submitText: '确认取消',
+      body: field('取消原因', 'reason', '', { multiline: true }),
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/recovery-requests/${encodeURIComponent(requestId)}/cancel`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              expectedRevision: aggregateRevision(
+                group.projection,
+                'recovery',
+                requestId,
+              ),
+              reason: formData.get('reason'),
+            }),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+        await loadTabData();
+      },
+    });
+  };
+
+  const rotateCredential = () => {
+    const group = selectedGroup();
+    openDialog({
+      title: '轮换当前 Credential',
+      submitText: '生成并轮换',
+      body: '<label class="collaboration-field collaboration-check-field"><input type="checkbox" name="revokeCurrent" checked><span>轮换后撤销当前 Credential</span></label>',
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/credentials/rotate`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              expectedRevision: aggregateRevision(
+                group.projection,
+                'membership',
+                group.localPrincipalId,
+              ),
+              revokeCurrent: Boolean(formData.get('revokeCurrent')),
+            }),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+        await loadTabData();
+      },
+    });
+  };
+
+  const revokeCredential = (credentialId) => {
+    const group = selectedGroup();
+    openDialog({
+      title: '撤销 Credential',
+      submitText: '确认撤销',
+      danger: true,
+      body: field('撤销原因', 'reason', '', { multiline: true }),
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/credentials/${encodeURIComponent(credentialId)}/revoke`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              expectedRevision: aggregateRevision(
+                group.projection,
+                'membership',
+                group.localPrincipalId,
+              ),
+              reason: formData.get('reason'),
+            }),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+        await loadTabData();
+      },
+    });
+  };
+
+  const revokeClient = (clientId) => {
+    const group = selectedGroup();
+    openDialog({
+      title: '撤销 Client',
+      submitText: '撤销 Client 与其 Credentials',
+      danger: true,
+      body: field('撤销原因', 'reason', '', { multiline: true }),
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/clients/${encodeURIComponent(clientId)}/revoke`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              expectedRevision: aggregateRevision(
+                group.projection,
+                'membership',
+                group.localPrincipalId,
+              ),
+              reason: formData.get('reason'),
+            }),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+        await loadTabData();
+      },
+    });
+  };
+
   const issueInvite = () => {
     const group = selectedGroup();
     openDialog({
       title: '发放邀请',
       submitText: '发放',
-      body: `<div class="collaboration-form-grid">${field('成员 ID', 'principalId')}${field('过期时间', 'expiresAt', '', { required: false })}</div>`,
+      body: `<div class="collaboration-form-grid">${field('过期时间', 'expiresAt', '', { required: false })}</div>`,
       onSubmit: async (formData) => {
         await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/invites`,
           {
             method: 'POST',
             body: JSON.stringify({
-              principalId: formData.get('principalId'),
               expiresAt: formData.get('expiresAt') || null,
               expectedRevision: 0,
             }),
@@ -1307,11 +1624,81 @@ export function createCollaborationWorkspace(options) {
       },
     });
 
+  const updateGitSshKey = (useDefault = false) => {
+    const group = selectedGroup();
+    const save = async (sshKeyPath) => {
+      await options.request(
+        `/groups/${encodeURIComponent(group.groupId)}/settings/git-remote`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ sshKeyPath }),
+        },
+      );
+      if (elements.dialog.open) closeDialog();
+      await loadDetail(group.groupId, false);
+    };
+    if (useDefault) return save(null);
+    openDialog({
+      title: 'Git Remote SSH Key',
+      submitText: '更新本地设置',
+      body: field(
+        '本地 Key 路径',
+        'sshKeyPath',
+        group.gitRemoteAccess?.sshKeyPath || '',
+      ),
+      onSubmit: async (formData) =>
+        save(String(formData.get('sshKeyPath') || '').trim() || null),
+    });
+  };
+
+  const recoveryCredentialDialog = (operation) => {
+    const group = selectedGroup();
+    openDialog({
+      title:
+        operation === 'export'
+          ? '导出离线 Group recovery Credential'
+          : '导入离线 Group recovery Credential',
+      submitText: operation === 'export' ? '安全导出' : '导入',
+      body: field(
+        operation === 'export' ? '导出路径' : 'Credential 路径',
+        'path',
+      ),
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/recovery-credential/${operation}`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ path: formData.get('path') }),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
   const handleAction = async (button) => {
     const action = button.dataset.collaborationAction;
     const group = selectedGroup();
     if (action === 'go-activity') return selectTab('activity');
     if (action === 'request-join') return requestJoin();
+    if (action === 'request-recovery') return requestRecovery();
+    if (action === 'approve-recovery')
+      return decideRecovery(button.dataset.requestId, 'approve');
+    if (action === 'reject-recovery')
+      return decideRecovery(button.dataset.requestId, 'reject');
+    if (action === 'cancel-recovery')
+      return cancelRecovery(button.dataset.requestId);
+    if (action === 'rotate-credential') return rotateCredential();
+    if (action === 'revoke-credential')
+      return revokeCredential(button.dataset.credentialId);
+    if (action === 'revoke-client') return revokeClient(button.dataset.clientId);
+    if (action === 'edit-git-ssh-key') return updateGitSshKey(false);
+    if (action === 'clear-git-ssh-key') return updateGitSshKey(true);
+    if (action === 'export-recovery-credential')
+      return recoveryCredentialDialog('export');
+    if (action === 'import-recovery-credential')
+      return recoveryCredentialDialog('import');
     if (action === 'issue-invite') return issueInvite();
     if (action === 'revoke-invite') {
       const inviteId = button.dataset.inviteId;

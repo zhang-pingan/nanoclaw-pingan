@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import {
   CollaborationProjectSpaceIdentityService,
-  type CollaborationPrincipalIdentity,
+  type CollaborationEventSigningIdentity,
 } from './project-space-identity.js';
 import {
   CollaborationProjectSpaceStore,
@@ -18,6 +18,8 @@ import {
   collaborationDeadlineSnapshotHashV3,
   collaborationFencingTokenV3,
   collaborationIdempotencyKeyV3,
+  collaborationRecoveryRequestHashV3,
+  collaborationRecoveryVerificationCodeV3,
   collaborationTurnCompletionHashV3,
   collaborationTurnInputHashV3,
   collaborationWorkflowDefinitionHashV3,
@@ -32,12 +34,14 @@ import {
   artifactMetadataV3Schema,
   collaborationBasenameSchema,
   clientDefinitionSchema,
+  credentialDefinitionSchema,
   discussionMessageSchema,
   discussionSchema,
   executorDescriptorSchema,
   machineDefinitionV3Schema,
   memberDefinitionV3Schema,
   permissionGrantSchema,
+  recoveryRequestSchema,
   handoffEnvelopeV3Schema,
   stateExecutionSchema,
   collaborationTurnV3Schema,
@@ -50,6 +54,7 @@ import {
   type CollaborationEventTypeV3,
   type CollaborationEventV3,
   type CollaborationPermission,
+  type CredentialDefinition,
   type ArtifactMetadataV3,
   type Discussion,
   type FileMetadata,
@@ -77,11 +82,13 @@ export interface CollaborationProjectSpaceTransport {
     readonly remoteUrl: string;
     readonly repositoryPath: string;
     readonly previousHead?: string | null;
+    readonly gitSshKeyPath?: string;
   }): Promise<ValidatedProjectSpaceHistory>;
   create(input: {
     readonly remoteUrl: string;
     readonly repositoryPath: string;
-    readonly identity: CollaborationPrincipalIdentity;
+    readonly gitSshKeyPath?: string;
+    readonly identity: CollaborationEventSigningIdentity;
     readonly genesisEvent: CollaborationEventV3;
     readonly genesisProjection: CollaborationProjectionV3;
   }): Promise<ValidatedProjectSpaceHistory>;
@@ -89,7 +96,8 @@ export interface CollaborationProjectSpaceTransport {
     readonly remoteUrl: string;
     readonly repositoryPath: string;
     readonly previousHead: string | null;
-    readonly identity: CollaborationPrincipalIdentity;
+    readonly gitSshKeyPath?: string;
+    readonly identity: CollaborationEventSigningIdentity;
     readonly buildEvent: (history: ValidatedProjectSpaceHistory) =>
       | CollaborationEventV3
       | {
@@ -122,7 +130,7 @@ export interface ProjectSpaceInspectResult {
 export interface CreateProjectSpaceGroupInput {
   readonly remoteUrl: string;
   readonly name: string;
-  readonly signingKeyPath?: string;
+  readonly gitSshKeyPath?: string;
   readonly displayName: string;
   readonly clientDisplayName: string;
   readonly membershipPolicy: 'open' | 'approval' | 'invite_only';
@@ -133,7 +141,7 @@ export interface CreateProjectSpaceGroupInput {
 
 export interface JoinProjectSpaceGroupInput {
   readonly remoteUrl: string;
-  readonly signingKeyPath?: string;
+  readonly gitSshKeyPath?: string;
   readonly displayName: string;
   readonly clientDisplayName: string;
   readonly inviteId?: string;
@@ -149,6 +157,24 @@ export const MAX_PROJECT_SPACE_FILE_BYTES = 10 * 1024 * 1024;
 
 function newId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
+}
+
+function sharedCredential(
+  identity: CollaborationEventSigningIdentity,
+  eventId: string,
+): CredentialDefinition {
+  return credentialDefinitionSchema.parse({
+    format: 'icarus.collaboration-credential/1',
+    credential_id: identity.credentialId,
+    principal_id: identity.principalId,
+    client_id: identity.clientId,
+    public_key: identity.publicKey,
+    fingerprint: identity.fingerprint,
+    purpose: identity.purpose,
+    status: 'active',
+    created_at_event: eventId,
+    revoked_at_event: null,
+  });
 }
 
 export function collaborationProjectSpaceRepositoryPath(
@@ -176,15 +202,25 @@ export class CollaborationProjectSpaceService {
       this.repositoryRoot,
       remoteUrl,
     );
-    const history = await this.transport.inspect({ remoteUrl, repositoryPath });
+    const history = await this.transport.inspect({
+      remoteUrl,
+      repositoryPath,
+      gitSshKeyPath: this.identities.resolveGitSshKeyPath(),
+    });
     return this.inspectResult(history, repositoryPath);
   }
 
   async createGroup(
     input: CreateProjectSpaceGroupInput,
   ): Promise<CollaborationProjectSpaceGroupRecord> {
-    const identity = await this.identities.resolveSigningIdentity(
-      input.signingKeyPath,
+    const identity = await this.identities.createPrincipalIdentity();
+    const recoveryIdentity = await this.identities.createCredentialIdentity({
+      principalId: identity.principalId,
+      clientId: identity.clientId,
+      purpose: 'group_recovery',
+    });
+    const gitSshKeyPath = this.identities.resolveGitSshKeyPath(
+      input.gitSshKeyPath,
     );
     const groupId = input.groupId ?? newId('group');
     const eventId = newId('evt');
@@ -193,8 +229,6 @@ export class CollaborationProjectSpaceService {
       format: 'icarus.collaboration-member/3',
       principal_id: identity.principalId,
       display_name: input.displayName,
-      signing_key_ref: identity.keyRef,
-      signing_public_key: identity.publicKey,
       status: 'active',
       joined_at_event: eventId,
     });
@@ -222,7 +256,6 @@ export class CollaborationProjectSpaceService {
         name: input.name,
         creator: {
           principal_id: identity.principalId,
-          signing_key_ref: identity.keyRef,
         },
         owner_principal_id: identity.principalId,
         control_branch: COLLABORATION_CONTROL_BRANCH,
@@ -234,6 +267,8 @@ export class CollaborationProjectSpaceService {
       },
       member,
       client,
+      credential: sharedCredential(identity, eventId),
+      recovery_credential: sharedCredential(recoveryIdentity, eventId),
       owner_permissions: ownerPermissions,
     };
     const event = buildCollaborationEventV3({
@@ -247,6 +282,7 @@ export class CollaborationProjectSpaceService {
       actor: {
         principal_id: identity.principalId,
         client_id: identity.clientId,
+        credential_id: identity.credentialId,
         executor_id: null,
       },
       occurredAt,
@@ -260,6 +296,7 @@ export class CollaborationProjectSpaceService {
     const history = await this.transport.create({
       remoteUrl: input.remoteUrl,
       repositoryPath,
+      gitSshKeyPath,
       identity,
       genesisEvent: event,
       genesisProjection: projection,
@@ -270,6 +307,8 @@ export class CollaborationProjectSpaceService {
       repositoryPath,
       mode: 'member',
       identity,
+      recoveryIdentity,
+      gitSshKeyPath,
       pollIntervalMs: input.pollIntervalMs,
     });
     return this.store.getGroup(groupId)!;
@@ -277,6 +316,7 @@ export class CollaborationProjectSpaceService {
 
   async observeGroup(input: {
     readonly remoteUrl: string;
+    readonly gitSshKeyPath?: string;
     readonly pollIntervalMs?: number;
     readonly notificationsEnabled?: boolean;
   }): Promise<CollaborationProjectSpaceGroupRecord> {
@@ -287,6 +327,7 @@ export class CollaborationProjectSpaceService {
     const history = await this.transport.inspect({
       remoteUrl: input.remoteUrl,
       repositoryPath,
+      gitSshKeyPath: this.identities.resolveGitSshKeyPath(input.gitSshKeyPath),
     });
     if (
       history.projection.group.visibility_policy.observer_access !== 'allowed'
@@ -299,6 +340,7 @@ export class CollaborationProjectSpaceService {
       remoteUrl: input.remoteUrl,
       repositoryPath,
       mode: 'observer',
+      gitSshKeyPath: this.identities.resolveGitSshKeyPath(input.gitSshKeyPath),
       pollIntervalMs: input.pollIntervalMs,
       notificationsEnabled: input.notificationsEnabled,
     });
@@ -312,83 +354,20 @@ export class CollaborationProjectSpaceService {
       this.repositoryRoot,
       input.remoteUrl,
     );
+    const existingSubscription = this.store
+      .listGroups()
+      .find((group) => group.remoteUrl === input.remoteUrl);
+    const gitSshKeyPath = this.identities.resolveGitSshKeyPath(
+      input.gitSshKeyPath ?? existingSubscription?.gitSshKeyPath,
+    );
     const [identity, inspected] = await Promise.all([
-      this.identities.resolveSigningIdentity(input.signingKeyPath),
-      this.transport.inspect({ remoteUrl: input.remoteUrl, repositoryPath }),
+      this.identities.createPrincipalIdentity(),
+      this.transport.inspect({
+        remoteUrl: input.remoteUrl,
+        repositoryPath,
+        gitSshKeyPath,
+      }),
     ]);
-    const existingMember = inspected.projection.members[identity.principalId];
-    if (existingMember?.status === 'active') {
-      const registered = await this.appendWithIdentity({
-        history: inspected,
-        remoteUrl: input.remoteUrl,
-        repositoryPath,
-        identity,
-        aggregateType: 'membership',
-        aggregateId: identity.principalId,
-        eventType: 'client_registered',
-        payload: {
-          client: {
-            format: 'icarus.collaboration-client/1',
-            principal_id: identity.principalId,
-            client_id: identity.clientId,
-            display_name: input.clientDisplayName,
-            capabilities: [],
-            status: 'active',
-            registered_at_event: '__EVENT_ID__',
-          },
-        },
-        replaceEventId: true,
-      });
-      this.registerOrUpgradeMember({
-        history: registered,
-        remoteUrl: input.remoteUrl,
-        repositoryPath,
-        identity,
-        pollIntervalMs: input.pollIntervalMs,
-      });
-      return this.store.getGroup(registered.projection.groupId)!;
-    }
-    if (existingMember?.status === 'requested') {
-      if (
-        existingMember.signing_key_ref !== identity.keyRef ||
-        existingMember.signing_public_key !== identity.publicKey
-      )
-        throw new Error('Pending Membership signing identity does not match');
-      let history = inspected;
-      if (
-        !history.projection.clients[identity.principalId]?.[identity.clientId]
-      )
-        history = await this.appendWithIdentity({
-          history,
-          remoteUrl: input.remoteUrl,
-          repositoryPath,
-          identity,
-          aggregateType: 'membership',
-          aggregateId: identity.principalId,
-          eventType: 'client_registered',
-          payload: {
-            client: {
-              format: 'icarus.collaboration-client/1',
-              principal_id: identity.principalId,
-              client_id: identity.clientId,
-              display_name: input.clientDisplayName,
-              capabilities: [],
-              status: 'active',
-              registered_at_event: '__EVENT_ID__',
-            },
-          },
-          replaceEventId: true,
-        });
-      this.registerOrUpgradeMember({
-        history,
-        remoteUrl: input.remoteUrl,
-        repositoryPath,
-        identity,
-        pollIntervalMs: input.pollIntervalMs,
-      });
-      return this.store.getGroup(history.projection.groupId)!;
-    }
-
     const joinPolicy = inspected.projection.group.membership_policy.join;
     const open = joinPolicy === 'open';
     if (joinPolicy === 'invite_only') {
@@ -396,8 +375,6 @@ export class CollaborationProjectSpaceService {
         throw new Error('Invite-only membership requires an Invite');
       const invite = inspected.projection.invites[input.inviteId];
       if (!invite) throw new Error('Invite does not exist');
-      if (invite.principal_id !== identity.principalId)
-        throw new Error('Invite targets a different Principal');
       if (invite.status !== 'active') throw new Error('Invite is not active');
       if (
         invite.expires_at !== null &&
@@ -407,66 +384,58 @@ export class CollaborationProjectSpaceService {
     } else if (input.inviteId) {
       throw new Error('This Group membership policy does not accept Invites');
     }
-    const memberEventType = open ? 'member_registered' : 'membership_requested';
-    const joinedAtEvent = open ? '__EVENT_ID__' : null;
-    let history = await this.appendWithIdentity({
+    const eventId = newId('evt');
+    const client = {
+      format: 'icarus.collaboration-client/1' as const,
+      principal_id: identity.principalId,
+      client_id: identity.clientId,
+      display_name: input.clientDisplayName,
+      capabilities: [],
+      status: 'active' as const,
+      registered_at_event: eventId,
+    };
+    const history = await this.appendWithIdentity({
       history: inspected,
       remoteUrl: input.remoteUrl,
       repositoryPath,
+      gitSshKeyPath,
       identity,
       aggregateType: 'membership',
       aggregateId: identity.principalId,
-      eventType: memberEventType,
+      eventType: open ? 'member_registered' : 'membership_requested',
       payload: {
         member: {
           format: 'icarus.collaboration-member/3',
           principal_id: identity.principalId,
           display_name: input.displayName,
-          signing_key_ref: identity.keyRef,
-          signing_public_key: identity.publicKey,
           status: open ? 'active' : 'requested',
-          joined_at_event: joinedAtEvent,
+          joined_at_event: open ? eventId : null,
+        },
+        client,
+        credential: {
+          ...sharedCredential(identity, eventId),
+          created_at_event: eventId,
         },
         ...(!open
           ? { invite_id: joinPolicy === 'invite_only' ? input.inviteId : null }
           : {}),
       },
-      replaceEventId: open,
-    });
-    history = await this.appendWithIdentity({
-      history,
-      remoteUrl: input.remoteUrl,
-      repositoryPath,
-      identity,
-      aggregateType: 'membership',
-      aggregateId: identity.principalId,
-      eventType: 'client_registered',
-      payload: {
-        client: {
-          format: 'icarus.collaboration-client/1',
-          principal_id: identity.principalId,
-          client_id: identity.clientId,
-          display_name: input.clientDisplayName,
-          capabilities: [],
-          status: 'active',
-          registered_at_event: '__EVENT_ID__',
-        },
-      },
-      replaceEventId: true,
+      eventId,
     });
     this.registerOrUpgradeMember({
       history,
       remoteUrl: input.remoteUrl,
       repositoryPath,
+      gitSshKeyPath,
       identity,
       pollIntervalMs: input.pollIntervalMs,
+      pending: !open,
     });
     return this.store.getGroup(history.projection.groupId)!;
   }
 
   async issueInvite(input: {
     readonly groupId: string;
-    readonly principalId: string;
     readonly expiresAt?: string | null;
     readonly expectedRevision?: number;
     readonly inviteId?: string;
@@ -478,7 +447,6 @@ export class CollaborationProjectSpaceService {
     const invite = {
       format: 'icarus.collaboration-invite/1',
       invite_id: inviteId,
-      principal_id: input.principalId,
       issued_by_principal_id: group.localPrincipalId,
       status: 'active',
       issued_at: '__OCCURRED_AT__',
@@ -578,31 +546,421 @@ export class CollaborationProjectSpaceService {
     });
   }
 
-  async registerCurrentClient(input: {
+  async requestIdentityRecovery(input: {
     readonly groupId: string;
-    readonly expectedRevision: number;
-    readonly displayName: string;
-    readonly capabilities?: readonly string[];
-  }): Promise<CollaborationProjectSpaceGroupRecord> {
-    const group = this.requireLocalMember(input.groupId);
+    readonly targetPrincipalId: string;
+    readonly type: 'identity_recovery' | 'owner_recovery';
+    readonly clientDisplayName: string;
+    readonly reason?: string | null;
+    readonly expiresInMs?: number;
+  }): Promise<{
+    readonly group: CollaborationProjectSpaceGroupRecord;
+    readonly requestId: string;
+    readonly requestHash: string;
+    readonly verificationCode: string;
+  }> {
+    const group = this.store.getGroup(input.groupId);
+    if (!group)
+      throw new Error(`Collaboration Group not found: ${input.groupId}`);
+    if (group.subscriptionMode !== 'observer')
+      throw new Error('Identity recovery starts from an Observer subscription');
+    const history = await this.sync(input.groupId);
+    const target = history.projection.members[input.targetPrincipalId];
+    if (!target || target.status !== 'active')
+      throw new Error('Recovery target must be an active Principal');
+    if (input.type === 'owner_recovery' && !input.reason?.trim())
+      throw new Error('Owner recovery requires a reason');
+    const identity = await this.identities.createCredentialIdentity({
+      principalId: input.targetPrincipalId,
+      purpose: 'event_signing',
+    });
     const eventId = newId('evt');
+    const requestId = newId('recovery');
+    const createdAt = new Date(this.now()).toISOString();
+    const expiresAt = new Date(
+      this.now() + (input.expiresInMs ?? 7 * 24 * 60 * 60 * 1000),
+    ).toISOString();
     const client = clientDefinitionSchema.parse({
       format: 'icarus.collaboration-client/1',
-      principal_id: group.localPrincipalId,
-      client_id: group.localClientId,
-      display_name: input.displayName,
-      capabilities: [...(input.capabilities ?? [])],
+      principal_id: input.targetPrincipalId,
+      client_id: identity.clientId,
+      display_name: input.clientDisplayName,
+      capabilities: [],
       status: 'active',
       registered_at_event: eventId,
     });
+    const credential = sharedCredential(identity, eventId);
+    const immutable = {
+      format: 'icarus.collaboration-recovery-request/1' as const,
+      request_id: requestId,
+      type: input.type,
+      target_principal_id: input.targetPrincipalId,
+      requested_client: client,
+      requested_credential: credential,
+      reason: input.reason?.trim() || null,
+      created_at: createdAt,
+      expires_at: expiresAt,
+    };
+    const requestHash = collaborationRecoveryRequestHashV3(immutable);
+    const request = recoveryRequestSchema.parse({
+      ...immutable,
+      request_hash: requestHash,
+      status: 'pending',
+      decided_at_event: null,
+      decided_by_principal_id: null,
+      decision_reason: null,
+      approval_kind: null,
+      revoked_credential_ids: [],
+    });
+    const updated = await this.appendWithIdentity({
+      history,
+      remoteUrl: group.remoteUrl,
+      repositoryPath: group.repositoryPath,
+      gitSshKeyPath: group.gitSshKeyPath,
+      identity,
+      aggregateType: 'recovery',
+      aggregateId: requestId,
+      eventType:
+        input.type === 'identity_recovery'
+          ? 'identity_recovery_requested'
+          : 'owner_recovery_requested',
+      payload: { request },
+      eventId,
+    });
+    this.store.updateLocalIdentity({
+      groupId: input.groupId,
+      subscriptionMode: 'observer',
+      localPrincipalId: identity.principalId,
+      localClientId: identity.clientId,
+      localCredentialId: identity.credentialId,
+      eventPrivateKeyPath: identity.privateKeyPath,
+      eventPublicKey: identity.publicKey,
+      eventFingerprint: identity.fingerprint,
+    });
+    this.saveHistory(input.groupId, updated);
+    return {
+      group: this.store.getGroup(input.groupId)!,
+      requestId,
+      requestHash,
+      verificationCode: collaborationRecoveryVerificationCodeV3(requestHash),
+    };
+  }
+
+  async decideRecovery(input: {
+    readonly groupId: string;
+    readonly requestId: string;
+    readonly expectedRevision: number;
+    readonly decision: 'approve' | 'reject';
+    readonly reason: string;
+    readonly useOfflineOwnerCredential?: boolean;
+    readonly revokeCredentialIds?: readonly string[];
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const history = await this.requireHistory(input.groupId);
+    const request = history.projection.recoveryRequests[input.requestId];
+    if (!request || request.status !== 'pending')
+      throw new Error('Recovery request is not pending');
+    const payload = {
+      request_hash: request.request_hash,
+      reason: input.reason,
+      revoke_previous_credentials:
+        input.decision === 'approve' &&
+        request.type === 'owner_recovery' &&
+        input.revokeCredentialIds === undefined,
+      revoke_credential_ids:
+        input.decision === 'approve' && request.type === 'owner_recovery'
+          ? [...(input.revokeCredentialIds ?? [])]
+          : [],
+    };
+    if (!input.useOfflineOwnerCredential)
+      return this.appendLocal(input.groupId, {
+        aggregateType: 'recovery',
+        aggregateId: input.requestId,
+        expectedRevision: input.expectedRevision,
+        eventType:
+          input.decision === 'approve'
+            ? 'recovery_approved'
+            : 'recovery_rejected',
+        payload,
+      });
+
+    if (input.decision !== 'approve' || request.type !== 'owner_recovery')
+      throw new Error('Offline Group recovery is only valid for approval');
+    const group = this.store.getGroup(input.groupId);
+    if (!group?.recoveryCredentialId || !group.recoveryPrivateKeyPath)
+      throw new Error('No imported Group recovery Credential is available');
+    const identity = await this.identities.loadCredentialIdentity(
+      group.recoveryCredentialId,
+    );
+    const updated = await this.appendWithIdentity({
+      history,
+      remoteUrl: group.remoteUrl,
+      repositoryPath: group.repositoryPath,
+      gitSshKeyPath: group.gitSshKeyPath,
+      identity,
+      aggregateType: 'recovery',
+      aggregateId: input.requestId,
+      eventType: 'recovery_approved',
+      payload,
+    });
+    this.saveHistory(input.groupId, updated);
+    return this.store.getGroup(input.groupId)!;
+  }
+
+  async cancelRecovery(input: {
+    readonly groupId: string;
+    readonly requestId: string;
+    readonly expectedRevision: number;
+    readonly reason: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.store.getGroup(input.groupId);
+    if (
+      !group ||
+      !group.localPrincipalId ||
+      !group.localClientId ||
+      !group.localCredentialId ||
+      !group.eventPrivateKeyPath ||
+      !group.eventPublicKey ||
+      !group.eventFingerprint
+    )
+      throw new Error(
+        'This installation does not hold a recovery request identity',
+      );
+    return this.withRepositoryOperation(group.repositoryPath, async () => {
+      const history = await this.syncUnlocked(input.groupId);
+      const request = history.projection.recoveryRequests[input.requestId];
+      if (!request || request.status !== 'pending')
+        throw new Error('Recovery request is not pending');
+      if (
+        request.target_principal_id !== group.localPrincipalId ||
+        request.requested_client.client_id !== group.localClientId ||
+        request.requested_credential.credential_id !== group.localCredentialId
+      )
+        throw new Error('Only the requesting Client may cancel recovery');
+      const revision =
+        history.projection.aggregateHeads[`recovery:${input.requestId}`]
+          ?.revision ?? 0;
+      if (revision !== input.expectedRevision)
+        throw new Error(
+          `Aggregate revision conflict: expected ${String(input.expectedRevision)}, current ${String(revision)}`,
+        );
+      const identity: CollaborationEventSigningIdentity = {
+        principalId: group.localPrincipalId,
+        clientId: group.localClientId,
+        credentialId: group.localCredentialId,
+        privateKeyPath: group.eventPrivateKeyPath!,
+        publicKey: group.eventPublicKey!,
+        fingerprint: group.eventFingerprint!,
+        purpose: 'event_signing',
+      };
+      const updated = await this.appendWithIdentity({
+        history,
+        remoteUrl: group.remoteUrl,
+        repositoryPath: group.repositoryPath,
+        gitSshKeyPath: group.gitSshKeyPath,
+        identity,
+        aggregateType: 'recovery',
+        aggregateId: input.requestId,
+        eventType: 'recovery_cancelled',
+        payload: {
+          request_hash: request.request_hash,
+          reason: input.reason,
+          revoke_previous_credentials: false,
+        },
+      });
+      this.saveHistory(input.groupId, updated);
+      return this.store.getGroup(input.groupId)!;
+    });
+  }
+
+  async expireRecoveryRequests(groupId: string): Promise<number> {
+    const group = this.store.getGroup(groupId);
+    if (group?.subscriptionMode !== 'member') return 0;
+    let history = await this.requireHistory(groupId);
+    let expired = 0;
+    for (const request of Object.values(history.projection.recoveryRequests)) {
+      const expiryAuthority =
+        request.type === 'identity_recovery'
+          ? request.target_principal_id
+          : history.projection.group.owner_principal_id;
+      if (
+        group.localPrincipalId !== expiryAuthority ||
+        request.status !== 'pending' ||
+        Date.parse(request.expires_at) > this.now()
+      )
+        continue;
+      const revision =
+        history.projection.aggregateHeads[`recovery:${request.request_id}`]
+          ?.revision ?? 0;
+      await this.appendLocal(groupId, {
+        aggregateType: 'recovery',
+        aggregateId: request.request_id,
+        expectedRevision: revision,
+        eventType: 'recovery_expired',
+        payload: {
+          request_hash: request.request_hash,
+          reason: 'request expired',
+          revoke_previous_credentials: false,
+        },
+      });
+      expired += 1;
+      history = await this.requireHistory(groupId);
+    }
+    return expired;
+  }
+
+  async rotateCredential(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly revokeCurrent?: boolean;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const identity = await this.identities.createCredentialIdentity({
+      principalId: group.localPrincipalId!,
+      clientId: group.localClientId!,
+      purpose: 'event_signing',
+    });
+    const eventId = newId('evt');
+    const updated = await this.appendLocal(input.groupId, {
+      aggregateType: 'membership',
+      aggregateId: group.localPrincipalId!,
+      expectedRevision: input.expectedRevision,
+      eventType: 'credential_rotated',
+      eventId,
+      payload: {
+        credential: sharedCredential(identity, eventId),
+        revoke_credential_id: input.revokeCurrent
+          ? group.localCredentialId
+          : null,
+      },
+    });
+    this.store.updateLocalIdentity({
+      groupId: input.groupId,
+      subscriptionMode: 'member',
+      localPrincipalId: identity.principalId,
+      localClientId: identity.clientId,
+      localCredentialId: identity.credentialId,
+      eventPrivateKeyPath: identity.privateKeyPath,
+      eventPublicKey: identity.publicKey,
+      eventFingerprint: identity.fingerprint,
+    });
+    return this.store.getGroup(updated.groupId)!;
+  }
+
+  async revokeCredential(input: {
+    readonly groupId: string;
+    readonly credentialId: string;
+    readonly expectedRevision: number;
+    readonly reason: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    if (input.credentialId === group.localCredentialId)
+      throw new Error('Rotate before revoking the currently used Credential');
     return this.appendLocal(input.groupId, {
       aggregateType: 'membership',
       aggregateId: group.localPrincipalId!,
       expectedRevision: input.expectedRevision,
-      eventType: 'client_registered',
-      payload: { client },
-      eventId,
+      eventType: 'credential_revoked',
+      payload: {
+        credential_id: input.credentialId,
+        reason: input.reason,
+      },
     });
+  }
+
+  async revokeClient(input: {
+    readonly groupId: string;
+    readonly clientId: string;
+    readonly expectedRevision: number;
+    readonly reason: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    if (input.clientId === group.localClientId)
+      throw new Error('A different active Client must revoke this Client');
+    const client =
+      group.projection?.clients[group.localPrincipalId!]?.[input.clientId];
+    if (!client || client.status !== 'active')
+      throw new Error('Client is not active for the local Principal');
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'membership',
+      aggregateId: group.localPrincipalId!,
+      expectedRevision: input.expectedRevision,
+      eventType: 'client_revoked',
+      payload: {
+        client_id: input.clientId,
+        reason: input.reason,
+      },
+    });
+  }
+
+  updateGitSshKeyPath(groupId: string, configured?: string | null): string {
+    const resolved = this.identities.resolveGitSshKeyPath(configured);
+    this.store.updateGitSshKeyPath(groupId, resolved);
+    return resolved;
+  }
+
+  async exportGroupRecoveryCredential(
+    groupId: string,
+    destinationPath: string,
+  ): Promise<string> {
+    const group = this.requireLocalMember(groupId);
+    if (!group.recoveryCredentialId)
+      throw new Error(
+        'This Client does not hold the Group recovery Credential',
+      );
+    return this.identities.exportRecoveryCredential(
+      group.recoveryCredentialId,
+      destinationPath,
+    );
+  }
+
+  async importGroupRecoveryCredential(
+    groupId: string,
+    sourcePath: string,
+  ): Promise<void> {
+    const group = this.store.getGroup(groupId);
+    if (!group) throw new Error(`Collaboration Group not found: ${groupId}`);
+    const identity = await this.identities.importRecoveryCredential(sourcePath);
+    const shared =
+      group.projection?.credentials[identity.principalId]?.[
+        identity.credentialId
+      ];
+    if (
+      !shared ||
+      shared.status !== 'active' ||
+      shared.purpose !== 'group_recovery' ||
+      identity.principalId !== group.ownerPrincipalId ||
+      shared.principal_id !== identity.principalId ||
+      shared.client_id !== identity.clientId ||
+      shared.public_key !== identity.publicKey ||
+      shared.fingerprint !== identity.fingerprint
+    )
+      throw new Error(
+        'Imported Credential does not match the active Group Owner recovery record',
+      );
+    if (
+      group.localPrincipalId &&
+      group.localClientId &&
+      group.localCredentialId &&
+      group.eventPrivateKeyPath &&
+      group.eventPublicKey &&
+      group.eventFingerprint
+    )
+      this.store.updateLocalIdentity({
+        groupId,
+        subscriptionMode: group.subscriptionMode,
+        localPrincipalId: group.localPrincipalId,
+        localClientId: group.localClientId,
+        localCredentialId: group.localCredentialId,
+        eventPrivateKeyPath: group.eventPrivateKeyPath,
+        eventPublicKey: group.eventPublicKey,
+        eventFingerprint: group.eventFingerprint,
+        recoveryCredentialId: identity.credentialId,
+        recoveryPrivateKeyPath: identity.privateKeyPath,
+      });
+    else
+      throw new Error(
+        'Import requires a local recovery request identity for this Group',
+      );
   }
 
   async registerExecutor(input: {
@@ -2331,6 +2689,7 @@ export class CollaborationProjectSpaceService {
         remoteUrl: group.remoteUrl,
         repositoryPath: group.repositoryPath,
         previousHead: group.lastVerifiedHead,
+        gitSshKeyPath: group.gitSshKeyPath,
       });
       this.saveHistory(groupId, history);
       this.store.finishSyncAttempt({
@@ -2389,8 +2748,10 @@ export class CollaborationProjectSpaceService {
     readonly history: ValidatedProjectSpaceHistory;
     readonly remoteUrl: string;
     readonly repositoryPath: string;
+    readonly gitSshKeyPath: string;
     readonly mode: 'observer' | 'member';
-    readonly identity?: CollaborationPrincipalIdentity;
+    readonly identity?: CollaborationEventSigningIdentity;
+    readonly recoveryIdentity?: CollaborationEventSigningIdentity;
     readonly pollIntervalMs?: number;
     readonly notificationsEnabled?: boolean;
   }): void {
@@ -2411,11 +2772,15 @@ export class CollaborationProjectSpaceService {
       lifecycle: input.history.projection.group.lifecycle,
       ownerPrincipalId: input.history.projection.group.owner_principal_id,
       repositoryPath: input.repositoryPath,
+      gitSshKeyPath: input.gitSshKeyPath,
       localPrincipalId: input.identity?.principalId ?? null,
       localClientId: input.identity?.clientId ?? null,
-      signingKeyPath: input.identity?.privateKeyPath ?? null,
-      signingPublicKey: input.identity?.publicKey ?? null,
-      signingKeyRef: input.identity?.keyRef ?? null,
+      localCredentialId: input.identity?.credentialId ?? null,
+      eventPrivateKeyPath: input.identity?.privateKeyPath ?? null,
+      eventPublicKey: input.identity?.publicKey ?? null,
+      eventFingerprint: input.identity?.fingerprint ?? null,
+      recoveryCredentialId: input.recoveryIdentity?.credentialId ?? null,
+      recoveryPrivateKeyPath: input.recoveryIdentity?.privateKeyPath ?? null,
       nowMs: this.now(),
     });
     this.saveHistory(input.history.projection.groupId, input.history);
@@ -2425,27 +2790,34 @@ export class CollaborationProjectSpaceService {
     readonly history: ValidatedProjectSpaceHistory;
     readonly remoteUrl: string;
     readonly repositoryPath: string;
-    readonly identity: CollaborationPrincipalIdentity;
+    readonly gitSshKeyPath: string;
+    readonly identity: CollaborationEventSigningIdentity;
     readonly pollIntervalMs?: number;
+    readonly pending?: boolean;
   }): void {
     const existing = this.store.getGroup(input.history.projection.groupId);
-    if (existing?.subscriptionMode === 'observer') {
-      this.store.updateSubscriptionMode({
+    const subscriptionMode = input.pending ? 'observer' : 'member';
+    if (existing) {
+      this.store.updateLocalIdentity({
         groupId: input.history.projection.groupId,
+        subscriptionMode,
         localPrincipalId: input.identity.principalId,
         localClientId: input.identity.clientId,
-        signingKeyPath: input.identity.privateKeyPath,
-        signingPublicKey: input.identity.publicKey,
-        signingKeyRef: input.identity.keyRef,
+        localCredentialId: input.identity.credentialId,
+        eventPrivateKeyPath: input.identity.privateKeyPath,
+        eventPublicKey: input.identity.publicKey,
+        eventFingerprint: input.identity.fingerprint,
       });
+      this.store.updateGitSshKeyPath(
+        input.history.projection.groupId,
+        input.gitSshKeyPath,
+      );
       this.saveHistory(input.history.projection.groupId, input.history);
       return;
     }
-    if (existing)
-      throw new Error('Group is already registered as a Member on this Client');
     this.registerLocalGroup({
       ...input,
-      mode: 'member',
+      mode: subscriptionMode,
     });
   }
 
@@ -2475,9 +2847,10 @@ export class CollaborationProjectSpaceService {
         currentGroup.subscriptionMode !== 'member' ||
         !currentGroup.localPrincipalId ||
         !currentGroup.localClientId ||
-        !currentGroup.signingKeyPath ||
-        !currentGroup.signingPublicKey ||
-        !currentGroup.signingKeyRef
+        !currentGroup.localCredentialId ||
+        !currentGroup.eventPrivateKeyPath ||
+        !currentGroup.eventPublicKey ||
+        !currentGroup.eventFingerprint
       )
         throw new Error(
           'Observer subscriptions cannot issue collaboration commands',
@@ -2491,17 +2864,20 @@ export class CollaborationProjectSpaceService {
         throw new Error(
           `Aggregate revision conflict: expected ${String(input.expectedRevision)}, current ${String(head?.revision ?? 0)}`,
         );
-      const identity: CollaborationPrincipalIdentity = {
+      const identity: CollaborationEventSigningIdentity = {
         principalId: currentGroup.localPrincipalId,
         clientId: currentGroup.localClientId,
-        privateKeyPath: currentGroup.signingKeyPath,
-        publicKey: currentGroup.signingPublicKey,
-        keyRef: currentGroup.signingKeyRef,
+        credentialId: currentGroup.localCredentialId,
+        privateKeyPath: currentGroup.eventPrivateKeyPath,
+        publicKey: currentGroup.eventPublicKey,
+        fingerprint: currentGroup.eventFingerprint,
+        purpose: 'event_signing',
       };
       const updated = await this.appendWithIdentity({
         history,
         remoteUrl: currentGroup.remoteUrl,
         repositoryPath: currentGroup.repositoryPath,
+        gitSshKeyPath: currentGroup.gitSshKeyPath,
         identity,
         ...input,
       });
@@ -2535,7 +2911,8 @@ export class CollaborationProjectSpaceService {
     readonly history: ValidatedProjectSpaceHistory;
     readonly remoteUrl: string;
     readonly repositoryPath: string;
-    readonly identity: CollaborationPrincipalIdentity;
+    readonly gitSshKeyPath: string;
+    readonly identity: CollaborationEventSigningIdentity;
     readonly aggregateType: CollaborationAggregateType;
     readonly aggregateId: string;
     readonly eventType: CollaborationEventTypeV3;
@@ -2551,6 +2928,7 @@ export class CollaborationProjectSpaceService {
     return this.transport.append({
       remoteUrl: input.remoteUrl,
       repositoryPath: input.repositoryPath,
+      gitSshKeyPath: input.gitSshKeyPath,
       previousHead: input.history.head,
       identity: input.identity,
       buildEvent: (history) => {
@@ -2578,6 +2956,7 @@ export class CollaborationProjectSpaceService {
           actor: {
             principal_id: input.identity.principalId,
             client_id: input.identity.clientId,
+            credential_id: input.identity.credentialId,
             executor_id: input.executorId ?? null,
           },
           occurredAt,
@@ -2618,7 +2997,34 @@ export class CollaborationProjectSpaceService {
       groupId,
       Object.values(history.projection.turns),
     );
-    const group = this.store.getGroup(groupId);
+    let group = this.store.getGroup(groupId);
+    if (
+      group?.subscriptionMode === 'observer' &&
+      group.localPrincipalId &&
+      group.localClientId &&
+      group.localCredentialId &&
+      group.eventPrivateKeyPath &&
+      group.eventPublicKey &&
+      group.eventFingerprint &&
+      history.projection.members[group.localPrincipalId]?.status === 'active' &&
+      history.projection.clients[group.localPrincipalId]?.[group.localClientId]
+        ?.status === 'active' &&
+      history.projection.credentials[group.localPrincipalId]?.[
+        group.localCredentialId
+      ]?.status === 'active'
+    ) {
+      this.store.updateLocalIdentity({
+        groupId,
+        subscriptionMode: 'member',
+        localPrincipalId: group.localPrincipalId,
+        localClientId: group.localClientId,
+        localCredentialId: group.localCredentialId,
+        eventPrivateKeyPath: group.eventPrivateKeyPath,
+        eventPublicKey: group.eventPublicKey,
+        eventFingerprint: group.eventFingerprint,
+      });
+      group = this.store.getGroup(groupId);
+    }
     if (
       group?.subscriptionMode !== 'member' ||
       !group.localPrincipalId ||
@@ -2627,6 +3033,75 @@ export class CollaborationProjectSpaceService {
       return;
     for (const record of history.eventRecords) {
       if (knownEventIds.has(record.event.event_id)) continue;
+      if (
+        ['identity_recovery_requested', 'owner_recovery_requested'].includes(
+          record.event.event_type,
+        )
+      ) {
+        const parsed = recoveryRequestSchema.safeParse(
+          record.event.payload.request,
+        );
+        if (!parsed.success) continue;
+        const recipient =
+          parsed.data.type === 'identity_recovery'
+            ? parsed.data.target_principal_id
+            : history.projection.group.owner_principal_id;
+        if (recipient !== group.localPrincipalId) continue;
+        this.store.enqueueNotification({
+          groupId,
+          recipientPrincipalId: group.localPrincipalId,
+          recipientClientId: group.localClientId,
+          kind: parsed.data.type,
+          resourceType: 'recovery_request',
+          resourceId: parsed.data.request_id,
+          reason:
+            parsed.data.type === 'identity_recovery'
+              ? 'device_approval_required'
+              : 'offline_identity_verification_required',
+          dedupeKey: `recovery-request:${groupId}:${parsed.data.request_hash}:${group.localClientId}`,
+          payload: {
+            request_id: parsed.data.request_id,
+            request_hash: parsed.data.request_hash,
+            verification_code: collaborationRecoveryVerificationCodeV3(
+              parsed.data.request_hash,
+            ),
+            expires_at: parsed.data.expires_at,
+          },
+          nowMs: this.now(),
+        });
+        continue;
+      }
+      if (
+        [
+          'recovery_approved',
+          'recovery_rejected',
+          'recovery_expired',
+          'recovery_cancelled',
+        ].includes(record.event.event_type)
+      ) {
+        const request =
+          history.projection.recoveryRequests[record.event.aggregate_id];
+        if (!request || request.target_principal_id !== group.localPrincipalId)
+          continue;
+        this.store.enqueueNotification({
+          groupId,
+          recipientPrincipalId: group.localPrincipalId,
+          recipientClientId: group.localClientId,
+          kind: record.event.event_type,
+          resourceType: 'recovery_request',
+          resourceId: request.request_id,
+          reason: request.status,
+          dedupeKey: `recovery-decision:${groupId}:${request.request_hash}:${request.status}:${group.localClientId}`,
+          payload: {
+            request_id: request.request_id,
+            request_hash: request.request_hash,
+            status: request.status,
+            approval_kind: request.approval_kind,
+          },
+          nowMs: this.now(),
+        });
+        continue;
+      }
       if (
         !['message_posted', 'message_revised'].includes(record.event.event_type)
       )

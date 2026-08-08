@@ -18697,6 +18697,34 @@ textarea.workflow-wizard-input {
   gap: 5px;
 }
 
+.collaboration-record-main > p,
+.collaboration-record-main > span {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--minimal-text-soft, #575f6a);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.collaboration-recovery-record {
+  align-items: flex-start;
+}
+
+.collaboration-verification-code {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--minimal-line-strong, #cfd4dc);
+  border-radius: 6px;
+  background: #f4f5f6;
+  color: var(--minimal-text, #202327);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+}
+
 .collaboration-record-title {
   flex-wrap: wrap;
 }
@@ -18951,6 +18979,20 @@ textarea.workflow-wizard-input {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.collaboration-check-field {
+  min-height: 42px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.collaboration-check-field input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
 }
 
 /* Outcome-first Workflow editor */

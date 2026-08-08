@@ -10,10 +10,16 @@ import {
   buildCollaborationEventV3,
   reduceCollaborationEventV3,
 } from './protocol/v3-reducer.js';
+import { collaborationCredentialFingerprintV3 } from './protocol/v3-schema.js';
 
 const NOW = '2026-08-06T12:00:00.000Z';
-const PRINCIPAL = 'principal_sha256_alice';
+const PRINCIPAL = 'principal_00000000-0000-4000-8000-000000000001';
 const CLIENT = 'client_alice';
+const CREDENTIAL = 'credential_alice';
+const RECOVERY_CREDENTIAL = 'credential_alice_recovery';
+const PUBLIC_KEY =
+  'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice';
+const FINGERPRINT = collaborationCredentialFingerprintV3(PUBLIC_KEY);
 
 function history() {
   const event = buildCollaborationEventV3({
@@ -27,6 +33,7 @@ function history() {
     actor: {
       principal_id: PRINCIPAL,
       client_id: CLIENT,
+      credential_id: CREDENTIAL,
       executor_id: null,
     },
     occurredAt: NOW,
@@ -38,7 +45,6 @@ function history() {
         name: 'Test group',
         creator: {
           principal_id: PRINCIPAL,
-          signing_key_ref: 'ssh-ed25519:SHA256:alice',
         },
         owner_principal_id: PRINCIPAL,
         control_branch: 'refs/heads/icarus/control',
@@ -52,9 +58,6 @@ function history() {
         format: 'icarus.collaboration-member/3',
         principal_id: PRINCIPAL,
         display_name: 'Alice',
-        signing_key_ref: 'ssh-ed25519:SHA256:alice',
-        signing_public_key:
-          'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice',
         status: 'active',
         joined_at_event: 'evt_genesis',
       },
@@ -66,6 +69,30 @@ function history() {
         capabilities: [],
         status: 'active',
         registered_at_event: 'evt_genesis',
+      },
+      credential: {
+        format: 'icarus.collaboration-credential/1',
+        credential_id: CREDENTIAL,
+        principal_id: PRINCIPAL,
+        client_id: CLIENT,
+        public_key: PUBLIC_KEY,
+        fingerprint: FINGERPRINT,
+        purpose: 'event_signing',
+        status: 'active',
+        created_at_event: 'evt_genesis',
+        revoked_at_event: null,
+      },
+      recovery_credential: {
+        format: 'icarus.collaboration-credential/1',
+        credential_id: RECOVERY_CREDENTIAL,
+        principal_id: PRINCIPAL,
+        client_id: CLIENT,
+        public_key: PUBLIC_KEY,
+        fingerprint: FINGERPRINT,
+        purpose: 'group_recovery',
+        status: 'active',
+        created_at_event: 'evt_genesis',
+        revoked_at_event: null,
       },
       owner_permissions: {
         format: 'icarus.collaboration-permission-grant/1',
@@ -92,9 +119,13 @@ function group(
     localClientId: CLIENT,
     remoteUrl: '/tmp/group.git',
     repositoryPath: '/tmp/cache.git',
-    signingKeyPath: '/tmp/id_ed25519',
-    signingPublicKey: 'public',
-    signingKeyRef: 'ssh-ed25519:SHA256:alice',
+    gitSshKeyPath: '/tmp/id_ed25519',
+    localCredentialId: CREDENTIAL,
+    eventPrivateKeyPath: '/tmp/event-key',
+    eventPublicKey: PUBLIC_KEY,
+    eventFingerprint: FINGERPRINT,
+    recoveryCredentialId: RECOVERY_CREDENTIAL,
+    recoveryPrivateKeyPath: '/tmp/recovery-key',
     protocolStatus: 'verified',
     protocolError: null,
     projection,
@@ -158,7 +189,15 @@ describe('Collaboration project-space v3 audit', () => {
       eventRecords: [{ event, commitHash: 'a'.repeat(40), commitOrder: 1 }],
       executions: [execution],
       notifications: [notification],
-      localEvidence: [{ kind: 'verified-file', sha256: 'b'.repeat(64) }],
+      localEvidence: [
+        {
+          kind: 'verified-file',
+          sha256: 'b'.repeat(64),
+          localPath: '/private/provider/workspace',
+          privateKey: 'private-key-material',
+          apiToken: 'provider-token',
+        },
+      ],
       generatedAt: new Date(NOW),
     });
 
@@ -182,7 +221,21 @@ describe('Collaboration project-space v3 audit', () => {
     expect(audit.events[0]).not.toHaveProperty('payload');
     expect(audit.local_evidence[0]).not.toHaveProperty('receipt');
     expect(audit.local_evidence[0]).not.toHaveProperty('observation');
-    expect(JSON.stringify(audit)).not.toContain('secret');
+    expect(audit.credentials[PRINCIPAL]?.[CREDENTIAL]).toMatchObject({
+      credential_id: CREDENTIAL,
+      public_key: PUBLIC_KEY,
+      fingerprint: FINGERPRINT,
+      purpose: 'event_signing',
+    });
+    const serialized = JSON.stringify(audit);
+    expect(serialized).toContain(PUBLIC_KEY);
+    expect(serialized).not.toContain('/private/provider');
+    expect(serialized).not.toContain('/tmp/id_ed25519');
+    expect(serialized).not.toContain('/tmp/event-key');
+    expect(serialized).not.toContain('/tmp/recovery-key');
+    expect(serialized).not.toContain('private-key-material');
+    expect(serialized).not.toContain('provider-token');
+    expect(serialized).not.toContain('secret');
   });
 
   it('includes event and provider content only when explicitly requested', () => {

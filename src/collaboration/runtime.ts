@@ -24,7 +24,7 @@ import { CollaborationScheduler } from './scheduler.js';
 
 export interface CollaborationRuntimeOptions {
   readonly storeDir: string;
-  readonly defaultSigningKeyPath?: string;
+  readonly defaultGitSshKeyPath?: string;
   readonly runOnceService: RunOnceService;
   readonly workflowHost?: CollaborationWorkflowHostService | null;
   readonly codex: {
@@ -75,7 +75,7 @@ export class CollaborationRuntime {
         this.repositoryRoot,
         new CollaborationProjectSpaceIdentityService(
           this.options.storeDir,
-          this.options.defaultSigningKeyPath,
+          this.options.defaultGitSshKeyPath,
         ),
         this.options.now,
       );

@@ -10,6 +10,7 @@ import type {
 } from './project-space-store.js';
 import type { CollaborationRuntime } from './runtime.js';
 import { strictParseJson } from './protocol/canonical-json.js';
+import { collaborationRecoveryVerificationCodeV3 } from './protocol/v3-reducer.js';
 import {
   collaborationPermissionSchema,
   machineDefinitionV3Schema,
@@ -138,6 +139,20 @@ function publicGroup(
     lastSyncAtMs: group.lastSyncAtMs,
     lastError: redactDiagnostic(group.lastError),
     backoffAttempt: group.backoffAttempt,
+    gitRemoteAccess: {
+      sshKeyPath: group.gitSshKeyPath,
+      permissionBoundary:
+        'Git Remote access controls clone/fetch/push only; Icarus permissions are verified separately.',
+    },
+    icarusIdentity: {
+      principalId: group.localPrincipalId,
+      clientId: group.localClientId,
+      credentialId: group.localCredentialId,
+      credentialFingerprint: group.eventFingerprint,
+      recoveryCredentialAvailable: Boolean(
+        group.recoveryCredentialId && group.recoveryPrivateKeyPath,
+      ),
+    },
     projection: group.projection,
   };
 }
@@ -335,6 +350,7 @@ export class CollaborationWebApi {
         z
           .object({
             remoteUrl: z.string().min(1),
+            gitSshKeyPath: z.string().trim().min(1).optional(),
             pollIntervalMs: z.number().int().positive().optional(),
             notificationsEnabled: z.boolean().optional(),
           })
@@ -362,7 +378,7 @@ export class CollaborationWebApi {
           .object({
             remoteUrl: z.string().min(1),
             name: z.string().min(1).max(240),
-            signingKeyPath: z.string().trim().min(1).optional(),
+            gitSshKeyPath: z.string().trim().min(1).optional(),
             displayName: z.string().min(1).max(160),
             clientDisplayName: z.string().min(1).max(160),
             membershipPolicy: z.enum(['open', 'approval', 'invite_only']),
@@ -410,6 +426,28 @@ export class CollaborationWebApi {
       send(res, 200, {
         group: publicGroup(this.runtime.store.getGroup(found[1]!)),
         verifiedHead: history.head,
+      });
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/clients/([^/]+)/revoke$`, 'u'),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({ expectedRevision, reason: z.string().min(1).max(4000) })
+          .strict(),
+      );
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.revokeClient({
+            groupId: found[1]!,
+            clientId: found[2]!,
+            ...body,
+          }),
+        ),
       });
       return;
     }
@@ -464,7 +502,7 @@ export class CollaborationWebApi {
         req,
         z
           .object({
-            signingKeyPath: z.string().trim().min(1).optional(),
+            gitSshKeyPath: z.string().trim().min(1).optional(),
             displayName: z.string().min(1),
             clientDisplayName: z.string().min(1),
             inviteId: identifier.optional(),
@@ -477,6 +515,7 @@ export class CollaborationWebApi {
           await this.runtime.groups.joinGroup({
             remoteUrl: group.remoteUrl,
             ...body,
+            gitSshKeyPath: body.gitSshKeyPath ?? group.gitSshKeyPath,
           }),
         ),
       });
@@ -495,7 +534,6 @@ export class CollaborationWebApi {
         req,
         z
           .object({
-            principalId: identifier,
             expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
             expectedRevision,
           })
@@ -503,7 +541,6 @@ export class CollaborationWebApi {
       );
       const group = await this.runtime.groups.issueInvite({
         groupId: found[1]!,
-        principalId: body.principalId,
         expiresAt: body.expiresAt,
         expectedRevision: body.expectedRevision,
       });
@@ -570,6 +607,20 @@ export class CollaborationWebApi {
       send(res, 200, {
         members: projection.members,
         clients: projection.clients,
+        credentials: projection.credentials,
+        recoveryRequests: Object.fromEntries(
+          Object.entries(projection.recoveryRequests).map(
+            ([requestId, request]) => [
+              requestId,
+              {
+                ...request,
+                verification_code: collaborationRecoveryVerificationCodeV3(
+                  request.request_hash,
+                ),
+              },
+            ],
+          ),
+        ),
         executors: projection.executors,
         permissionGrants: projection.permissionGrants,
       });
@@ -577,7 +628,64 @@ export class CollaborationWebApi {
     }
     found = match(
       pathname,
-      new RegExp(`^${API_PREFIX}/groups/([^/]+)/clients$`, 'u'),
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/recovery-requests/([^/]+)/cancel$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({ expectedRevision, reason: z.string().min(1).max(4000) })
+          .strict(),
+      );
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.cancelRecovery({
+            groupId: found[1]!,
+            requestId: found[2]!,
+            ...body,
+          }),
+        ),
+      });
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/recovery-requests$`, 'u'),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            targetPrincipalId: identifier,
+            type: z.enum(['identity_recovery', 'owner_recovery']),
+            clientDisplayName: z.string().min(1).max(160),
+            reason: z.string().min(1).max(4000).nullable().optional(),
+            expiresInMs: z
+              .number()
+              .int()
+              .min(60_000)
+              .max(2_592_000_000)
+              .optional(),
+          })
+          .strict(),
+      );
+      const result = await this.runtime.groups.requestIdentityRecovery({
+        groupId: found[1]!,
+        ...body,
+      });
+      send(res, 201, { ...result, group: publicGroup(result.group) });
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/recovery-requests/([^/]+)/(approve|reject)$`,
+        'u',
+      ),
     );
     if (found && method === 'POST') {
       const body = await jsonBody(
@@ -585,19 +693,113 @@ export class CollaborationWebApi {
         z
           .object({
             expectedRevision,
-            displayName: z.string().min(1).max(160),
-            capabilities: z.array(identifier).max(100).optional(),
+            reason: z.string().min(1).max(4000),
+            useOfflineOwnerCredential: z.boolean().optional(),
+            revokeCredentialIds: z.array(identifier).max(1000).optional(),
           })
+          .strict(),
+      );
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.decideRecovery({
+            groupId: found[1]!,
+            requestId: found[2]!,
+            decision: found[3] === 'approve' ? 'approve' : 'reject',
+            ...body,
+          }),
+        ),
+      });
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/credentials/rotate$`, 'u'),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({ expectedRevision, revokeCurrent: z.boolean().optional() })
           .strict(),
       );
       send(res, 201, {
         group: publicGroup(
-          await this.runtime.groups.registerCurrentClient({
+          await this.runtime.groups.rotateCredential({
             groupId: found[1]!,
             ...body,
           }),
         ),
       });
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/credentials/([^/]+)/revoke$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({ expectedRevision, reason: z.string().min(1).max(4000) })
+          .strict(),
+      );
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.revokeCredential({
+            groupId: found[1]!,
+            credentialId: found[2]!,
+            ...body,
+          }),
+        ),
+      });
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/settings/git-remote$`, 'u'),
+    );
+    if (found && method === 'PUT') {
+      const body = await jsonBody(
+        req,
+        z.object({ sshKeyPath: z.string().trim().min(1).nullable() }).strict(),
+      );
+      send(res, 200, {
+        sshKeyPath: this.runtime.groups.updateGitSshKeyPath(
+          found[1]!,
+          body.sshKeyPath,
+        ),
+      });
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/recovery-credential/(export|import)$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z.object({ path: z.string().trim().min(1) }).strict(),
+      );
+      if (found[2] === 'export') {
+        const exportedPath =
+          await this.runtime.groups.exportGroupRecoveryCredential(
+            found[1]!,
+            body.path,
+          );
+        send(res, 201, { exported: true, path: exportedPath });
+      } else {
+        await this.runtime.groups.importGroupRecoveryCredential(
+          found[1]!,
+          body.path,
+        );
+        send(res, 200, { imported: true });
+      }
       return;
     }
     found = match(

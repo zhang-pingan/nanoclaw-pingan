@@ -6,6 +6,7 @@ import {
   collaborationDeadlineSnapshotHashV3,
   collaborationFencingTokenV3,
   collaborationIdempotencyKeyV3,
+  collaborationRecoveryRequestHashV3,
   collaborationTurnInputHashV3,
   collaborationWorkflowDefinitionHashV3,
   reduceCollaborationEventV3,
@@ -22,18 +23,31 @@ import type {
   WorkflowLayout,
   WorkItem,
 } from './v3-schema.js';
+import { collaborationCredentialFingerprintV3 } from './v3-schema.js';
 
 const NOW = '2026-08-06T12:00:00.000Z';
-const ALICE = 'principal_sha256_alice';
-const BOB = 'principal_sha256_bob';
+const ALICE = 'principal_00000000-0000-4000-8000-000000000001';
+const BOB = 'principal_00000000-0000-4000-8000-000000000002';
 const ALICE_CLIENT = 'client_alice';
 const BOB_CLIENT = 'client_bob';
 const BOB_CLIENT_2 = 'client_bob_second';
+const ALICE_CREDENTIAL = 'credential_alice';
+const ALICE_RECOVERY_CREDENTIAL = 'credential_alice_recovery';
+const BOB_CREDENTIAL = 'credential_bob';
+const BOB_CREDENTIAL_2 = 'credential_bob_second';
+const CAROL = 'principal_00000000-0000-4000-8000-000000000003';
+const CAROL_CLIENT = 'client_carol';
+const CAROL_CREDENTIAL = 'credential_carol';
 const HASH = `sha256:${'a'.repeat(64)}`;
 const ALICE_KEY =
   'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice';
 const BOB_KEY =
   'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEbob00';
+const ALICE_FINGERPRINT = collaborationCredentialFingerprintV3(ALICE_KEY);
+const BOB_FINGERPRINT = collaborationCredentialFingerprintV3(BOB_KEY);
+const CAROL_KEY =
+  'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEcarol';
+const CAROL_FINGERPRINT = collaborationCredentialFingerprintV3(CAROL_KEY);
 
 let eventOrdinal = 0;
 
@@ -45,6 +59,7 @@ function event(input: {
   payload: Record<string, unknown>;
   actor?: string;
   client?: string;
+  credential?: string;
   executor?: string | null;
   id?: string;
   occurredAt?: string;
@@ -65,6 +80,9 @@ function event(input: {
     actor: {
       principal_id: actor,
       client_id: input.client ?? (actor === ALICE ? ALICE_CLIENT : BOB_CLIENT),
+      credential_id:
+        input.credential ??
+        (actor === ALICE ? ALICE_CREDENTIAL : BOB_CREDENTIAL),
       executor_id: input.executor ?? null,
     },
     occurredAt: input.occurredAt ?? NOW,
@@ -96,7 +114,6 @@ function genesis(): CollaborationProjectionV3 {
         name: 'Test group',
         creator: {
           principal_id: ALICE,
-          signing_key_ref: 'ssh-ed25519:SHA256:alice',
         },
         owner_principal_id: ALICE,
         control_branch: 'refs/heads/icarus/control',
@@ -110,8 +127,6 @@ function genesis(): CollaborationProjectionV3 {
         format: 'icarus.collaboration-member/3',
         principal_id: ALICE,
         display_name: 'Alice',
-        signing_key_ref: 'ssh-ed25519:SHA256:alice',
-        signing_public_key: ALICE_KEY,
         status: 'active',
         joined_at_event: 'evt_genesis',
       },
@@ -123,6 +138,30 @@ function genesis(): CollaborationProjectionV3 {
         capabilities: [],
         status: 'active',
         registered_at_event: 'evt_genesis',
+      },
+      credential: {
+        format: 'icarus.collaboration-credential/1',
+        credential_id: ALICE_CREDENTIAL,
+        principal_id: ALICE,
+        client_id: ALICE_CLIENT,
+        public_key: ALICE_KEY,
+        fingerprint: ALICE_FINGERPRINT,
+        purpose: 'event_signing',
+        status: 'active',
+        created_at_event: 'evt_genesis',
+        revoked_at_event: null,
+      },
+      recovery_credential: {
+        format: 'icarus.collaboration-credential/1',
+        credential_id: ALICE_RECOVERY_CREDENTIAL,
+        principal_id: ALICE,
+        client_id: ALICE_CLIENT,
+        public_key: ALICE_KEY,
+        fingerprint: ALICE_FINGERPRINT,
+        purpose: 'group_recovery',
+        status: 'active',
+        created_at_event: 'evt_genesis',
+        revoked_at_event: null,
       },
       owner_permissions: {
         format: 'icarus.collaboration-permission-grant/1',
@@ -156,19 +195,9 @@ function withBob(secondClient = false): CollaborationProjectionV3 {
         format: 'icarus.collaboration-member/3',
         principal_id: BOB,
         display_name: 'Bob',
-        signing_key_ref: 'ssh-ed25519:SHA256:bob',
-        signing_public_key: BOB_KEY,
         status: 'active',
         joined_at_event: joinEventId,
       },
-    },
-  });
-  projection = apply(projection, {
-    aggregateType: 'membership',
-    aggregateId: BOB,
-    eventType: 'client_registered',
-    actor: BOB,
-    payload: {
       client: {
         format: 'icarus.collaboration-client/1',
         principal_id: BOB,
@@ -176,31 +205,47 @@ function withBob(secondClient = false): CollaborationProjectionV3 {
         display_name: 'Bob MacBook',
         capabilities: [],
         status: 'active',
-        registered_at_event: 'evt_bob_client',
+        registered_at_event: joinEventId,
+      },
+      credential: {
+        format: 'icarus.collaboration-credential/1',
+        credential_id: BOB_CREDENTIAL,
+        principal_id: BOB,
+        client_id: BOB_CLIENT,
+        public_key: BOB_KEY,
+        fingerprint: BOB_FINGERPRINT,
+        purpose: 'event_signing',
+        status: 'active',
+        created_at_event: joinEventId,
+        revoked_at_event: null,
       },
     },
-    id: 'evt_bob_client',
+    actor: BOB,
   });
-  if (secondClient)
-    projection = apply(projection, {
-      aggregateType: 'membership',
-      aggregateId: BOB,
-      eventType: 'client_registered',
-      actor: BOB,
-      client: BOB_CLIENT_2,
-      id: 'evt_bob_client_2',
-      payload: {
-        client: {
-          format: 'icarus.collaboration-client/1',
-          principal_id: BOB,
-          client_id: BOB_CLIENT_2,
-          display_name: 'Bob Desktop',
-          capabilities: [],
-          status: 'active',
-          registered_at_event: 'evt_bob_client_2',
-        },
-      },
-    });
+  if (secondClient) {
+    projection = structuredClone(projection);
+    projection.clients[BOB]![BOB_CLIENT_2] = {
+      format: 'icarus.collaboration-client/1',
+      principal_id: BOB,
+      client_id: BOB_CLIENT_2,
+      display_name: 'Bob Desktop',
+      capabilities: [],
+      status: 'active',
+      registered_at_event: 'evt_bob_recovery_approved',
+    };
+    projection.credentials[BOB]![BOB_CREDENTIAL_2] = {
+      format: 'icarus.collaboration-credential/1',
+      credential_id: BOB_CREDENTIAL_2,
+      principal_id: BOB,
+      client_id: BOB_CLIENT_2,
+      public_key: BOB_KEY,
+      fingerprint: BOB_FINGERPRINT,
+      purpose: 'event_signing',
+      status: 'active',
+      created_at_event: 'evt_bob_recovery_requested',
+      revoked_at_event: null,
+    };
+  }
   return projection;
 }
 
@@ -531,6 +576,96 @@ function addWorkItems(
 }
 
 describe('Collaboration v3 reducer invariants', () => {
+  it('rejects future-dated recovery expiry by an unrelated active Member', () => {
+    let projection = withBob();
+    const requestEventId = 'evt_recovery_expiry_request';
+    const requestId = 'recovery_expiry_attack';
+    const requestedClientId = 'client_alice_recovery_expiry';
+    const requestedCredentialId = 'credential_alice_recovery_expiry';
+    const immutable = {
+      format: 'icarus.collaboration-recovery-request/1' as const,
+      request_id: requestId,
+      type: 'identity_recovery' as const,
+      target_principal_id: ALICE,
+      requested_client: {
+        format: 'icarus.collaboration-client/1' as const,
+        principal_id: ALICE,
+        client_id: requestedClientId,
+        display_name: 'Alice replacement',
+        capabilities: [],
+        status: 'active' as const,
+        registered_at_event: requestEventId,
+      },
+      requested_credential: {
+        format: 'icarus.collaboration-credential/1' as const,
+        credential_id: requestedCredentialId,
+        principal_id: ALICE,
+        client_id: requestedClientId,
+        public_key: ALICE_KEY,
+        fingerprint: ALICE_FINGERPRINT,
+        purpose: 'event_signing' as const,
+        status: 'active' as const,
+        created_at_event: requestEventId,
+        revoked_at_event: null,
+      },
+      reason: null,
+      created_at: NOW,
+      expires_at: '2026-08-07T12:00:00.000Z',
+    };
+    const requestHash = collaborationRecoveryRequestHashV3(immutable);
+    projection = apply(projection, {
+      aggregateType: 'recovery',
+      aggregateId: requestId,
+      eventType: 'identity_recovery_requested',
+      id: requestEventId,
+      actor: ALICE,
+      client: requestedClientId,
+      credential: requestedCredentialId,
+      payload: {
+        request: {
+          ...immutable,
+          request_hash: requestHash,
+          status: 'pending',
+          decided_at_event: null,
+          decided_by_principal_id: null,
+          decision_reason: null,
+          approval_kind: null,
+          revoked_credential_ids: [],
+        },
+      },
+    });
+    const expiryPayload = {
+      request_hash: requestHash,
+      reason: 'request expired',
+      revoke_previous_credentials: false,
+      revoke_credential_ids: [],
+    };
+
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'recovery',
+        aggregateId: requestId,
+        eventType: 'recovery_expired',
+        actor: BOB,
+        occurredAt: '2099-01-01T00:00:00.000Z',
+        payload: expiryPayload,
+      }),
+    ).toThrow(/target Principal|expiry requires/iu);
+
+    const expired = apply(projection, {
+      aggregateType: 'recovery',
+      aggregateId: requestId,
+      eventType: 'recovery_expired',
+      actor: ALICE,
+      occurredAt: '2026-08-07T12:00:00.000Z',
+      payload: expiryPayload,
+    });
+    expect(expired.recoveryRequests[requestId]).toMatchObject({
+      status: 'expired',
+      decided_by_principal_id: ALICE,
+    });
+  });
+
   it('keeps assisted Executor results awaiting claimant confirmation and binds their hash', () => {
     const fixture = workflowFixture({ startTurn: true });
     const projection = structuredClone(fixture.projection);
@@ -998,6 +1133,7 @@ describe('Collaboration v3 reducer invariants', () => {
         eventType: 'turn_recovery_requested',
         actor: BOB,
         client: BOB_CLIENT_2,
+        credential: BOB_CREDENTIAL_2,
         payload: {
           turn_id: 'turn_1',
           epoch: 1,
@@ -1266,7 +1402,7 @@ describe('Collaboration v3 reducer invariants', () => {
       ).toThrow(/relation|itself|unique|does not exist/u);
   });
 
-  it('requires an authorized issuer and consumes a targeted Invite once', () => {
+  it('requires an authorized issuer and consumes an unbound Invite once', () => {
     let projection = apply(withBob(), {
       aggregateType: 'group',
       aggregateId: 'group_test',
@@ -1276,7 +1412,6 @@ describe('Collaboration v3 reducer invariants', () => {
     const invite = {
       format: 'icarus.collaboration-invite/1',
       invite_id: 'invite_carol',
-      principal_id: 'principal_sha256_carol',
       issued_by_principal_id: ALICE,
       status: 'active',
       issued_at: NOW,
@@ -1302,17 +1437,6 @@ describe('Collaboration v3 reducer invariants', () => {
       eventType: 'invite_issued',
       payload: { invite },
     });
-    const activeMemberInvite = {
-      ...invite,
-      invite_id: 'invite_active_bob',
-      principal_id: BOB,
-    };
-    projection = apply(projection, {
-      aggregateType: 'invite',
-      aggregateId: activeMemberInvite.invite_id,
-      eventType: 'invite_issued',
-      payload: { invite: activeMemberInvite },
-    });
     expect(() =>
       apply(projection, {
         aggregateType: 'membership',
@@ -1325,27 +1449,55 @@ describe('Collaboration v3 reducer invariants', () => {
             status: 'requested',
             joined_at_event: null,
           },
-          invite_id: activeMemberInvite.invite_id,
+          client: {
+            ...projection.clients[BOB]![BOB_CLIENT]!,
+            registered_at_event: 'evt_active_request',
+          },
+          credential: {
+            ...projection.credentials[BOB]![BOB_CREDENTIAL]!,
+            created_at_event: 'evt_active_request',
+          },
+          invite_id: invite.invite_id,
         },
+        id: 'evt_active_request',
       }),
     ).toThrow(/already|existing|active/iu);
     projection = apply(projection, {
       aggregateType: 'membership',
-      aggregateId: invite.principal_id,
+      aggregateId: CAROL,
       eventType: 'membership_requested',
-      actor: invite.principal_id,
-      client: 'client_carol',
+      actor: CAROL,
+      client: CAROL_CLIENT,
+      credential: CAROL_CREDENTIAL,
       id: 'evt_carol_request',
       payload: {
         member: {
           format: 'icarus.collaboration-member/3',
-          principal_id: invite.principal_id,
+          principal_id: CAROL,
           display_name: 'Carol',
-          signing_key_ref: 'ssh-ed25519:SHA256:carol',
-          signing_public_key:
-            'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEcarol',
           status: 'requested',
           joined_at_event: null,
+        },
+        client: {
+          format: 'icarus.collaboration-client/1',
+          principal_id: CAROL,
+          client_id: CAROL_CLIENT,
+          display_name: 'Carol laptop',
+          capabilities: [],
+          status: 'active',
+          registered_at_event: 'evt_carol_request',
+        },
+        credential: {
+          format: 'icarus.collaboration-credential/1',
+          credential_id: CAROL_CREDENTIAL,
+          principal_id: CAROL,
+          client_id: CAROL_CLIENT,
+          public_key: CAROL_KEY,
+          fingerprint: CAROL_FINGERPRINT,
+          purpose: 'event_signing',
+          status: 'active',
+          created_at_event: 'evt_carol_request',
+          revoked_at_event: null,
         },
         invite_id: invite.invite_id,
       },
@@ -1360,15 +1512,25 @@ describe('Collaboration v3 reducer invariants', () => {
     expect(() =>
       apply(projection, {
         aggregateType: 'membership',
-        aggregateId: invite.principal_id,
+        aggregateId: CAROL,
         eventType: 'membership_requested',
-        actor: invite.principal_id,
-        client: 'client_carol',
+        actor: CAROL,
+        client: CAROL_CLIENT,
+        credential: CAROL_CREDENTIAL,
+        id: 'evt_carol_retry',
         payload: {
           member: {
-            ...projection.members[invite.principal_id],
+            ...projection.members[CAROL],
             status: 'requested',
             joined_at_event: null,
+          },
+          client: {
+            ...projection.clients[CAROL]![CAROL_CLIENT]!,
+            registered_at_event: 'evt_carol_retry',
+          },
+          credential: {
+            ...projection.credentials[CAROL]![CAROL_CREDENTIAL]!,
+            created_at_event: 'evt_carol_retry',
           },
           invite_id: invite.invite_id,
         },
@@ -1376,7 +1538,7 @@ describe('Collaboration v3 reducer invariants', () => {
     ).toThrow(/Invite.*used|active/iu);
   });
 
-  it('rejects missing, wrong-target, expired, and revoked Invites', () => {
+  it('rejects missing, expired, and revoked Invites', () => {
     const request = (
       projection: CollaborationProjectionV3,
       inviteId: string | null,
@@ -1393,13 +1555,33 @@ describe('Collaboration v3 reducer invariants', () => {
             format: 'icarus.collaboration-member/3',
             principal_id: BOB,
             display_name: 'Bob',
-            signing_key_ref: 'ssh-ed25519:SHA256:bob',
-            signing_public_key: BOB_KEY,
             status: 'requested',
             joined_at_event: null,
           },
+          client: {
+            format: 'icarus.collaboration-client/1',
+            principal_id: BOB,
+            client_id: BOB_CLIENT,
+            display_name: 'Bob laptop',
+            capabilities: [],
+            status: 'active',
+            registered_at_event: 'evt_invite_request',
+          },
+          credential: {
+            format: 'icarus.collaboration-credential/1',
+            credential_id: BOB_CREDENTIAL,
+            principal_id: BOB,
+            client_id: BOB_CLIENT,
+            public_key: BOB_KEY,
+            fingerprint: BOB_FINGERPRINT,
+            purpose: 'event_signing',
+            status: 'active',
+            created_at_event: 'evt_invite_request',
+            revoked_at_event: null,
+          },
           invite_id: inviteId,
         },
+        id: 'evt_invite_request',
       });
     let base = apply(genesis(), {
       aggregateType: 'group',
@@ -1413,7 +1595,6 @@ describe('Collaboration v3 reducer invariants', () => {
     const issue = (
       projection: CollaborationProjectionV3,
       inviteId: string,
-      principalId: string,
       expiresAt: string | null,
     ) =>
       apply(projection, {
@@ -1424,7 +1605,6 @@ describe('Collaboration v3 reducer invariants', () => {
           invite: {
             format: 'icarus.collaboration-invite/1',
             invite_id: inviteId,
-            principal_id: principalId,
             issued_by_principal_id: ALICE,
             status: 'active',
             issued_at: NOW,
@@ -1434,20 +1614,12 @@ describe('Collaboration v3 reducer invariants', () => {
           },
         },
       });
-    const wrong = issue(base, 'invite_wrong', ALICE, null);
-    expect(() => request(wrong, 'invite_wrong')).toThrow(/target|Principal/iu);
-
-    const expired = issue(
-      base,
-      'invite_expired',
-      BOB,
-      '2026-08-06T12:01:00.000Z',
-    );
+    const expired = issue(base, 'invite_expired', '2026-08-06T12:01:00.000Z');
     expect(() =>
       request(expired, 'invite_expired', '2026-08-06T12:02:00.000Z'),
     ).toThrow(/expired/iu);
 
-    base = issue(base, 'invite_revoked', BOB, null);
+    base = issue(base, 'invite_revoked', null);
     base = apply(base, {
       aggregateType: 'invite',
       aggregateId: 'invite_revoked',
