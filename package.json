@@ -6,7 +6,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "node scripts/clean-typescript-output.mjs && tsc",
+    "build": "node scripts/clean-typescript-output.mjs && tsc && node dist/host-core/runtime-assets.js",
     "start": "./local/shell/start.sh --mode current",
     "dev": "tsx src/index.ts",
     "dev:electron": "node scripts/build-electron.mjs && electron dist-electron/main.cjs",

@@ -13,6 +13,7 @@ import {
   HOST_CORE_STARTUP_SMOKE_MARKER,
   HOST_CORE_STARTUP_SMOKE_TIMEOUT_MS,
 } from './startup-smoke.js';
+import { copyWorkflowRuntimeAssets } from './runtime-assets.js';
 
 export const HOST_CORE_SNAPSHOT_DIRECTORY = 'host-core-snapshots';
 export const HOST_CORE_SNAPSHOT_FILENAME = 'snapshot.json';
@@ -166,25 +167,7 @@ function copyTree(source: string, target: string): void {
 }
 
 function copyRuntimeAssets(projectRoot: string, snapshotRoot: string): void {
-  const workflowRoot = path.join(projectRoot, 'src', 'workflow-runtime');
-  const visit = (directory: string): void => {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const source = path.join(directory, entry.name);
-      if (entry.isDirectory()) visit(source);
-      else if (entry.isFile() && /\.(?:json|sql)$/.test(entry.name)) {
-        const relative = path.relative(workflowRoot, source);
-        const target = path.join(
-          snapshotRoot,
-          'dist',
-          'workflow-runtime',
-          relative,
-        );
-        fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.copyFileSync(source, target);
-      }
-    }
-  };
-  visit(workflowRoot);
+  copyWorkflowRuntimeAssets(projectRoot, path.join(snapshotRoot, 'dist'));
   const configRoot = path.join(projectRoot, 'config');
   if (fs.existsSync(configRoot))
     copyTree(configRoot, path.join(snapshotRoot, 'config'));
