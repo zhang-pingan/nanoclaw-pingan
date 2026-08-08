@@ -308,7 +308,7 @@ class TaskWorkspaceRenderer {
     return `
       <div class="tw-shell">
         <aside class="tw-sessions" aria-label="Task Sessions">
-          <header class="tw-pane-header"><div><span class="tw-kicker">Workspace</span><h1>Task Sessions</h1></div><button type="button" class="tw-icon-btn" data-tw-action="new-session" title="New task" aria-label="New task">+</button></header>
+          <header class="tw-pane-header"><h1>Tasks</h1><button type="button" class="tw-icon-btn" data-tw-action="new-session" title="New task" aria-label="New task"><span aria-hidden="true">+</span></button></header>
           <div class="tw-session-tools">
             <input type="search" data-role="session-search" placeholder="Search tasks" aria-label="Search tasks">
             <div class="tw-segments" role="tablist" aria-label="Task state">
@@ -320,23 +320,35 @@ class TaskWorkspaceRenderer {
         <main class="tw-conversation">
           <header class="tw-conversation-header" data-role="session-header"></header>
           <div class="tw-timeline" data-role="timeline" aria-live="polite"></div>
-          <footer class="tw-composer">
-            <div class="tw-composer-row">
-              <label class="tw-selector"><span>Workflow</span><select data-role="recipe-selector" aria-label="Workflow recipe"></select></label>
-              <span class="tw-cursor-state" data-role="cursor-state"></span>
+          <footer class="tw-composer-dock">
+            <div class="tw-composer">
+              <textarea data-role="composer-input" rows="2" placeholder="Message or describe a task" aria-label="Task message"></textarea>
+              <div class="tw-composer-footer">
+                <div class="tw-composer-context">
+                  <label class="tw-selector"><span>Workflow</span><select data-role="recipe-selector" aria-label="Workflow recipe"></select></label>
+                  <span class="tw-cursor-state" data-role="cursor-state"></span>
+                </div>
+                <span class="tw-error" data-role="error" aria-live="assertive"></span>
+                <div class="tw-composer-actions"><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="send" disabled>Send</button><button type="button" class="tw-btn tw-btn-primary" data-tw-action="run" disabled>Run</button></div>
+              </div>
             </div>
-            <textarea data-role="composer-input" rows="2" placeholder="Message the Coordinator or describe work to run" aria-label="Task message"></textarea>
-            <div class="tw-composer-actions"><span class="tw-error" data-role="error" aria-live="assertive"></span><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="send" disabled>Send</button><button type="button" class="tw-btn tw-btn-primary" data-tw-action="run" disabled>Run</button></div>
           </footer>
         </main>
         <aside class="tw-inspector" aria-label="Runtime Inspector">
-          <header class="tw-inspector-header"><div><span class="tw-kicker">Runtime</span><h2>Inspector</h2></div><button type="button" class="tw-icon-btn" data-tw-action="toggle-inspector" title="Collapse inspector" aria-label="Collapse inspector">&gt;</button></header>
-          <label class="tw-execution-selector"><span>Linked Workflow / Run</span><select data-role="execution-selector" aria-label="Linked Workflow and Run"></select></label>
+          <header class="tw-inspector-header"><h2>Runtime</h2><button type="button" class="tw-icon-btn tw-inspector-close" data-tw-action="toggle-inspector" data-inspector-control="close" title="Close Runtime" aria-label="Close Runtime"><span aria-hidden="true">&times;</span></button></header>
+          <label class="tw-execution-selector"><span>Workflow run</span><select data-role="execution-selector" aria-label="Linked Workflow and Run"></select></label>
           <nav class="tw-inspector-tabs" aria-label="Inspector panels">
             ${(['overview', 'dag', 'artifacts', 'pending', 'trace'] as const).map((panel) => `<button type="button" data-tw-action="inspector-tab" data-panel="${panel}" class="${panel === 'overview' ? 'is-active' : ''}">${panel === 'dag' ? 'DAG' : escapeHtml(readableLabel(panel))}</button>`).join('')}
           </nav>
           <div class="tw-inspector-content" data-role="inspector-content"></div>
         </aside>
+        <dialog class="tw-new-task-dialog" data-role="new-session-dialog" aria-labelledby="tw-new-task-title">
+          <div class="tw-new-task-form">
+            <header><h2 id="tw-new-task-title">New task</h2><button type="button" class="tw-icon-btn" data-tw-action="cancel-new-session" title="Close" aria-label="Close"><span aria-hidden="true">&times;</span></button></header>
+            <label><span>Title</span><input type="text" data-role="new-session-title" maxlength="240" autocomplete="off" placeholder="Task title"></label>
+            <div class="tw-new-task-actions"><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="cancel-new-session">Cancel</button><button type="button" class="tw-btn tw-btn-primary" data-tw-action="confirm-new-session" disabled>Create</button></div>
+          </div>
+        </dialog>
       </div>`;
   }
 
@@ -562,15 +574,21 @@ class TaskWorkspaceRenderer {
     );
     list.innerHTML = sessions.length
       ? sessions
-          .map(
-            (session) => `
-              <button type="button" class="tw-session-item ${session.session_id === this.state.activeSession?.session_id ? 'is-active' : ''}" data-tw-action="select-session" data-session-id="${escapeAttribute(session.session_id)}">
+          .map((session) => {
+            const active =
+              session.session_id === this.state.activeSession?.session_id;
+            const attention =
+              session.attention_state === 'none'
+                ? ''
+                : `<span class="tw-attention is-${escapeAttribute(session.attention_state)}">${escapeHtml(readableLabel(session.attention_state))}</span>`;
+            return `
+              <button type="button" class="tw-session-item ${active ? 'is-active' : ''}" data-tw-action="select-session" data-session-id="${escapeAttribute(session.session_id)}"${active ? ' aria-current="page"' : ''}>
                 <span class="tw-session-title">${escapeHtml(session.title)}</span>
-                <span class="tw-session-meta"><span class="tw-attention is-${escapeAttribute(session.attention_state)}">${escapeHtml(readableLabel(session.attention_state))}</span><time>${escapeHtml(formatTime(session.updated_at_ms))}</time></span>
-              </button>`,
-          )
+                <span class="tw-session-meta">${attention}<time>${escapeHtml(formatTime(session.updated_at_ms))}</time></span>
+              </button>`;
+          })
           .join('')
-      : '<div class="tw-empty tw-empty-compact">No tasks in this view.</div>';
+      : `<div class="tw-empty tw-empty-compact">No ${escapeHtml(readableLabel(this.state.sessionFilter).toLocaleLowerCase())} tasks</div>`;
     this.options.root
       .querySelectorAll('[data-tw-action="session-filter"]')
       .forEach((button) => {
@@ -586,8 +604,9 @@ class TaskWorkspaceRenderer {
     if (!header) return;
     const session = this.state.activeSession;
     if (!session) {
-      header.innerHTML =
-        '<div><span class="tw-kicker">Conversation</span><h2>Select or create a task</h2></div>';
+      header.innerHTML = `
+        <div class="tw-session-heading"><h2>No task selected</h2></div>
+        <div class="tw-header-actions"><button type="button" class="tw-runtime-toggle" data-tw-action="toggle-inspector" aria-expanded="false"><span class="tw-runtime-toggle-dot" aria-hidden="true"></span>Runtime</button></div>`;
       return;
     }
     const controls =
@@ -597,8 +616,8 @@ class TaskWorkspaceRenderer {
           ? `<button type="button" class="tw-btn tw-btn-quiet" data-tw-action="session-status" data-status-action="reopen">Reopen</button>`
           : `<button type="button" class="tw-btn tw-btn-quiet" data-tw-action="session-status" data-status-action="reopen">Reopen</button><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="session-status" data-status-action="archive">Archive</button>`;
     header.innerHTML = `
-      <div class="tw-session-heading"><span class="tw-kicker">Conversation</span><h2 title="${escapeAttribute(session.title)}">${escapeHtml(session.title)}</h2><span class="tw-status is-${escapeAttribute(session.status)}">${escapeHtml(session.status)}</span></div>
-      <div class="tw-header-actions">${controls}</div>`;
+      <div class="tw-session-heading"><h2 title="${escapeAttribute(session.title)}">${escapeHtml(session.title)}</h2><span class="tw-status is-${escapeAttribute(session.status)}">${escapeHtml(session.status)}</span></div>
+      <div class="tw-header-actions">${controls}<button type="button" class="tw-runtime-toggle" data-tw-action="toggle-inspector" aria-expanded="false"><span class="tw-runtime-toggle-dot" aria-hidden="true"></span>Runtime</button></div>`;
   }
 
   private selectedRecipe(): RecipeCatalogItem | null {
@@ -630,6 +649,20 @@ class TaskWorkspaceRenderer {
         .join('')}`;
     selector.disabled =
       !session || session.status !== 'open' || this.state.busy;
+    const input = this.element<HTMLTextAreaElement>(
+      '[data-role="composer-input"]',
+    );
+    if (input) {
+      input.disabled = !session || session.status !== 'open' || this.state.busy;
+      input.placeholder = session
+        ? 'Message or describe a task'
+        : 'Select a task';
+    }
+    this.element('.tw-composer')?.classList.toggle(
+      'is-disabled',
+      !session || session.status !== 'open',
+    );
+    this.element('.tw-composer-dock')?.classList.toggle('is-hidden', !session);
     this.syncComposerButtons();
   }
 
@@ -638,7 +671,7 @@ class TaskWorkspaceRenderer {
     if (!timeline) return;
     if (!this.state.activeSession) {
       timeline.innerHTML =
-        '<div class="tw-empty"><strong>No task selected</strong><span>Create a TaskSession to start a conversation.</span></div>';
+        '<div class="tw-empty tw-empty-conversation"><strong>No task selected</strong><button type="button" class="tw-btn tw-btn-primary" data-tw-action="new-session">New task</button></div>';
       return;
     }
     timeline.innerHTML = this.state.timeline.length
@@ -647,7 +680,7 @@ class TaskWorkspaceRenderer {
             renderTimelineEntry(entry, this.resolvedInteraction(entry)),
           )
           .join('')
-      : '<div class="tw-empty"><strong>Start the task</strong><span>Send a message or select a Workflow and Run.</span></div>';
+      : '<div class="tw-empty tw-empty-conversation"><strong>Ready</strong></div>';
     if (scrollToBottom) timeline.scrollTop = timeline.scrollHeight;
   }
 
@@ -721,23 +754,27 @@ class TaskWorkspaceRenderer {
     const selector = this.element<HTMLSelectElement>(
       '[data-role="execution-selector"]',
     );
-    const collapse = this.element<HTMLButtonElement>(
-      '[data-tw-action="toggle-inspector"]',
-    );
     shell?.classList.toggle(
       'is-inspector-collapsed',
       this.state.inspectorCollapsed,
     );
-    if (collapse) {
-      collapse.setAttribute(
-        'aria-expanded',
-        this.state.inspectorCollapsed ? 'false' : 'true',
-      );
-      collapse.title = this.state.inspectorCollapsed
-        ? 'Expand inspector'
-        : 'Collapse inspector';
-      collapse.setAttribute('aria-label', collapse.title);
-    }
+    this.options.root
+      .querySelectorAll<HTMLButtonElement>(
+        '[data-tw-action="toggle-inspector"]',
+      )
+      .forEach((button) => {
+        const closeControl = button.dataset.inspectorControl === 'close';
+        const expanded = !this.state.inspectorCollapsed;
+        button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        button.classList.toggle('is-active', expanded && !closeControl);
+        button.classList.toggle(
+          'has-runtime',
+          Boolean(this.state.selectedRunId),
+        );
+        if (closeControl) return;
+        button.title = expanded ? 'Close Runtime' : 'Open Runtime';
+        button.setAttribute('aria-label', button.title);
+      });
     if (selector) {
       selector.innerHTML =
         renderExecutionOptions(this.state) ||
@@ -811,12 +848,43 @@ class TaskWorkspaceRenderer {
     this.state.activeSession = session;
   }
 
+  private openNewSessionDialog(): void {
+    const dialog = this.element<HTMLDialogElement>(
+      '[data-role="new-session-dialog"]',
+    );
+    const input = this.element<HTMLInputElement>(
+      '[data-role="new-session-title"]',
+    );
+    if (!dialog || !input || dialog.open || this.state.busy) return;
+    input.value = '';
+    const createButton = this.element<HTMLButtonElement>(
+      '[data-tw-action="confirm-new-session"]',
+    );
+    if (createButton) createButton.disabled = true;
+    dialog.showModal();
+    input.focus();
+  }
+
+  private closeNewSessionDialog(force = false): void {
+    if (this.state.busy && !force) return;
+    this.element<HTMLDialogElement>(
+      '[data-role="new-session-dialog"]',
+    )?.close();
+  }
+
   private async createSession(): Promise<void> {
-    const title = window.prompt('Task title', 'New task')?.trim();
-    if (!title) return;
+    const title = this.element<HTMLInputElement>(
+      '[data-role="new-session-title"]',
+    )?.value.trim();
+    if (!title || this.state.busy) return;
+    const createButton = this.element<HTMLButtonElement>(
+      '[data-tw-action="confirm-new-session"]',
+    );
+    if (createButton) createButton.disabled = true;
     this.setBusy(true);
     try {
       const { session } = await this.api.createSession(title);
+      this.closeNewSessionDialog(true);
       this.upsertSession(session);
       this.state.sessionFilter = 'active';
       await this.openSession(session.session_id);
@@ -824,6 +892,10 @@ class TaskWorkspaceRenderer {
       this.report(error);
     } finally {
       this.setBusy(false);
+      const dialog = this.element<HTMLDialogElement>(
+        '[data-role="new-session-dialog"]',
+      );
+      if (createButton && dialog?.open) createButton.disabled = false;
     }
   }
 
@@ -1199,7 +1271,9 @@ class TaskWorkspaceRenderer {
     );
     if (!button || !this.options.root.contains(button)) return;
     const action = button.dataset.twAction;
-    if (action === 'new-session') void this.createSession();
+    if (action === 'new-session') this.openNewSessionDialog();
+    else if (action === 'cancel-new-session') this.closeNewSessionDialog();
+    else if (action === 'confirm-new-session') void this.createSession();
     else if (action === 'select-session') {
       const sessionId = button.dataset.sessionId;
       if (sessionId) void this.openSession(sessionId);
@@ -1249,6 +1323,11 @@ class TaskWorkspaceRenderer {
     if (target.matches('[data-role="session-search"]')) {
       this.state.sessionSearch = target.value;
       this.renderSessionList();
+    } else if (target.matches('[data-role="new-session-title"]')) {
+      const createButton = this.element<HTMLButtonElement>(
+        '[data-tw-action="confirm-new-session"]',
+      );
+      if (createButton) createButton.disabled = !target.value.trim();
     } else if (target.matches('[data-role="composer-input"]')) {
       this.syncComposerButtons();
       target.style.height = 'auto';
@@ -1277,6 +1356,12 @@ class TaskWorkspaceRenderer {
     ) {
       event.preventDefault();
       void this.submitMessage(event.shiftKey ? 'run' : 'send');
+    } else if (
+      target.matches('[data-role="new-session-title"]') &&
+      event.key === 'Enter'
+    ) {
+      event.preventDefault();
+      void this.createSession();
     }
   };
 

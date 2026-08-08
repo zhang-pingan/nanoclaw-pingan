@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   chooseExecution,
+  createTaskWorkspaceState,
   mergeTimelineEntries,
   timelineCursor,
   visibleSessions,
@@ -48,6 +49,10 @@ function session(
 }
 
 describe('Task Workspace renderer state', () => {
+  it('keeps Runtime out of the primary conversation until requested', () => {
+    expect(createTaskWorkspaceState().inspectorCollapsed).toBe(true);
+  });
+
   it('deduplicates cursor pages while displaying stable occurrence order', () => {
     const merged = mergeTimelineEntries(
       [entry('late', 1, 200)],

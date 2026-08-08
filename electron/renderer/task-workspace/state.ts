@@ -87,7 +87,7 @@ export function createTaskWorkspaceState(): TaskWorkspaceState {
     sessionFilter: 'active',
     sessionSearch: '',
     inspectorPanel: 'overview',
-    inspectorCollapsed: false,
+    inspectorCollapsed: true,
     localInteractions: [],
     replans: [],
     busy: false,
