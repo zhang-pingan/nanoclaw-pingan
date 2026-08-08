@@ -10,6 +10,7 @@ import {
   readFile,
   unlink,
 } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -68,11 +69,20 @@ function parseStoredClientIdentity(contents: string, filePath: string): string {
 export class CollaborationProjectSpaceIdentityService {
   readonly identityDirectory: string;
   readonly clientIdentityPath: string;
+  readonly defaultSigningKeyPath: string;
   private clientIdPromise: Promise<string> | null = null;
 
-  constructor(storeDirectory: string) {
+  constructor(
+    storeDirectory: string,
+    defaultSigningKeyPath = path.join(os.homedir(), '.ssh', 'id_rsa'),
+  ) {
+    const configuredDefault =
+      defaultSigningKeyPath.trim() || path.join(os.homedir(), '.ssh', 'id_rsa');
     this.identityDirectory = path.join(storeDirectory, IDENTITY_DIRECTORY);
     this.clientIdentityPath = path.join(this.identityDirectory, CLIENT_ID_FILE);
+    this.defaultSigningKeyPath = path.resolve(
+      configuredDefault.replace(/^~(?=$|[\\/])/u, os.homedir()),
+    );
   }
 
   clientId(): Promise<string> {
@@ -84,9 +94,12 @@ export class CollaborationProjectSpaceIdentityService {
   }
 
   async resolveSigningIdentity(
-    signingKeyPath: string,
+    signingKeyPath?: string,
   ): Promise<CollaborationPrincipalIdentity> {
-    const privateKeyPath = path.resolve(signingKeyPath.trim());
+    const configuredPath = signingKeyPath?.trim() || this.defaultSigningKeyPath;
+    const privateKeyPath = path.resolve(
+      configuredPath.replace(/^~(?=$|[\\/])/u, os.homedir()),
+    );
     const publicKeyPath = `${privateKeyPath}.pub`;
     const [clientId, publicKey, sshResult] = await Promise.all([
       this.clientId(),

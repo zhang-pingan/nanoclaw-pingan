@@ -95,6 +95,7 @@ Web 工作台由 `src/channels/web.ts` 启动本地 HTTP/WebSocket 服务，默�
 Collaboration Project Space 是与本地 Dynamic Workflow Runtime 分离的跨机器协作模式。Group 创建后立即可用，不要求预先创建 Workflow。共享事实只存在于 Git 控制分支上的 SSH 签名事件和物化文件；SQLite 保存本机订阅、Executor Binding、durable receipt、staged upload、通知投递、Provider observation、诊断和可重建缓存。
 
 - Principal 是成员与权限主体；`principal_id` 从 SSH 公钥 fingerprint 稳定派生。Client ID 由本机 Identity Service 生成，一个 Principal 可注册多个 Client，Executor 为可选本地能力描述。
+- 创建或加入 Group 时 SSH signing key 路径可省略；Host 优先使用 `SSH_KEY_PATH`，未配置时读取 `~/.ssh/id_rsa`。
 - Observer 是不进入 Group Membership 的只读本地订阅，可以 fetch、验签、浏览 verified virtual file tree 和审计，但不能发布事件。
 - 每个 Principal 拥有可发布进度、文件、Prompt 和 Action 的 Workspace；Group 还提供 Shared Workspace、Work Item、Discussion 和直接权限。
 - Workflow Definition/Instance 均为可选且可多实例。State 可直接指派 Principal，也可在启动 Instance 时把 participant slot 解析为 Principal；Group 不再包含 Role、Role Claim 或单一 active Turn。

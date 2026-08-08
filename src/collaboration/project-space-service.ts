@@ -122,7 +122,7 @@ export interface ProjectSpaceInspectResult {
 export interface CreateProjectSpaceGroupInput {
   readonly remoteUrl: string;
   readonly name: string;
-  readonly signingKeyPath: string;
+  readonly signingKeyPath?: string;
   readonly displayName: string;
   readonly clientDisplayName: string;
   readonly membershipPolicy: 'open' | 'approval' | 'invite_only';
@@ -133,7 +133,7 @@ export interface CreateProjectSpaceGroupInput {
 
 export interface JoinProjectSpaceGroupInput {
   readonly remoteUrl: string;
-  readonly signingKeyPath: string;
+  readonly signingKeyPath?: string;
   readonly displayName: string;
   readonly clientDisplayName: string;
   readonly inviteId?: string;

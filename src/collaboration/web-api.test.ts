@@ -192,6 +192,51 @@ describe('Collaboration project-space v3 Web API', () => {
     });
   });
 
+  it('accepts create and join requests without an SSH signing key path', async () => {
+    const createGroup = vi.fn(async (_input: Record<string, unknown>) =>
+      group(),
+    );
+    const joinGroup = vi.fn(async (_input: Record<string, unknown>) => group());
+    await withApiServer(
+      new CollaborationWebApi(runtime({ groups: { createGroup, joinGroup } })),
+      async (baseUrl) => {
+        const headers = { 'content-type': 'application/json' };
+        const created = await fetch(`${baseUrl}/api/collaboration/groups`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            remoteUrl: '/tmp/default-key.git',
+            name: 'Default key project',
+            displayName: 'Alice',
+            clientDisplayName: 'Alice MacBook',
+            membershipPolicy: 'approval',
+            observerAccess: 'allowed',
+          }),
+        });
+        expect(created.status).toBe(201);
+        expect(createGroup.mock.calls[0]?.[0]).not.toHaveProperty(
+          'signingKeyPath',
+        );
+
+        const joined = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/join-requests`,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              displayName: 'Bob',
+              clientDisplayName: 'Bob MacBook',
+            }),
+          },
+        );
+        expect(joined.status).toBe(201);
+        expect(joinGroup.mock.calls[0]?.[0]).not.toHaveProperty(
+          'signingKeyPath',
+        );
+      },
+    );
+  });
+
   it('rejects Host-derived identity fields and duplicate JSON keys', async () => {
     const createGroup = vi.fn();
     await withApiServer(

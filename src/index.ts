@@ -24,6 +24,7 @@ import {
   ICARUS_INTERNAL_API_TOKEN,
   MYSQL_PROXY_PORT,
   POLL_INTERVAL,
+  SSH_KEY_PATH,
   STORE_DIR,
   TIMEZONE,
   TRIGGER_PATTERN,
@@ -2903,6 +2904,7 @@ async function main(): Promise<void> {
 
   const collaborationRuntime = new CollaborationRuntime({
     storeDir: STORE_DIR,
+    defaultSigningKeyPath: SSH_KEY_PATH ?? undefined,
     runOnceService: internalRunOnceService,
     workflowHost: workflowRuntimeStore
       ? new WorkflowExecutionHostService(workflowRuntimeStore)

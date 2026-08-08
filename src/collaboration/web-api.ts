@@ -362,7 +362,7 @@ export class CollaborationWebApi {
           .object({
             remoteUrl: z.string().min(1),
             name: z.string().min(1).max(240),
-            signingKeyPath: z.string().min(1),
+            signingKeyPath: z.string().trim().min(1).optional(),
             displayName: z.string().min(1).max(160),
             clientDisplayName: z.string().min(1).max(160),
             membershipPolicy: z.enum(['open', 'approval', 'invite_only']),
@@ -464,7 +464,7 @@ export class CollaborationWebApi {
         req,
         z
           .object({
-            signingKeyPath: z.string().min(1),
+            signingKeyPath: z.string().trim().min(1).optional(),
             displayName: z.string().min(1),
             clientDisplayName: z.string().min(1),
             inviteId: identifier.optional(),
