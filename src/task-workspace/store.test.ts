@@ -70,6 +70,204 @@ afterEach(() => {
 });
 
 describe('TaskWorkspaceStore', () => {
+  it('deletes the complete owned Workspace graph without touching other sessions', () => {
+    const store = openStore();
+    const retained = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Retained task',
+      nowMs: 1,
+    });
+    const deleted = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Deleted task',
+      nowMs: 2,
+    });
+    const run = store.createRunLaunchIntent({
+      sessionId: deleted.session_id,
+      messageText: 'Run and delete',
+      mode: 'temporary_workflow',
+      selectedRecipeRef: { id: 'ad_hoc_personal_task', version: '1.0.0' },
+      selectedRecipeHash: sha('1'),
+      effectiveInput: { text: 'Run and delete' },
+      attachmentManifestHash: sha('2'),
+      idempotencyKey: 'run:delete-graph',
+      nowMs: 3,
+    });
+    store.addExecutionLink({
+      session_id: deleted.session_id,
+      workflow_id: 'workflow:delete-graph',
+      intake_id: 'intake:delete-graph',
+      creation_request_id: 'creation:delete-graph',
+      launch_intent_id: run.launch.launch_intent_id,
+      created_at_ms: 4,
+    });
+    const artifact = store.upsertArtifactLink({
+      sessionId: deleted.session_id,
+      workflowId: 'workflow:delete-graph',
+      artifactRef: 'artifact:delete-graph',
+      artifactHash: sha('3'),
+      display: { title: 'Delete me' },
+      nowMs: 5,
+    });
+    store.upsertPendingInteraction({
+      interactionId: 'interaction:delete-graph',
+      sessionId: deleted.session_id,
+      workflowId: 'workflow:delete-graph',
+      runId: 'run:delete-graph',
+      waitId: 'wait:delete-graph',
+      renderedSnapshot: { prompt: 'Delete?' },
+      renderedSnapshotHash: sha('4'),
+      targetRowVersion: 1,
+      nowMs: 6,
+    });
+    store.putIdempotency({
+      domain: 'interaction:interaction:delete-graph',
+      key: 'interaction-submit:delete-graph',
+      requestHash: sha('9'),
+      response: { disposition: 'accepted' },
+      nowMs: 6,
+    });
+    store.createCommandProposal({
+      sessionId: deleted.session_id,
+      workflowId: 'workflow:delete-graph',
+      runId: 'run:delete-graph',
+      action: 'pause',
+      expectedTargetRowVersion: 1,
+      idempotencyKey: 'command:delete-graph',
+      nowMs: 7,
+    });
+    store.appendRuntimeEvents({
+      sessionId: deleted.session_id,
+      workflowId: 'workflow:delete-graph',
+      runId: 'run:delete-graph',
+      expectedAfterEventSeq: 0,
+      events: [
+        {
+          seq: 1,
+          event_type: 'run_created',
+          occurred_at_ms: 8,
+        },
+      ],
+      nextEventSeq: 1,
+      nowMs: 8,
+    });
+    const personalDraft = store.createPersonalWorkflowDraft({
+      ownerPrincipalRef: 'human:local-owner',
+      sourceSessionId: deleted.session_id,
+      sourceWorkflowId: 'workflow:delete-graph',
+      sourceRunId: 'run:delete-graph',
+      source: { format: 'test' },
+      sourceHash: sha('5'),
+      compiledPlan: { format: 'plan' },
+      compiledPlanHash: sha('6'),
+      compilerVersion: 'test',
+      resourceClosureHash: sha('7'),
+      policyCeilingHash: sha('8'),
+      riskSummary: {},
+      nowMs: 9,
+    });
+    store.audit({
+      sessionId: deleted.session_id,
+      actorKind: 'human',
+      actorRef: 'human:local-owner',
+      action: 'test_event',
+      targetRef: deleted.session_id,
+      detail: {},
+      nowMs: 10,
+    });
+
+    store.deleteSession({
+      sessionId: deleted.session_id,
+      principalRef: 'human:local-owner',
+    });
+
+    expect(store.listSessions('human:local-owner')).toEqual([retained]);
+    expect(() => store.getSession(deleted.session_id)).toThrow(/not found/i);
+    expect(() => store.getArtifactLink(artifact.artifact_link_id)).toThrow(
+      /not found/i,
+    );
+    expect(() =>
+      store.getPersonalWorkflowDraft(
+        String(personalDraft.draft_id),
+        'human:local-owner',
+      ),
+    ).toThrow(/not found/i);
+    expect(
+      store.findExecutionLinkByWorkflow(
+        'workflow:delete-graph',
+        'human:local-owner',
+      ),
+    ).toBeNull();
+    expect(
+      store.findIdempotency({
+        domain: 'interaction:interaction:delete-graph',
+        key: 'interaction-submit:delete-graph',
+        requestHash: sha('9'),
+      }),
+    ).toBeNull();
+    store.integrityCheck();
+
+    const replacement = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Replacement task',
+      nowMs: 11,
+    });
+    expect(() =>
+      store.createRunLaunchIntent({
+        sessionId: replacement.session_id,
+        messageText: 'Reuse deleted idempotency key',
+        mode: 'temporary_workflow',
+        selectedRecipeRef: {
+          id: 'ad_hoc_personal_task',
+          version: '1.0.0',
+        },
+        selectedRecipeHash: sha('1'),
+        effectiveInput: { text: 'Reuse deleted idempotency key' },
+        attachmentManifestHash: sha('2'),
+        idempotencyKey: 'run:delete-graph',
+        nowMs: 12,
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects deletion while a Coordinator turn is running', () => {
+    const store = openStore();
+    const session = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Coordinator is running',
+      nowMs: 1,
+    });
+    const message = store.appendMessage({
+      sessionId: session.session_id,
+      role: 'human',
+      bodyText: 'Wait for the response',
+      createCoordinatorTurn: true,
+      nowMs: 2,
+    });
+    const turn = store.claimNextCoordinatorTurn(session.session_id, 3);
+    expect(turn).not.toBeNull();
+
+    expect(() =>
+      store.deleteSession({
+        sessionId: session.session_id,
+        principalRef: 'human:local-owner',
+      }),
+    ).toThrow(/currently processing/i);
+
+    store.finishCoordinatorTurn({
+      turnId: message.turn!.turn_id,
+      status: 'completed',
+      queryId: null,
+      nowMs: 4,
+    });
+    expect(() =>
+      store.deleteSession({
+        sessionId: session.session_id,
+        principalRef: 'human:local-owner',
+      }),
+    ).not.toThrow();
+  });
+
   it('restores a consistent closed database backup without later writes', () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), 'icarus-task-workspace-backup-'),

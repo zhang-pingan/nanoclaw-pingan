@@ -983,6 +983,150 @@ export class TaskWorkspaceStore {
     ).map((row) => this.getSession(row.session_id, principalRef));
   }
 
+  deleteSession(input: { sessionId: string; principalRef: string }): void {
+    this.transaction(() => {
+      this.getSession(input.sessionId, input.principalRef);
+      const runningTurn = this.database
+        .prepare(
+          `SELECT 1 FROM task_workspace_coordinator_turns
+            WHERE session_id = ? AND status = 'running' LIMIT 1`,
+        )
+        .get(input.sessionId);
+      if (runningTurn) {
+        throw new TaskWorkspaceStoreError(
+          'conflict',
+          'Task is currently processing a Coordinator response',
+        );
+      }
+
+      this.database
+        .prepare(
+          `DELETE FROM task_workspace_idempotency_records
+            WHERE domain IN (
+              SELECT 'interaction:' || interaction_id
+                FROM task_workspace_pending_interaction_links
+                WHERE session_id = ?
+            )`,
+        )
+        .run(input.sessionId);
+      this.database
+        .prepare(
+          `DELETE FROM task_workspace_idempotency_records
+            WHERE domain = 'task-workspace-run'
+              AND idempotency_key IN (
+                SELECT idempotency_key FROM task_workspace_launch_intents
+                  WHERE session_id = ?
+              )`,
+        )
+        .run(input.sessionId);
+
+      // Personal drafts have a deliberate draft/revision cycle.
+      this.database
+        .prepare(
+          `UPDATE task_workspace_personal_workflow_drafts
+              SET current_revision_id = NULL WHERE source_session_id = ?`,
+        )
+        .run(input.sessionId);
+      this.database
+        .prepare(
+          `DELETE FROM task_workspace_personal_workflow_draft_revisions
+            WHERE draft_id IN (
+              SELECT draft_id FROM task_workspace_personal_workflow_drafts
+                WHERE source_session_id = ?
+            )`,
+        )
+        .run(input.sessionId);
+      this.database
+        .prepare(
+          'DELETE FROM task_workspace_personal_workflow_drafts WHERE source_session_id = ?',
+        )
+        .run(input.sessionId);
+
+      this.database
+        .prepare(
+          `DELETE FROM task_workspace_temporary_draft_revisions
+            WHERE draft_id IN (
+              SELECT draft_id FROM task_workspace_temporary_drafts
+                WHERE launch_intent_id IN (
+                  SELECT launch_intent_id FROM task_workspace_launch_intents
+                    WHERE session_id = ?
+                )
+            )`,
+        )
+        .run(input.sessionId);
+      this.database
+        .prepare(
+          `DELETE FROM task_workspace_temporary_drafts
+            WHERE launch_intent_id IN (
+              SELECT launch_intent_id FROM task_workspace_launch_intents
+                WHERE session_id = ?
+            )`,
+        )
+        .run(input.sessionId);
+      this.database
+        .prepare(
+          `DELETE FROM task_workspace_launch_input_revisions
+            WHERE launch_intent_id IN (
+              SELECT launch_intent_id FROM task_workspace_launch_intents
+                WHERE session_id = ?
+            )`,
+        )
+        .run(input.sessionId);
+
+      for (const table of [
+        'task_workspace_execution_links',
+        'task_workspace_artifact_links',
+        'task_workspace_pending_interaction_links',
+        'task_workspace_runtime_command_proposals',
+        'task_workspace_replan_requests',
+        'task_workspace_timeline_entries',
+        'task_workspace_runtime_cursors',
+      ]) {
+        this.database
+          .prepare(`DELETE FROM ${table} WHERE session_id = ?`)
+          .run(input.sessionId);
+      }
+
+      this.database
+        .prepare(
+          'DELETE FROM task_workspace_launch_intents WHERE session_id = ?',
+        )
+        .run(input.sessionId);
+      this.database
+        .prepare(
+          'DELETE FROM task_workspace_coordinator_turns WHERE session_id = ?',
+        )
+        .run(input.sessionId);
+      this.database
+        .prepare(
+          `DELETE FROM task_workspace_message_attachments
+            WHERE message_id IN (
+              SELECT message_id FROM task_workspace_messages
+                WHERE session_id = ?
+            )`,
+        )
+        .run(input.sessionId);
+      this.database
+        .prepare('DELETE FROM task_workspace_messages WHERE session_id = ?')
+        .run(input.sessionId);
+      this.database
+        .prepare('DELETE FROM task_workspace_threads WHERE session_id = ?')
+        .run(input.sessionId);
+      this.database
+        .prepare('DELETE FROM task_workspace_audit_events WHERE session_id = ?')
+        .run(input.sessionId);
+      const deleted = this.database
+        .prepare('DELETE FROM task_workspace_sessions WHERE session_id = ?')
+        .run(input.sessionId).changes;
+      if (deleted !== 1) {
+        throw new TaskWorkspaceStoreError(
+          'conflict',
+          'TaskSession deletion failed',
+        );
+      }
+    });
+  }
+
   updateSessionStatus(input: {
     sessionId: string;
     principalRef: string;

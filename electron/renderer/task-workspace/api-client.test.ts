@@ -14,6 +14,20 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe('TaskWorkspaceApiClient', () => {
+  it('deletes the encoded TaskSession resource', async () => {
+    const fetcher = vi.fn(async () =>
+      response({ deleted_session_id: 'session:1' }),
+    );
+    const client = new TaskWorkspaceApiClient(fetcher);
+
+    await client.deleteSession('session:1');
+
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/task-workspace/sessions/session%3A1',
+      { method: 'DELETE' },
+    );
+  });
+
   it('uses the HTTP session cursor as the timeline recovery path', async () => {
     const fetcher = vi.fn(async () =>
       response({

@@ -229,6 +229,19 @@ export class TaskWorkspaceService {
     return this.options.store.listSessions(principalRef);
   }
 
+  deleteSession(input: { sessionId: string; principalRef: string }): void {
+    if (
+      this.activeTurns.has(input.sessionId) ||
+      this.coordinatorTails.has(input.sessionId)
+    ) {
+      throw new TaskWorkspaceServiceError(
+        'conflict',
+        'Task is currently processing a Coordinator response',
+      );
+    }
+    this.options.store.deleteSession(input);
+  }
+
   resolveRuntimeLink(
     workflowId: string,
     principalRef: string,

@@ -245,6 +245,8 @@ class TaskWorkspaceRenderer {
   private catchingUp = false;
   private detailTimer: ReturnType<typeof setTimeout> | null = null;
   private catalogExpiresAt = 0;
+  private contextMenuSessionId = '';
+  private pendingDeleteSessionId = '';
 
   constructor(private readonly options: MountTaskWorkspaceOptions) {
     this.api = new TaskWorkspaceApiClient(options.apiFetch);
@@ -258,6 +260,10 @@ class TaskWorkspaceRenderer {
     this.options.root.addEventListener('input', this.onInput);
     this.options.root.addEventListener('change', this.onChange);
     this.options.root.addEventListener('keydown', this.onKeyDown);
+    this.options.root.addEventListener('contextmenu', this.onContextMenu);
+    this.options.root.addEventListener('scroll', this.onScroll, true);
+    document.addEventListener('pointerdown', this.onDocumentPointerDown);
+    document.addEventListener('keydown', this.onDocumentKeyDown);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     void this.bootstrap();
     this.pollTimer = setInterval(() => {
@@ -272,11 +278,15 @@ class TaskWorkspaceRenderer {
     if (this.detailTimer) clearTimeout(this.detailTimer);
     this.pollTimer = null;
     this.detailTimer = null;
+    document.removeEventListener('pointerdown', this.onDocumentPointerDown);
+    document.removeEventListener('keydown', this.onDocumentKeyDown);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.options.root.removeEventListener('click', this.onClick);
     this.options.root.removeEventListener('input', this.onInput);
     this.options.root.removeEventListener('change', this.onChange);
     this.options.root.removeEventListener('keydown', this.onKeyDown);
+    this.options.root.removeEventListener('contextmenu', this.onContextMenu);
+    this.options.root.removeEventListener('scroll', this.onScroll, true);
     this.options.root.innerHTML = '';
   }
 
@@ -349,6 +359,19 @@ class TaskWorkspaceRenderer {
             <div class="tw-new-task-actions"><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="cancel-new-session">Cancel</button><button type="button" class="tw-btn tw-btn-primary" data-tw-action="confirm-new-session" disabled>Create</button></div>
           </div>
         </dialog>
+        <div class="tw-session-context-menu" data-role="session-context-menu" role="menu" aria-label="Task actions" hidden>
+          <button type="button" role="menuitem" data-tw-action="request-delete-session">Delete</button>
+        </div>
+        <dialog class="tw-delete-task-dialog" data-role="delete-session-dialog" aria-labelledby="tw-delete-task-title">
+          <div class="tw-delete-task-form">
+            <header><h2 id="tw-delete-task-title">Delete task?</h2><button type="button" class="tw-icon-btn" data-tw-action="cancel-delete-session" title="Close" aria-label="Close"><span aria-hidden="true">&times;</span></button></header>
+            <div class="tw-delete-task-copy">
+              <strong data-role="delete-session-name"></strong>
+              <p>This permanently removes the conversation and Task history. Linked Runtime workflows are not deleted.</p>
+            </div>
+            <div class="tw-delete-task-actions"><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="cancel-delete-session">Cancel</button><button type="button" class="tw-btn tw-btn-danger" data-tw-action="confirm-delete-session">Delete</button></div>
+          </div>
+        </dialog>
       </div>`;
   }
 
@@ -414,10 +437,11 @@ class TaskWorkspaceRenderer {
     this.state.sessions = response.sessions;
     const current = this.state.activeSession;
     if (current) {
-      this.state.activeSession =
-        response.sessions.find(
-          (session) => session.session_id === current.session_id,
-        ) ?? current;
+      const refreshed = response.sessions.find(
+        (session) => session.session_id === current.session_id,
+      );
+      if (refreshed) this.state.activeSession = refreshed;
+      else this.clearActiveSession();
     }
     this.renderSessionList();
     this.renderSessionHeader();
@@ -425,6 +449,7 @@ class TaskWorkspaceRenderer {
   }
 
   private async openSession(sessionId: string): Promise<void> {
+    this.closeSessionContextMenu();
     const sequence = ++this.openSequence;
     const listed = this.state.sessions.find(
       (session) => session.session_id === sessionId,
@@ -818,6 +843,10 @@ class TaskWorkspaceRenderer {
   private setBusy(busy: boolean): void {
     this.state.busy = busy;
     this.options.root.classList.toggle('is-busy', busy);
+    const deleteButton = this.element<HTMLButtonElement>(
+      '[data-tw-action="confirm-delete-session"]',
+    );
+    if (deleteButton) deleteButton.disabled = busy;
     this.syncComposerButtons();
   }
 
@@ -846,6 +875,119 @@ class TaskWorkspaceRenderer {
       ),
     ];
     this.state.activeSession = session;
+  }
+
+  private clearActiveSession(): void {
+    this.openSequence += 1;
+    this.state.activeSession = null;
+    this.state.executionLinks = [];
+    this.state.timeline = [];
+    this.state.timelineCursor = 0;
+    this.state.timelineSourceState = 'ready';
+    this.state.runtimeDetail = null;
+    this.state.selectedWorkflowId = '';
+    this.state.selectedRunId = '';
+    this.state.localInteractions = [];
+    this.state.replans = [];
+  }
+
+  private openSessionContextMenu(
+    sessionId: string,
+    clientX: number,
+    clientY: number,
+  ): void {
+    const menu = this.element<HTMLElement>(
+      '[data-role="session-context-menu"]',
+    );
+    if (!menu) return;
+    this.contextMenuSessionId = sessionId;
+    menu.hidden = false;
+    menu.style.left = `${String(clientX)}px`;
+    menu.style.top = `${String(clientY)}px`;
+    const bounds = menu.getBoundingClientRect();
+    menu.style.left = `${String(Math.max(8, Math.min(clientX, window.innerWidth - bounds.width - 8)))}px`;
+    menu.style.top = `${String(Math.max(8, Math.min(clientY, window.innerHeight - bounds.height - 8)))}px`;
+    menu.querySelector<HTMLButtonElement>('button')?.focus();
+  }
+
+  private closeSessionContextMenu(): void {
+    const menu = this.element<HTMLElement>(
+      '[data-role="session-context-menu"]',
+    );
+    if (menu) menu.hidden = true;
+    this.contextMenuSessionId = '';
+  }
+
+  private openDeleteSessionDialog(sessionId: string): void {
+    const session = this.state.sessions.find(
+      (candidate) => candidate.session_id === sessionId,
+    );
+    const dialog = this.element<HTMLDialogElement>(
+      '[data-role="delete-session-dialog"]',
+    );
+    if (!session || !dialog || dialog.open || this.state.busy) return;
+    this.pendingDeleteSessionId = sessionId;
+    const name = this.element('[data-role="delete-session-name"]');
+    if (name) name.textContent = session.title;
+    dialog.showModal();
+    dialog
+      .querySelector<HTMLButtonElement>(
+        '[data-tw-action="cancel-delete-session"]',
+      )
+      ?.focus();
+  }
+
+  private closeDeleteSessionDialog(force = false): void {
+    if (this.state.busy && !force) return;
+    this.element<HTMLDialogElement>(
+      '[data-role="delete-session-dialog"]',
+    )?.close();
+    this.pendingDeleteSessionId = '';
+  }
+
+  private async deleteSession(): Promise<void> {
+    const sessionId = this.pendingDeleteSessionId;
+    if (!sessionId || this.state.busy) return;
+    const wasActive = this.state.activeSession?.session_id === sessionId;
+    const visibleBefore = visibleSessions(
+      this.state.sessions,
+      this.state.sessionFilter,
+      this.state.sessionSearch,
+    );
+    const deletedIndex = Math.max(
+      0,
+      visibleBefore.findIndex((session) => session.session_id === sessionId),
+    );
+    this.clearError();
+    this.setBusy(true);
+    try {
+      await this.api.deleteSession(sessionId);
+      this.state.sessions = this.state.sessions.filter(
+        (session) => session.session_id !== sessionId,
+      );
+      const remainingVisible = visibleSessions(
+        this.state.sessions,
+        this.state.sessionFilter,
+        this.state.sessionSearch,
+      );
+      const next =
+        remainingVisible[
+          Math.min(deletedIndex, Math.max(remainingVisible.length - 1, 0))
+        ] ?? null;
+      this.closeDeleteSessionDialog(true);
+      if (wasActive) {
+        this.clearActiveSession();
+        this.renderAll();
+        if (next) await this.openSession(next.session_id);
+      } else {
+        this.renderSessionList();
+      }
+      this.options.showToast?.('Task deleted', 1800);
+    } catch (error) {
+      this.report(error);
+    } finally {
+      this.setBusy(false);
+    }
   }
 
   private openNewSessionDialog(): void {
@@ -1274,7 +1416,15 @@ class TaskWorkspaceRenderer {
     if (action === 'new-session') this.openNewSessionDialog();
     else if (action === 'cancel-new-session') this.closeNewSessionDialog();
     else if (action === 'confirm-new-session') void this.createSession();
-    else if (action === 'select-session') {
+    else if (action === 'request-delete-session') {
+      const sessionId = this.contextMenuSessionId;
+      this.closeSessionContextMenu();
+      if (sessionId) this.openDeleteSessionDialog(sessionId);
+    } else if (action === 'cancel-delete-session') {
+      this.closeDeleteSessionDialog();
+    } else if (action === 'confirm-delete-session') {
+      void this.deleteSession();
+    } else if (action === 'select-session') {
       const sessionId = button.dataset.sessionId;
       if (sessionId) void this.openSession(sessionId);
     } else if (action === 'session-filter') {
@@ -1363,6 +1513,53 @@ class TaskWorkspaceRenderer {
       event.preventDefault();
       void this.createSession();
     }
+  };
+
+  private readonly onContextMenu = (event: MouseEvent): void => {
+    const item = (event.target as Element | null)?.closest<HTMLElement>(
+      '.tw-session-item[data-session-id]',
+    );
+    if (!item || !this.options.root.contains(item)) {
+      this.closeSessionContextMenu();
+      return;
+    }
+    const sessionId = item.dataset.sessionId;
+    if (!sessionId) return;
+    event.preventDefault();
+    this.openSessionContextMenu(sessionId, event.clientX, event.clientY);
+  };
+
+  private readonly onDocumentPointerDown = (event: PointerEvent): void => {
+    const menu = this.element('[data-role="session-context-menu"]');
+    if (
+      menu &&
+      !menu.hidden &&
+      event.target instanceof Node &&
+      !menu.contains(event.target)
+    ) {
+      this.closeSessionContextMenu();
+    }
+  };
+
+  private readonly onDocumentKeyDown = (event: KeyboardEvent): void => {
+    if (event.key !== 'Escape') return;
+    const menu = this.element('[data-role="session-context-menu"]');
+    if (menu && !menu.hidden) {
+      event.preventDefault();
+      this.closeSessionContextMenu();
+      return;
+    }
+    const dialog = this.element<HTMLDialogElement>(
+      '[data-role="delete-session-dialog"]',
+    );
+    if (dialog?.open && !this.state.busy) {
+      event.preventDefault();
+      this.closeDeleteSessionDialog();
+    }
+  };
+
+  private readonly onScroll = (): void => {
+    this.closeSessionContextMenu();
   };
 
   private readonly onVisibilityChange = (): void => {

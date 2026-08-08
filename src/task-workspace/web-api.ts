@@ -320,6 +320,14 @@ export class TaskWorkspaceWebApi {
       );
       return;
     }
+    if (match && method === 'DELETE') {
+      this.service.deleteSession({
+        sessionId: match[1]!,
+        principalRef: this.principalRef,
+      });
+      send(res, 200, { deleted_session_id: match[1]! });
+      return;
+    }
     match = segment(
       pathname,
       /^\/api\/task-workspace\/sessions\/([^/]+)\/(complete|reopen|archive)$/,

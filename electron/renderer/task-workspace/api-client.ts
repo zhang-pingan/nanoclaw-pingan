@@ -77,6 +77,13 @@ export class TaskWorkspaceApiClient {
     });
   }
 
+  deleteSession(sessionId: string): Promise<{ deleted_session_id: string }> {
+    return this.request(
+      `/api/task-workspace/sessions/${encodeURIComponent(sessionId)}`,
+      { method: 'DELETE' },
+    );
+  }
+
   getSession(sessionId: string): Promise<{
     session: TaskSession;
     execution_links: Array<Record<string, unknown>>;

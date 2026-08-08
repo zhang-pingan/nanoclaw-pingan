@@ -2,13 +2,14 @@ import http from 'node:http';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import type { TaskWorkspaceService } from './service.js';
+import { TaskWorkspaceService, TaskWorkspaceServiceError } from './service.js';
 import { TaskWorkspaceWebApi } from './web-api.js';
 
 const SNAPSHOT_HASH = `sha256:${'a'.repeat(64)}`;
 const PAYLOAD_HASH = `sha256:${'b'.repeat(64)}`;
 
 interface ApiServiceStub {
+  readonly deleteSession: ReturnType<typeof vi.fn>;
   readonly createCommandProposal: ReturnType<typeof vi.fn>;
   readonly resolveRuntimeLink: ReturnType<typeof vi.fn>;
   readonly listReplans: ReturnType<typeof vi.fn>;
@@ -24,6 +25,7 @@ interface ApiServiceStub {
 
 function apiServiceStub(): ApiServiceStub {
   return {
+    deleteSession: vi.fn(),
     createCommandProposal: vi.fn(() => ({ proposal_id: 'proposal:test' })),
     resolveRuntimeLink: vi.fn(() => ({
       link: {
@@ -145,6 +147,17 @@ async function getJson(
   };
 }
 
+async function deleteJson(
+  baseUrl: string,
+  pathname: string,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const response = await fetch(`${baseUrl}${pathname}`, { method: 'DELETE' });
+  return {
+    status: response.status,
+    body: (await response.json()) as Record<string, unknown>,
+  };
+}
+
 function commandBody(
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
@@ -206,6 +219,45 @@ function expectClosedBodyRejection(response: {
     },
   });
 }
+
+describe('Task Workspace session deletion Web API', () => {
+  it('deletes only through the authenticated principal', async () => {
+    const service = apiServiceStub();
+    await withApiServer(apiFor(service), async (baseUrl) => {
+      expect(
+        await deleteJson(
+          baseUrl,
+          '/api/task-workspace/sessions/session%3Atest',
+        ),
+      ).toEqual({
+        status: 200,
+        body: { deleted_session_id: 'session:test' },
+      });
+    });
+    expect(service.deleteSession).toHaveBeenCalledWith({
+      sessionId: 'session:test',
+      principalRef: 'human:test-principal',
+    });
+  });
+
+  it('maps inaccessible sessions to not found', async () => {
+    const service = apiServiceStub();
+    service.deleteSession.mockImplementationOnce(() => {
+      throw new TaskWorkspaceServiceError('not_found', 'TaskSession not found');
+    });
+    await withApiServer(apiFor(service), async (baseUrl) => {
+      expect(
+        await deleteJson(
+          baseUrl,
+          '/api/task-workspace/sessions/session%3Aother',
+        ),
+      ).toMatchObject({
+        status: 404,
+        body: { error: { code: 'not_found' } },
+      });
+    });
+  });
+});
 
 describe('Task Workspace runtime command Web API', () => {
   it.each(['pause', 'resume', 'cancel'] as const)(
