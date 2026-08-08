@@ -1,7 +1,7 @@
 # Workflow Pack 架构优化方案
 
 > **状态**：Proposed
-> **日期**：2026-08-06
+> **日期**：2026-08-08
 > **范围**：Task Workspace、Workflow Runtime Registry、Core System Recipe、Feature Package Runtime、Personal Workflow、Temporary Workflow
 > **项目边界**：Icarus 是本地单用户内部实验工具。当前没有必须兼容的历史业务 Workflow 数据，本方案遵循 [`internal-experimental-scope.md`](internal-experimental-scope.md) 的 latest-only 策略。
 
@@ -83,6 +83,17 @@ local/features.json = disabled
 
 Personal Workflow 已经扩展 Registry ownership，并拥有独立 Release、active pointer 和发布流程。这解决了 principal ownership，但 Core、Feature、Personal 仍分别使用 bootstrap、Feature Publisher/Activation 和 Personal Publisher/Activation 三条作者路径。
 
+### 2.1 2026-08-08 代码复核结论
+
+Task Workspace Core 1.2 和 Temporary Workflow 执行链的最新实现没有改变本方案的目标架构，但改变了部分工作的完成状态和优先级：
+
+1. `task-workspace-core.ts` 已不再在运行时读取 `compiler/golden/cases@1.json`，而是发布自包含的 compiler snapshot、Schema、Graph Policy、Scope Interface、Capability、Executor、Adapter 和 Outbox Policy；Temporary Workflow 也已绑定真实的 `codex-task` 执行资源。因此“去除 Golden fixture 运行时依赖”已经完成，不再作为待实现项。
+2. Core 1.2 仍通过专用 bootstrap SQL 和发布逻辑写入资源，没有复用共享 `WorkflowBundlePublisher`。`compiled_plan_pin.provenance` 仍为 `golden_corpus`，需要在统一 Publisher 前明确该字段表达的是编译器验证来源还是资源发布来源，并按合同保留或更名，避免已不读取 Golden fixture 后继续产生误导。
+3. `ad_hoc_personal_task` 仍作为普通 `core` Recipe 被公开 `listRecipes()` 返回；Temporary launch 也仍通过公开 Catalog 搜索它并取得 selection token。新增的 `refreshRecipeSelection()` 同样基于公开 `listRecipes()`，只能服务用户可选 Recipe 的 token 刷新，不能承担隐藏 System Recipe 解析。这使 System Recipe 隐藏成为当前最高优先级的架构缺口。
+4. Temporary Coordinator 已补齐 closed-schema 校验、真实 execution resource contract、draft/confirm/idempotency/recovery，以及 Artifact、attempt、edge 和 completion cut 等 Runtime detail。这说明 System Recipe 应被定义为自包含的平台执行协议 bundle，而不是 Core 提供给用户选择的 Workflow 模板。
+5. Task Workspace 已支持用户显式删除自己的 TaskSession。该能力属于 Task Workspace 的生命周期；Pack Purge 仍不得借用该命令跨领域删除与 Pack Run 关联的 TaskSession。
+6. 旧 `src/features/` Host/UI/API lifecycle 和 Runtime `workflow_feature_active_releases` 双控制面未发生实质变化，删除旧 Feature App Runtime、建立单一 Pack activation authority 的结论保持不变。
+
 ## 3. 目标
 
 - 让 Task Workspace 成为所有用户 Workflow 的唯一交互和启动界面。
@@ -139,6 +150,18 @@ System Recipe 必须满足：
 
 当前 `ad_hoc_personal_task` 应从普通 Core Recipe 调整为隐藏 System Recipe。Task Workspace 的 `Temporary Workflow` 是 UI launch mode，不是对该 Recipe 的直接 Catalog 展示。
 
+Host 应提供与公开 Catalog 分离的 system-only resolver，例如：
+
+```ts
+resolveSystemRecipe({
+  purpose: 'temporary_workflow' | 'personal_workflow',
+  principal_ref,
+  now_ms,
+});
+```
+
+该 resolver 只接受 Core 定义的有限 `purpose`，返回 exact Recipe、snapshot 和内部启动凭据，并验证当前 Core release；不得接受任意 Recipe id。公开 `listRecipes()` 和 `refreshRecipeSelection()` 永不返回或刷新 System Recipe，System Recipe 也不签发面向用户选择的 selection token。
+
 ### 5.3 Workflow Pack
 
 Workflow Pack 是开发者维护、Git 管理、可整体启停的声明式 Workflow 分发单元。它可以包含多个 Recipe 及其共享资源。
@@ -160,6 +183,8 @@ Workflow Pack 不负责：
 - 任意数据库 migration；
 - 后台常驻服务；
 - 直接推进 Workflow 状态。
+
+其中 Capability、Executor 和 Adapter 资源需要区分“声明/绑定”与“实现”：Pack 可以声明所需 capability 并引用 Core 允许的 exact binding，但不能携带或动态加载任意 Adapter/Executor implementation。受信任实现属于 Core-owned Host Capability Registry，并由 active execution bundle pin 住兼容身份。
 
 ### 5.4 Personal Workflow
 
@@ -468,6 +493,8 @@ Purge 不得自动删除：
 - external workspace；
 - 用户显式导出的文件。
 
+用户仍可以在 Task Workspace 中通过独立的 `Delete Task` 命令删除自己拥有的 TaskSession；该命令遵循 Task Workspace 自己的鉴权、确认和清理合同。Pack Purge 无权代替用户调用或批量复用该命令，也不能将“由此 Pack 启动过 Run”解释为 Pack 对 Session 的所有权。
+
 旧 `deleteFeatureData()` 不应直接扩展成跨三个数据库的递归删除器。它应被拆成 owner-aware query、disable/uninstall/purge 三个服务边界。
 
 ## 11. 发布模型统一
@@ -494,6 +521,8 @@ Owner-specific 逻辑只处理：
 | Personal      | principal ownership、personal workflow id、reviewed source |
 
 不要求三类 Release 强行使用同一张 polymorphic 表。可以继续使用 typed nullable owner columns 和 owner-specific active pointer 表，但 publication implementation、receipt 和 Catalog resolution 必须共享。
+
+Core 1.2 已经形成自包含 resource bundle，这是共享 Publisher 的输入基线；后续工作不是重新设计该 bundle，而是把当前专用 bootstrap SQL、collision/closure/snapshot 写入和 receipt 生成收敛到上述 primitives。迁移后仍保留 Core bootstrap authority 和 system-only policy，不把 Core System Recipe 变成 Pack。
 
 ### 11.2 Temporary 不进入 Publisher
 
@@ -544,6 +573,8 @@ Pack Workflow Capability
 ```
 
 Pack 只能引用已注册的 Host Capability，不能动态 import Host implementation。
+
+当前 Temporary Workflow 使用的 `codex-task` Capability/Executor/Adapter 是该边界的基线案例：协议资源可以随 Core System bundle 自包含发布，但 Adapter/Executor implementation 仍由 Core 静态注册和托管。Workflow Pack 只能引用经过 allowlist、permission 和 compatibility 校验的 binding，不能用同名 Registry resource 替换宿主实现。
 
 新增 Host Capability 必须回答：
 
@@ -631,19 +662,21 @@ Pack 只能引用已注册的 Host Capability，不能动态 import Host impleme
 
 ### Phase 1：Catalog 与 Core System Recipe
 
+- 已完成：Core 1.2 使用自包含 resource bundle，移除运行时对 compiler Golden fixture 的读取。
 - 增加 system-only Recipe visibility。
 - 从 Workspace Catalog 隐藏 `ad_hoc_personal_task`。
-- Temporary mode 由 Host 内部解析 exact System Recipe。
+- 新增 Host-only `resolveSystemRecipe()`，Temporary mode 通过有限 `purpose` 解析 exact System Recipe，不再调用公开 `listRecipes()`。
+- 限定 `refreshRecipeSelection()` 只处理公开、用户可选的 Pack/Personal Recipe。
 - 将 `recipe_kind` 调整为 `distribution_kind`。
 - 删除 `feature_ui` source 和遗留 source union 不一致。
-- 用正式 Core resource bundle 替换运行时对 compiler Golden fixture 的读取。
+- 明确 `compiled_plan_pin.provenance = golden_corpus` 的合同语义；若它表示旧资源来源而非编译验证来源，则随 Core 1.2 更名并更新验证。
 
 退出条件：Selector 只显示 Temporary、Pack 和 Personal；Runtime 可在无 Pack/Personal 时正常运行。
 
 ### Phase 2：统一 Bundle Publisher
 
 - 提取共享 Registry publication、closure、snapshot、compile 和 receipt primitives。
-- Core System、Pack、Personal 使用共享实现。
+- 将 Core 1.2 当前专用 bootstrap SQL 接入共享 primitives；Core System、Pack、Personal 使用共享实现。
 - 保留必要的 typed owner-specific activation policy。
 - 为 active Run 建立 self-contained execution bundle/pin 验证。
 
@@ -687,7 +720,9 @@ Pack 只能引用已注册的 Host Capability，不能动态 import Host impleme
 - Workflow Runtime 在零 Pack、零 Personal Workflow 时可以启动。
 - Task Workspace 可以创建 Session、普通对话和查看空 Catalog。
 - `ad_hoc_personal_task` 不出现在用户 selector。
-- Temporary Workflow 可以通过 Host 内部 System Recipe 正常启动。
+- `listRecipes()` 和 `refreshRecipeSelection()` 永不返回 system-only Recipe。
+- Temporary Workflow 可以通过 Host-only resolver 启动 System Recipe，launch 路径不通过公开 Catalog 搜索它，也不使用用户 selection token。
+- Core System bundle 不读取 compiler Golden fixture，发布内容足以独立完成 compile、pin 和执行。
 - Core 不发布任何用户可选业务 Recipe。
 
 ### 17.2 Workflow Pack
@@ -698,6 +733,7 @@ Pack 只能引用已注册的 Host Capability，不能动态 import Host impleme
 - Pack active 后，其 Recipe 出现在 Task Workspace，并走统一 T0/Runtime 路径。
 - Core Web/Renderer 不包含具体 Pack id、业务路由或业务页面分支。
 - Pack 不能动态加载 Host module 或创建自有 migration。
+- Pack 只能引用 Core allowlist 中的 Capability/Adapter binding，不能提供任意 Adapter/Executor implementation。
 
 ### 17.3 Disable 与运行中引用
 
@@ -729,6 +765,7 @@ Pack 只能引用已注册的 Host Capability，不能动态 import Host impleme
 - Disable 不删除数据。
 - Uninstall 不删除 TaskSession 或 Runtime history。
 - Purge 显示 exact target summary，并拒绝删除 active/pinned/shared resource。
+- 用户 `Delete Task` 与 Pack Purge 是两个独立命令；Pack Purge 不能删除关联 TaskSession。
 - External workspace 永不由 Pack Purge 自动删除。
 - reset/reinitialize 只操作明确的开发 Store 文件，不影响源码、配置、凭据或用户文件。
 
