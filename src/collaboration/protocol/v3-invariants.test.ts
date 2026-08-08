@@ -6,6 +6,7 @@ import {
   collaborationDeadlineSnapshotHashV3,
   collaborationFencingTokenV3,
   collaborationIdempotencyKeyV3,
+  collaborationRecoveryRequestHashV3,
   collaborationTurnInputHashV3,
   collaborationWorkflowDefinitionHashV3,
   reduceCollaborationEventV3,
@@ -575,6 +576,96 @@ function addWorkItems(
 }
 
 describe('Collaboration v3 reducer invariants', () => {
+  it('rejects future-dated recovery expiry by an unrelated active Member', () => {
+    let projection = withBob();
+    const requestEventId = 'evt_recovery_expiry_request';
+    const requestId = 'recovery_expiry_attack';
+    const requestedClientId = 'client_alice_recovery_expiry';
+    const requestedCredentialId = 'credential_alice_recovery_expiry';
+    const immutable = {
+      format: 'icarus.collaboration-recovery-request/1' as const,
+      request_id: requestId,
+      type: 'identity_recovery' as const,
+      target_principal_id: ALICE,
+      requested_client: {
+        format: 'icarus.collaboration-client/1' as const,
+        principal_id: ALICE,
+        client_id: requestedClientId,
+        display_name: 'Alice replacement',
+        capabilities: [],
+        status: 'active' as const,
+        registered_at_event: requestEventId,
+      },
+      requested_credential: {
+        format: 'icarus.collaboration-credential/1' as const,
+        credential_id: requestedCredentialId,
+        principal_id: ALICE,
+        client_id: requestedClientId,
+        public_key: ALICE_KEY,
+        fingerprint: ALICE_FINGERPRINT,
+        purpose: 'event_signing' as const,
+        status: 'active' as const,
+        created_at_event: requestEventId,
+        revoked_at_event: null,
+      },
+      reason: null,
+      created_at: NOW,
+      expires_at: '2026-08-07T12:00:00.000Z',
+    };
+    const requestHash = collaborationRecoveryRequestHashV3(immutable);
+    projection = apply(projection, {
+      aggregateType: 'recovery',
+      aggregateId: requestId,
+      eventType: 'identity_recovery_requested',
+      id: requestEventId,
+      actor: ALICE,
+      client: requestedClientId,
+      credential: requestedCredentialId,
+      payload: {
+        request: {
+          ...immutable,
+          request_hash: requestHash,
+          status: 'pending',
+          decided_at_event: null,
+          decided_by_principal_id: null,
+          decision_reason: null,
+          approval_kind: null,
+          revoked_credential_ids: [],
+        },
+      },
+    });
+    const expiryPayload = {
+      request_hash: requestHash,
+      reason: 'request expired',
+      revoke_previous_credentials: false,
+      revoke_credential_ids: [],
+    };
+
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'recovery',
+        aggregateId: requestId,
+        eventType: 'recovery_expired',
+        actor: BOB,
+        occurredAt: '2099-01-01T00:00:00.000Z',
+        payload: expiryPayload,
+      }),
+    ).toThrow(/target Principal|expiry requires/iu);
+
+    const expired = apply(projection, {
+      aggregateType: 'recovery',
+      aggregateId: requestId,
+      eventType: 'recovery_expired',
+      actor: ALICE,
+      occurredAt: '2026-08-07T12:00:00.000Z',
+      payload: expiryPayload,
+    });
+    expect(expired.recoveryRequests[requestId]).toMatchObject({
+      status: 'expired',
+      decided_by_principal_id: ALICE,
+    });
+  });
+
   it('keeps assisted Executor results awaiting claimant confirmation and binds their hash', () => {
     const fixture = workflowFixture({ startTurn: true });
     const projection = structuredClone(fixture.projection);

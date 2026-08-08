@@ -1502,7 +1502,9 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
           readonly materializedFiles: readonly CollaborationProjectSpaceMaterializedFile[];
         };
   }): Promise<ValidatedProjectSpaceHistory> {
-    const history = await this.inspect(input);
+    const gitSshKeyPath =
+      input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa');
+    const history = await this.inspect({ ...input, gitSshKeyPath });
     const built = input.buildEvent(history);
     const event = 'event' in built ? built.event : built;
     const extra = 'event' in built ? built.materializedFiles : [];
@@ -1523,13 +1525,13 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         'origin',
         input.remoteUrl,
       ]);
-      await execute(checkoutPath, this.gitBinary, [
-        'fetch',
-        '-q',
-        '--no-tags',
-        'origin',
-        history.head,
-      ]);
+      await execute(
+        checkoutPath,
+        this.gitBinary,
+        ['fetch', '-q', '--no-tags', 'origin', history.head],
+        false,
+        gitSshKeyPath,
+      );
       await execute(checkoutPath, this.gitBinary, [
         'checkout',
         '-q',
@@ -1544,7 +1546,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         this.gitBinary,
         ['push', 'origin', `HEAD:${COLLABORATION_CONTROL_BRANCH}`],
         true,
-        input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
+        gitSshKeyPath,
       );
       if (push.exitCode !== 0) {
         if (/non-fast-forward|fetch first|rejected/iu.test(push.stderr))
@@ -1560,8 +1562,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
       remoteUrl: input.remoteUrl,
       repositoryPath: input.repositoryPath,
       previousHead: history.head,
-      gitSshKeyPath:
-        input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
+      gitSshKeyPath,
     });
   }
 

@@ -117,7 +117,11 @@ export function buildCollaborationObserveRequest(input) {
 }
 
 export function buildCollaborationJoinRequest(input) {
-  const gitSshKeyPath = String(input.gitSshKeyPath ?? '').trim();
+  const explicitGitSshKeyPath = String(input.gitSshKeyPath ?? '').trim();
+  const configuredGitSshKeyPath = String(
+    input.configuredGitSshKeyPath ?? '',
+  ).trim();
+  const gitSshKeyPath = explicitGitSshKeyPath || configuredGitSshKeyPath;
   return {
     ...(gitSshKeyPath ? { gitSshKeyPath } : {}),
     displayName: requiredString(input.displayName, '成员显示名'),

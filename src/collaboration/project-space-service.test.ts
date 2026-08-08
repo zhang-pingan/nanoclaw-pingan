@@ -540,6 +540,38 @@ describe('Collaboration project space v3 Group and identity service', () => {
     observer.store.close();
   });
 
+  it('reuses an observed Group custom SSH key for join when no override is provided', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/reuse-observer-key.git',
+      name: 'Reuse observer transport',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_reuse_observer_key',
+    });
+    const bob = service(tempDirectory(), transport, BOB);
+    await bob.service.observeGroup({
+      remoteUrl: '/tmp/reuse-observer-key.git',
+      gitSshKeyPath: '/tmp/observed-custom-key',
+    });
+
+    const joined = await bob.service.joinGroup({
+      remoteUrl: '/tmp/reuse-observer-key.git',
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    expect(joined.gitSshKeyPath).toBe('/tmp/observed-custom-key');
+    expect(bob.store.getGroup('group_reuse_observer_key')?.gitSshKeyPath).toBe(
+      '/tmp/observed-custom-key',
+    );
+    owner.store.close();
+    bob.store.close();
+  });
+
   it('registers one Principal with multiple Clients while Executor remains optional', async () => {
     const transport = new MemoryTransport();
     const owner = service(tempDirectory(), transport, ALICE);

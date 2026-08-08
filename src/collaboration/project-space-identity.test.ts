@@ -1,9 +1,12 @@
 import {
   copyFileSync,
+  existsSync,
+  lstatSync,
   mkdtempSync,
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import os from 'node:os';
@@ -108,6 +111,56 @@ describe('Collaboration project-space identity', () => {
     expect(readFileSync(imported.privateKeyPath, 'utf8')).toBe(
       readFileSync(recovery.privateKeyPath, 'utf8'),
     );
+  });
+
+  it('exports the recovery trio exclusively without overwriting files or following symlinks', async () => {
+    const root = temporaryDirectory();
+    const service = new CollaborationProjectSpaceIdentityService(
+      path.join(root, 'store'),
+    );
+    const principal = await service.createPrincipalIdentity();
+    const recovery = await service.createCredentialIdentity({
+      principalId: principal.principalId,
+      clientId: principal.clientId,
+      purpose: 'group_recovery',
+    });
+
+    for (const [index, suffix] of ['', '.pub', '.icarus.json'].entries()) {
+      const destination = path.join(root, `existing-${String(index)}`);
+      const protectedPath = `${destination}${suffix}`;
+      writeFileSync(protectedPath, `protected-${String(index)}`, {
+        mode: 0o600,
+      });
+
+      await expect(
+        service.exportRecoveryCredential(recovery.credentialId, destination),
+      ).rejects.toThrow(/already exists|symlink/u);
+      expect(readFileSync(protectedPath, 'utf8')).toBe(
+        `protected-${String(index)}`,
+      );
+      for (const candidate of [
+        destination,
+        `${destination}.pub`,
+        `${destination}.icarus.json`,
+      ])
+        if (candidate !== protectedPath)
+          expect(existsSync(candidate)).toBe(false);
+    }
+
+    const protectedKey = path.join(root, 'protected-key');
+    const symlinkDestination = path.join(root, 'symlink-export');
+    writeFileSync(protectedKey, 'do-not-overwrite', { mode: 0o600 });
+    symlinkSync(protectedKey, symlinkDestination);
+    await expect(
+      service.exportRecoveryCredential(
+        recovery.credentialId,
+        symlinkDestination,
+      ),
+    ).rejects.toThrow(/already exists|symlink/u);
+    expect(lstatSync(symlinkDestination).isSymbolicLink()).toBe(true);
+    expect(readFileSync(protectedKey, 'utf8')).toBe('do-not-overwrite');
+    expect(existsSync(`${symlinkDestination}.pub`)).toBe(false);
+    expect(existsSync(`${symlinkDestination}.icarus.json`)).toBe(false);
   });
 
   it('rejects recovery backups whose metadata, public key, and private key disagree', async () => {

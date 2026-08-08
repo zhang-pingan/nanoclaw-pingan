@@ -1,6 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -357,6 +364,90 @@ describe('Collaboration project space v3 Git protocol', () => {
       previousHead: history.head,
     });
     expect(replayed.projection).toEqual(history.projection);
+  }, 30_000);
+
+  it('passes the configured SSH key to the append checkout fetch process', async () => {
+    const test = fixture();
+    const logPath = path.join(test.root, 'git-wrapper.jsonl');
+    const wrapperPath = path.join(test.root, 'git-wrapper.cjs');
+    const realGit = run(test.root, ['which', 'git']);
+    writeFileSync(
+      wrapperPath,
+      `#!/usr/bin/env node
+const { appendFileSync } = require('node:fs');
+const { spawnSync } = require('node:child_process');
+appendFileSync(${JSON.stringify(logPath)}, JSON.stringify({
+  args: process.argv.slice(2),
+  gitSshCommand: process.env.GIT_SSH_COMMAND || null,
+}) + '\\n');
+const result = spawnSync(${JSON.stringify(realGit)}, process.argv.slice(2), {
+  env: process.env,
+  stdio: 'inherit',
+});
+if (result.error) throw result.error;
+process.exit(result.status === null ? 1 : result.status);
+`,
+      { mode: 0o700 },
+    );
+    chmodSync(wrapperPath, 0o700);
+    const transport = new CollaborationProjectSpaceGitTransport(wrapperPath);
+    const initial = genesis(test.identity);
+    const history = await transport.create({
+      remoteUrl: test.remote,
+      repositoryPath: test.cache,
+      gitSshKeyPath: test.identity.privateKeyPath,
+      identity: test.identity,
+      genesisEvent: initial.event,
+      genesisProjection: initial.projection,
+    });
+    writeFileSync(logPath, '');
+
+    await transport.append({
+      remoteUrl: test.remote,
+      repositoryPath: test.cache,
+      previousHead: history.head,
+      gitSshKeyPath: test.identity.privateKeyPath,
+      identity: test.identity,
+      buildEvent: (current) => {
+        const head = current.projection.aggregateHeads['group:group_signed']!;
+        return buildCollaborationEventV3({
+          groupId: 'group_signed',
+          eventId: 'evt_transport_key_check',
+          aggregateType: 'group',
+          aggregateId: 'group_signed',
+          aggregateRevision: head.revision + 1,
+          previousEventHash: head.eventHash,
+          eventType: 'group_settings_updated',
+          actor: {
+            principal_id: test.identity.principalId,
+            client_id: test.identity.clientId,
+            credential_id: test.identity.credentialId,
+            executor_id: null,
+          },
+          occurredAt: NOW,
+          payload: { name: 'SSH transport checked' },
+        });
+      },
+    });
+
+    const invocations = readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            args: string[];
+            gitSshCommand: string | null;
+          },
+      );
+    const appendFetch = invocations.find(
+      ({ args }) =>
+        args[0] === 'fetch' && args[1] === '-q' && args.at(-1) === history.head,
+    );
+    expect(appendFetch?.gitSshCommand).toContain(
+      `ssh -i '${test.identity.privateKeyPath}'`,
+    );
+    expect(appendFetch?.gitSshCommand).toContain('IdentitiesOnly=yes');
   }, 30_000);
 
   it('materializes original business bytes with a verified JSON sidecar and virtual tree', async () => {

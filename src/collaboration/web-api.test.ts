@@ -255,7 +255,7 @@ describe('Collaboration project-space v3 Web API', () => {
     });
   });
 
-  it('accepts create and join requests without an SSH signing key path', async () => {
+  it('uses the Host default for create and the observed SSH key for join', async () => {
     const createGroup = vi.fn(async (_input: Record<string, unknown>) =>
       group(),
     );
@@ -298,9 +298,12 @@ describe('Collaboration project-space v3 Web API', () => {
           },
         );
         expect(joined.status).toBe(201);
-        expect(joinGroup.mock.calls[0]?.[0]).not.toHaveProperty(
-          'signingKeyPath',
-        );
+        expect(joinGroup).toHaveBeenCalledWith({
+          remoteUrl: group().remoteUrl,
+          gitSshKeyPath: '/private/keys/id_ed25519',
+          displayName: 'Bob',
+          clientDisplayName: 'Bob MacBook',
+        });
 
         const observed = await fetch(
           `${baseUrl}/api/collaboration/subscriptions`,
@@ -397,7 +400,10 @@ describe('Collaboration project-space v3 Web API', () => {
         );
         expect(joined.status).toBe(201);
         expect(joinGroup).toHaveBeenCalledWith(
-          expect.objectContaining({ inviteId: 'invite_bob' }),
+          expect.objectContaining({
+            gitSshKeyPath: '/tmp/bob',
+            inviteId: 'invite_bob',
+          }),
         );
 
         const revoked = await fetch(

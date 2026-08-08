@@ -757,7 +757,7 @@ export function createCollaborationWorkspace(options) {
     openDialog({
       title: '申请加入群组',
       submitText: '提交申请',
-      body: `<div class="collaboration-form-grid">${field('Git Remote SSH Key（可选）', 'gitSshKeyPath', '', { required: false })}${field('成员显示名', 'displayName')}${field('客户端名称', 'clientDisplayName')}${inviteOnly ? field('邀请 ID', 'inviteId') : ''}</div>`,
+      body: `<div class="collaboration-form-grid">${field('Git Remote SSH Key（可选）', 'gitSshKeyPath', group.gitRemoteAccess?.sshKeyPath || '', { required: false })}${field('成员显示名', 'displayName')}${field('客户端名称', 'clientDisplayName')}${inviteOnly ? field('邀请 ID', 'inviteId') : ''}</div>`,
       onSubmit: async (formData) => {
         await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/join-requests`,
@@ -765,7 +765,11 @@ export function createCollaborationWorkspace(options) {
             method: 'POST',
             body: JSON.stringify(
               buildCollaborationJoinRequest(
-                Object.fromEntries(formData.entries()),
+                {
+                  ...Object.fromEntries(formData.entries()),
+                  configuredGitSshKeyPath:
+                    group.gitRemoteAccess?.sshKeyPath || '',
+                },
               ),
             ),
           },

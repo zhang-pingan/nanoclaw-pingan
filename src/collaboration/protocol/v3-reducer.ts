@@ -1517,6 +1517,16 @@ export function reduceCollaborationEventV3(
           conflict('Only the requesting Client may cancel recovery');
       } else if (event.event_type === 'recovery_expired') {
         if (!expired) conflict('Recovery request has not expired');
+        const expiryAuthority =
+          request.type === 'identity_recovery'
+            ? request.target_principal_id
+            : next.group.owner_principal_id;
+        if (event.actor.principal_id !== expiryAuthority)
+          conflict(
+            request.type === 'identity_recovery'
+              ? 'Identity recovery expiry requires the target Principal'
+              : 'Owner recovery expiry requires the Group Owner',
+          );
       } else {
         if (expired) conflict('Expired recovery request cannot be decided');
         if (request.type === 'identity_recovery') {

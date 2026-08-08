@@ -489,11 +489,13 @@ pending -> approved | rejected | expired | cancelled
 ```
 
 - pending 请求不注册新 Client/Credential，也不授予任何业务权限；只有请求 Credential 可以取消自己的 pending 请求；
+- `recovery_expired` 只能由 identity recovery 的目标 Principal 或 owner recovery 的 Group Owner 在本地时钟到达固定 `expires_at` 后签署；普通 Member 不能通过 future-dated event 提前终结他人的请求；
 - request hash 派生六位短验证码，新旧设备展示同一值；验证码只用于防止批准错请求，不证明现实身份；
 - `identity_recovery` 由目标 Principal 的现有 active Client/Credential 批准或拒绝，批准者必须属于同一 Principal；
 - `owner_recovery` 要求申请原因，由 Group Owner 在完成线下核实后填写必填决策原因；批准默认撤销目标 Principal 的全部旧 event Credentials，也可显式选择撤销范围；
 - 批准事件原子添加新 Client/Credential并终结请求，CAS、request hash 和 pending 状态保证只能终结一次；新设备下一次 verified replay 后由 Observer 升级为该 Principal 的 Member Client；
 - Group genesis 自动生成 purpose 为 `group_recovery` 的 offline Credential。私钥只在 Owner 本机保存，可显式安全导出/导入；它只能批准 Owner recovery，不能替代普通业务 Credential；
+- offline Credential 导出使用完整三件套的排他发布，任一目标文件或 symlink 已存在时拒绝且不覆盖，发布中途失败会回滚本次已创建的目标；
 - Owner 丢失全部在线 Credential 时必须使用预先备份的 offline Credential。没有 active approver 或有效备份时 fail closed，不能按 Principal ID 或 display name 恢复。
 
 同步调度器为目标 Principal 的 active Clients 和 Group Owner 生成本地通知，详情显示请求类型、新设备名称、Credential fingerprint、申请/过期时间、request hash 和验证码，并明确区分 self-device approval、Owner recovery 和 offline Owner recovery。

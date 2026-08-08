@@ -515,6 +515,7 @@ export class CollaborationWebApi {
           await this.runtime.groups.joinGroup({
             remoteUrl: group.remoteUrl,
             ...body,
+            gitSshKeyPath: body.gitSshKeyPath ?? group.gitSshKeyPath,
           }),
         ),
       });

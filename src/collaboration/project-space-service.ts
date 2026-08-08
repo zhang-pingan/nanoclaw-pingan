@@ -354,8 +354,11 @@ export class CollaborationProjectSpaceService {
       this.repositoryRoot,
       input.remoteUrl,
     );
+    const existingSubscription = this.store
+      .listGroups()
+      .find((group) => group.remoteUrl === input.remoteUrl);
     const gitSshKeyPath = this.identities.resolveGitSshKeyPath(
-      input.gitSshKeyPath,
+      input.gitSshKeyPath ?? existingSubscription?.gitSshKeyPath,
     );
     const [identity, inspected] = await Promise.all([
       this.identities.createPrincipalIdentity(),
@@ -775,7 +778,12 @@ export class CollaborationProjectSpaceService {
     let history = await this.requireHistory(groupId);
     let expired = 0;
     for (const request of Object.values(history.projection.recoveryRequests)) {
+      const expiryAuthority =
+        request.type === 'identity_recovery'
+          ? request.target_principal_id
+          : history.projection.group.owner_principal_id;
       if (
+        group.localPrincipalId !== expiryAuthority ||
         request.status !== 'pending' ||
         Date.parse(request.expires_at) > this.now()
       )

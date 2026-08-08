@@ -7,8 +7,10 @@ import {
   lstat,
   link,
   mkdir,
+  mkdtemp,
   open,
   readFile,
+  rm,
   unlink,
   writeFile,
 } from 'node:fs/promises';
@@ -264,17 +266,79 @@ export class CollaborationProjectSpaceIdentityService {
     if (identity.purpose !== 'group_recovery')
       throw new Error('Only a Group recovery Credential can be exported');
     const destination = expandLocalPath(destinationPath);
-    await mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
-    await copyFile(identity.privateKeyPath, destination);
-    await chmod(destination, 0o600);
-    await copyFile(`${identity.privateKeyPath}.pub`, `${destination}.pub`);
-    await chmod(`${destination}.pub`, 0o600);
+    const destinationDirectory = path.dirname(destination);
+    await mkdir(destinationDirectory, { recursive: true, mode: 0o700 });
+    const destinationDirectoryMetadata = await lstat(destinationDirectory);
+    if (
+      !destinationDirectoryMetadata.isDirectory() ||
+      destinationDirectoryMetadata.isSymbolicLink()
+    )
+      throw new Error(
+        `Group recovery export directory is unsafe: ${destinationDirectory}`,
+      );
+    const destinations = [
+      destination,
+      `${destination}.pub`,
+      `${destination}.icarus.json`,
+    ];
+    for (const target of destinations) {
+      try {
+        await lstat(target);
+        throw new Error(
+          `Group recovery export target already exists or is a symlink: ${target}`,
+        );
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    }
     const metadata = await readFile(
       path.join(this.credentialDirectory, credentialId, 'metadata.json'),
       'utf8',
     );
-    await writeFile(`${destination}.icarus.json`, metadata, { mode: 0o600 });
-    return destination;
+    const stagingDirectory = await mkdtemp(
+      path.join(destinationDirectory, '.icarus-recovery-export-'),
+    );
+    await chmod(stagingDirectory, 0o700);
+    const staged = [
+      path.join(stagingDirectory, 'credential'),
+      path.join(stagingDirectory, 'credential.pub'),
+      path.join(stagingDirectory, 'credential.icarus.json'),
+    ];
+    const published: string[] = [];
+    try {
+      await copyFile(
+        identity.privateKeyPath,
+        staged[0]!,
+        constants.COPYFILE_EXCL,
+      );
+      await copyFile(
+        `${identity.privateKeyPath}.pub`,
+        staged[1]!,
+        constants.COPYFILE_EXCL,
+      );
+      await writeFile(staged[2]!, metadata, { flag: 'wx', mode: 0o600 });
+      await Promise.all(staged.map((file) => chmod(file, 0o600)));
+      for (const [index, target] of destinations.entries()) {
+        await link(staged[index]!, target);
+        published.push(target);
+      }
+      return destination;
+    } catch (error) {
+      for (const target of published.reverse())
+        await unlink(target).catch((cleanupError: NodeJS.ErrnoException) => {
+          if (cleanupError.code !== 'ENOENT') throw cleanupError;
+        });
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST')
+        throw new Error(
+          'Group recovery export refused because a destination appeared during publication',
+          { cause: error },
+        );
+      throw error;
+    } finally {
+      await rm(stagingDirectory, { recursive: true, force: true }).catch(
+        () => undefined,
+      );
+    }
   }
 
   async importRecoveryCredential(

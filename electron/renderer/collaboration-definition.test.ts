@@ -74,6 +74,21 @@ describe('Collaboration project-space request builders', () => {
     ).not.toHaveProperty('gitSshKeyPath');
   });
 
+  it('reuses the observed Group SSH key when the join field is blank', () => {
+    expect(
+      buildCollaborationJoinRequest({
+        gitSshKeyPath: '  ',
+        configuredGitSshKeyPath: '/tmp/observed-group-key',
+        displayName: 'Alice',
+        clientDisplayName: 'Alice laptop',
+      }),
+    ).toEqual({
+      gitSshKeyPath: '/tmp/observed-group-key',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice laptop',
+    });
+  });
+
   it('builds Principal/Client join input without caller identity overrides', () => {
     expect(
       buildCollaborationJoinRequest({
