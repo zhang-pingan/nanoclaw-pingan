@@ -54,6 +54,26 @@ describe('Collaboration project-space request builders', () => {
     expect(request).not.toHaveProperty('principalId');
   });
 
+  it('omits the SSH signing key when create and join use the Host default', () => {
+    expect(
+      buildCollaborationCreateRequest({
+        remoteUrl: '/tmp/project.git',
+        name: 'Project',
+        signingKeyPath: '  ',
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'approval',
+        observerAccess: 'allowed',
+      }),
+    ).not.toHaveProperty('signingKeyPath');
+    expect(
+      buildCollaborationJoinRequest({
+        displayName: 'Alice',
+        clientDisplayName: 'Alice laptop',
+      }),
+    ).not.toHaveProperty('signingKeyPath');
+  });
+
   it('builds Principal/Client join input without caller identity overrides', () => {
     expect(
       buildCollaborationJoinRequest({
@@ -101,6 +121,17 @@ describe('Collaboration project-space request builders', () => {
     });
   });
 
+  it('uses Chinese display labels for a new project workflow definition', () => {
+    const draft = defaultCollaborationWorkflowDraft();
+    expect(draft.name).toBe('交付流程');
+    expect(draft.participants.map((entry) => entry.label)).toEqual([
+      '构建者',
+      '审核者',
+    ]);
+    expect(draft.states[0]!.label).toBe('构建');
+    expect(createStateDraft(2).label).toBe('状态 2');
+  });
+
   it('supports a State assigned directly to a Principal', () => {
     const draft = completeDraft();
     draft.states[1]!.assigneeType = 'principal';
@@ -119,7 +150,7 @@ describe('Collaboration project-space request builders', () => {
         expectedRevision: 0,
         draft: unknown,
       }),
-    ).toThrow(/未知 Participant/);
+    ).toThrow(/未知参与者/);
 
     const terminal = completeDraft();
     terminal.states[2]!.startTimeoutMs = 1000;
@@ -128,7 +159,7 @@ describe('Collaboration project-space request builders', () => {
         expectedRevision: 0,
         draft: terminal,
       }),
-    ).toThrow(/Terminal State.*超时/);
+    ).toThrow(/终止状态.*超时/);
 
     const duplicate = completeDraft();
     duplicate.states[0]!.transitions.push({
@@ -141,7 +172,7 @@ describe('Collaboration project-space request builders', () => {
         expectedRevision: 0,
         draft: duplicate,
       }),
-    ).toThrow(/Outcome 重复/);
+    ).toThrow(/执行结果重复/);
   });
 
   it('round-trips Definition projection into an editable draft', () => {

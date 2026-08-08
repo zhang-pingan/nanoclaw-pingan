@@ -28,11 +28,7 @@ export function collaborationCanApproveMembers(group) {
 }
 
 export function collaborationCanCreateTurn(group, instance, definition) {
-  if (
-    !instance ||
-    instance.lifecycle !== 'running' ||
-    instance.active_turn_id
-  )
+  if (!instance || instance.lifecycle !== 'running' || instance.active_turn_id)
     return false;
   const state = definition?.machine?.states?.[instance.business_state];
   if (!state || state.terminal) return false;
@@ -41,11 +37,11 @@ export function collaborationCanCreateTurn(group, instance, definition) {
     group?.projection?.permissionGrants?.[principalId]?.grants || [];
   return Boolean(
     principalId &&
-      (instance.created_by_principal_id === principalId ||
-        instance.resolved_assignments?.[instance.business_state] ===
-          principalId ||
-        grants.includes('workflow_instance:manage_all') ||
-        grants.includes('group:admin')),
+    (instance.created_by_principal_id === principalId ||
+      instance.resolved_assignments?.[instance.business_state] ===
+        principalId ||
+      grants.includes('workflow_instance:manage_all') ||
+      grants.includes('group:admin')),
   );
 }
 
@@ -78,7 +74,7 @@ export function buildCollaborationStartTurnRequest(
   if (turn?.execution_mode === 'manual')
     return { expectedRevision, executorId: null };
   const selected = String(executorId || '').trim();
-  if (!selected) throw new Error('Assisted Turn requires an Executor');
+  if (!selected) throw new Error('辅助执行轮次必须选择执行器');
   return { expectedRevision, executorId: selected };
 }
 
@@ -93,10 +89,10 @@ export function parseCollaborationMarkers(value) {
         .filter(Boolean),
     ),
   ];
-  if (markers.length > 100) throw new Error('At most 100 Markers are allowed');
+  if (markers.length > 100) throw new Error('最多可添加 100 个标记');
   for (const marker of markers) {
     if (marker.length > 160 || !collaborationMarkerPattern.test(marker))
-      throw new Error(`Marker must be an identifier: ${marker}`);
+      throw new Error(`标记必须是合法标识符：${marker}`);
   }
   return markers;
 }
@@ -142,12 +138,10 @@ export function collaborationArtifactName(projection, ref) {
 export async function stageCollaborationArtifactFiles(input) {
   const files = [...(input.files || [])];
   const artifactIds = input.artifactIds;
-  if (!Array.isArray(artifactIds))
-    throw new Error('Artifact staging state is required');
-  if (files.length > 20)
-    throw new Error('At most 20 Artifacts may be attached');
+  if (!Array.isArray(artifactIds)) throw new Error('缺少产出物暂存状态');
+  if (files.length > 20) throw new Error('最多可添加 20 个产出物');
   if (artifactIds.length > files.length)
-    throw new Error('Artifact staging state does not match selected files');
+    throw new Error('产出物暂存状态与所选文件不匹配');
   for (let index = artifactIds.length; index < files.length; index += 1) {
     const file = files[index];
     const metadata = input.metadata(file);
@@ -163,7 +157,7 @@ export async function stageCollaborationArtifactFiles(input) {
     });
     const artifactId = staged?.metadata?.artifact_id;
     if (!artifactId || typeof artifactId !== 'string')
-      throw new Error('Artifact staging response is invalid');
+      throw new Error('产出物暂存响应无效');
     artifactIds.push(artifactId);
   }
   return artifactIds;
@@ -271,9 +265,9 @@ export function collaborationElapsed(value, nowMs = Date.now()) {
 
 export function collaborationTurnLifecycle(turn) {
   const entries = [
-    ['created_at', 'Created'],
-    ['started_at', 'Started'],
-    ['completed_at', 'Completed'],
+    ['created_at', '已创建'],
+    ['started_at', '已开始'],
+    ['completed_at', '已完成'],
   ];
   const rows = [];
   let previous = null;

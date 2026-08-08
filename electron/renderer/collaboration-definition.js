@@ -1,3 +1,5 @@
+import { collaborationLabel } from './collaboration-labels.js';
+
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:@-]*$/;
 
 function requiredString(value, label) {
@@ -32,13 +34,13 @@ function uniqueIds(entries, kind) {
 }
 
 export function createParticipantDraft(index = 1) {
-  return { id: `participant_${index}`, label: `Participant ${index}` };
+  return { id: `participant_${index}`, label: `参与者 ${index}` };
 }
 
 export function createTransitionDraft(input = {}) {
   return {
     outcome: input.outcome || 'done',
-    label: input.label || input.outcome || 'Done',
+    label: input.label || input.outcome || '完成',
     targetState: input.targetState || input.stateId || 'state_1',
   };
 }
@@ -47,7 +49,7 @@ export function createStateDraft(index = 1, input = {}) {
   const id = input.id || `state_${index}`;
   return {
     id,
-    label: input.label || `State ${index}`,
+    label: input.label || `状态 ${index}`,
     description: input.description || '',
     assigneeType: input.terminal
       ? ''
@@ -67,17 +69,17 @@ export function defaultCollaborationWorkflowDraft() {
   return {
     definitionId: 'delivery',
     version: 1,
-    name: 'Delivery',
+    name: '交付流程',
     description: '',
     initialState: 'build',
     participants: [
-      { id: 'builder', label: 'Builder' },
-      { id: 'reviewer', label: 'Reviewer' },
+      { id: 'builder', label: '构建者' },
+      { id: 'reviewer', label: '审核者' },
     ],
     states: [
       createStateDraft(1, {
         id: 'build',
-        label: 'Build',
+        label: '构建',
         participantId: 'builder',
       }),
     ],
@@ -91,12 +93,13 @@ export function defaultCollaborationWorkflowDraft() {
 }
 
 export function buildCollaborationCreateRequest(input) {
+  const signingKeyPath = String(input.signingKeyPath ?? '').trim();
   return {
-    remoteUrl: requiredString(input.remoteUrl, 'Git remote'),
-    name: requiredString(input.name, '项目空间名称'),
-    signingKeyPath: requiredString(input.signingKeyPath, 'SSH signing key'),
-    displayName: requiredString(input.displayName, 'Principal 显示名'),
-    clientDisplayName: requiredString(input.clientDisplayName, 'Client 显示名'),
+    remoteUrl: requiredString(input.remoteUrl, 'Git 远程仓库'),
+    name: requiredString(input.name, '群组名称'),
+    ...(signingKeyPath ? { signingKeyPath } : {}),
+    displayName: requiredString(input.displayName, '成员显示名'),
+    clientDisplayName: requiredString(input.clientDisplayName, '客户端名称'),
     membershipPolicy: ['open', 'approval', 'invite_only'].includes(
       input.membershipPolicy,
     )
@@ -109,55 +112,56 @@ export function buildCollaborationCreateRequest(input) {
 
 export function buildCollaborationObserveRequest(input) {
   return {
-    remoteUrl: requiredString(input.remoteUrl, 'Git remote'),
+    remoteUrl: requiredString(input.remoteUrl, 'Git 远程仓库'),
   };
 }
 
 export function buildCollaborationJoinRequest(input) {
+  const signingKeyPath = String(input.signingKeyPath ?? '').trim();
   return {
-    signingKeyPath: requiredString(input.signingKeyPath, 'SSH signing key'),
-    displayName: requiredString(input.displayName, 'Principal 显示名'),
-    clientDisplayName: requiredString(input.clientDisplayName, 'Client 显示名'),
+    ...(signingKeyPath ? { signingKeyPath } : {}),
+    displayName: requiredString(input.displayName, '成员显示名'),
+    clientDisplayName: requiredString(input.clientDisplayName, '客户端名称'),
     ...(String(input.inviteId || '').trim()
-      ? { inviteId: identifier(input.inviteId, 'Invite ID') }
+      ? { inviteId: identifier(input.inviteId, '邀请 ID') }
       : {}),
   };
 }
 
 export function buildCollaborationWorkflowRequest(input) {
   const draft = input.draft;
-  if (!draft || typeof draft !== 'object') throw new Error('Workflow 不能为空');
+  if (!draft || typeof draft !== 'object') throw new Error('工作流不能为空');
   const participants = (draft.participants || []).map((entry, index) => ({
-    id: identifier(entry.id, `Participant ${index + 1} ID`),
-    label: requiredString(entry.label, `Participant ${index + 1} 名称`),
+    id: identifier(entry.id, `参与者 ${index + 1} ID`),
+    label: requiredString(entry.label, `参与者 ${index + 1} 名称`),
   }));
-  const participantIds = uniqueIds(participants, 'Participant');
+  const participantIds = uniqueIds(participants, '参与者');
   const states = (draft.states || []).map((candidate, index) => ({
-    id: identifier(candidate.id, `State ${index + 1} ID`),
-    label: requiredString(candidate.label, `State ${index + 1} 名称`),
+    id: identifier(candidate.id, `状态 ${index + 1} ID`),
+    label: requiredString(candidate.label, `状态 ${index + 1} 名称`),
     description: String(candidate.description ?? '').trim(),
     assigneeType: String(candidate.assigneeType || '').trim(),
     assigneeId: String(candidate.assigneeId || '').trim(),
     terminal: Boolean(candidate.terminal),
     startTimeoutMs: optionalPositiveInteger(
       candidate.startTimeoutMs,
-      `State ${candidate.id || index + 1} 开始超时`,
+      `状态 ${candidate.id || index + 1} 开始超时`,
     ),
     executionTimeoutMs: optionalPositiveInteger(
       candidate.executionTimeoutMs,
-      `State ${candidate.id || index + 1} 执行超时`,
+      `状态 ${candidate.id || index + 1} 执行超时`,
     ),
     reminderIntervalMs: optionalPositiveInteger(
       candidate.reminderIntervalMs,
-      `State ${candidate.id || index + 1} 提醒间隔`,
+      `状态 ${candidate.id || index + 1} 提醒间隔`,
     ),
     transitions: candidate.transitions || [],
   }));
-  if (!states.length) throw new Error('至少需要一个 State');
-  const stateIds = uniqueIds(states, 'State');
-  const initialState = identifier(draft.initialState, 'Initial State');
+  if (!states.length) throw new Error('至少需要一个状态');
+  const stateIds = uniqueIds(states, '状态');
+  const initialState = identifier(draft.initialState, '初始状态');
   if (!stateIds.has(initialState))
-    throw new Error(`Initial State 不存在：${initialState}`);
+    throw new Error(`初始状态不存在：${initialState}`);
 
   const machineStates = {};
   for (const state of states) {
@@ -165,32 +169,28 @@ export function buildCollaborationWorkflowRequest(input) {
       state.startTimeoutMs !== null || state.executionTimeoutMs !== null;
     const hasTimeout = hasDeadline || state.reminderIntervalMs !== null;
     if (state.terminal && (state.assigneeId || state.transitions.length))
-      throw new Error(
-        `Terminal State ${state.id} 不能指定 assignee 或 Outcome`,
-      );
+      throw new Error(`终止状态 ${state.id} 不能指定负责人或执行结果`);
     if (state.terminal && hasTimeout)
-      throw new Error(`Terminal State ${state.id} 不能配置超时策略`);
+      throw new Error(`终止状态 ${state.id} 不能配置超时策略`);
     if (!hasDeadline && state.reminderIntervalMs !== null)
-      throw new Error(`State ${state.id} 必须先配置开始或执行超时`);
+      throw new Error(`状态 ${state.id} 必须先配置开始或执行超时`);
     if (!state.terminal && !state.transitions.length)
-      throw new Error(`非终态 ${state.id} 至少需要一个 Outcome`);
+      throw new Error(`非终止状态 ${state.id} 至少需要一个执行结果`);
     let assignee;
     if (!state.terminal) {
       const assigneeId = identifier(
         state.assigneeId,
-        `State ${state.id} assignee`,
+        `状态 ${state.id} 负责人`,
       );
       if (state.assigneeType === 'participant_slot') {
         if (!participantIds.has(assigneeId))
-          throw new Error(
-            `State ${state.id} 引用了未知 Participant：${assigneeId}`,
-          );
+          throw new Error(`状态 ${state.id} 引用了未知参与者：${assigneeId}`);
         assignee = { type: 'participant_slot', slot: assigneeId };
       } else if (state.assigneeType === 'principal') {
         if (!assigneeId.startsWith('principal_'))
-          throw new Error(`State ${state.id} Principal ID 不合法`);
+          throw new Error(`状态 ${state.id} 成员 ID 不合法`);
         assignee = { type: 'principal', principal_id: assigneeId };
-      } else throw new Error(`State ${state.id} assignee 类型不合法`);
+      } else throw new Error(`状态 ${state.id} 的负责人类型不合法`);
     }
     const outcomes = new Set();
     machineStates[state.id] = {
@@ -211,24 +211,22 @@ export function buildCollaborationWorkflowRequest(input) {
       transitions: state.transitions.map((candidate, index) => {
         const outcome = identifier(
           candidate.outcome,
-          `State ${state.id} Outcome ${index + 1}`,
+          `状态 ${state.id} 执行结果 ${index + 1}`,
         );
         if (outcomes.has(outcome))
-          throw new Error(`State ${state.id} Outcome 重复：${outcome}`);
+          throw new Error(`状态 ${state.id} 的执行结果重复：${outcome}`);
         outcomes.add(outcome);
         const targetState = identifier(
           candidate.targetState,
-          `Outcome ${outcome} 目标 State`,
+          `执行结果 ${outcome} 的目标状态`,
         );
         if (!stateIds.has(targetState))
-          throw new Error(
-            `Outcome ${outcome} 引用了未知 State：${targetState}`,
-          );
+          throw new Error(`执行结果 ${outcome} 引用了未知状态：${targetState}`);
         return {
           outcome,
           label: requiredString(
             candidate.label || outcome,
-            `Outcome ${outcome}`,
+            `执行结果 ${outcome}`,
           ),
           target_state: targetState,
         };
@@ -237,10 +235,10 @@ export function buildCollaborationWorkflowRequest(input) {
   }
 
   return {
-    definitionId: identifier(draft.definitionId, 'Definition ID'),
+    definitionId: identifier(draft.definitionId, '定义 ID'),
     expectedRevision: Number(input.expectedRevision ?? 0),
     version: Number(draft.version || 1),
-    name: requiredString(draft.name, 'Workflow 名称'),
+    name: requiredString(draft.name, '工作流名称'),
     description: String(draft.description || '').trim(),
     launchPolicy: input.launchPolicy || {
       group_admin: true,
@@ -284,7 +282,7 @@ export function collaborationDraftFromDefinition(definition) {
       slots.add(state.assignee.slot);
   const states = Object.entries(machine.states || {}).map(([id, state]) => ({
     id,
-    label: state.label || id,
+    label: collaborationLabel(state.label || id, id),
     description: state.description || '',
     assigneeType: state.assignee?.type || '',
     assigneeId:
@@ -297,17 +295,23 @@ export function collaborationDraftFromDefinition(definition) {
     reminderIntervalMs: state.timeout_policy?.reminder_interval_ms ?? '',
     transitions: (state.transitions || []).map((transition) => ({
       outcome: transition.outcome,
-      label: transition.label || transition.outcome,
+      label: collaborationLabel(
+        transition.label || transition.outcome,
+        transition.outcome,
+      ),
       targetState: transition.target_state,
     })),
   }));
   return {
     definitionId: definition?.definition?.definition_id || 'workflow',
     version: definition?.definition?.version || 1,
-    name: definition?.definition?.name || 'Workflow',
+    name: collaborationLabel(definition?.definition?.name || '工作流'),
     description: definition?.definition?.description || '',
     initialState: machine.initial_state || states[0]?.id || '',
-    participants: [...slots].map((id) => ({ id, label: id })),
+    participants: [...slots].map((id) => ({
+      id,
+      label: collaborationLabel(id, id),
+    })),
     states,
     layout: {
       format: 'icarus.collaboration-workflow-layout/1',

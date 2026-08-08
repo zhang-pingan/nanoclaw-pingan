@@ -13,6 +13,7 @@ import {
   removeCollaborationState,
   validateCollaborationFsmDraft,
 } from './collaboration-fsm.js';
+import { collaborationLabel } from './collaboration-labels.js';
 
 const html = (value) =>
   String(value ?? '')
@@ -60,15 +61,15 @@ function participantOptions(draft, selected) {
 
 function renderParticipants(draft, readonly) {
   return `<section class="collaboration-workflow-participants">
-    <div class="collaboration-section-head"><h3>Participant slots</h3>${readonly ? '' : '<button type="button" class="btn-ghost" data-workflow-action="add-participant">Add</button>'}</div>
+    <div class="collaboration-section-head"><h3>参与者角色</h3>${readonly ? '' : '<button type="button" class="btn-ghost" data-workflow-action="add-participant">添加</button>'}</div>
     <div class="collaboration-participant-list">${(draft.participants || [])
       .map(
         (
           participant,
         ) => `<div class="collaboration-participant-row" data-participant-id="${attr(participant.id)}">
           <label><span>ID</span><input data-participant-field="id" value="${attr(participant.id)}" ${readonly ? 'disabled' : ''}></label>
-          <label><span>Name</span><input data-participant-field="label" value="${attr(participant.label)}" ${readonly ? 'disabled' : ''}></label>
-          ${readonly ? '' : '<button type="button" class="collaboration-icon-button" data-workflow-action="remove-participant" title="Remove participant" aria-label="Remove participant">×</button>'}
+          <label><span>名称</span><input data-participant-field="label" value="${attr(participant.label)}" ${readonly ? 'disabled' : ''}></label>
+          ${readonly ? '' : '<button type="button" class="collaboration-icon-button" data-workflow-action="remove-participant" title="移除参与者" aria-label="移除参与者">×</button>'}
         </div>`,
       )
       .join('')}</div>
@@ -99,7 +100,7 @@ function renderCanvas(draft, selectedStateId, highlights, readonly) {
       const id = collaborationEdgeId(state.id, transition.outcome);
       edges.push(`<g class="collaboration-workflow-edge ${visitedEdges.has(id) ? 'visited' : ''}">
         <path d="${edgeGeometry(source, target, state.id === transition.targetState)}" marker-end="url(#collaboration-arrow)"></path>
-        <text x="${(Number(source.x) + Number(target.x)) / 2 + 110}" y="${(Number(source.y) + Number(target.y)) / 2 + 42}">${html(transition.outcome)}</text>
+        <text x="${(Number(source.x) + Number(target.x)) / 2 + 110}" y="${(Number(source.y) + Number(target.y)) / 2 + 42}">${html(transition.label || collaborationLabel(transition.outcome))}</text>
       </g>`);
     }
   return `<div class="collaboration-workflow-canvas" data-workflow-canvas tabindex="0">
@@ -111,10 +112,10 @@ function renderCanvas(draft, selectedStateId, highlights, readonly) {
           const selected = state.id === selectedStateId;
           const current = state.id === highlights?.currentStateId;
           const assignee = state.terminal
-            ? 'Terminal'
-            : `${state.assigneeType === 'principal' ? 'Principal' : 'Participant'} · ${state.assigneeId}`;
+            ? '终止状态'
+            : `${state.assigneeType === 'principal' ? '成员' : '参与者'} · ${state.assigneeId}`;
           return `<button type="button" class="collaboration-workflow-node ${selected ? 'selected' : ''} ${current ? 'current' : ''} ${visitedStates.has(state.id) ? 'visited' : ''} ${state.terminal ? 'terminal' : ''}" style="left:${Number(point.x)}px;top:${Number(point.y)}px" data-state-id="${attr(state.id)}" ${readonly ? '' : 'data-draggable-state="true"'}>
-            <span>${html(state.id === draft.initialState ? 'Initial' : state.terminal ? 'Terminal' : 'State')}</span>
+            <span>${html(state.id === draft.initialState ? '初始状态' : state.terminal ? '终止状态' : '状态')}</span>
             <strong>${html(state.label)}</strong>
             <small>${html(assignee)}</small>
           </button>`;
@@ -129,33 +130,33 @@ function renderInspector(draft, selectedStateId, readonly) {
     (candidate) => candidate.id === selectedStateId,
   );
   if (!state)
-    return '<aside class="collaboration-workflow-inspector"><div class="collaboration-section-empty">Select a State</div></aside>';
+    return '<aside class="collaboration-workflow-inspector"><div class="collaboration-section-empty">请选择一个状态</div></aside>';
   const disabled = readonly ? 'disabled' : '';
   return `<aside class="collaboration-workflow-inspector" data-inspector-state="${attr(state.id)}">
-    <div class="collaboration-section-head"><h3>State</h3>${readonly || draft.states.length < 2 ? '' : '<button type="button" class="btn-danger-soft" data-workflow-action="remove-state">Delete</button>'}</div>
+    <div class="collaboration-section-head"><h3>状态</h3>${readonly || draft.states.length < 2 ? '' : '<button type="button" class="btn-danger-soft" data-workflow-action="remove-state">删除</button>'}</div>
     <label class="collaboration-field"><span>ID</span><input data-state-field="id" value="${attr(state.id)}" ${disabled}></label>
-    <label class="collaboration-field"><span>Name</span><input data-state-field="label" value="${attr(state.label)}" ${disabled}></label>
-    <label class="collaboration-field"><span>Description</span><textarea data-state-field="description" ${disabled}>${html(state.description)}</textarea></label>
-    <label class="collaboration-toggle"><input type="checkbox" data-state-field="terminal" ${state.terminal ? 'checked' : ''} ${disabled}><span>Terminal</span></label>
+    <label class="collaboration-field"><span>名称</span><input data-state-field="label" value="${attr(state.label)}" ${disabled}></label>
+    <label class="collaboration-field"><span>描述</span><textarea data-state-field="description" ${disabled}>${html(state.description)}</textarea></label>
+    <label class="collaboration-toggle"><input type="checkbox" data-state-field="terminal" ${state.terminal ? 'checked' : ''} ${disabled}><span>终止状态</span></label>
     ${
       state.terminal
         ? ''
-        : `<label class="collaboration-field"><span>Assignee type</span><select data-state-field="assigneeType" ${disabled}><option value="participant_slot" ${state.assigneeType === 'participant_slot' ? 'selected' : ''}>Participant slot</option><option value="principal" ${state.assigneeType === 'principal' ? 'selected' : ''}>Principal</option></select></label>
-          <label class="collaboration-field"><span>Assignee</span>${
+        : `<label class="collaboration-field"><span>负责人类型</span><select data-state-field="assigneeType" ${disabled}><option value="participant_slot" ${state.assigneeType === 'participant_slot' ? 'selected' : ''}>参与者角色</option><option value="principal" ${state.assigneeType === 'principal' ? 'selected' : ''}>指定成员</option></select></label>
+          <label class="collaboration-field"><span>负责人</span>${
             state.assigneeType === 'participant_slot'
               ? `<select data-state-field="assigneeId" ${disabled}>${participantOptions(draft, state.assigneeId)}</select>`
               : `<input data-state-field="assigneeId" value="${attr(state.assigneeId)}" ${disabled}>`
           }</label>
           <div class="collaboration-timeout-grid">
-            <label class="collaboration-field"><span>Start timeout ms</span><input type="number" min="1" data-state-field="startTimeoutMs" value="${attr(state.startTimeoutMs)}" ${disabled}></label>
-            <label class="collaboration-field"><span>Execution timeout ms</span><input type="number" min="1" data-state-field="executionTimeoutMs" value="${attr(state.executionTimeoutMs)}" ${disabled}></label>
-            <label class="collaboration-field"><span>Reminder ms</span><input type="number" min="1" data-state-field="reminderIntervalMs" value="${attr(state.reminderIntervalMs)}" ${disabled}></label>
+            <label class="collaboration-field"><span>开始超时（ms）</span><input type="number" min="1" data-state-field="startTimeoutMs" value="${attr(state.startTimeoutMs)}" ${disabled}></label>
+            <label class="collaboration-field"><span>执行超时（ms）</span><input type="number" min="1" data-state-field="executionTimeoutMs" value="${attr(state.executionTimeoutMs)}" ${disabled}></label>
+            <label class="collaboration-field"><span>提醒间隔（ms）</span><input type="number" min="1" data-state-field="reminderIntervalMs" value="${attr(state.reminderIntervalMs)}" ${disabled}></label>
           </div>
-          <div class="collaboration-section-head"><h3>Outcomes</h3>${readonly ? '' : '<button type="button" class="btn-ghost" data-workflow-action="add-outcome">Add</button>'}</div>
+          <div class="collaboration-section-head"><h3>执行结果</h3>${readonly ? '' : '<button type="button" class="btn-ghost" data-workflow-action="add-outcome">添加</button>'}</div>
           <div class="collaboration-outcome-list">${(state.transitions || [])
             .map(
               (transition) =>
-                `<div class="collaboration-outcome-row" data-outcome-id="${attr(transition.outcome)}"><div><strong>${html(transition.outcome)}</strong><span>${html(transition.label)} → ${html(transition.targetState)}</span></div>${readonly ? '' : '<button type="button" class="collaboration-icon-button" data-workflow-action="remove-outcome" title="Remove Outcome" aria-label="Remove Outcome">×</button>'}</div>`,
+                `<div class="collaboration-outcome-row" data-outcome-id="${attr(transition.outcome)}"><div><strong>${html(transition.outcome)}</strong><span>${html(transition.label)} → ${html(transition.targetState)}</span></div>${readonly ? '' : '<button type="button" class="collaboration-icon-button" data-workflow-action="remove-outcome" title="移除执行结果" aria-label="移除执行结果">×</button>'}</div>`,
             )
             .join('')}</div>`
     }
@@ -164,31 +165,38 @@ function renderInspector(draft, selectedStateId, readonly) {
 
 function outcomeDialog(draft, source) {
   const preset = COLLABORATION_OUTCOME_PRESETS[0];
-  const outcome = window.prompt('Outcome ID', preset.id);
+  const outcome = window.prompt('执行结果 ID', preset.id);
   if (!outcome) return null;
-  const label = window.prompt('Outcome label', outcome) || outcome;
-  const destination = window.prompt(
-    'Destination: existing, self, new, terminal',
-    'new',
+  const label = window.prompt('执行结果名称', preset.label) || preset.label;
+  const destinationInput = window.prompt(
+    '目标类型：已有状态、当前状态、新建状态、终止状态',
+    '新建状态',
   );
+  const destination =
+    {
+      已有状态: 'existing',
+      当前状态: 'self',
+      新建状态: 'new',
+      终止状态: 'terminal',
+    }[destinationInput] || destinationInput;
   if (!['existing', 'self', 'new', 'terminal'].includes(destination))
     return null;
   const input = { sourceStateId: source.id, outcome, label, destination };
   if (destination === 'existing')
     input.targetStateId = window.prompt(
-      `Target State (${draft.states.map((state) => state.id).join(', ')})`,
+      `目标状态（${draft.states.map((state) => state.id).join('、')}）`,
       draft.states[0]?.id,
     );
   if (destination === 'new' || destination === 'terminal') {
     input.newStateId = window.prompt(
-      'New State ID',
+      '新状态 ID',
       nextCollaborationDraftId(
         destination === 'terminal' ? 'terminal' : 'state',
         draft.states,
       ),
     );
     input.newStateLabel =
-      window.prompt('New State name', input.newStateId) || input.newStateId;
+      window.prompt('新状态名称', input.newStateId) || input.newStateId;
     input.newStateAssigneeType = 'participant_slot';
     input.newStateAssigneeId = source.assigneeId || draft.participants[0]?.id;
   }
@@ -196,7 +204,7 @@ function outcomeDialog(draft, source) {
 }
 
 export function mountCollaborationFsmEditor(host, options) {
-  if (!host) throw new Error('Workflow editor host is required');
+  if (!host) throw new Error('缺少工作流编辑器容器');
   const readonly = Boolean(options.readonly);
   const history = createCollaborationDraftHistory(options.draft);
   let draft = history.current();
@@ -214,12 +222,12 @@ export function mountCollaborationFsmEditor(host, options) {
     const issues = validateCollaborationFsmDraft(draft);
     host.innerHTML = `<div class="collaboration-workflow-editor ${readonly ? 'readonly' : ''}">
       <header class="collaboration-workflow-toolbar">
-        <div class="collaboration-segmented"><button type="button" data-workflow-view="participants" class="${draft.layout.view === 'participants' ? 'active' : ''}">Participants</button><button type="button" data-workflow-view="free" class="${draft.layout.view === 'free' ? 'active' : ''}">Free</button></div>
-        <div class="collaboration-toolbar-actions">${readonly ? '' : '<button type="button" class="collaboration-icon-button" data-workflow-action="undo" title="Undo" aria-label="Undo">↶</button><button type="button" class="collaboration-icon-button" data-workflow-action="redo" title="Redo" aria-label="Redo">↷</button><button type="button" class="btn-ghost" data-workflow-action="layout">Auto layout</button><button type="button" class="btn-ghost" data-workflow-action="add-state">Add State</button>'}</div>
+        <div class="collaboration-segmented"><button type="button" data-workflow-view="participants" class="${draft.layout.view === 'participants' ? 'active' : ''}">按参与者</button><button type="button" data-workflow-view="free" class="${draft.layout.view === 'free' ? 'active' : ''}">自由布局</button></div>
+        <div class="collaboration-toolbar-actions">${readonly ? '' : '<button type="button" class="collaboration-icon-button" data-workflow-action="undo" title="撤销" aria-label="撤销">↶</button><button type="button" class="collaboration-icon-button" data-workflow-action="redo" title="重做" aria-label="重做">↷</button><button type="button" class="btn-ghost" data-workflow-action="layout">自动布局</button><button type="button" class="btn-ghost" data-workflow-action="add-state">添加状态</button>'}</div>
       </header>
       ${renderParticipants(draft, readonly)}
       <div class="collaboration-workflow-body">${renderCanvas(draft, selectedStateId, options.runtimeHighlights, readonly)}${renderInspector(draft, selectedStateId, readonly)}</div>
-      <footer class="collaboration-workflow-issues">${issues.length ? issues.map((entry) => `<span class="${entry.severity}">${html(entry.message)}</span>`).join('') : '<span class="ok">Workflow valid</span>'}</footer>
+      <footer class="collaboration-workflow-issues">${issues.length ? issues.map((entry) => `<span class="${entry.severity}">${html(entry.message)}</span>`).join('') : '<span class="ok">工作流配置有效</span>'}</footer>
     </div>`;
   };
 

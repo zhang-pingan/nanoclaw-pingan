@@ -12,6 +12,13 @@ import {
 } from './collaboration-fsm.js';
 import { mountCollaborationFsmEditor } from './collaboration-fsm-editor.js';
 import {
+  collaborationAggregateLabel,
+  collaborationEventLabel,
+  collaborationLabel,
+  collaborationPermissionLabel,
+  collaborationStatusLabel,
+} from './collaboration-labels.js';
+import {
   collaborationArtifactName,
   collaborationAuditEventTimeline,
   buildCollaborationCompleteTurnRequest,
@@ -108,7 +115,7 @@ function statusTone(value) {
 }
 
 function status(value, label = value) {
-  return `<span class="collaboration-status ${statusTone(value)}">${html(label || 'unknown')}</span>`;
+  return `<span class="collaboration-status ${statusTone(value)}">${html(collaborationStatusLabel(label || value))}</span>`;
 }
 
 function timestamp(value) {
@@ -218,7 +225,7 @@ export function createCollaborationWorkspace(options) {
   const openDialog = (dialogOptions) => {
     elements.dialogTitle.textContent = dialogOptions.title;
     elements.dialogBody.innerHTML = dialogOptions.body;
-    elements.dialogSubmit.textContent = dialogOptions.submitText || 'Save';
+    elements.dialogSubmit.textContent = dialogOptions.submitText || '保存';
     elements.dialogSubmit.className = dialogOptions.danger
       ? 'btn-danger-soft'
       : 'btn-primary';
@@ -266,11 +273,11 @@ export function createCollaborationWorkspace(options) {
             ) => `<button type="button" class="collaboration-list-item ${group.groupId === state.selectedGroupId ? 'active' : ''}" data-collaboration-group-id="${attr(group.groupId)}">
               <span class="collaboration-list-item-head"><strong>${html(group.name)}</strong>${status(group.protocolStatus, group.lifecycle)}</span>
               <span class="collaboration-list-id">${html(group.groupId)}</span>
-              <span class="collaboration-list-meta"><span>${html(group.subscriptionMode)}</span><span>${html(group.lastVerifiedHead ? group.lastVerifiedHead.slice(0, 8) : 'not synced')}</span></span>
+              <span class="collaboration-list-meta"><span>${html(collaborationLabel(group.subscriptionMode))}</span><span>${html(group.lastVerifiedHead ? group.lastVerifiedHead.slice(0, 8) : '尚未同步')}</span></span>
             </button>`,
           )
           .join('')
-      : empty(state.loading ? 'Loading' : 'No project spaces');
+      : empty(state.loading ? '正在加载' : '暂无群组');
   };
 
   const renderShell = () => {
@@ -280,9 +287,9 @@ export function createCollaborationWorkspace(options) {
     if (!group) return;
     elements.title.textContent = group.name;
     elements.lifecycle.className = `collaboration-status ${statusTone(group.lifecycle)}`;
-    elements.lifecycle.textContent = group.lifecycle;
+    elements.lifecycle.textContent = collaborationStatusLabel(group.lifecycle);
     const membershipStatus = collaborationLocalMembershipStatus(group);
-    elements.meta.innerHTML = `<span>${html(group.groupId)}</span><span>${html(group.subscriptionMode === 'member' ? `member · ${membershipStatus}` : 'observer')}</span><span>${html(group.protocolStatus)}</span><span>${html(localDate(group.lastSyncAtMs))}</span>`;
+    elements.meta.innerHTML = `<span>${html(group.groupId)}</span><span>${html(group.subscriptionMode === 'member' ? `成员 · ${collaborationStatusLabel(membershipStatus)}` : '观察者')}</span><span>${html(collaborationStatusLabel(group.protocolStatus))}</span><span>${html(localDate(group.lastSyncAtMs))}</span>`;
     elements.tabs.forEach((button) =>
       button.classList.toggle(
         'active',
@@ -294,11 +301,11 @@ export function createCollaborationWorkspace(options) {
 
   const renderObserverBand = (group) => {
     if (collaborationIsObserver(group))
-      return `<section class="collaboration-observer-band"><div><strong>Read-only Observer</strong><span>${html(group.lastVerifiedHead ? `Verified ${group.lastVerifiedHead.slice(0, 12)}` : 'Awaiting verified head')}</span></div><button type="button" class="btn-primary" data-collaboration-action="request-join">Request membership</button></section>`;
+      return `<section class="collaboration-observer-band"><div><strong>只读观察者</strong><span>${html(group.lastVerifiedHead ? `已验证 ${group.lastVerifiedHead.slice(0, 12)}` : '正在等待验证版本')}</span></div><button type="button" class="btn-primary" data-collaboration-action="request-join">申请加入群组</button></section>`;
     const membershipStatus = collaborationLocalMembershipStatus(group);
     return membershipStatus === 'active'
       ? ''
-      : `<section class="collaboration-observer-band"><div><strong>Membership ${html(membershipStatus)}</strong><span>Project writes remain disabled until membership is active.</span></div></section>`;
+      : `<section class="collaboration-observer-band"><div><strong>成员状态：${html(collaborationStatusLabel(membershipStatus))}</strong><span>成员资格生效前，群组写入功能保持禁用。</span></div></section>`;
   };
 
   const renderOverview = () => {
@@ -309,36 +316,37 @@ export function createCollaborationWorkspace(options) {
     const activity = (projection?.activity || []).slice(-8).reverse();
     return `${renderObserverBand(group)}
       <section class="collaboration-metrics">
-        ${metric('Members', Object.values(projection?.members || {}).filter((member) => member.status === 'active').length)}
-        ${metric('Open work', items.filter((item) => !['done', 'cancelled'].includes(item.status)).length)}
-        ${metric('Workflow runs', instances.filter((instance) => instance.lifecycle !== 'closed').length)}
-        ${metric('Notifications', notifications.length, notifications.length ? 'warning' : '')}
+        ${metric('成员', Object.values(projection?.members || {}).filter((member) => member.status === 'active').length)}
+        ${metric('待处理工作', items.filter((item) => !['done', 'cancelled'].includes(item.status)).length)}
+        ${metric('运行中的工作流', instances.filter((instance) => instance.lifecycle !== 'closed').length)}
+        ${metric('通知', notifications.length, notifications.length ? 'warning' : '')}
       </section>
-      <section class="collaboration-section"><div class="collaboration-section-head"><h3>Project activity</h3><button type="button" class="btn-ghost" data-collaboration-action="go-activity">View all</button></div>
-        <div class="collaboration-timeline">${activity.length ? activity.map((event) => `<article><span class="collaboration-timeline-marker"></span><div><strong>${html(event.eventType)}</strong><small>${html(event.actorPrincipalId)} · ${html(timestamp(event.occurredAt))}</small></div></article>`).join('') : empty('No activity')}</div>
+      <section class="collaboration-section"><div class="collaboration-section-head"><h3>群组动态</h3><button type="button" class="btn-ghost" data-collaboration-action="go-activity">查看全部</button></div>
+        <div class="collaboration-timeline">${activity.length ? activity.map((event) => `<article><span class="collaboration-timeline-marker"></span><div><strong>${html(collaborationEventLabel(event.eventType))}</strong><small>${html(collaborationPrincipalName(projection, event.actorPrincipalId))} · ${html(timestamp(event.occurredAt))}</small></div></article>`).join('') : empty('暂无动态')}</div>
       </section>
-      <section class="collaboration-section collaboration-two-column"><div><div class="collaboration-section-head"><h3>Work Items</h3></div>${
+      <section class="collaboration-section collaboration-two-column"><div><div class="collaboration-section-head"><h3>工作项</h3></div>${
         items
           .slice(0, 5)
           .map(
             (item) =>
               `<button type="button" class="collaboration-row-button" data-collaboration-action="open-work-item" data-work-item-id="${attr(item.work_item_id)}"><strong>${html(item.title)}</strong>${status(item.status)}</button>`,
           )
-          .join('') || empty('No Work Items')
-      }</div><div><div class="collaboration-section-head"><h3>Workflow Instances</h3></div>${
+          .join('') || empty('暂无工作项')
+      }</div><div><div class="collaboration-section-head"><h3>工作流实例</h3></div>${
         instances
           .slice(0, 5)
           .map(
             (instance) =>
               `<button type="button" class="collaboration-row-button" data-collaboration-action="open-instance" data-instance-id="${attr(instance.instance_id)}"><strong>${html(instance.definition_id)}</strong>${status(instance.lifecycle, instance.business_state)}</button>`,
           )
-          .join('') || empty('No Instances')
+          .join('') || empty('暂无实例')
       }</div></section>`;
   };
 
   const renderActivity = () => {
     const events = [...(selectedGroup().projection?.activity || [])].reverse();
-    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>Activity</h3><span>${events.length}</span></div><div class="collaboration-timeline">${events.map((event) => `<article><span class="collaboration-timeline-marker"></span><div><strong>${html(event.eventType)}</strong><p>${html(event.aggregateType)} · ${html(event.aggregateId)} · rev ${html(event.aggregateRevision)}</p><small>${html(event.actorPrincipalId)} / ${html(event.actorClientId)} · ${html(timestamp(event.occurredAt))}</small></div></article>`).join('') || empty('No activity')}</div></section>`;
+    const projection = selectedGroup().projection;
+    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>活动</h3><span>${events.length}</span></div><div class="collaboration-timeline">${events.map((event) => `<article><span class="collaboration-timeline-marker"></span><div><strong>${html(collaborationEventLabel(event.eventType))}</strong><p>${html(collaborationAggregateLabel(event.aggregateType))} · ${html(event.aggregateId)} · 修订 ${html(event.aggregateRevision)}</p><small>${html(collaborationPrincipalName(projection, event.actorPrincipalId))} / ${html(event.actorClientId)} · ${html(timestamp(event.occurredAt))}</small></div></article>`).join('') || empty('暂无活动')}</div></section>`;
   };
 
   const renderWorkItemDetail = (item) => {
@@ -346,9 +354,9 @@ export function createCollaborationWorkspace(options) {
     const updates =
       group.projection?.workItemUpdates?.[item.work_item_id] || [];
     const mutable = collaborationCanMutate(group);
-    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-work-item">Back</button>${mutable ? '<button type="button" class="btn-ghost" data-collaboration-action="post-work-progress">Post progress</button>' : ''}</section>
-      <section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(item.title)}</h3>${status(item.status)}</div><p class="collaboration-prose">${html(item.description || '')}</p><dl class="collaboration-definition-list"><div><dt>Owner</dt><dd>${html(collaborationPrincipalName(group.projection, item.owner_principal_id))}</dd></div><div><dt>Priority</dt><dd>${html(item.priority)}</dd></div><div><dt>Due</dt><dd>${html(timestamp(item.due_at))}</dd></div><div><dt>Assignment</dt><dd>${html(item.assignment_status)}</dd></div><div><dt>Labels</dt><dd>${(item.labels || []).map((label) => `<code>${html(label)}</code>`).join(' ') || '-'}</dd></div><div><dt>Blocked by</dt><dd>${(item.blocked_by || []).map((id) => `<code>${html(id)}</code>`).join(' ') || '-'}</dd></div></dl>${mutable ? `<div class="collaboration-segmented">${['proposed', 'open', 'in_progress', 'blocked', 'done', 'cancelled'].map((value) => `<button type="button" data-collaboration-action="set-work-status" data-status="${value}" class="${item.status === value ? 'active' : ''}">${html(value)}</button>`).join('')}</div>` : ''}</section>
-      <section class="collaboration-section"><div class="collaboration-section-head"><h3>Progress</h3><span>${updates.length}</span></div><div class="collaboration-record-list">${
+    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-work-item">返回</button>${mutable ? '<button type="button" class="btn-ghost" data-collaboration-action="post-work-progress">发布进展</button>' : ''}</section>
+      <section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(item.title)}</h3>${status(item.status)}</div><p class="collaboration-prose">${html(item.description || '')}</p><dl class="collaboration-definition-list"><div><dt>负责人</dt><dd>${html(collaborationPrincipalName(group.projection, item.owner_principal_id))}</dd></div><div><dt>优先级</dt><dd>${html(collaborationLabel(item.priority))}</dd></div><div><dt>截止时间</dt><dd>${html(timestamp(item.due_at))}</dd></div><div><dt>分配状态</dt><dd>${html(collaborationLabel(item.assignment_status))}</dd></div><div><dt>标签</dt><dd>${(item.labels || []).map((label) => `<code>${html(collaborationLabel(label))}</code>`).join(' ') || '-'}</dd></div><div><dt>阻塞项</dt><dd>${(item.blocked_by || []).map((id) => `<code>${html(id)}</code>`).join(' ') || '-'}</dd></div></dl>${mutable ? `<div class="collaboration-segmented">${['proposed', 'open', 'in_progress', 'blocked', 'done', 'cancelled'].map((value) => `<button type="button" data-collaboration-action="set-work-status" data-status="${value}" class="${item.status === value ? 'active' : ''}">${html(collaborationStatusLabel(value))}</button>`).join('')}</div>` : ''}</section>
+      <section class="collaboration-section"><div class="collaboration-section-head"><h3>进展</h3><span>${updates.length}</span></div><div class="collaboration-record-list">${
         updates
           .slice()
           .reverse()
@@ -356,7 +364,7 @@ export function createCollaborationWorkspace(options) {
             (update) =>
               `<article class="collaboration-record"><div><strong>${html(update.summary)}</strong><small>${html(collaborationPrincipalName(group.projection, update.actor_principal_id))} · ${html(timestamp(update.created_at))}</small>${renderArtifactRefs(group.projection, update.artifact_refs)}</div></article>`,
           )
-          .join('') || empty('No progress')
+          .join('') || empty('暂无进展')
       }</div></section>`;
   };
 
@@ -369,7 +377,7 @@ export function createCollaborationWorkspace(options) {
     if (selected) return renderWorkItemDetail(selected);
     const columns = collaborationWorkItemColumns(items);
     const statuses = ['proposed', 'open', 'in_progress', 'blocked', 'done'];
-    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>Work Items</h3>${collaborationCanMutate(group) ? '<button type="button" class="btn-primary" data-collaboration-action="new-work-item">New</button>' : ''}</div><div class="collaboration-view-toggle"><button type="button" data-collaboration-action="work-view" data-view="board" class="${state.workItemView !== 'list' ? 'active' : ''}">Board</button><button type="button" data-collaboration-action="work-view" data-view="list" class="${state.workItemView === 'list' ? 'active' : ''}">List</button></div>${state.workItemView === 'list' ? `<div class="collaboration-record-list">${items.map((item) => `<button type="button" class="collaboration-row-button" data-collaboration-action="open-work-item" data-work-item-id="${attr(item.work_item_id)}"><strong>${html(item.title)}</strong><span>${html(collaborationPrincipalName(group.projection, item.owner_principal_id))}</span>${status(item.status)}</button>`).join('') || empty('No Work Items')}</div>` : `<div class="collaboration-work-board">${statuses.map((column) => `<section><header><strong>${html(column)}</strong><span>${columns[column].length}</span></header>${columns[column].map((item) => `<button type="button" data-collaboration-action="open-work-item" data-work-item-id="${attr(item.work_item_id)}"><strong>${html(item.title)}</strong><small>${html(collaborationPrincipalName(group.projection, item.owner_principal_id))}</small><span>${html(item.priority)}</span></button>`).join('') || empty('Empty')}</section>`).join('')}</div>`}</section>`;
+    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>工作项</h3>${collaborationCanMutate(group) ? '<button type="button" class="btn-primary" data-collaboration-action="new-work-item">新建</button>' : ''}</div><div class="collaboration-view-toggle"><button type="button" data-collaboration-action="work-view" data-view="board" class="${state.workItemView !== 'list' ? 'active' : ''}">看板</button><button type="button" data-collaboration-action="work-view" data-view="list" class="${state.workItemView === 'list' ? 'active' : ''}">列表</button></div>${state.workItemView === 'list' ? `<div class="collaboration-record-list">${items.map((item) => `<button type="button" class="collaboration-row-button" data-collaboration-action="open-work-item" data-work-item-id="${attr(item.work_item_id)}"><strong>${html(item.title)}</strong><span>${html(collaborationPrincipalName(group.projection, item.owner_principal_id))}</span>${status(item.status)}</button>`).join('') || empty('暂无工作项')}</div>` : `<div class="collaboration-work-board">${statuses.map((column) => `<section><header><strong>${html(collaborationStatusLabel(column))}</strong><span>${columns[column].length}</span></header>${columns[column].map((item) => `<button type="button" data-collaboration-action="open-work-item" data-work-item-id="${attr(item.work_item_id)}"><strong>${html(item.title)}</strong><small>${html(collaborationPrincipalName(group.projection, item.owner_principal_id))}</small><span>${html(collaborationLabel(item.priority))}</span></button>`).join('') || empty('暂无内容')}</section>`).join('')}</div>`}</section>`;
   };
 
   const renderDiscussions = () => {
@@ -382,20 +390,26 @@ export function createCollaborationWorkspace(options) {
       const messages = Object.values(selected.messages || {}).sort((a, b) =>
         a.created_at.localeCompare(b.created_at),
       );
-      return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-discussion">Back</button>${collaborationCanMutate(group) ? '<button type="button" class="btn-primary" data-collaboration-action="new-message">Reply</button>' : ''}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(selected.discussion.title)}</h3>${status(selected.discussion.status)}</div><div class="collaboration-discussion-stream">${messages.map((message) => `<article><header><strong>${html(collaborationPrincipalName(group.projection, message.author_principal_id))}</strong><small>${html(timestamp(message.created_at))}</small></header><p>${message.tombstoned ? '<em>Message removed</em>' : html(message.body)}</p></article>`).join('') || empty('No messages')}</div></section>`;
+      return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-discussion">返回</button>${collaborationCanMutate(group) ? '<button type="button" class="btn-primary" data-collaboration-action="new-message">回复</button>' : ''}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(selected.discussion.title)}</h3>${status(selected.discussion.status)}</div><div class="collaboration-discussion-stream">${messages.map((message) => `<article><header><strong>${html(collaborationPrincipalName(group.projection, message.author_principal_id))}</strong><small>${html(timestamp(message.created_at))}</small></header><p>${message.tombstoned ? '<em>消息已移除</em>' : html(message.body)}</p></article>`).join('') || empty('暂无消息')}</div></section>`;
     }
-    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>Discussions</h3>${collaborationCanMutate(group) ? '<button type="button" class="btn-primary" data-collaboration-action="new-discussion">New</button>' : ''}</div><div class="collaboration-record-list">${threads.map((thread) => `<button type="button" class="collaboration-row-button" data-collaboration-action="open-discussion" data-thread-id="${attr(thread.discussion.thread_id)}"><strong>${html(thread.discussion.title)}</strong><span>${html(Object.keys(thread.messages || {}).length)} messages</span>${status(thread.discussion.status)}</button>`).join('') || empty('No Discussions')}</div></section>`;
+    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>讨论</h3>${collaborationCanMutate(group) ? '<button type="button" class="btn-primary" data-collaboration-action="new-discussion">新建</button>' : ''}</div><div class="collaboration-record-list">${threads.map((thread) => `<button type="button" class="collaboration-row-button" data-collaboration-action="open-discussion" data-thread-id="${attr(thread.discussion.thread_id)}"><strong>${html(thread.discussion.title)}</strong><span>${html(Object.keys(thread.messages || {}).length)} 条消息</span>${status(thread.discussion.status)}</button>`).join('') || empty('暂无讨论')}</div></section>`;
   };
 
   const renderFiles = () => {
     const group = selectedGroup();
     const files = state.tabData.files || [];
     const tree = collaborationVerifiedFileTree(files);
-    return `<section class="collaboration-files-layout"><aside><div class="collaboration-section-head"><h3>Verified files</h3>${collaborationCanMutate(group) ? '<button type="button" class="btn-primary" data-collaboration-action="upload-file">Upload</button>' : ''}</div>${renderTreeNode(tree)}</aside><main id="collaboration-file-preview">${state.filePreview ? `<header><strong>${html(state.filePreview.name)}</strong><small>${html(state.filePreview.mediaType)}</small></header>${state.filePreview.text ? `<pre>${html(state.filePreview.text)}</pre>` : `<a class="btn-primary" href="${attr(state.filePreview.url)}" download>Download</a>`}` : empty('Select a file')}</main></section>`;
+    return `<section class="collaboration-files-layout"><aside><div class="collaboration-section-head"><h3>已验证文件</h3>${collaborationCanMutate(group) ? '<button type="button" class="btn-primary" data-collaboration-action="upload-file">上传</button>' : ''}</div>${renderTreeNode(tree)}</aside><main id="collaboration-file-preview">${state.filePreview ? `<header><strong>${html(state.filePreview.name)}</strong><small>${html(state.filePreview.mediaType)}</small></header>${state.filePreview.text ? `<pre>${html(state.filePreview.text)}</pre>` : `<a class="btn-primary" href="${attr(state.filePreview.url)}" download>下载</a>`}` : empty('请选择文件')}</main></section>`;
   };
 
   const workflowDefinitionEntries = () =>
     Object.values(selectedGroup().projection?.workflowDefinitions || {});
+
+  const workflowStateLabel = (definition, stateId) =>
+    collaborationLabel(
+      definition?.machine?.states?.[stateId]?.label || stateId,
+      stateId || '未知',
+    );
 
   const renderInstanceDetail = (instance) => {
     const group = selectedGroup();
@@ -428,9 +442,9 @@ export function createCollaborationWorkspace(options) {
         });
     });
     const currentTurn = turn
-      ? `<dl class="collaboration-definition-list"><div><dt>State</dt><dd>${html(turn.state_id)}</dd></div><div><dt>Assignee</dt><dd>${html(collaborationPrincipalName(projection, turn.assignee_principal_id))}</dd></div><div><dt>Client</dt><dd>${html(turn.claimant_client_id || '-')}</dd></div><div><dt>Mode</dt><dd>${html(turn.execution_mode)}</dd></div><div><dt>Attempt</dt><dd>${html(turn.attempt)}</dd></div><div><dt>Deadline</dt><dd>${html(collaborationTurnDeadline(turn)?.deadlineAt || '-')}</dd></div></dl><div class="collaboration-record-actions">${access.canStart ? '<button type="button" class="btn-primary" data-collaboration-action="start-turn">Start Turn</button>' : ''}${access.canComplete ? '<button type="button" class="btn-primary" data-collaboration-action="complete-turn">Complete</button>' : ''}${collaborationCanMutate(group) && turn.assignee_principal_id === group.localPrincipalId ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">Execution</button>' : ''}</div><div class="collaboration-outcome-preview">${routes.map((route) => `<span><strong>${html(route.outcome)}</strong> → ${html(route.target_state)}</span>`).join('')}</div>`
-      : `<div class="collaboration-section-empty">${instance.lifecycle === 'running' ? `Ready for ${html(instance.business_state)}` : 'No active Turn'}</div><div class="collaboration-record-actions">${currentAssignedToLocal ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">Execution</button>' : ''}${canCreateTurn ? `<button type="button" class="btn-primary" data-collaboration-action="create-turn">${turns.length ? 'Continue' : 'Create Turn'}</button>` : ''}</div>`;
-    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-instance">Back</button>${collaborationCanMutate(group) ? `<button type="button" class="btn-ghost" data-collaboration-action="instance-command" data-command="${instance.lifecycle === 'draft' || instance.lifecycle === 'ready' ? 'start' : instance.lifecycle === 'paused' ? 'resume' : 'pause'}">${instance.lifecycle === 'paused' ? 'Resume' : instance.lifecycle === 'running' ? 'Pause' : 'Start'}</button>` : ''}</section><section class="collaboration-metrics">${metric('Lifecycle', instance.lifecycle)}${metric('State', instance.business_state)}${metric('Epoch', instance.epoch)}${metric('Turns', turns.length)}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(instance.definition_id)} · ${html(instance.instance_id)}</h3>${status(instance.lifecycle)}</div><div id="collaboration-instance-graph"></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Current Turn</h3>${turn ? status(turn.state) : ''}</div>${currentTurn}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Turn history</h3><span>${turns.length}</span></div>${turns.map((item) => `<article class="collaboration-record"><div><strong>${html(item.state_id)}</strong><small>${html(timestamp(item.created_at))}${item.outcome ? ` · ${html(item.outcome)}` : ''}</small>${renderArtifactRefs(projection, item.artifact_refs)}</div>${status(item.state)}</article>`).join('') || empty('No Turns')}</section>`;
+      ? `<dl class="collaboration-definition-list"><div><dt>状态</dt><dd>${html(workflowStateLabel(definition, turn.state_id))}</dd></div><div><dt>负责人</dt><dd>${html(collaborationPrincipalName(projection, turn.assignee_principal_id))}</dd></div><div><dt>客户端</dt><dd>${html(turn.claimant_client_id || '-')}</dd></div><div><dt>执行模式</dt><dd>${html(collaborationLabel(turn.execution_mode))}</dd></div><div><dt>尝试次数</dt><dd>${html(turn.attempt)}</dd></div><div><dt>截止时间</dt><dd>${html(collaborationTurnDeadline(turn)?.deadlineAt || '-')}</dd></div></dl><div class="collaboration-record-actions">${access.canStart ? '<button type="button" class="btn-primary" data-collaboration-action="start-turn">开始执行</button>' : ''}${access.canComplete ? '<button type="button" class="btn-primary" data-collaboration-action="complete-turn">完成</button>' : ''}${collaborationCanMutate(group) && turn.assignee_principal_id === group.localPrincipalId ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">执行配置</button>' : ''}</div><div class="collaboration-outcome-preview">${routes.map((route) => `<span><strong>${html(collaborationLabel(route.label || route.outcome))}</strong> → ${html(workflowStateLabel(definition, route.target_state))}</span>`).join('')}</div>`
+      : `<div class="collaboration-section-empty">${instance.lifecycle === 'running' ? `可以开始：${html(workflowStateLabel(definition, instance.business_state))}` : '当前没有执行轮次'}</div><div class="collaboration-record-actions">${currentAssignedToLocal ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">执行配置</button>' : ''}${canCreateTurn ? `<button type="button" class="btn-primary" data-collaboration-action="create-turn">${turns.length ? '继续执行' : '创建执行轮次'}</button>` : ''}</div>`;
+    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-instance">返回</button>${collaborationCanMutate(group) ? `<button type="button" class="btn-ghost" data-collaboration-action="instance-command" data-command="${instance.lifecycle === 'draft' || instance.lifecycle === 'ready' ? 'start' : instance.lifecycle === 'paused' ? 'resume' : 'pause'}">${instance.lifecycle === 'paused' ? '恢复' : instance.lifecycle === 'running' ? '暂停' : '启动'}</button>` : ''}</section><section class="collaboration-metrics">${metric('生命周期', collaborationStatusLabel(instance.lifecycle))}${metric('当前状态', workflowStateLabel(definition, instance.business_state))}${metric('周期', instance.epoch)}${metric('执行轮次', turns.length)}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(collaborationLabel(definition?.definition?.name || instance.definition_id))} · ${html(instance.instance_id)}</h3>${status(instance.lifecycle)}</div><div id="collaboration-instance-graph"></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>当前执行轮次</h3>${turn ? status(turn.state) : ''}</div>${currentTurn}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>执行历史</h3><span>${turns.length}</span></div>${turns.map((item) => `<article class="collaboration-record"><div><strong>${html(workflowStateLabel(definition, item.state_id))}</strong><small>${html(timestamp(item.created_at))}${item.outcome ? ` · ${html(collaborationLabel(item.outcome))}` : ''}</small>${renderArtifactRefs(projection, item.artifact_refs)}</div>${status(item.state)}</article>`).join('') || empty('暂无执行记录')}</section>`;
   };
 
   const renderWorkflows = () => {
@@ -441,7 +455,18 @@ export function createCollaborationWorkspace(options) {
     );
     if (selectedInstance) return renderInstanceDetail(selectedInstance);
     const definitions = workflowDefinitionEntries();
-    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>Workflow Definitions</h3>${collaborationCanMutate(group) ? '<button type="button" class="btn-primary" data-collaboration-action="new-workflow">New</button>' : ''}</div><div class="collaboration-record-list">${definitions.map((entry) => `<article class="collaboration-record"><div><strong>${html(entry.definition.name)}</strong><small>${html(entry.definition.definition_id)} · v${html(entry.definition.version)}</small></div>${status(entry.definition.status)}<div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="view-workflow" data-definition-key="${attr(entry.definition.definition_id)}@${attr(entry.definition.version)}">Open</button>${entry.definition.status === 'published' && collaborationWorkflowEditable(group, entry) ? `<button type="button" class="btn-ghost" data-collaboration-action="new-workflow-version" data-definition-key="${attr(entry.definition.definition_id)}@${attr(entry.definition.version)}">New version</button>` : ''}${collaborationWorkflowPublishable(group, entry) ? `<button type="button" class="btn-primary" data-collaboration-action="publish-workflow" data-definition-id="${attr(entry.definition.definition_id)}" data-version="${attr(entry.definition.version)}">Publish</button>` : ''}</div></article>`).join('') || empty('No Workflow Definitions')}</div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Workflow Instances</h3>${collaborationCanMutate(group) && definitions.some((entry) => entry.definition.status === 'published') ? '<button type="button" class="btn-primary" data-collaboration-action="new-instance">New</button>' : ''}</div><div class="collaboration-record-list">${instances.map((instance) => `<button type="button" class="collaboration-row-button" data-collaboration-action="open-instance" data-instance-id="${attr(instance.instance_id)}"><strong>${html(instance.definition_id)}</strong><span>${html(instance.business_state)} · ${html(instance.scope.type)}</span>${status(instance.lifecycle)}</button>`).join('') || empty('No Workflow Instances')}</div></section>`;
+    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>工作流定义</h3>${collaborationCanMutate(group) ? '<button type="button" class="btn-primary" data-collaboration-action="new-workflow">新建</button>' : ''}</div><div class="collaboration-record-list">${definitions.map((entry) => `<article class="collaboration-record"><div><strong>${html(collaborationLabel(entry.definition.name))}</strong><small>${html(entry.definition.definition_id)} · v${html(entry.definition.version)}</small></div>${status(entry.definition.status)}<div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="view-workflow" data-definition-key="${attr(entry.definition.definition_id)}@${attr(entry.definition.version)}">打开</button>${entry.definition.status === 'published' && collaborationWorkflowEditable(group, entry) ? `<button type="button" class="btn-ghost" data-collaboration-action="new-workflow-version" data-definition-key="${attr(entry.definition.definition_id)}@${attr(entry.definition.version)}">新建版本</button>` : ''}${collaborationWorkflowPublishable(group, entry) ? `<button type="button" class="btn-primary" data-collaboration-action="publish-workflow" data-definition-id="${attr(entry.definition.definition_id)}" data-version="${attr(entry.definition.version)}">发布</button>` : ''}</div></article>`).join('') || empty('暂无工作流定义')}</div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>工作流实例</h3>${collaborationCanMutate(group) && definitions.some((entry) => entry.definition.status === 'published') ? '<button type="button" class="btn-primary" data-collaboration-action="new-instance">新建</button>' : ''}</div><div class="collaboration-record-list">${
+      instances
+        .map((instance) => {
+          const definition = definitions.find(
+            (entry) =>
+              entry.definition.definition_id === instance.definition_id &&
+              entry.definition.version === instance.definition_version,
+          );
+          return `<button type="button" class="collaboration-row-button" data-collaboration-action="open-instance" data-instance-id="${attr(instance.instance_id)}"><strong>${html(collaborationLabel(definition?.definition?.name || instance.definition_id))}</strong><span>${html(workflowStateLabel(definition, instance.business_state))} · ${html(collaborationLabel(instance.scope.type))}</span>${status(instance.lifecycle)}</button>`;
+        })
+        .join('') || empty('暂无工作流实例')
+    }</div></section>`;
   };
 
   const renderMembers = () => {
@@ -451,9 +476,9 @@ export function createCollaborationWorkspace(options) {
     const invites = Object.values(projection?.invites || {});
     const inviteSection =
       projection?.group?.membership_policy?.join === 'invite_only'
-        ? `<section class="collaboration-section"><div class="collaboration-section-head"><h3>Invites</h3>${canApprove ? '<button type="button" class="btn-primary" data-collaboration-action="issue-invite">Issue</button>' : ''}</div><div class="collaboration-record-list">${invites.map((invite) => `<article class="collaboration-record"><div><strong>${html(collaborationPrincipalName(projection, invite.principal_id))}</strong><small>${html(invite.invite_id)} · ${html(invite.expires_at ? timestamp(invite.expires_at) : 'No expiry')}</small></div>${status(invite.status)}${canApprove && invite.status === 'active' ? `<button type="button" class="btn-ghost" data-collaboration-action="revoke-invite" data-invite-id="${attr(invite.invite_id)}">Revoke</button>` : ''}</article>`).join('') || empty('No Invites')}</div></section>`
+        ? `<section class="collaboration-section"><div class="collaboration-section-head"><h3>邀请</h3>${canApprove ? '<button type="button" class="btn-primary" data-collaboration-action="issue-invite">发放邀请</button>' : ''}</div><div class="collaboration-record-list">${invites.map((invite) => `<article class="collaboration-record"><div><strong>${html(collaborationPrincipalName(projection, invite.principal_id))}</strong><small>${html(invite.invite_id)} · ${html(invite.expires_at ? timestamp(invite.expires_at) : '永不过期')}</small></div>${status(invite.status)}${canApprove && invite.status === 'active' ? `<button type="button" class="btn-ghost" data-collaboration-action="revoke-invite" data-invite-id="${attr(invite.invite_id)}">撤销</button>` : ''}</article>`).join('') || empty('暂无邀请')}</div></section>`
         : '';
-    return `${inviteSection}<section class="collaboration-section"><div class="collaboration-section-head"><h3>Principals</h3><span>${Object.keys(projection?.members || {}).length}</span></div><div class="collaboration-record-list">${Object.values(
+    return `${inviteSection}<section class="collaboration-section"><div class="collaboration-section-head"><h3>成员</h3><span>${Object.keys(projection?.members || {}).length}</span></div><div class="collaboration-record-list">${Object.values(
       projection?.members || {},
     )
       .map((member) => {
@@ -464,36 +489,36 @@ export function createCollaborationWorkspace(options) {
         );
         const approvalActions =
           canApprove && member.status === 'requested'
-            ? `<div class="collaboration-record-actions"><button type="button" class="btn-primary" data-collaboration-action="approve-member" data-principal-id="${attr(member.principal_id)}">Approve</button><button type="button" class="btn-danger-soft" data-collaboration-action="reject-member" data-principal-id="${attr(member.principal_id)}">Reject</button></div>`
+            ? `<div class="collaboration-record-actions"><button type="button" class="btn-primary" data-collaboration-action="approve-member" data-principal-id="${attr(member.principal_id)}">批准</button><button type="button" class="btn-danger-soft" data-collaboration-action="reject-member" data-principal-id="${attr(member.principal_id)}">拒绝</button></div>`
             : '';
-        return `<article class="collaboration-record"><div><strong>${html(member.display_name)}</strong><small>${html(member.principal_id)} · ${clients.length} Clients</small><p>${grants.map((grant) => `<code>${html(grant)}</code>`).join(' ') || 'No direct grants'}</p></div>${status(member.status)}${approvalActions}${group.localPrincipalId === group.ownerPrincipalId && collaborationCanMutate(group) && member.status === 'active' ? `<button type="button" class="btn-ghost" data-collaboration-action="edit-permissions" data-principal-id="${attr(member.principal_id)}">Permissions</button>` : ''}</article>`;
+        return `<article class="collaboration-record"><div><strong>${html(member.display_name)}</strong><small>${html(member.principal_id)} · ${clients.length} 个客户端</small><p>${grants.map((grant) => `<code title="${attr(grant)}">${html(collaborationPermissionLabel(grant))}</code>`).join(' ') || '无直接权限'}</p></div>${status(member.status)}${approvalActions}${group.localPrincipalId === group.ownerPrincipalId && collaborationCanMutate(group) && member.status === 'active' ? `<button type="button" class="btn-ghost" data-collaboration-action="edit-permissions" data-principal-id="${attr(member.principal_id)}">权限</button>` : ''}</article>`;
       })
       .join('')}</div></section>`;
   };
 
   const renderAudit = () => {
     const audit = state.tabData.audit;
-    if (!audit) return empty('Loading audit');
+    if (!audit) return empty('正在加载审计记录');
     const events = collaborationAuditEventTimeline(audit.events);
-    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>Audit</h3><button type="button" class="btn-ghost" data-collaboration-action="export-audit">Export JSON</button></div><section class="collaboration-metrics">${metric('Aggregates', Object.keys(audit.aggregates || {}).length)}${metric('Events', events.length)}${metric('Local evidence', audit.local_evidence?.length || 0)}${metric('Head', audit.group?.last_verified_head?.slice(0, 10) || '-')}</section><div class="collaboration-timeline">${events
+    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>审计</h3><button type="button" class="btn-ghost" data-collaboration-action="export-audit">导出 JSON</button></div><section class="collaboration-metrics">${metric('聚合对象', Object.keys(audit.aggregates || {}).length)}${metric('事件', events.length)}${metric('本地证据', audit.local_evidence?.length || 0)}${metric('当前版本', audit.group?.last_verified_head?.slice(0, 10) || '-')}</section><div class="collaboration-timeline">${events
       .slice()
       .reverse()
       .map(
         (event) =>
-          `<article><span class="collaboration-timeline-marker"></span><div><strong>${html(event.event_type)}</strong><p>${html(event.aggregate_type)} · ${html(event.aggregate_id)} · rev ${html(event.aggregate_revision)}</p><small>commit ${html(event.commit_hash?.slice(0, 12))} · ${html(timestamp(event.occurred_at))}</small></div></article>`,
+          `<article><span class="collaboration-timeline-marker"></span><div><strong>${html(collaborationEventLabel(event.event_type))}</strong><p>${html(collaborationAggregateLabel(event.aggregate_type))} · ${html(event.aggregate_id)} · 修订 ${html(event.aggregate_revision)}</p><small>Git commit ${html(event.commit_hash?.slice(0, 12))} · ${html(timestamp(event.occurred_at))}</small></div></article>`,
       )
       .join('')}</div></section>`;
   };
 
   const renderSettings = () => {
     const group = selectedGroup();
-    return `${renderObserverBand(group)}<section class="collaboration-section"><div class="collaboration-section-head"><h3>Project space</h3></div><dl class="collaboration-definition-list"><div><dt>Group</dt><dd>${html(group.groupId)}</dd></div><div><dt>Remote</dt><dd>${html(group.remoteUrl)}</dd></div><div><dt>Mode</dt><dd>${html(group.subscriptionMode)}</dd></div><div><dt>Protocol</dt><dd>${html(group.protocolStatus)}</dd></div><div><dt>Verified head</dt><dd>${html(group.lastVerifiedHead || '-')}</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="backup">Backup</button><button type="button" class="btn-ghost" data-collaboration-action="restore">Restore</button>${group.localPrincipalId === group.ownerPrincipalId && group.lifecycle === 'active' ? '<button type="button" class="btn-danger-soft" data-collaboration-action="archive-group">Archive</button>' : ''}</div></section>`;
+    return `${renderObserverBand(group)}<section class="collaboration-section"><div class="collaboration-section-head"><h3>群组设置</h3></div><dl class="collaboration-definition-list"><div><dt>群组 ID</dt><dd>${html(group.groupId)}</dd></div><div><dt>Git 远程仓库</dt><dd>${html(group.remoteUrl)}</dd></div><div><dt>订阅模式</dt><dd>${html(collaborationLabel(group.subscriptionMode))}</dd></div><div><dt>协议状态</dt><dd>${html(collaborationStatusLabel(group.protocolStatus))}</dd></div><div><dt>已验证版本</dt><dd>${html(group.lastVerifiedHead || '-')}</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="backup">创建备份</button><button type="button" class="btn-ghost" data-collaboration-action="restore">恢复备份</button>${group.localPrincipalId === group.ownerPrincipalId && group.lifecycle === 'active' ? '<button type="button" class="btn-danger-soft" data-collaboration-action="archive-group">归档群组</button>' : ''}</div></section>`;
   };
 
   const renderDiagnostics = () => {
     const data = state.tabData.diagnostics;
-    if (!data) return empty('Loading diagnostics');
-    return `<section class="collaboration-metrics">${metric('Protocol', data.group?.protocolStatus || '-')}${metric('Sync attempts', data.syncAttempts?.length || 0)}${metric('Incidents', data.integrityIncidents?.length || 0, data.integrityIncidents?.length ? 'danger' : '')}${metric('Scheduler', data.scheduler?.running ? 'running' : 'stopped')}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Sync</h3></div><div class="collaboration-record-list">${(data.syncAttempts || []).map((attempt) => `<article class="collaboration-record"><strong>${html(attempt.outcome)}</strong><span>${html(localDate(attempt.started_at_ms || attempt.startedAtMs))}</span><small>${html(attempt.error || '')}</small></article>`).join('') || empty('No sync attempts')}</div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Integrity</h3></div>${(data.integrityIncidents || []).map((incident) => `<article class="collaboration-record"><strong>${html(incident.code)}</strong><p>${html(incident.message)}</p></article>`).join('') || empty('No incidents')}</section>`;
+    if (!data) return empty('正在加载诊断信息');
+    return `<section class="collaboration-metrics">${metric('协议', collaborationStatusLabel(data.group?.protocolStatus || '-'))}${metric('同步次数', data.syncAttempts?.length || 0)}${metric('异常事件', data.integrityIncidents?.length || 0, data.integrityIncidents?.length ? 'danger' : '')}${metric('调度器', collaborationStatusLabel(data.scheduler?.running ? 'running' : 'stopped'))}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>同步记录</h3></div><div class="collaboration-record-list">${(data.syncAttempts || []).map((attempt) => `<article class="collaboration-record"><strong>${html(collaborationStatusLabel(attempt.outcome))}</strong><span>${html(localDate(attempt.started_at_ms || attempt.startedAtMs))}</span><small>${html(attempt.error || '')}</small></article>`).join('') || empty('暂无同步记录')}</div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>完整性检查</h3></div>${(data.integrityIncidents || []).map((incident) => `<article class="collaboration-record"><strong>${html(incident.code)}</strong><p>${html(incident.message)}</p></article>`).join('') || empty('未发现异常')}</section>`;
   };
 
   const renderContent = () => {
@@ -536,7 +561,7 @@ export function createCollaborationWorkspace(options) {
   };
 
   const loadDetail = async (groupId, updateHistory = true) => {
-    elements.content.innerHTML = empty('Loading project space');
+    elements.content.innerHTML = empty('正在加载群组');
     const data = await options.request(
       `/groups/${encodeURIComponent(groupId)}`,
     );
@@ -559,9 +584,7 @@ export function createCollaborationWorkspace(options) {
       const statusData = await options.request('/status');
       state.status = statusData.collaboration;
       setBanner(
-        state.status?.available
-          ? ''
-          : state.status?.error || 'Collaboration unavailable',
+        state.status?.available ? '' : state.status?.error || '群组服务不可用',
       );
       const data = await options.request('/groups');
       state.groups = data.groups || [];
@@ -610,28 +633,28 @@ export function createCollaborationWorkspace(options) {
       },
     );
     await loadDetail(state.selectedGroupId, false);
-    options.showToast('Project space synced');
+    options.showToast('群组同步完成');
   };
 
   const openCreate = () =>
     openDialog({
-      title: 'Create project space',
-      submitText: 'Create',
-      body: `<div class="collaboration-form-grid">${field('Name', 'name')}${field('Git remote', 'remoteUrl')}${field('SSH signing key', 'signingKeyPath')}${field('Principal name', 'displayName')}${field('Client name', 'clientDisplayName')}${field(
-        'Membership',
+      title: '创建群组',
+      submitText: '创建',
+      body: `<div class="collaboration-form-grid">${field('群组名称', 'name')}${field('Git 远程仓库', 'remoteUrl')}${field('SSH 签名密钥（可选）', 'signingKeyPath', '', { required: false })}${field('成员显示名', 'displayName')}${field('客户端名称', 'clientDisplayName')}${field(
+        '加入方式',
         'membershipPolicy',
         'approval',
         {
           options: [
-            ['open', 'Open'],
-            ['approval', 'Approval'],
-            ['invite_only', 'Invite only'],
+            ['open', '开放加入'],
+            ['approval', '需要审批'],
+            ['invite_only', '仅限邀请'],
           ],
         },
-      )}${field('Observer access', 'observerAccess', 'allowed', {
+      )}${field('观察者访问', 'observerAccess', 'allowed', {
         options: [
-          ['allowed', 'Allowed'],
-          ['members_only', 'Members only'],
+          ['allowed', '允许观察'],
+          ['members_only', '仅限成员'],
         ],
       })}</div>`,
       onSubmit: async (formData) => {
@@ -648,9 +671,9 @@ export function createCollaborationWorkspace(options) {
 
   const openObserve = () =>
     openDialog({
-      title: 'Observe project space',
-      submitText: 'Observe',
-      body: field('Git remote', 'remoteUrl'),
+      title: '加入或观察群组',
+      submitText: '添加群组',
+      body: field('Git 远程仓库', 'remoteUrl'),
       onSubmit: async (formData) => {
         const data = await options.request('/subscriptions', {
           method: 'POST',
@@ -667,9 +690,9 @@ export function createCollaborationWorkspace(options) {
     const inviteOnly =
       group.projection?.group?.membership_policy?.join === 'invite_only';
     openDialog({
-      title: 'Request membership',
-      submitText: 'Submit',
-      body: `<div class="collaboration-form-grid">${field('SSH signing key', 'signingKeyPath')}${field('Principal name', 'displayName')}${field('Client name', 'clientDisplayName')}${inviteOnly ? field('Invite ID', 'inviteId') : ''}</div>`,
+      title: '申请加入群组',
+      submitText: '提交申请',
+      body: `<div class="collaboration-form-grid">${field('SSH 签名密钥（可选）', 'signingKeyPath', '', { required: false })}${field('成员显示名', 'displayName')}${field('客户端名称', 'clientDisplayName')}${inviteOnly ? field('邀请 ID', 'inviteId') : ''}</div>`,
       onSubmit: async (formData) => {
         await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/join-requests`,
@@ -691,9 +714,9 @@ export function createCollaborationWorkspace(options) {
   const issueInvite = () => {
     const group = selectedGroup();
     openDialog({
-      title: 'Issue Invite',
-      submitText: 'Issue',
-      body: `<div class="collaboration-form-grid">${field('Principal ID', 'principalId')}${field('Expires at', 'expiresAt', '', { required: false })}</div>`,
+      title: '发放邀请',
+      submitText: '发放',
+      body: `<div class="collaboration-form-grid">${field('成员 ID', 'principalId')}${field('过期时间', 'expiresAt', '', { required: false })}</div>`,
       onSubmit: async (formData) => {
         await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/invites`,
@@ -715,10 +738,10 @@ export function createCollaborationWorkspace(options) {
   const rejectMember = (principalId) => {
     const group = selectedGroup();
     openDialog({
-      title: 'Reject membership',
-      submitText: 'Reject',
+      title: '拒绝加入申请',
+      submitText: '确认拒绝',
       danger: true,
-      body: field('Reason', 'reason', '', { multiline: true }),
+      body: field('拒绝原因', 'reason', '', { multiline: true }),
       onSubmit: async (formData) => {
         await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/join-requests/${encodeURIComponent(principalId)}/reject`,
@@ -743,32 +766,32 @@ export function createCollaborationWorkspace(options) {
   const newWorkItem = () => {
     const group = selectedGroup();
     openDialog({
-      title: 'New Work Item',
+      title: '新建工作项',
       body: `<div class="collaboration-form-grid">${field(
-        'Type',
+        '类型',
         'type',
         'task',
         {
           options: [
-            ['task', 'Task'],
-            ['issue', 'Issue'],
-            ['decision', 'Decision'],
-            ['milestone', 'Milestone'],
+            ['task', '任务'],
+            ['issue', '问题'],
+            ['decision', '决策'],
+            ['milestone', '里程碑'],
           ],
         },
-      )}${field('Title', 'title')}${field('Description', 'description', '', { multiline: true, required: false })}${field(
-        'Priority',
+      )}${field('标题', 'title')}${field('描述', 'description', '', { multiline: true, required: false })}${field(
+        '优先级',
         'priority',
         'normal',
         {
           options: [
-            ['low', 'Low'],
-            ['normal', 'Normal'],
-            ['high', 'High'],
-            ['urgent', 'Urgent'],
+            ['low', '低'],
+            ['normal', '普通'],
+            ['high', '高'],
+            ['urgent', '紧急'],
           ],
         },
-      )}${field('Due at', 'dueAt', '', { required: false })}</div>`,
+      )}${field('截止时间', 'dueAt', '', { required: false })}</div>`,
       onSubmit: async (formData) => {
         const values = Object.fromEntries(formData.entries());
         await options.request(
@@ -790,14 +813,14 @@ export function createCollaborationWorkspace(options) {
     const artifactIds = [];
     let selectedFiles = null;
     openDialog({
-      title: 'Post progress',
-      body: `<div class="collaboration-form-grid">${field('Summary', 'summary', '', { multiline: true })}${field('Artifacts', 'artifacts', '', { type: 'file', required: false, multiple: true })}</div>`,
+      title: '发布工作进展',
+      body: `<div class="collaboration-form-grid">${field('进展摘要', 'summary', '', { multiline: true })}${field('产出物', 'artifacts', '', { type: 'file', required: false, multiple: true })}</div>`,
       onSubmit: async (formData) => {
         const fileControl = elements.dialogForm.elements.artifacts;
         if (selectedFiles === null) {
           selectedFiles = [...(fileControl?.files || [])];
           if (selectedFiles.length > 20)
-            throw new Error('At most 20 Artifacts may be attached');
+            throw new Error('最多可添加 20 个产出物');
           if (selectedFiles.length) fileControl.disabled = true;
         }
         await stageCollaborationArtifactFiles({
@@ -841,8 +864,8 @@ export function createCollaborationWorkspace(options) {
   const newDiscussion = () => {
     const group = selectedGroup();
     openDialog({
-      title: 'New Discussion',
-      body: field('Title', 'title'),
+      title: '新建讨论',
+      body: field('标题', 'title'),
       onSubmit: async (formData) => {
         await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/discussions`,
@@ -864,8 +887,8 @@ export function createCollaborationWorkspace(options) {
     const group = selectedGroup();
     const thread = group.projection.discussions[state.selectedDiscussionId];
     openDialog({
-      title: 'Reply',
-      body: field('Message', 'body', '', { multiline: true }),
+      title: '回复讨论',
+      body: field('消息内容', 'body', '', { multiline: true }),
       onSubmit: async (formData) => {
         await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/discussions/${encodeURIComponent(state.selectedDiscussionId)}/messages`,
@@ -890,21 +913,21 @@ export function createCollaborationWorkspace(options) {
   const uploadFile = () => {
     const group = selectedGroup();
     openDialog({
-      title: 'Upload file',
+      title: '上传文件',
       body: `<div class="collaboration-form-grid">${field(
-        'Scope',
+        '保存位置',
         'scope',
         'shared',
         {
           options: [
-            ['shared', 'Shared'],
-            ['me', 'Principal'],
+            ['shared', '共享文件'],
+            ['me', '个人文件'],
           ],
         },
-      )}${field('File', 'file', '', { type: 'file' })}</div>`,
+      )}${field('文件', 'file', '', { type: 'file' })}</div>`,
       onSubmit: async (formData) => {
         const fileValue = elements.dialogForm.elements.file?.files?.[0];
-        if (!fileValue) throw new Error('File is required');
+        if (!fileValue) throw new Error('请选择要上传的文件');
         const upload = new FormData();
         upload.append(
           'metadata',
@@ -949,8 +972,8 @@ export function createCollaborationWorkspace(options) {
     openDialog({
       title: entry
         ? `${entry.definition.name} · v${draft.version}`
-        : 'New Workflow Definition',
-      submitText: entry && !newVersion ? 'Save draft' : 'Create draft',
+        : '新建工作流定义',
+      submitText: entry && !newVersion ? '保存草稿' : '创建草稿',
       wide: true,
       body: `<div id="collaboration-workflow-editor-host"></div>`,
       onOpen: () => {
@@ -998,18 +1021,18 @@ export function createCollaborationWorkspace(options) {
       (entry) => entry.definition.status === 'published',
     );
     openDialog({
-      title: 'New Workflow Instance',
-      body: `<div class="collaboration-form-grid">${field('Definition', 'definition', `${definitions[0]?.definition.definition_id}@${definitions[0]?.definition.version}`, { options: definitions.map((entry) => [`${entry.definition.definition_id}@${entry.definition.version}`, `${entry.definition.name} · v${entry.definition.version}`]) })}${field(
-        'Scope',
+      title: '新建工作流实例',
+      body: `<div class="collaboration-form-grid">${field('工作流定义', 'definition', `${definitions[0]?.definition.definition_id}@${definitions[0]?.definition.version}`, { options: definitions.map((entry) => [`${entry.definition.definition_id}@${entry.definition.version}`, `${entry.definition.name} · v${entry.definition.version}`]) })}${field(
+        '作用范围',
         'scope',
         'group',
         {
           options: [
-            ['group', 'Group'],
-            ['work_item', 'Work Item'],
+            ['group', '整个群组'],
+            ['work_item', '指定工作项'],
           ],
         },
-      )}${field('Work Item ID', 'workItemId', '', { required: false })}${field('Participant bindings JSON', 'participants', '{}', { multiline: true })}</div>`,
+      )}${field('工作项 ID', 'workItemId', '', { required: false })}${field('参与者绑定 JSON', 'participants', '{}', { multiline: true })}</div>`,
       onSubmit: async (formData) => {
         const [definitionId, version] = String(
           formData.get('definition'),
@@ -1058,14 +1081,14 @@ export function createCollaborationWorkspace(options) {
     const artifactIds = [];
     let selectedFiles = null;
     openDialog({
-      title: `Complete ${turn.state_id}`,
-      body: `<div class="collaboration-form-grid">${field('Outcome', 'outcome', draft.outcome, { options: routes.map((route) => [route.outcome, `${route.label} → ${route.target_state}`]) })}${field('Summary', 'summary', draft.summary, { multiline: true })}${field('Instruction', 'instruction', draft.instruction, { multiline: true, required: false })}${field('Markers', 'markers', draft.markers, { multiline: true, required: false })}${field('Data JSON', 'data', draft.data, { multiline: true })}${field('Artifacts', 'artifacts', '', { type: 'file', required: false, multiple: true })}</div>`,
+      title: `完成：${workflowStateLabel(definition, turn.state_id)}`,
+      body: `<div class="collaboration-form-grid">${field('执行结果', 'outcome', draft.outcome, { options: routes.map((route) => [route.outcome, `${collaborationLabel(route.label || route.outcome)} → ${workflowStateLabel(definition, route.target_state)}`]) })}${field('摘要', 'summary', draft.summary, { multiline: true })}${field('后续说明', 'instruction', draft.instruction, { multiline: true, required: false })}${field('标记', 'markers', draft.markers, { multiline: true, required: false })}${field('数据 JSON', 'data', draft.data, { multiline: true })}${field('产出物', 'artifacts', '', { type: 'file', required: false, multiple: true })}</div>`,
       onSubmit: async (formData) => {
         const fileControl = elements.dialogForm.elements.artifacts;
         if (selectedFiles === null) {
           selectedFiles = [...(fileControl?.files || [])];
           if (selectedFiles.length > 20)
-            throw new Error('At most 20 Artifacts may be attached');
+            throw new Error('最多可添加 20 个产出物');
           if (selectedFiles.length) fileControl.disabled = true;
         }
         await stageCollaborationArtifactFiles({
@@ -1122,7 +1145,7 @@ export function createCollaborationWorkspace(options) {
       group.projection,
       instance.instance_id,
     );
-    if (!turn) throw new Error('Workflow Instance has no active Turn');
+    if (!turn) throw new Error('工作流实例当前没有可执行轮次');
     await options.request(
       `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/turns/${encodeURIComponent(turn.turn_id)}/start`,
       {
@@ -1146,6 +1169,11 @@ export function createCollaborationWorkspace(options) {
   const selectTurnExecutor = () => {
     const group = selectedGroup();
     const instance = selectedInstance();
+    const definition = workflowDefinitionEntries().find(
+      (entry) =>
+        entry.definition.definition_id === instance.definition_id &&
+        entry.definition.version === instance.definition_version,
+    );
     const turn = collaborationCurrentTurn(
       group.projection,
       instance.instance_id,
@@ -1156,13 +1184,11 @@ export function createCollaborationWorkspace(options) {
       state.detail.bindings,
     );
     if (!executors.length)
-      throw new Error(
-        'No enabled local Executor Binding matches this assisted Turn',
-      );
+      throw new Error('没有匹配当前辅助执行轮次的本地执行器绑定');
     openDialog({
-      title: `Start ${turn.state_id}`,
-      submitText: 'Start',
-      body: field('Executor', 'executorId', executors[0], {
+      title: `开始：${workflowStateLabel(definition, turn.state_id)}`,
+      submitText: '开始执行',
+      body: field('执行器', 'executorId', executors[0], {
         options: executors.map((executorId) => [executorId, executorId]),
       }),
       onSubmit: async (formData) => {
@@ -1181,47 +1207,47 @@ export function createCollaborationWorkspace(options) {
     );
     const stateId = turn?.state_id ?? instance.business_state;
     openDialog({
-      title: `Execution · ${stateId}`,
+      title: `执行配置 · ${stateId}`,
       body: `<div class="collaboration-form-grid">${field(
-        'Mode',
+        '执行模式',
         'mode',
         'manual',
         {
           options: [
-            ['manual', 'Manual'],
-            ['assisted', 'Assisted'],
-            ['automatic', 'Automatic'],
+            ['manual', '手动'],
+            ['assisted', '辅助执行'],
+            ['automatic', '自动执行'],
           ],
         },
-      )}${field('Action ID', 'actionId', '', { required: false })}${field('Executor ID', 'executorId', '', { required: false })}${field(
-        'Executor kind',
+      )}${field('操作 ID', 'actionId', '', { required: false })}${field('执行器 ID', 'executorId', '', { required: false })}${field(
+        '执行器类型',
         'executorKind',
         'run_once',
         {
           options: [
-            ['run_once', 'Run once'],
-            ['workflow', 'Workflow'],
-            ['external', 'External'],
+            ['run_once', '单次运行'],
+            ['workflow', '工作流'],
+            ['external', '外部执行器'],
             ['codex', 'Codex'],
           ],
         },
-      )}${field('Workspace path', 'workspacePath', '', { required: false })}${field(
-        'Filesystem',
+      )}${field('工作区路径', 'workspacePath', '', { required: false })}${field(
+        '文件系统权限',
         'filesystemAccess',
         'read_only',
         {
           options: [
-            ['read_only', 'Read only'],
-            ['workspace_write', 'Workspace write'],
+            ['read_only', '只读'],
+            ['workspace_write', '工作区可写'],
           ],
         },
-      )}${field('Approval', 'approvalPolicy', 'on-request', {
+      )}${field('审批策略', 'approvalPolicy', 'on-request', {
         options: [
-          ['untrusted', 'Untrusted'],
-          ['on-request', 'On request'],
-          ['never', 'Never'],
+          ['untrusted', '不受信任'],
+          ['on-request', '按需询问'],
+          ['never', '从不询问'],
         ],
-      })}${field('Config JSON', 'config', '{}', { multiline: true })}</div>`,
+      })}${field('配置 JSON', 'config', '{}', { multiline: true })}</div>`,
       onSubmit: async (formData) => {
         const values = Object.fromEntries(formData.entries());
         const manual = values.mode === 'manual';
@@ -1261,10 +1287,10 @@ export function createCollaborationWorkspace(options) {
 
   const backupDialog = (restore) =>
     openDialog({
-      title: restore ? 'Restore backup' : 'Create backup',
-      submitText: restore ? 'Restore' : 'Create',
+      title: restore ? '恢复群组备份' : '创建群组备份',
+      submitText: restore ? '确认恢复' : '创建备份',
       danger: restore,
-      body: field('Backup directory', 'backupDirectory', '', {
+      body: field('备份目录', 'backupDirectory', '', {
         required: restore,
       }),
       onSubmit: async (formData) => {
@@ -1299,7 +1325,7 @@ export function createCollaborationWorkspace(options) {
               'invite',
               inviteId,
             ),
-            reason: 'Revoked from project-space members view',
+            reason: '从群组成员页面撤销邀请',
           }),
         },
       );
@@ -1486,8 +1512,8 @@ export function createCollaborationWorkspace(options) {
       const current =
         group.projection.permissionGrants?.[principalId]?.grants || [];
       return openDialog({
-        title: 'Direct permissions',
-        body: field('Grants', 'grants', current.join(', ')),
+        title: '直接权限',
+        body: field('权限项', 'grants', current.join(', ')),
         onSubmit: async (formData) => {
           await options.request(
             `/groups/${encodeURIComponent(group.groupId)}/permissions/${encodeURIComponent(principalId)}`,
@@ -1524,7 +1550,7 @@ export function createCollaborationWorkspace(options) {
               'group',
               group.groupId,
             ),
-            reason: 'Archived from project-space settings',
+            reason: '从群组设置页面归档',
           }),
         },
       );

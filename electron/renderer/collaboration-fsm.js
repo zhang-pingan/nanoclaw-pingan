@@ -4,10 +4,10 @@ import {
 } from './collaboration-definition.js';
 
 export const COLLABORATION_OUTCOME_PRESETS = [
-  { id: 'done', label: 'Done' },
-  { id: 'changes_requested', label: 'Changes requested' },
-  { id: 'blocked', label: 'Blocked' },
-  { id: 'cancelled', label: 'Cancelled' },
+  { id: 'done', label: '完成' },
+  { id: 'changes_requested', label: '需要修改' },
+  { id: 'blocked', label: '已阻塞' },
+  { id: 'cancelled', label: '已取消' },
 ];
 
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:@-]*$/;
@@ -69,7 +69,7 @@ export function validateCollaborationFsmDraft(draft) {
   for (const participant of draft.participants || []) {
     if (!participant.id || !IDENTIFIER.test(participant.id))
       issues.push(
-        issue('error', 'INVALID_PARTICIPANT_ID', 'Participant ID 不合法', {
+        issue('error', 'INVALID_PARTICIPANT_ID', '参与者 ID 不合法', {
           participantId: participant.id,
         }),
       );
@@ -78,7 +78,7 @@ export function validateCollaborationFsmDraft(draft) {
         issue(
           'error',
           'DUPLICATE_PARTICIPANT',
-          `Participant ID 重复：${participant.id}`,
+          `参与者 ID 重复：${participant.id}`,
           { participantId: participant.id },
         ),
       );
@@ -89,27 +89,27 @@ export function validateCollaborationFsmDraft(draft) {
   for (const state of draft.states || []) {
     if (!state.id || !IDENTIFIER.test(state.id))
       issues.push(
-        issue('error', 'INVALID_STATE_ID', 'State ID 不合法', {
+        issue('error', 'INVALID_STATE_ID', '状态 ID 不合法', {
           stateId: state.id,
         }),
       );
     if (states.has(state.id))
       issues.push(
-        issue('error', 'DUPLICATE_STATE', `State ID 重复：${state.id}`, {
+        issue('error', 'DUPLICATE_STATE', `状态 ID 重复：${state.id}`, {
           stateId: state.id,
         }),
       );
     states.set(state.id, state);
     if (!String(state.label || '').trim())
       issues.push(
-        issue('error', 'MISSING_STATE_LABEL', 'State 名称不能为空', {
+        issue('error', 'MISSING_STATE_LABEL', '状态名称不能为空', {
           stateId: state.id,
         }),
       );
   }
   if (!draft.initialState || !states.has(draft.initialState))
     issues.push(
-      issue('error', 'MISSING_INITIAL', '必须指定存在的 initial State'),
+      issue('error', 'MISSING_INITIAL', '必须指定一个已存在的初始状态'),
     );
 
   for (const state of states.values()) {
@@ -119,24 +119,19 @@ export function validateCollaborationFsmDraft(draft) {
     if (state.terminal) {
       if (state.assigneeId)
         issues.push(
-          issue(
-            'error',
-            'TERMINAL_ASSIGNEE',
-            'Terminal State 不能指定 assignee',
-            {
-              stateId: state.id,
-            },
-          ),
+          issue('error', 'TERMINAL_ASSIGNEE', '终止状态不能指定负责人', {
+            stateId: state.id,
+          }),
         );
       if (transitions.length)
         issues.push(
-          issue('error', 'TERMINAL_OUTGOING', 'Terminal State 不能有出边', {
+          issue('error', 'TERMINAL_OUTGOING', '终止状态不能有后续连线', {
             stateId: state.id,
           }),
         );
       if (hasDeadline || state.reminderIntervalMs)
         issues.push(
-          issue('error', 'TERMINAL_TIMEOUT', 'Terminal State 不能配置超时', {
+          issue('error', 'TERMINAL_TIMEOUT', '终止状态不能配置超时', {
             stateId: state.id,
           }),
         );
@@ -144,7 +139,7 @@ export function validateCollaborationFsmDraft(draft) {
     }
     if (!['participant_slot', 'principal'].includes(state.assigneeType))
       issues.push(
-        issue('error', 'MISSING_ASSIGNEE', '非终态必须指定 assignee', {
+        issue('error', 'MISSING_ASSIGNEE', '非终止状态必须指定负责人', {
           stateId: state.id,
         }),
       );
@@ -156,7 +151,7 @@ export function validateCollaborationFsmDraft(draft) {
         issue(
           'error',
           'UNKNOWN_PARTICIPANT',
-          `引用了未知 Participant：${state.assigneeId}`,
+          `引用了未知参与者：${state.assigneeId}`,
           { stateId: state.id },
         ),
       );
@@ -165,18 +160,13 @@ export function validateCollaborationFsmDraft(draft) {
       !String(state.assigneeId).startsWith('principal_')
     )
       issues.push(
-        issue(
-          'error',
-          'INVALID_PRINCIPAL',
-          'Principal ID 必须以 principal_ 开头',
-          {
-            stateId: state.id,
-          },
-        ),
+        issue('error', 'INVALID_PRINCIPAL', '成员 ID 必须以 principal_ 开头', {
+          stateId: state.id,
+        }),
       );
     if (!transitions.length)
       issues.push(
-        issue('error', 'MISSING_OUTCOME', '非终态至少需要一个 Outcome', {
+        issue('error', 'MISSING_OUTCOME', '非终止状态至少需要一个执行结果', {
           stateId: state.id,
         }),
       );
@@ -205,7 +195,7 @@ export function validateCollaborationFsmDraft(draft) {
       const edgeId = collaborationEdgeId(state.id, transition.outcome);
       if (!transition.outcome || !IDENTIFIER.test(transition.outcome))
         issues.push(
-          issue('error', 'INVALID_OUTCOME', 'Outcome ID 不合法', {
+          issue('error', 'INVALID_OUTCOME', '执行结果 ID 不合法', {
             stateId: state.id,
             edgeId,
           }),
@@ -215,7 +205,7 @@ export function validateCollaborationFsmDraft(draft) {
           issue(
             'error',
             'DUPLICATE_OUTCOME',
-            `Outcome ID 重复：${transition.outcome}`,
+            `执行结果 ID 重复：${transition.outcome}`,
             { stateId: state.id, edgeId },
           ),
         );
@@ -225,7 +215,7 @@ export function validateCollaborationFsmDraft(draft) {
           issue(
             'error',
             'UNKNOWN_TARGET',
-            `引用了未知目标 State：${transition.targetState}`,
+            `引用了未知目标状态：${transition.targetState}`,
             { stateId: state.id, edgeId },
           ),
         );
@@ -249,14 +239,9 @@ export function validateCollaborationFsmDraft(draft) {
     for (const stateId of states.keys())
       if (!reachable.has(stateId))
         issues.push(
-          issue(
-            'error',
-            'UNREACHABLE_STATE',
-            'State 无法从 initial State 到达',
-            {
-              stateId,
-            },
-          ),
+          issue('error', 'UNREACHABLE_STATE', '状态无法从初始状态到达', {
+            stateId,
+          }),
         );
     const terminals = [...states.values()].filter((state) => state.terminal);
     if (!terminals.some((state) => reachable.has(state.id)))
@@ -265,15 +250,13 @@ export function validateCollaborationFsmDraft(draft) {
           ? issue(
               'error',
               'NO_REACHABLE_TERMINAL',
-              '从 initial State 无法到达 terminal State',
+              '从初始状态无法到达终止状态',
               { stateId: draft.initialState },
             )
-          : issue(
-              'warning',
-              'LOOP_WITHOUT_TERMINAL',
-              'Workflow 没有 terminal State',
-              { stateId: draft.initialState, confirmRequired: true },
-            ),
+          : issue('warning', 'LOOP_WITHOUT_TERMINAL', '工作流没有终止状态', {
+              stateId: draft.initialState,
+              confirmRequired: true,
+            }),
       );
   }
   return issues;
@@ -287,12 +270,12 @@ function nextStatePosition(draft, sourceStateId, ordinal = 0) {
 export function addCollaborationOutcomeFirst(draft, input) {
   const next = structuredClone(draft);
   const source = next.states.find((state) => state.id === input.sourceStateId);
-  if (!source) throw new Error(`State 不存在：${input.sourceStateId}`);
-  if (source.terminal) throw new Error('Terminal State 不能添加 Outcome');
+  if (!source) throw new Error(`状态不存在：${input.sourceStateId}`);
+  if (source.terminal) throw new Error('终止状态不能添加执行结果');
   const outcome = String(input.outcome || '').trim();
-  if (!outcome) throw new Error('Outcome ID 不能为空');
+  if (!outcome) throw new Error('执行结果 ID 不能为空');
   if (source.transitions.some((transition) => transition.outcome === outcome))
-    throw new Error(`Outcome ID 重复：${outcome}`);
+    throw new Error(`执行结果 ID 重复：${outcome}`);
 
   let targetState = input.targetStateId || '';
   let createdStateId = null;
@@ -303,7 +286,7 @@ export function addCollaborationOutcomeFirst(draft, input) {
       input.newStateId ||
       nextCollaborationDraftId(terminal ? 'terminal' : 'state', next.states);
     if (next.states.some((state) => state.id === id))
-      throw new Error(`State ID 重复：${id}`);
+      throw new Error(`状态 ID 重复：${id}`);
     const created = createStateDraft(next.states.length + 1, {
       id,
       label: input.newStateLabel || id,
@@ -325,7 +308,7 @@ export function addCollaborationOutcomeFirst(draft, input) {
     createdStateId = id;
   }
   if (!next.states.some((state) => state.id === targetState))
-    throw new Error(`目标 State 不存在：${targetState}`);
+    throw new Error(`目标状态不存在：${targetState}`);
   source.transitions.push(
     createTransitionDraft({
       outcome,

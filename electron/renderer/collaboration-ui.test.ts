@@ -5,6 +5,13 @@ import {
   parseCollaborationRoute,
 } from './collaboration-workspace.js';
 import {
+  collaborationAggregateLabel,
+  collaborationEventLabel,
+  collaborationLabel,
+  collaborationPermissionLabel,
+  collaborationStatusLabel,
+} from './collaboration-labels.js';
+import {
   collaborationArtifactName,
   collaborationAuditEventTimeline,
   collaborationCanApproveMembers,
@@ -30,6 +37,18 @@ import {
 } from './collaboration-ui.js';
 
 describe('Collaboration project-space v3 UI helpers', () => {
+  it('renders project-space protocol labels in Chinese without changing technical keywords', () => {
+    expect(collaborationStatusLabel('in_progress')).toBe('进行中');
+    expect(collaborationStatusLabel('PROTOCOL_QUARANTINED')).toBe('协议已隔离');
+    expect(collaborationEventLabel('workflow_instance_started')).toBe(
+      '工作流实例已启动',
+    );
+    expect(collaborationAggregateLabel('work_item')).toBe('工作项');
+    expect(collaborationPermissionLabel('member:approve')).toBe('审批成员');
+    expect(collaborationLabel('Git')).toBe('Git');
+    expect(collaborationLabel('Codex')).toBe('Codex');
+  });
+
   it('round-trips encoded Project Space routes for cold navigation', () => {
     expect(collaborationRoute('', 'overview')).toBe('/groups');
     expect(collaborationRoute('group:release/one', 'work-items')).toBe(
@@ -237,7 +256,7 @@ describe('Collaboration project-space v3 UI helpers', () => {
       buildCollaborationStartTurnRequest(4, {
         execution_mode: 'assisted',
       }),
-    ).toThrow(/Executor/u);
+    ).toThrow(/执行器/u);
 
     const group = {
       groupId: 'group_1',
@@ -441,7 +460,7 @@ describe('Collaboration project-space v3 UI helpers', () => {
         data: {},
         artifactIds: [],
       }),
-    ).toThrow(/Marker must be an identifier/u);
+    ).toThrow(/标记必须是合法标识符/u);
   });
 
   it('builds verified virtual files and Work Item board columns', () => {
