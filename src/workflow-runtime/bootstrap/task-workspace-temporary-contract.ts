@@ -6,7 +6,7 @@ import type {
   VersionedRef,
 } from '../contracts/types.js';
 
-export const TASK_WORKSPACE_CORE_VERSION = '1.2.0';
+export const TASK_WORKSPACE_CORE_VERSION = '1.3.0';
 
 export const TASK_WORKSPACE_TEMPORARY_REFS = {
   interface: {
@@ -231,7 +231,7 @@ export const TEMPORARY_WORKFLOW_COORDINATOR_RESPONSE_SCHEMA: JsonObject = {
       additionalProperties: false,
       required: ['effect_ceiling', 'human_input_points', 'notes'],
       properties: {
-        effect_ceiling: { const: 'read_only' },
+        effect_ceiling: { const: 'mutable_effects' },
         human_input_points: {
           type: 'array',
           items: { type: 'string' },
@@ -312,7 +312,10 @@ export const TEMPORARY_WORKFLOW_COORDINATOR_RESPONSE_SCHEMA: JsonObject = {
                   id: { type: 'string', minLength: 1, maxLength: 255 },
                   type: { const: 'terminal' },
                   trigger: { $ref: '#/$defs/trigger' },
-                  exit: { const: 'done' },
+                  exit: {
+                    type: 'string',
+                    enum: ['done', 'failed', 'cancelled'],
+                  },
                 },
               },
             ],
@@ -409,15 +412,22 @@ export const TEMPORARY_WORKFLOW_COORDINATOR_RESPONSE_SCHEMA: JsonObject = {
                       exits: {
                         type: 'array',
                         minItems: 1,
-                        items: { const: 'done' },
+                        items: {
+                          type: 'string',
+                          enum: ['done', 'failed', 'cancelled'],
+                        },
+                        uniqueItems: true,
                       },
                       pick: {
                         type: 'object',
                         additionalProperties: false,
-                        required: ['type'],
                         properties: {
-                          type: { const: 'lowest_terminal_node_id' },
+                          type: { const: 'exit_priority_then_first' },
+                          exit_priority: {
+                            const: ['failed', 'cancelled', 'done'],
+                          },
                         },
+                        required: ['type', 'exit_priority'],
                       },
                     },
                   },
@@ -463,17 +473,43 @@ export const TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE: JsonObject = {
         {
           id: 'done',
           type: 'terminal',
-          trigger: { type: 'all', edge_ids: ['codex_finished'] },
+          trigger: { type: 'all', edge_ids: ['codex_succeeded'] },
           exit: 'done',
+        },
+        {
+          id: 'failed',
+          type: 'terminal',
+          trigger: { type: 'all', edge_ids: ['codex_failed'] },
+          exit: 'failed',
+        },
+        {
+          id: 'cancelled',
+          type: 'terminal',
+          trigger: { type: 'all', edge_ids: ['codex_cancelled'] },
+          exit: 'cancelled',
         },
       ],
       control_edges: [
         {
-          id: 'codex_finished',
+          id: 'codex_succeeded',
           kind: 'control',
           from_node_id: 'codex_task',
           to_node_id: 'done',
-          on: { statuses: ['succeeded', 'failed', 'cancelled'] },
+          on: { statuses: ['succeeded'] },
+        },
+        {
+          id: 'codex_failed',
+          kind: 'control',
+          from_node_id: 'codex_task',
+          to_node_id: 'failed',
+          on: { statuses: ['failed'] },
+        },
+        {
+          id: 'codex_cancelled',
+          kind: 'control',
+          from_node_id: 'codex_task',
+          to_node_id: 'cancelled',
+          on: { statuses: ['cancelled'] },
         },
       ],
       data_edges: [
@@ -502,13 +538,16 @@ export const TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE: JsonObject = {
       completion: {
         settled_rules: [
           {
-            id: 'select_done',
+            id: 'select_outcome',
             phase: 'settled',
             priority: 100,
             when: { fact: 'all_nodes_terminal' },
             select: {
-              exits: ['done'],
-              pick: { type: 'lowest_terminal_node_id' },
+              exits: ['done', 'failed', 'cancelled'],
+              pick: {
+                type: 'exit_priority_then_first',
+                exit_priority: ['failed', 'cancelled', 'done'],
+              },
             },
           },
         ],
@@ -519,9 +558,11 @@ export const TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE: JsonObject = {
     },
   },
   risk_summary: {
-    effect_ceiling: 'read_only',
+    effect_ceiling: 'mutable_effects',
     human_input_points: [],
-    notes: ['Runs one Codex task through the published Core capability.'],
+    notes: [
+      'Codex may modify workspace files. Execution is idempotent by provider key; automatic file rollback is not available.',
+    ],
   },
 };
 
@@ -538,7 +579,16 @@ export function temporaryWorkflowCoordinatorContract(): JsonObject {
         ...TASK_WORKSPACE_TEMPORARY_REFS.resultSchema,
         content_hash: WORKFLOW_AGENT_RESULT_SCHEMA_HASH,
       },
-      effect_ceiling: 'read_only',
+      effect_ceiling: 'mutable_effects',
+      recovery_kind: 'idempotent',
+      file_access: 'workspace_write',
+      automatic_file_rollback: false,
+      required_outcome_routes: {
+        succeeded: 'done',
+        failed: 'failed',
+        cancelled: 'cancelled',
+      },
+      completion_exit_priority: ['failed', 'cancelled', 'done'],
       max_nodes: 16,
     },
     example_response: TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE,

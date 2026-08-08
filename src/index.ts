@@ -2793,6 +2793,7 @@ async function main(): Promise<void> {
   > | null = null;
   let workflowAdapterExecutionStore: WorkflowAdapterExecutionStore | null =
     null;
+  let workflowAdapters: WorkflowExecutionAdapterRegistry | null = null;
   if (WORKFLOW_EXECUTION_ENABLED) {
     const runtimeDatabasePath = path.join(STORE_DIR, 'workflow-runtime.db');
     workflowRuntimeStore = WorkflowRuntimeConnectionFactory.openStore({
@@ -2824,7 +2825,7 @@ async function main(): Promise<void> {
     workflowAdapterExecutionStore = new WorkflowAdapterExecutionStore(
       path.join(STORE_DIR, 'workflow-adapter-executions.db'),
     );
-    const workflowAdapters = new WorkflowExecutionAdapterRegistry();
+    workflowAdapters = new WorkflowExecutionAdapterRegistry();
     const containerAgentJid =
       WORKFLOW_CONTAINER_AGENT_JID || resolveAssistantActionJid() || '';
     workflowAdapters.register(
@@ -2895,6 +2896,9 @@ async function main(): Promise<void> {
     store: taskWorkspaceStore,
     runtimeGateway: runtimeWorkspaceGateway,
     runtimeEventHub,
+    adapterReadiness: workflowAdapters
+      ? (adapterRefId) => workflowAdapters!.getReadiness(adapterRefId)
+      : undefined,
     coordinator: internalAgentChatService,
     coordinatorAgentJid: () => resolveAssistantActionJid(),
     onTimelineDelta: broadcastTaskWorkspaceDelta,

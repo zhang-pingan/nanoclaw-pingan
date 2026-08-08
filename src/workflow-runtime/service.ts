@@ -1862,6 +1862,26 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
     if (!targetKey) return false;
     const targetState = object(states[targetKey]);
     if (!targetState || targetState.type !== 'terminal') return false;
+    if (routeSource === 'exit:cancelled') {
+      commitRootT8(this.store, {
+        workflowId: row.workflow_id,
+        sourceActivationId: row.activation_id,
+        sourceRunId: row.graph_run_id,
+        rootScopeId: row.root_scope_id,
+        closeRequestId: row.close_request_id,
+        expectedWorkflowRowVersion: row.workflow_row_version,
+        expectedSourceActivationRowVersion: row.activation_row_version,
+        expectedSourceRunRowVersion: row.run_row_version,
+        expectedRootScopeRowVersion: row.root_row_version,
+        routeSource,
+        target: { kind: 'global_cancel' },
+        contextValueSchema: schema,
+        requiredChildren: [],
+        bestEffortOutbox: [],
+        nowMs,
+      });
+      return true;
+    }
     const definitionRef: RuntimeRegistryRef = {
       rowId: row.definition_row_id,
       resourceType: row.definition_resource_type,

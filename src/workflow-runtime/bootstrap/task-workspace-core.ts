@@ -176,7 +176,11 @@ function scopeInterface(ref: VersionedRef): JsonObject {
   const snapshot: JsonObject = {
     ref,
     inputs: {},
-    exits: { done: { output_ports: {} } },
+    exits: {
+      done: { output_ports: {} },
+      failed: { output_ports: {} },
+      cancelled: { output_ports: {} },
+    },
   };
   return {
     format: 'icarus.workflow-scope-interface/1',
@@ -227,8 +231,8 @@ function buildCoreCompilerBase(): CoreCompilerBase {
     allow_early_close: false,
     allow_indefinite_waits: false,
     effect_policy: {
-      allowed_recovery_kinds: ['pure'],
-      max_impact: 'read_only',
+      allowed_recovery_kinds: ['idempotent'],
+      max_impact: 'mutable_effects',
     },
     build_retry: null,
     limits: graphLimits({ max_nodes: 16, max_edges_per_scope: 32 }),
@@ -245,8 +249,8 @@ function buildCoreCompilerBase(): CoreCompilerBase {
     allow_early_close: true,
     allow_indefinite_waits: false,
     effect_policy: {
-      allowed_recovery_kinds: ['pure'],
-      max_impact: 'read_only',
+      allowed_recovery_kinds: ['idempotent'],
+      max_impact: 'mutable_effects',
     },
     build_retry: null,
     limits: graphLimits(),
@@ -392,17 +396,63 @@ function buildCoreCompilerBase(): CoreCompilerBase {
       {
         id: 'done',
         type: 'terminal',
-        trigger: { type: 'all', edge_ids: ['edge.expanded'] },
+        trigger: { type: 'all', edge_ids: ['edge.expanded.done'] },
         exit: 'done',
+      },
+      {
+        id: 'failed',
+        type: 'terminal',
+        trigger: {
+          type: 'any',
+          edge_ids: ['edge.expanded.failed-exit', 'edge.expanded.failed'],
+        },
+        exit: 'failed',
+      },
+      {
+        id: 'cancelled',
+        type: 'terminal',
+        trigger: {
+          type: 'any',
+          edge_ids: ['edge.expanded.cancelled-exit', 'edge.expanded.cancelled'],
+        },
+        exit: 'cancelled',
       },
     ],
     control_edges: [
       {
-        id: 'edge.expanded',
+        id: 'edge.expanded.done',
         kind: 'control',
         from_node_id: 'expand_child',
         to_node_id: 'done',
-        on: { statuses: ['succeeded'] },
+        on: { statuses: ['succeeded'], child_exits: ['done'] },
+      },
+      {
+        id: 'edge.expanded.failed-exit',
+        kind: 'control',
+        from_node_id: 'expand_child',
+        to_node_id: 'failed',
+        on: { statuses: ['succeeded'], child_exits: ['failed'] },
+      },
+      {
+        id: 'edge.expanded.failed',
+        kind: 'control',
+        from_node_id: 'expand_child',
+        to_node_id: 'failed',
+        on: { statuses: ['failed'] },
+      },
+      {
+        id: 'edge.expanded.cancelled-exit',
+        kind: 'control',
+        from_node_id: 'expand_child',
+        to_node_id: 'cancelled',
+        on: { statuses: ['succeeded'], child_exits: ['cancelled'] },
+      },
+      {
+        id: 'edge.expanded.cancelled',
+        kind: 'control',
+        from_node_id: 'expand_child',
+        to_node_id: 'cancelled',
+        on: { statuses: ['cancelled'] },
       },
     ],
     data_edges: [
@@ -428,13 +478,16 @@ function buildCoreCompilerBase(): CoreCompilerBase {
             completion: {
               settled_rules: [
                 {
-                  id: 'select_done',
+                  id: 'select_outcome',
                   phase: 'settled',
                   priority: 100,
                   when: { fact: 'all_nodes_terminal' },
                   select: {
-                    exits: ['done'],
-                    pick: { type: 'lowest_terminal_node_id' },
+                    exits: ['done', 'failed', 'cancelled'],
+                    pick: {
+                      type: 'exit_priority_then_first',
+                      exit_priority: ['failed', 'cancelled', 'done'],
+                    },
                   },
                 },
               ],
@@ -450,13 +503,16 @@ function buildCoreCompilerBase(): CoreCompilerBase {
     completion: {
       settled_rules: [
         {
-          id: 'select_done',
+          id: 'select_outcome',
           phase: 'settled',
           priority: 100,
           when: { fact: 'all_nodes_terminal' },
           select: {
-            exits: ['done'],
-            pick: { type: 'lowest_terminal_node_id' },
+            exits: ['done', 'failed', 'cancelled'],
+            pick: {
+              type: 'exit_priority_then_first',
+              exit_priority: ['failed', 'cancelled', 'done'],
+            },
           },
         },
       ],
@@ -673,7 +729,9 @@ function augmentCompilerSnapshot(input: JsonObject): {
     quality_revision_policy: null,
     required_tools: [],
     required_mcp_methods: [],
-    required_file_scopes: [],
+    required_file_scopes: [
+      { ref: 'workspace', access: 'write', impact: 'mutable_effects' },
+    ],
     required_claims: [],
     allowed_groups: [],
     retry_policy: {
@@ -682,9 +740,14 @@ function augmentCompilerSnapshot(input: JsonObject): {
       backoff: 'fixed',
     },
     timeout_ceiling_ms: 3_600_000,
-    effect_impact: 'read_only',
-    effect: { type: 'pure' },
-    cancellation: { type: 'fence_only', safe_to_abandon: true },
+    effect_impact: 'mutable_effects',
+    effect: { type: 'idempotent', key: { scope: 'node' } },
+    cancellation: {
+      type: 'cooperative',
+      cancel_action_ref: refs.executor,
+      ack_required_before_close: false,
+      safe_if_cancel_lost: true,
+    },
     dependency_closure_hash: dependencyClosureHash,
     outbox_effect: {
       effect_type: 'capability_dispatch',
@@ -792,7 +855,11 @@ export function ensureTaskWorkspaceCore(
       run: {
         type: 'graph',
         graph_source: compilerBase.source,
-        exit_routes: { done: { target: 'completed' } },
+        exit_routes: {
+          done: { target: 'completed' },
+          failed: { target: 'failed' },
+          cancelled: { target: 'cancelled' },
+        },
         on_error: { target: 'failed' },
         on_local_cancel: { target: 'cancelled' },
         on_temporary_replan: { target: 'run' },
@@ -867,7 +934,7 @@ export function ensureTaskWorkspaceCore(
       version: CORE_VERSION,
     },
     launch_policy: 'confirm',
-    effect_ceiling: 'read_only',
+    effect_ceiling: 'mutable_effects',
     input_summary: { accepts_text: true, accepts_attachments: true },
     compiler_input_snapshot: augmented.snapshot,
   };
@@ -890,7 +957,12 @@ export function ensureTaskWorkspaceCore(
     {
       type: 'execution_policy',
       id: 'icarus.core.task-workspace.execution',
-      content: { launch_source: 'task_workspace', effect_ceiling: 'read_only' },
+      content: {
+        launch_source: 'task_workspace',
+        effect_ceiling: 'mutable_effects',
+        recovery_kind: 'idempotent',
+        file_access: 'workspace_write',
+      },
     },
     {
       type: 'command_policy',

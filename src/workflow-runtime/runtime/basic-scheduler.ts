@@ -198,6 +198,24 @@ export function scheduleReadyNodeT4(
                   AND source.published_output_envelope_value_id IS NOT NULL
                 ORDER BY e.edge_key COLLATE BINARY LIMIT 1`,
               [input.graphRunId, input.scopeId, String(authority.node.id)],
+            ) ??
+            transaction.queryOne<{ id: string; hash: string }>(
+              `SELECT attempt.result_value_id AS id, attempt.result_hash AS hash
+                 FROM workflow_graph_edges e
+                 JOIN workflow_graph_control_edge_resolutions r ON r.edge_id = e.id
+                 JOIN workflow_graph_nodes source
+                   ON source.graph_run_id = e.graph_run_id
+                  AND source.scope_id = e.scope_id
+                  AND source.node_key = json_extract(e.compiled_edge_json, '$.from_node_id')
+                 JOIN workflow_graph_node_attempts attempt
+                   ON attempt.id = source.current_attempt_id
+                WHERE e.graph_run_id = ? AND e.scope_id = ?
+                  AND json_extract(e.compiled_edge_json, '$.to_node_id') = ?
+                  AND r.state = 'taken' AND attempt.phase = 'terminal'
+                  AND attempt.result_value_id IS NOT NULL
+                  AND attempt.result_hash IS NOT NULL
+                ORDER BY e.edge_key COLLATE BINARY LIMIT 1`,
+              [input.graphRunId, input.scopeId, String(authority.node.id)],
             ));
       if (!derivedInput)
         throw new G5RuntimeError(

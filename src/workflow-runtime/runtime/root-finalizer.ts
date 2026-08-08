@@ -1053,14 +1053,18 @@ function loadTransitionAuthority(
   input: T8RootCommitInput,
   authority: RootCutAuthority,
 ): { transition: JsonObject | null; effects: JsonObject[] } {
-  if (authority.cancelReason === 'workflow_cancel') {
+  const explicitCancelledExit =
+    authority.outcomeKind === 'completed' &&
+    authority.exitName === 'cancelled' &&
+    input.routeSource === 'exit:cancelled';
+  if (authority.cancelReason === 'workflow_cancel' || explicitCancelledExit) {
     if (
       input.target.kind !== 'global_cancel' ||
-      input.routeSource !== 'workflow_cancel'
+      (!explicitCancelledExit && input.routeSource !== 'workflow_cancel')
     )
       throw new G5RuntimeError(
         'contract_invalid',
-        'T8 workflow cancel cannot use a Definition route',
+        'T8 cancellation cannot use the requested transition target',
       );
     return { transition: null, effects: [] };
   }
@@ -2387,13 +2391,18 @@ export function commitRootT8InTransaction(
     targetActivationId = targetActivation.activationId;
     targetRunId = targetActivation.graphRunId;
   } else if (input.target.kind === 'terminal') {
-    if (
-      (cut.outcomeKind === 'completed' &&
-        (input.target.terminalKind !== 'normal' ||
-          input.target.output === null ||
+    const completedTerminalInvalid =
+      cut.outcomeKind === 'completed' &&
+      (input.target.terminalKind === 'normal'
+        ? input.target.output === null ||
           input.target.outputSchemaHash === null ||
           input.target.errorCode !== null ||
-          input.target.errorDetail !== null)) ||
+          input.target.errorDetail !== null
+        : input.target.output !== null ||
+          input.target.outputSchemaHash !== null ||
+          input.target.errorCode === null);
+    if (
+      completedTerminalInvalid ||
       (cut.outcomeKind === 'errored' &&
         (input.target.terminalKind !== 'errored' ||
           input.target.output !== null ||
@@ -2685,7 +2694,9 @@ export function commitRootT8InTransaction(
         terminalStatus === 'errored' && input.target.kind === 'terminal'
           ? (input.target.errorDetail?.hash ?? null)
           : null,
-        terminalStatus === 'cancelled' ? cut.cancelReason : null,
+        terminalStatus === 'cancelled'
+          ? (cut.cancelReason ?? input.routeSource)
+          : null,
         terminalStatus === 'active' ? null : input.nowMs,
         input.nowMs,
         input.workflowId,

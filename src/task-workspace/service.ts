@@ -1,6 +1,8 @@
 import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 
 import type { InternalAgentChatService } from '../internal-agent-run-once/chat-service.js';
+import type { WorkflowExecutionAdapterReadiness } from '../workflow-execution/adapter-registry.js';
+import { CODEX_TASK_ADAPTER_ID } from '../workflow-execution/types.js';
 import {
   TEMPORARY_WORKFLOW_COORDINATOR_RESPONSE_SCHEMA,
   temporaryWorkflowCoordinatorContract,
@@ -75,6 +77,9 @@ export interface TaskWorkspaceServiceOptions {
   readonly runtimeEventHub: RuntimeEventHub;
   readonly coordinator: Pick<InternalAgentChatService, 'chat'> | null;
   readonly coordinatorAgentJid: () => string | null;
+  readonly adapterReadiness?: (
+    adapterRefId: string,
+  ) => WorkflowExecutionAdapterReadiness;
   readonly preparePublishedCreation?: (input: {
     readonly session: TaskSessionV1;
     readonly launch: TaskLaunchIntentV1;
@@ -146,11 +151,81 @@ export function parseTemporaryWorkflowCoordinatorResponse(text: string): {
   }
   const source = asObject(asObject(parsed.graph_scope)?.source);
   const risk = asObject(parsed.risk_summary);
-  if (!source || !risk) return null;
+  if (!source || !risk || !hasTemporaryOutcomeContract(source)) return null;
   return {
     source,
     risk,
   };
+}
+
+const TEMPORARY_OUTCOME_EXIT = {
+  succeeded: 'done',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+function hasTemporaryOutcomeContract(source: JsonObject): boolean {
+  const nodes = Array.isArray(source.nodes)
+    ? source.nodes.map(asObject).filter((node): node is JsonObject => !!node)
+    : [];
+  const terminals = new Map(
+    nodes
+      .filter((node) => node.type === 'terminal')
+      .map((node) => [String(node.id), String(node.exit)]),
+  );
+  const delegations = nodes.filter(
+    (candidate) => candidate.type === 'delegation',
+  );
+  if (
+    delegations.length === 0 ||
+    !['done', 'failed', 'cancelled'].every((exit) =>
+      [...terminals.values()].includes(exit),
+    )
+  ) {
+    return false;
+  }
+  const edges = Array.isArray(source.control_edges)
+    ? source.control_edges
+        .map(asObject)
+        .filter((edge): edge is JsonObject => !!edge)
+    : [];
+  for (const node of delegations) {
+    for (const [status, expectedExit] of Object.entries(
+      TEMPORARY_OUTCOME_EXIT,
+    )) {
+      const matching = edges.filter(
+        (edge) =>
+          edge.from_node_id === node.id &&
+          Array.isArray(asObject(edge.on)?.statuses) &&
+          (asObject(edge.on)!.statuses as JsonValue[]).includes(status),
+      );
+      if (
+        matching.length === 0 ||
+        matching.some(
+          (edge) => terminals.get(String(edge.to_node_id)) !== expectedExit,
+        )
+      ) {
+        return false;
+      }
+    }
+  }
+  const settledRules = asObject(source.completion)?.settled_rules;
+  return (
+    Array.isArray(settledRules) &&
+    settledRules.some((value) => {
+      const select = asObject(asObject(value)?.select);
+      const pick = asObject(select?.pick);
+      return (
+        pick?.type === 'exit_priority_then_first' &&
+        JSON.stringify(pick.exit_priority) ===
+          JSON.stringify(['failed', 'cancelled', 'done']) &&
+        Array.isArray(select?.exits) &&
+        ['done', 'failed', 'cancelled'].every((exit) =>
+          (select.exits as JsonValue[]).includes(exit),
+        )
+      );
+    })
+  );
 }
 
 function temporaryReplanSourceFromCoordinator(text: string): JsonObject | null {
@@ -195,6 +270,19 @@ export class TaskWorkspaceService {
   constructor(private readonly options: TaskWorkspaceServiceOptions) {
     this.now = options.now ?? Date.now;
     this.pollMs = options.timelinePollMs ?? 15_000;
+  }
+
+  private temporaryAdapterError(): string | null {
+    if (!this.options.adapterReadiness) return null;
+    try {
+      const readiness = this.options.adapterReadiness(CODEX_TASK_ADAPTER_ID);
+      if (readiness.status === 'ready') return null;
+      return readiness.status === 'unavailable'
+        ? readiness.error
+        : 'Codex Task Adapter readiness has not been checked';
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
   }
 
   async start(): Promise<void> {
@@ -331,10 +419,17 @@ export class TaskWorkspaceService {
         expires_at_ms: this.now(),
       };
     }
-    return this.options.runtimeGateway.listRecipes({
+    const catalog = this.options.runtimeGateway.listRecipes({
       principal_ref: principalRef,
       now_ms: this.now(),
     });
+    if (!this.temporaryAdapterError()) return catalog;
+    return {
+      ...catalog,
+      items: catalog.items.filter(
+        (item) => item.recipe_ref.id !== 'ad_hoc_personal_task',
+      ),
+    };
   }
 
   async send(input: {
@@ -445,6 +540,8 @@ export class TaskWorkspaceService {
           'Temporary Workflow Runtime is unavailable; set WORKFLOW_EXECUTION_ENABLED=true and restart the Host',
         );
       }
+      const adapterError = this.temporaryAdapterError();
+      if (adapterError) return this.failLaunch(launch, adapterError);
       void this.planTemporary(
         session,
         launch,
@@ -1600,6 +1697,8 @@ export class TaskWorkspaceService {
     launch: TaskLaunchIntentV1,
     revision: TemporaryWorkflowDraftRevisionV1,
   ): Promise<TaskLaunchIntentV1> {
+    const adapterError = this.temporaryAdapterError();
+    if (adapterError) return this.failLaunch(launch, adapterError);
     if (
       !this.options.runtimeGateway ||
       (!this.options.runtimeGateway.launchTemporary &&
@@ -1768,6 +1867,14 @@ export class TaskWorkspaceService {
         throw new TaskWorkspaceServiceError(
           'runtime_unavailable',
           'Temporary Workflow Runtime is unavailable; set WORKFLOW_EXECUTION_ENABLED=true and restart the Host',
+          true,
+        );
+      }
+      const adapterError = this.temporaryAdapterError();
+      if (adapterError) {
+        throw new TaskWorkspaceServiceError(
+          'runtime_unavailable',
+          adapterError,
           true,
         );
       }
@@ -2273,6 +2380,21 @@ export class TaskWorkspaceService {
           cursor = page.next_event_seq;
           hasMore = page.has_more;
         }
+      }
+      if (
+        workflow.final_outcome_kind === 'normal' ||
+        workflow.final_outcome_kind === 'errored' ||
+        workflow.final_outcome_kind === 'cancelled'
+      ) {
+        this.options.store.projectRuntimeOutcome({
+          sessionId: session.session_id,
+          outcome: workflow.final_outcome_kind,
+          errorCode:
+            typeof workflow.final_error_code === 'string'
+              ? workflow.final_error_code
+              : null,
+          nowMs: this.now(),
+        });
       }
     }
   }

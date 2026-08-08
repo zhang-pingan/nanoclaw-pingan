@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { WorkflowExecutionAdapterReadiness } from '../workflow-execution/adapter-registry.js';
 import {
   cloneJson,
   TASK_WORKSPACE_TEMPORARY_REFS,
@@ -46,6 +47,7 @@ function service(
     chat: (input: Record<string, unknown>) => unknown;
   } | null = null,
   onTimelineDelta?: (delta: TaskWorkspaceTimelineDeltaV1) => void,
+  adapterReadiness?: () => WorkflowExecutionAdapterReadiness,
 ): TaskWorkspaceService {
   return new TaskWorkspaceService({
     store,
@@ -53,6 +55,7 @@ function service(
     runtimeEventHub: new RuntimeEventHub(),
     coordinator: coordinator as never,
     coordinatorAgentJid: () => (coordinator ? 'agent:coordinator' : null),
+    adapterReadiness,
     now: () => 100,
     onTimelineDelta,
   });
@@ -136,6 +139,25 @@ describe('TaskWorkspaceService review hardening', () => {
         }),
       ),
     ).toBeNull();
+
+    const misroutedFailure = cloneJson(response);
+    const source = (misroutedFailure.graph_scope as JsonObject)
+      .source as JsonObject;
+    const failedEdge = (source.control_edges as JsonObject[]).find(
+      (edge) => edge.id === 'codex_failed',
+    )!;
+    failedEdge.to_node_id = 'done';
+    expect(
+      parseTemporaryWorkflowCoordinatorResponse(
+        JSON.stringify(misroutedFailure),
+      ),
+    ).toBeNull();
+
+    const readOnlyRisk = cloneJson(response);
+    (readOnlyRisk.risk_summary as JsonObject).effect_ceiling = 'read_only';
+    expect(
+      parseTemporaryWorkflowCoordinatorResponse(JSON.stringify(readOnlyRisk)),
+    ).toBeNull();
   });
 
   it('fails a Temporary launch immediately when Runtime is disabled', async () => {
@@ -173,6 +195,73 @@ describe('TaskWorkspaceService review hardening', () => {
             entry.payload_json.status === 'failed' &&
             String(entry.payload_json.error_code).includes(
               'WORKFLOW_EXECUTION_ENABLED=true',
+            ),
+        ),
+    ).toBe(true);
+  });
+
+  it('fails before planning when the Codex Adapter preflight is unavailable', async () => {
+    const store = openStore();
+    const coordinator = { chat: vi.fn() };
+    const runtime = {
+      listRecipes: vi.fn(() => ({
+        format: 'icarus.workspace-recipe-catalog/1',
+        expires_at_ms: 200,
+        items: [
+          {
+            recipe_ref: { id: 'ad_hoc_personal_task', version: '1.3.0' },
+            recipe_hash: sha('b'),
+            selection_token: 'temporary-token',
+          },
+        ],
+      })),
+    };
+    const deltas: TaskWorkspaceTimelineDeltaV1[] = [];
+    const workspace = service(
+      store,
+      runtime,
+      coordinator,
+      (delta) => deltas.push(delta),
+      () => ({
+        status: 'unavailable',
+        error:
+          'Codex Task Adapter is unavailable: set WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED=true',
+      }),
+    );
+    const session = workspace.createSession({
+      principalRef: 'human:local-owner',
+      title: 'Codex preflight unavailable',
+    });
+
+    expect(workspace.listRecipes(session.owner_principal_ref).items).toEqual(
+      [],
+    );
+    const launch = await workspace.run({
+      sessionId: session.session_id,
+      principalRef: session.owner_principal_ref,
+      text: 'run this temporary workflow',
+      idempotencyKey: 'run:codex-preflight-unavailable',
+    });
+
+    expect(launch).toMatchObject({
+      status: 'failed',
+      last_error_code: expect.stringContaining(
+        'WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED=true',
+      ),
+    });
+    expect(coordinator.chat).not.toHaveBeenCalled();
+    expect(store.getSession(session.session_id)).toMatchObject({
+      status: 'open',
+      attention_state: 'failed',
+    });
+    expect(
+      deltas
+        .flatMap((delta) => delta.entries)
+        .some(
+          (entry) =>
+            entry.payload_json.status === 'failed' &&
+            String(entry.payload_json.error_code).includes(
+              'WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED=true',
             ),
         ),
     ).toBe(true);
@@ -625,4 +714,70 @@ describe('TaskWorkspaceService review hardening', () => {
       'inline_value_json',
     );
   });
+
+  it.each([
+    {
+      name: 'success',
+      outcome: 'normal',
+      errorCode: null,
+      status: 'completed',
+      attention: 'none',
+    },
+    {
+      name: 'failure',
+      outcome: 'errored',
+      errorCode: 'ad_hoc_workflow_failed',
+      status: 'open',
+      attention: 'failed',
+    },
+    {
+      name: 'cancelled',
+      outcome: 'cancelled',
+      errorCode: null,
+      status: 'cancelled',
+      attention: 'none',
+    },
+  ] as const)(
+    'projects Runtime $name into the Task-visible terminal state',
+    async (scenario) => {
+      const store = openStore();
+      const target = appendLaunch(store, 'temporary_workflow');
+      store.addExecutionLink({
+        session_id: target.session.session_id,
+        workflow_id: `workflow:${scenario.name}`,
+        intake_id: `intake:${scenario.name}`,
+        creation_request_id: `creation:${scenario.name}`,
+        launch_intent_id: target.launch.launch_intent_id,
+        created_at_ms: 5,
+      });
+      const runtime = {
+        getRuntimeDetail: () => ({
+          format: 'icarus.workspace-runtime-detail/1',
+          freshness: 'ready',
+          workflows: [
+            {
+              id: `workflow:${scenario.name}`,
+              availability: 'available',
+              final_outcome_kind: scenario.outcome,
+              final_error_code: scenario.errorCode,
+              runs: [],
+              pending: [],
+              artifacts: [],
+            },
+          ],
+        }),
+      };
+      const workspace = service(store, runtime);
+
+      const result = await workspace.getSession(
+        target.session.session_id,
+        target.session.owner_principal_ref,
+      );
+
+      expect(result.session).toMatchObject({
+        status: scenario.status,
+        attention_state: scenario.attention,
+      });
+    },
+  );
 });

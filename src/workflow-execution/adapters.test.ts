@@ -265,8 +265,11 @@ describe('CodexTaskAdapter', () => {
       desktopVisibilityConfirmed: false,
     });
 
+    await expect(adapter.preflight()).rejects.toThrow(
+      /WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED=true/,
+    );
     await expect(adapter.start(context, request)).rejects.toThrow(
-      /desktop visibility is not confirmed/,
+      /WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED=true/,
     );
   });
 });

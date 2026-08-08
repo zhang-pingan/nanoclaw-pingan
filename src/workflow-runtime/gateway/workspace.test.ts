@@ -28,6 +28,7 @@ import {
   type G6MapFixture,
 } from '../runtime/g6-test-support.js';
 import { insertInlineValue } from '../runtime/graph-store.js';
+import { selectCompletionCandidate } from '../runtime/fixed-point-authority.js';
 import { initializeScopeFixedPointT3a } from '../runtime/reconciler.js';
 import { prepareCapabilityDispatchT5 } from '../runtime/outbox.js';
 import {
@@ -501,6 +502,39 @@ afterEach(() => {
 });
 
 describe('RuntimeWorkspaceGateway', () => {
+  it('prioritizes a failed exit over a lower-id success candidate', () => {
+    const selected = selectCompletionCandidate(
+      {
+        exits: ['done', 'failed', 'cancelled'],
+        pick: {
+          type: 'exit_priority_then_first',
+          exit_priority: ['failed', 'cancelled', 'done'],
+        },
+      },
+      [
+        {
+          id: 'candidate:done',
+          terminalNodeId: 'node:a_done',
+          terminalNodeKey: 'a_done',
+          exitName: 'done',
+          candidateSequence: 1,
+          outputValueId: 'value:done',
+          outputHash: hash('completion-output', { exit: 'done' }),
+        },
+        {
+          id: 'candidate:failed',
+          terminalNodeId: 'node:z_failed',
+          terminalNodeKey: 'z_failed',
+          exitName: 'failed',
+          candidateSequence: 2,
+          outputValueId: 'value:failed',
+          outputHash: hash('completion-output', { exit: 'failed' }),
+        },
+      ],
+    );
+
+    expect(selected?.exitName).toBe('failed');
+  });
   it('refreshes a persisted exact Recipe selection after token expiry or Host secret rotation', () => {
     const store = openFresh();
     ensureTaskWorkspaceCore(store, 1_000);
@@ -1150,6 +1184,31 @@ describe('RuntimeWorkspaceGateway', () => {
           member.resource_id === TASK_WORKSPACE_TEMPORARY_REFS.interface.id,
       ),
     ).toBe(true);
+    const capability = JSON.parse(
+      store.queryOne<{ content: string }>(
+        `SELECT value.inline_canonical_json AS content
+           FROM workflow_registry_resources resource
+           JOIN workflow_values value ON value.id = resource.canonical_value_id
+          WHERE resource.resource_type = 'capability'
+            AND resource.resource_id = ? AND resource.resource_version = ?`,
+        [
+          TASK_WORKSPACE_TEMPORARY_REFS.capability.id,
+          TASK_WORKSPACE_CORE_VERSION,
+        ],
+      )!.content,
+    ) as JsonObject;
+    expect(capability).toMatchObject({
+      effect_impact: 'mutable_effects',
+      effect: { type: 'idempotent', key: { scope: 'node' } },
+      cancellation: {
+        type: 'cooperative',
+        ack_required_before_close: false,
+        safe_if_cancel_lost: true,
+      },
+      required_file_scopes: [
+        { ref: 'workspace', access: 'write', impact: 'mutable_effects' },
+      ],
+    });
   });
 
   it('launches and advances the fixed Temporary Workflow through its Dynamic Child', async () => {
@@ -1322,173 +1381,303 @@ describe('RuntimeWorkspaceGateway', () => {
     });
   });
 
-  it('executes a Temporary Codex capability through T5, Worker callback, and T6a close', async () => {
-    const store = openFresh();
-    ensureTaskWorkspaceCore(store, 1_000);
-    const gateway = new RuntimeWorkspaceGateway(store, Buffer.alloc(32, 7));
-    const recipe = gateway
-      .listRecipes({
+  it.each([
+    {
+      name: 'success',
+      adapterState: 'succeeded',
+      agentOutcome: 'success',
+      attemptOutcome: 'succeeded',
+      nodeError: null,
+      exit: 'done',
+      workflowStatus: 'completed',
+      workflowOutcome: 'normal',
+      workflowError: null,
+    },
+    {
+      name: 'failure',
+      adapterState: 'failed',
+      agentOutcome: 'failure',
+      attemptOutcome: 'failed',
+      nodeError: 'codex_failed',
+      exit: 'failed',
+      workflowStatus: 'errored',
+      workflowOutcome: 'errored',
+      workflowError: 'ad_hoc_workflow_failed',
+    },
+    {
+      name: 'blocked',
+      adapterState: 'blocked',
+      agentOutcome: 'blocked',
+      attemptOutcome: 'failed',
+      nodeError: 'codex_blocked',
+      exit: 'failed',
+      workflowStatus: 'errored',
+      workflowOutcome: 'errored',
+      workflowError: 'ad_hoc_workflow_failed',
+    },
+    {
+      name: 'cancelled',
+      adapterState: 'cancelled',
+      agentOutcome: 'cancelled',
+      attemptOutcome: 'cancelled',
+      nodeError: null,
+      exit: 'cancelled',
+      workflowStatus: 'cancelled',
+      workflowOutcome: 'cancelled',
+      workflowError: null,
+    },
+  ] as const)(
+    'propagates Temporary Codex $name through Adapter, Runtime, and Workflow outcomes',
+    async (scenario) => {
+      const store = openFresh();
+      ensureTaskWorkspaceCore(store, 1_000);
+      const gateway = new RuntimeWorkspaceGateway(store, Buffer.alloc(32, 7));
+      const recipe = gateway
+        .listRecipes({
+          principal_ref: 'human:local-owner',
+          now_ms: 2_000,
+        })
+        .items.find((item) => item.recipe_ref.id === 'ad_hoc_personal_task')!;
+      expect(recipe.recipe_ref.version).toBe(TASK_WORKSPACE_CORE_VERSION);
+      const response = cloneJson(TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE);
+      const source = (response.graph_scope as JsonObject).source as JsonObject;
+      const compilation = gateway.prepareTemporaryDraft({
         principal_ref: 'human:local-owner',
-        now_ms: 2_000,
-      })
-      .items.find((item) => item.recipe_ref.id === 'ad_hoc_personal_task')!;
-    expect(recipe.recipe_ref.version).toBe(TASK_WORKSPACE_CORE_VERSION);
-    const response = cloneJson(TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE);
-    const source = (response.graph_scope as JsonObject).source as JsonObject;
-    const compilation = gateway.prepareTemporaryDraft({
-      principal_ref: 'human:local-owner',
-      selection_token: recipe.selection_token,
-      source_json: source,
-      now_ms: 2_001,
-    });
-    const capabilityNode = (
-      compilation.compiled_plan_json.nodes as JsonObject[]
-    ).find((node) => node.type === 'delegation')!;
-    expect(capabilityNode.outbox_execution_binding).toMatchObject({
-      adapter_identity: {
-        ref: TASK_WORKSPACE_TEMPORARY_REFS.adapter,
-      },
-    });
-    const effectiveInput: JsonObject = { text: 'Complete the Codex task' };
-    const attachmentManifest: JsonValue = [];
-    const receipt = gateway.launchTemporary({
-      principal_ref: 'human:local-owner',
-      selection_token: recipe.selection_token,
-      authorization_ref: 'temporary-confirmation:codex-e2e',
-      launch: {
-        request_id: 'launch:codex-e2e',
-        creation_domain: 'task-workspace-test',
-        creation_key: 'codex-e2e',
-        effective_input_json: effectiveInput,
-        effective_input_hash: hash('input', effectiveInput),
-        attachment_manifest_json: attachmentManifest,
-        attachment_manifest_hash: hash('attachments', attachmentManifest),
-        deadline_at_ms: null,
-      },
-      now_ms: 2_002,
-      confirmed_revision_id: 'revision:codex-e2e',
-      confirmed_source_json: source,
-      confirmed_source_hash: compilation.source_hash,
-      confirmed_plan_hash: compilation.compiled_plan_hash,
-      resource_closure_hash: compilation.resource_closure_hash,
-      policy_ceiling_hash: compilation.policy_ceiling_hash,
-    });
+        selection_token: recipe.selection_token,
+        source_json: source,
+        now_ms: 2_001,
+      });
+      const capabilityNode = (
+        compilation.compiled_plan_json.nodes as JsonObject[]
+      ).find((node) => node.type === 'delegation')!;
+      expect(capabilityNode.outbox_execution_binding).toMatchObject({
+        adapter_identity: {
+          ref: TASK_WORKSPACE_TEMPORARY_REFS.adapter,
+        },
+      });
+      const effectiveInput: JsonObject = {
+        text: `Complete the Codex ${scenario.name} task`,
+      };
+      const attachmentManifest: JsonValue = [];
+      const receipt = gateway.launchTemporary({
+        principal_ref: 'human:local-owner',
+        selection_token: recipe.selection_token,
+        authorization_ref: `temporary-confirmation:codex-e2e:${scenario.name}`,
+        launch: {
+          request_id: `launch:codex-e2e:${scenario.name}`,
+          creation_domain: 'task-workspace-test',
+          creation_key: `codex-e2e:${scenario.name}`,
+          effective_input_json: effectiveInput,
+          effective_input_hash: hash('input', effectiveInput),
+          attachment_manifest_json: attachmentManifest,
+          attachment_manifest_hash: hash('attachments', attachmentManifest),
+          deadline_at_ms: null,
+        },
+        now_ms: 2_002,
+        confirmed_revision_id: `revision:codex-e2e:${scenario.name}`,
+        confirmed_source_json: source,
+        confirmed_source_hash: compilation.source_hash,
+        confirmed_plan_hash: compilation.compiled_plan_hash,
+        resource_closure_hash: compilation.resource_closure_hash,
+        policy_ceiling_hash: compilation.policy_ceiling_hash,
+      });
 
-    const executionRoot = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'icarus-workspace-codex-e2e-'),
-    );
-    roots.push(executionRoot);
-    const executionStore = new WorkflowAdapterExecutionStore(
-      path.join(executionRoot, 'workflow-adapter-executions.db'),
-    );
-    const registry = new WorkflowExecutionAdapterRegistry();
-    let adapterStarts = 0;
-    registry.register({
-      refId: TASK_WORKSPACE_TEMPORARY_REFS.adapter.id,
-      preflight: async () => undefined,
-      start: async (context, request) => {
-        adapterStarts += 1;
-        expect(request.result_schema).toMatchObject(
-          TASK_WORKSPACE_TEMPORARY_REFS.resultSchema,
-        );
-        return {
-          providerMetadata: { source: 'temporary-codex-e2e' },
-          completion: Promise.resolve({
-            state: 'succeeded' as const,
-            result: {
-              format: 'icarus.workflow-agent-result/1' as const,
-              outcome: 'success' as const,
-              summary: 'Codex task completed',
-              provider: {
-                adapter: TASK_WORKSPACE_TEMPORARY_REFS.adapter.id,
-                execution_id: context.executionId,
-                metadata: { source: 'temporary-codex-e2e' },
+      const executionRoot = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'icarus-workspace-codex-e2e-'),
+      );
+      roots.push(executionRoot);
+      const executionStore = new WorkflowAdapterExecutionStore(
+        path.join(executionRoot, 'workflow-adapter-executions.db'),
+      );
+      const registry = new WorkflowExecutionAdapterRegistry();
+      let adapterStarts = 0;
+      let executionId: string | null = null;
+      registry.register({
+        refId: TASK_WORKSPACE_TEMPORARY_REFS.adapter.id,
+        preflight: async () => undefined,
+        start: async (context, request) => {
+          adapterStarts += 1;
+          executionId = context.executionId;
+          expect(request.result_schema).toMatchObject(
+            TASK_WORKSPACE_TEMPORARY_REFS.resultSchema,
+          );
+          return {
+            providerMetadata: { source: 'temporary-codex-e2e' },
+            completion: Promise.resolve({
+              state: scenario.adapterState,
+              result: {
+                format: 'icarus.workflow-agent-result/1' as const,
+                outcome: scenario.agentOutcome,
+                summary: `Codex task ${scenario.name}`,
+                provider: {
+                  adapter: TASK_WORKSPACE_TEMPORARY_REFS.adapter.id,
+                  execution_id: context.executionId,
+                  metadata: { source: 'temporary-codex-e2e' },
+                },
+                artifacts: [],
+                error:
+                  scenario.agentOutcome === 'success' ||
+                  scenario.agentOutcome === 'cancelled'
+                    ? null
+                    : {
+                        code:
+                          scenario.agentOutcome === 'blocked'
+                            ? 'codex_blocked'
+                            : 'codex_failed',
+                        message: `Codex task ${scenario.name}`,
+                        retryable: false,
+                      },
               },
-              artifacts: [],
-              error: null,
-            },
-          }),
-          cancel: async () => undefined,
-        };
-      },
-      recover: async () => {
-        throw new Error('Recovery is not expected');
-      },
-    } satisfies WorkflowExecutionAdapter);
-    let workerNow = 3_000;
-    const worker = new WorkflowExecutionWorker({
-      runtimeStore: store,
-      executionStore,
-      registry,
-      pollIntervalMs: 100,
-      leaseOwner: 'worker:temporary-codex-e2e',
-      now: () => workerNow,
-    });
-    const authority = new WorkflowRuntimeTransactionAuthority(store);
+            }),
+            cancel: async () => undefined,
+          };
+        },
+        recover: async () => {
+          throw new Error('Recovery is not expected');
+        },
+      } satisfies WorkflowExecutionAdapter);
+      let workerNow = 3_000;
+      const worker = new WorkflowExecutionWorker({
+        runtimeStore: store,
+        executionStore,
+        registry,
+        pollIntervalMs: 100,
+        leaseOwner: 'worker:temporary-codex-e2e',
+        now: () => workerNow,
+      });
+      const authority = new WorkflowRuntimeTransactionAuthority(store);
 
-    try {
-      for (let iteration = 0; iteration < 120; iteration += 1) {
-        for (const phase of [
-          'compile',
-          'materialize',
-          'reconcile',
-          'schedule',
-          'recover',
-          'close',
-        ] as const) {
-          authority.advance(phase, 32, workerNow);
-          workerNow += 1;
+      try {
+        await worker.start();
+        for (let iteration = 0; iteration < 120; iteration += 1) {
+          for (const phase of [
+            'compile',
+            'materialize',
+            'reconcile',
+            'schedule',
+            'recover',
+            'close',
+          ] as const) {
+            authority.advance(phase, 32, workerNow);
+            workerNow += 1;
+          }
+          await worker.tick();
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          const workflow = store.queryOne<{ status: string }>(
+            'SELECT status FROM workflows WHERE id = ?',
+            [receipt.workflowId],
+          );
+          if (workflow?.status !== 'active') break;
         }
-        await worker.tick();
-        await new Promise<void>((resolve) => setImmediate(resolve));
-        const workflow = store.queryOne<{ status: string }>(
-          'SELECT status FROM workflows WHERE id = ?',
-          [receipt.workflowId],
-        );
-        if (workflow?.status !== 'active') break;
-      }
 
-      expect(adapterStarts).toBe(1);
-      expect(
-        store.queryOne<{ count: number }>(
-          `SELECT count(*) AS count FROM workflow_outbox
+        expect(adapterStarts).toBe(1);
+        expect(executionId).not.toBeNull();
+        expect(executionStore.get(executionId!)).toMatchObject({
+          state: scenario.adapterState,
+          result: { outcome: scenario.agentOutcome },
+        });
+        expect(
+          store.queryOne<{ count: number }>(
+            `SELECT count(*) AS count FROM workflow_outbox
             WHERE adapter_resource_id = ? AND status = 'succeeded'`,
-          [
-            `registry-resource:outbox_adapter:${TASK_WORKSPACE_TEMPORARY_REFS.adapter.id}@${TASK_WORKSPACE_TEMPORARY_REFS.adapter.version}`,
-          ],
-        ),
-      ).toEqual({ count: 1 });
-      expect(
-        store.queryOne<{
-          phase: string;
-          execution_outcome: string | null;
-          acceptance_state: string;
-        }>(
-          `SELECT attempt.phase, attempt.execution_outcome,
+            [
+              `registry-resource:outbox_adapter:${TASK_WORKSPACE_TEMPORARY_REFS.adapter.id}@${TASK_WORKSPACE_TEMPORARY_REFS.adapter.version}`,
+            ],
+          ),
+        ).toEqual({ count: 1 });
+        expect(
+          store.queryOne<{ status: string; execution_lane: string }>(
+            `SELECT status, execution_lane
+             FROM workflow_graph_effect_operations
+            WHERE graph_run_id = ? AND node_id IN (
+              SELECT id FROM workflow_graph_nodes WHERE node_key = 'codex_task'
+            )`,
+            [receipt.activation.graphRunId],
+          ),
+        ).toEqual({
+          status: 'compensation_not_required',
+          execution_lane: 'close_cleanup',
+        });
+        expect(
+          store.queryOne<{
+            phase: string;
+            execution_outcome: string | null;
+            acceptance_state: string;
+          }>(
+            `SELECT attempt.phase, attempt.execution_outcome,
                   attempt.acceptance_state
              FROM workflow_graph_node_attempts attempt
              JOIN workflow_graph_nodes node ON node.id = attempt.node_id
             WHERE attempt.graph_run_id = ? AND node.node_key = 'codex_task'`,
-          [receipt.activation.graphRunId],
-        ),
-      ).toEqual({
-        phase: 'terminal',
-        execution_outcome: 'succeeded',
-        acceptance_state: 'fenced',
-      });
-      expect(
-        store.queryOne<{
-          status: string;
-          final_outcome_kind: string | null;
-        }>('SELECT status, final_outcome_kind FROM workflows WHERE id = ?', [
-          receipt.workflowId,
-        ]),
-      ).toEqual({ status: 'completed', final_outcome_kind: 'normal' });
-    } finally {
-      await worker.stop();
-      executionStore.close();
-    }
-  }, 30_000);
+            [receipt.activation.graphRunId],
+          ),
+        ).toEqual({
+          phase: 'terminal',
+          execution_outcome: scenario.attemptOutcome,
+          acceptance_state: 'fenced',
+        });
+        expect(
+          store.queryOne<{
+            terminal_status: string;
+            terminal_code: string | null;
+          }>(
+            `SELECT terminal_status, terminal_code
+             FROM workflow_graph_nodes
+            WHERE graph_run_id = ? AND node_key = 'codex_task'`,
+            [receipt.activation.graphRunId],
+          ),
+        ).toEqual({
+          terminal_status: scenario.attemptOutcome,
+          terminal_code: scenario.nodeError,
+        });
+        expect(
+          store.queryOne<{
+            status: string;
+            final_outcome_kind: string | null;
+            final_error_code: string | null;
+          }>(
+            `SELECT status, final_outcome_kind, final_error_code
+             FROM workflows WHERE id = ?`,
+            [receipt.workflowId],
+          ),
+        ).toEqual({
+          status: scenario.workflowStatus,
+          final_outcome_kind: scenario.workflowOutcome,
+          final_error_code: scenario.workflowError,
+        });
+        expect(
+          store.queryOne<{
+            lifecycle: string;
+            outcome_kind: string | null;
+            exit_name: string | null;
+          }>(
+            `SELECT lifecycle, outcome_kind, exit_name
+             FROM workflow_graph_runs WHERE id = ?`,
+            [receipt.activation.graphRunId],
+          ),
+        ).toEqual({
+          lifecycle: 'closed',
+          outcome_kind: 'completed',
+          exit_name: scenario.exit,
+        });
+        expect(
+          store.queryOne<{
+            outcome_kind: string | null;
+            exit_name: string | null;
+          }>(
+            `SELECT outcome_kind, exit_name
+             FROM workflow_graph_scopes
+            WHERE graph_run_id = ? AND scope_kind = 'expansion'`,
+            [receipt.activation.graphRunId],
+          ),
+        ).toEqual({ outcome_kind: 'completed', exit_name: scenario.exit });
+      } finally {
+        await worker.stop();
+        executionStore.close();
+      }
+    },
+    30_000,
+  );
 
   it('resolves a closed Workspace approval interaction with canonical replay', () => {
     const target = armedApprovalWait('accepted-duplicate-conflict');

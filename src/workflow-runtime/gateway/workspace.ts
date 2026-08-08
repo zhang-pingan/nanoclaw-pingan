@@ -1331,7 +1331,9 @@ export class RuntimeWorkspaceGateway {
         },
       ),
       risk_summary_json: {
-        effect_ceiling: 'read_only',
+        effect_ceiling: 'mutable_effects',
+        recovery_kind: 'idempotent',
+        file_access: 'workspace_write',
         node_count: nodes.length,
         requested_limits: source.requested_limits ?? null,
       },
@@ -2547,6 +2549,8 @@ export class RuntimeWorkspaceGateway {
           typeof recipe.effect_ceiling === 'string'
             ? recipe.effect_ceiling
             : (executionPolicyContent.effect_ceiling ?? 'unspecified'),
+        recovery_kind: executionPolicyContent.recovery_kind ?? null,
+        file_access: executionPolicyContent.file_access ?? null,
         node_count: nodes.length,
         human_input_points: waits.map((node) =>
           isObject(node) && typeof node.node_key === 'string'

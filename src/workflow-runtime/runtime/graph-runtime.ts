@@ -888,7 +888,9 @@ export function requestScopeCloseT7aInTransaction(
   for (const effect of effects) {
     const request = requestByScope.get(effect.scope_id)!;
     const compensationNotRequired =
-      effect.status !== 'succeeded' || effect.recovery_kind === 'pure';
+      effect.status !== 'succeeded' ||
+      effect.recovery_kind === 'pure' ||
+      effect.recovery_kind === 'idempotent';
     requireSingleChange(
       transaction.execute(
         `UPDATE workflow_graph_effect_operations

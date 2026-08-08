@@ -155,6 +155,20 @@ export class WorkflowExecutionWorker {
   async start(): Promise<void> {
     if (this.interval) return;
     this.stopping = false;
+    const readiness = await this.options.registry.preflightAll();
+    for (const [adapterRefId, state] of readiness) {
+      if (state.status === 'ready') {
+        this.log.info(
+          { adapterRefId },
+          'Workflow execution Adapter preflight succeeded',
+        );
+      } else if (state.status === 'unavailable') {
+        this.log.warn(
+          { adapterRefId, error: state.error },
+          'Workflow execution Adapter preflight failed; dependent Workflows are unavailable',
+        );
+      }
+    }
     await this.recover();
     await this.tick();
     this.interval = setInterval(
