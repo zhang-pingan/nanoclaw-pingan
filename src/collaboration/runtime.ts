@@ -5,6 +5,11 @@ import type { Logger } from 'pino';
 import type { RunOnceService } from './executors/run-once.js';
 import type { CollaborationWorkflowHostService } from './executors/workflow.js';
 import {
+  ManagedAnalysisExecutorRegistry,
+  RunOnceManagedAnalysisExecutor,
+} from './analysis-executor.js';
+import { CollaborationAnalysisService } from './analysis-service.js';
+import {
   ActionExecutorRegistry,
   CodexTaskActionExecutor,
   RunOnceActionExecutor,
@@ -26,6 +31,7 @@ export interface CollaborationRuntimeOptions {
   readonly storeDir: string;
   readonly defaultGitSshKeyPath?: string;
   readonly runOnceService: RunOnceService;
+  readonly analysisAgentJid?: string | null;
   readonly workflowHost?: CollaborationWorkflowHostService | null;
   readonly codex: {
     readonly binary: string;
@@ -54,6 +60,8 @@ export class CollaborationRuntime {
   private groupsValue: CollaborationProjectSpaceService | null = null;
   private schedulerValue: CollaborationScheduler | null = null;
   private registryValue: ActionExecutorRegistry | null = null;
+  private analysisValue: CollaborationAnalysisService | null = null;
+  private analysisExecutorsValue: ManagedAnalysisExecutorRegistry | null = null;
   private errorValue: string | null = null;
   private stopPromise: Promise<void> | null = null;
 
@@ -95,12 +103,33 @@ export class CollaborationRuntime {
           requestTimeoutMs: this.options.codex.requestTimeoutMs,
         }),
       );
+      const analysisExecutors = new ManagedAnalysisExecutorRegistry();
+      if (this.options.analysisAgentJid)
+        analysisExecutors.register(
+          new RunOnceManagedAnalysisExecutor(this.options.runOnceService, {
+            executorId: 'analysis_run_once',
+            displayName: 'Icarus Managed Agent',
+            agentJid: this.options.analysisAgentJid,
+            temporaryRoot: path.join(
+              this.options.storeDir,
+              'collaboration-analysis-workspaces',
+            ),
+          }),
+        );
+      const analysis = new CollaborationAnalysisService(
+        store,
+        groups,
+        analysisExecutors,
+        { now: this.options.now },
+      );
       const scheduler = new CollaborationScheduler(store, groups, registry, {
         now: this.options.now,
       });
       this.storeValue = store;
       this.groupsValue = groups;
       this.registryValue = registry;
+      this.analysisValue = analysis;
+      this.analysisExecutorsValue = analysisExecutors;
       this.schedulerValue = scheduler;
       this.errorValue = null;
       scheduler.start();
@@ -121,6 +150,8 @@ export class CollaborationRuntime {
       this.groupsValue = null;
       this.schedulerValue = null;
       this.registryValue = null;
+      this.analysisValue = null;
+      this.analysisExecutorsValue = null;
       this.options.logger.error(
         { error: this.errorValue, databasePath: this.databasePath },
         'Collaboration project-space v3 Runtime is unavailable',
@@ -134,7 +165,9 @@ export class CollaborationRuntime {
     const store = this.storeValue;
     if (!store) return;
     const scheduler = this.schedulerValue;
+    const analysis = this.analysisValue;
     const stopping = (async () => {
+      await analysis?.stopAndDrain();
       await scheduler?.stopAndDrain();
       store.close();
       if (this.storeValue !== store) return;
@@ -142,6 +175,8 @@ export class CollaborationRuntime {
       this.groupsValue = null;
       this.schedulerValue = null;
       this.registryValue = null;
+      this.analysisValue = null;
+      this.analysisExecutorsValue = null;
     })();
     this.stopPromise = stopping;
     try {
@@ -194,6 +229,22 @@ export class CollaborationRuntime {
       throw new Error('Collaboration Executor Registry is unavailable');
     }
     return this.registryValue;
+  }
+
+  get analysis(): CollaborationAnalysisService {
+    if (!this.analysisValue) {
+      void this.store;
+      throw new Error('Collaboration Analysis Service is unavailable');
+    }
+    return this.analysisValue;
+  }
+
+  get analysisExecutors(): ManagedAnalysisExecutorRegistry {
+    if (!this.analysisExecutorsValue) {
+      void this.store;
+      throw new Error('Managed Analysis Executor registry is unavailable');
+    }
+    return this.analysisExecutorsValue;
   }
 
   async createBackup(

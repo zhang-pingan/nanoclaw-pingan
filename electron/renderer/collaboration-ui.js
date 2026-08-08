@@ -48,7 +48,8 @@ export function collaborationCanMutate(group) {
     group.localPrincipalId &&
     group.localClientId &&
     collaborationLocalMembershipStatus(group) === 'active' &&
-    (!group?.icarusIdentity?.credentialId || localCredential?.status === 'active') &&
+    (!group?.icarusIdentity?.credentialId ||
+      localCredential?.status === 'active') &&
     group.lifecycle !== 'archived',
   );
 }
@@ -59,6 +60,201 @@ export function collaborationCanApproveMembers(group) {
   const grants =
     group.projection?.permissionGrants?.[group.localPrincipalId]?.grants || [];
   return grants.includes('member:approve') || grants.includes('group:admin');
+}
+
+export function collaborationCanAnswerWorkItemAssignment(group, item) {
+  return Boolean(
+    collaborationCanMutate(group) &&
+    item?.assignment_status === 'pending' &&
+    item.owner_principal_id === group.localPrincipalId,
+  );
+}
+
+function collaborationExpectedRevision(value) {
+  const revision = Number(value);
+  if (!Number.isInteger(revision) || revision < 0)
+    throw new Error('expectedRevision 必须是非负整数');
+  return revision;
+}
+
+function collaborationUniqueIdentifiers(values, maximum, label) {
+  if (!Array.isArray(values)) throw new Error(`${label} 必须是数组`);
+  const identifiers = [
+    ...new Set(
+      values.map((value) => String(value || '').trim()).filter(Boolean),
+    ),
+  ];
+  if (identifiers.length > maximum)
+    throw new Error(`${label} 最多包含 ${maximum} 项`);
+  if (identifiers.some((value) => value.length > 240))
+    throw new Error(`${label} 包含过长标识符`);
+  return identifiers;
+}
+
+export function buildCollaborationAssignmentDecisionRequest(input) {
+  const accepted = Boolean(input.accepted);
+  const reason = String(input.reason || '').trim();
+  return {
+    expectedRevision: collaborationExpectedRevision(input.expectedRevision),
+    ...(!accepted && reason ? { reason } : {}),
+  };
+}
+
+export function buildCollaborationDiscussionMessageRequest(input) {
+  const body = String(input.body || '').trim();
+  if (!body) throw new Error('消息内容不能为空');
+  return {
+    expectedRevision: collaborationExpectedRevision(input.expectedRevision),
+    body,
+    mentions: collaborationUniqueIdentifiers(
+      input.mentions || [],
+      100,
+      '提及成员',
+    ),
+    ...(input.refs
+      ? {
+          refs: collaborationUniqueIdentifiers(input.refs, 100, '引用资源'),
+        }
+      : {}),
+  };
+}
+
+export function buildCollaborationAnalysisRunRequest(input) {
+  const scopeType = String(input.scopeType || input.scope?.type || '').trim();
+  const resourceId = String(input.resourceId || '').trim();
+  let scope;
+  if (scopeType === 'project' || scopeType === 'mine')
+    scope = { type: scopeType };
+  else if (scopeType === 'work_item') {
+    if (!resourceId) throw new Error('Work Item 分析必须选择工作项');
+    scope = { type: scopeType, work_item_id: resourceId };
+  } else if (scopeType === 'workflow_instance') {
+    if (!resourceId) throw new Error('Workflow 分析必须选择工作流实例');
+    scope = { type: scopeType, workflow_instance_id: resourceId };
+  } else throw new Error('不支持的分析范围');
+
+  const executionChannel = String(input.executionChannel || '').trim();
+  if (!['managed_executor', 'external_agent'].includes(executionChannel))
+    throw new Error('不支持的分析执行渠道');
+  const executorId = String(input.executorId || '').trim();
+  if (executionChannel === 'managed_executor' && !executorId)
+    throw new Error('托管分析必须选择本地 Executor');
+  if (executionChannel === 'external_agent' && executorId)
+    throw new Error('外部分析不能绑定本地 Executor');
+
+  return {
+    scope,
+    executionChannel,
+    executorId: executionChannel === 'managed_executor' ? executorId : null,
+    selectedFileIds: collaborationUniqueIdentifiers(
+      input.selectedFileIds || [],
+      1000,
+      '导出文件',
+    ),
+    includeSelectedFileContents: Boolean(input.includeSelectedFileContents),
+  };
+}
+
+export function parseCollaborationExternalResult(value) {
+  const raw = String(value || '');
+  if (!raw.trim()) throw new Error('外部分析结果不能为空');
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('外部分析结果必须是一个完整 JSON 对象');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+    throw new Error('外部分析结果必须是一个 JSON 对象');
+  return parsed;
+}
+
+export function buildCollaborationExternalResultRequest(value) {
+  parseCollaborationExternalResult(value);
+  return String(value).trim();
+}
+
+export function buildCollaborationFindingDecisionRequest(input) {
+  const decision = String(input.decision || '').trim();
+  if (!['accepted', 'deferred', 'ignored', 'false_positive'].includes(decision))
+    throw new Error('不支持的 Finding 决定');
+  const reason = String(input.reason || '').trim();
+  if (reason.length > 4000) throw new Error('决定原因最多 4000 个字符');
+  return { decision, ...(reason ? { reason } : {}) };
+}
+
+export function buildCollaborationActionPreviewRequest(input) {
+  const actions = (input.actions || []).map((entry) => {
+    const requestId = String(entry.requestId || '').trim();
+    const findingId = String(entry.findingId || '').trim();
+    const actionOrdinal = Number(entry.actionOrdinal);
+    if (
+      !requestId ||
+      !findingId ||
+      !Number.isInteger(actionOrdinal) ||
+      actionOrdinal < 0
+    )
+      throw new Error('建议动作缺少 Finding 或序号');
+    if (
+      !entry.action ||
+      typeof entry.action !== 'object' ||
+      Array.isArray(entry.action)
+    )
+      throw new Error('建议动作必须是对象');
+    return { requestId, findingId, actionOrdinal, action: entry.action };
+  });
+  if (!actions.length) throw new Error('请明确选择至少一个建议动作');
+  if (actions.length > 100) throw new Error('一次最多预览 100 个建议动作');
+  return { actions };
+}
+
+export function buildCollaborationActionApplyRequest(input) {
+  const actions = (input.actions || []).map((entry) => {
+    const applicationId = String(entry.applicationId || '').trim();
+    const confirmationToken = String(entry.confirmationToken || '').trim();
+    if (!applicationId || confirmationToken.length < 32)
+      throw new Error('动作确认信息无效，请重新预览');
+    return {
+      applicationId,
+      confirmationToken,
+      ...(entry.action ? { action: entry.action } : {}),
+    };
+  });
+  if (!actions.length) throw new Error('请逐项确认至少一个预览动作');
+  if (actions.length > 100) throw new Error('一次最多应用 100 个建议动作');
+  return { actions };
+}
+
+export function collaborationAnalysisRunAccess(group, detail) {
+  const status = detail?.run?.status;
+  const stale = detail?.stale === true || status === 'stale';
+  const external = detail?.run?.executionChannel === 'external_agent';
+  const mutable = collaborationCanMutate(group);
+  return {
+    canStart: status === 'prepared',
+    canRetry: ['invalid', 'failed'].includes(status),
+    canCancel:
+      status === 'prepared' ||
+      (external && status === 'awaiting_external_result'),
+    canCompleteReview: ['ready_for_review', 'partially_applied'].includes(
+      status,
+    ),
+    canSubmitExternal:
+      external && ['awaiting_external_result', 'invalid'].includes(status),
+    canExportExternal: external && status === 'awaiting_external_result',
+    canDecideFinding: [
+      'ready_for_review',
+      'partially_applied',
+      'stale',
+    ].includes(status),
+    canPreviewActions:
+      mutable &&
+      !stale &&
+      ['ready_for_review', 'partially_applied'].includes(status),
+    canApplyActions:
+      mutable &&
+      ['ready_for_review', 'partially_applied', 'stale'].includes(status),
+  };
 }
 
 export function collaborationCanCreateTurn(group, instance, definition) {
@@ -336,6 +532,97 @@ export function collaborationPendingNotifications(detail) {
   );
 }
 
+export function collaborationResourceTarget(
+  resourceType,
+  resourceId,
+  projection = null,
+) {
+  const type = String(resourceType || '').trim();
+  const id = String(resourceId || '').trim();
+  if (!type || !id)
+    return { tab: 'overview', resourceType: type, resourceId: id };
+  if (type === 'work_item')
+    return {
+      tab: 'work-items',
+      resourceType: type,
+      resourceId: id,
+      selectedWorkItemId: id,
+    };
+  if (type === 'discussion')
+    return {
+      tab: 'discussions',
+      resourceType: type,
+      resourceId: id,
+      selectedDiscussionId: id,
+    };
+  if (type === 'workflow_instance')
+    return {
+      tab: 'workflows',
+      resourceType: type,
+      resourceId: id,
+      selectedInstanceId: id,
+    };
+  if (type === 'turn') {
+    const turn = projection?.turns?.[id];
+    return {
+      tab: 'workflows',
+      resourceType: type,
+      resourceId: id,
+      selectedInstanceId: turn?.workflow_instance_id || '',
+    };
+  }
+  if (type === 'analysis_run')
+    return {
+      tab: 'analysis',
+      resourceType: type,
+      resourceId: id,
+      selectedAnalysisId: id,
+    };
+  if (type === 'file')
+    return { tab: 'files', resourceType: type, resourceId: id };
+  if (type === 'event')
+    return { tab: 'audit', resourceType: type, resourceId: id };
+  if (type === 'message') {
+    const thread = Object.values(projection?.discussions || {}).find((entry) =>
+      Object.hasOwn(entry?.messages || {}, id),
+    );
+    return {
+      tab: 'discussions',
+      resourceType: type,
+      resourceId: id,
+      selectedDiscussionId: thread?.discussion?.thread_id || '',
+    };
+  }
+  if (type === 'workflow_definition')
+    return { tab: 'workflows', resourceType: type, resourceId: id };
+  if (
+    [
+      'recovery',
+      'recovery_request',
+      'membership',
+      'credential',
+      'client',
+    ].includes(type)
+  )
+    return { tab: 'members', resourceType: type, resourceId: id };
+  if (type === 'principal')
+    return { tab: 'members', resourceType: type, resourceId: id };
+  if (['protocol', 'integrity', 'sync', 'group'].includes(type))
+    return { tab: 'diagnostics', resourceType: type, resourceId: id };
+  return { tab: 'overview', resourceType: type, resourceId: id };
+}
+
+export function collaborationNotificationTarget(
+  notification,
+  projection = null,
+) {
+  return collaborationResourceTarget(
+    notification?.resourceType,
+    notification?.resourceId,
+    projection,
+  );
+}
+
 export function collaborationAuditEventTimeline(events) {
   return [...(events || [])].sort(
     (left, right) =>
@@ -380,4 +667,8 @@ export function collaborationWorkItemColumns(items) {
       ),
     );
   return columns;
+}
+
+export function collaborationResourceNavigation(resourceType, resourceId) {
+  return collaborationResourceTarget(resourceType, resourceId);
 }

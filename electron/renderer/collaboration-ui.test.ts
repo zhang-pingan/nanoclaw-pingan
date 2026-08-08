@@ -15,6 +15,7 @@ import {
   collaborationArtifactName,
   collaborationAuditEventTimeline,
   collaborationCanApproveMembers,
+  collaborationCanAnswerWorkItemAssignment,
   collaborationCanDecideRecovery,
   collaborationCanCreateTurn,
   collaborationCanMutate,
@@ -26,6 +27,8 @@ import {
   collaborationLocalCredential,
   collaborationOutcomeRoutes,
   collaborationPendingNotifications,
+  collaborationNotificationTarget,
+  collaborationResourceTarget,
   collaborationPrincipalName,
   collaborationShortId,
   stageCollaborationArtifactFiles,
@@ -34,7 +37,16 @@ import {
   collaborationTurnHistory,
   buildCollaborationStartTurnRequest,
   buildCollaborationCompleteTurnRequest,
+  buildCollaborationAssignmentDecisionRequest,
+  buildCollaborationDiscussionMessageRequest,
+  buildCollaborationAnalysisRunRequest,
+  buildCollaborationExternalResultRequest,
+  buildCollaborationFindingDecisionRequest,
+  buildCollaborationActionPreviewRequest,
+  buildCollaborationActionApplyRequest,
   collaborationTurnCompletionDraft,
+  collaborationAnalysisRunAccess,
+  parseCollaborationExternalResult,
   collaborationVerifiedFileTree,
   collaborationWorkItemColumns,
 } from './collaboration-ui.js';
@@ -48,6 +60,14 @@ describe('Collaboration project-space v3 UI helpers', () => {
     );
     expect(collaborationAggregateLabel('work_item')).toBe('工作项');
     expect(collaborationPermissionLabel('member:approve')).toBe('审批成员');
+    expect(collaborationStatusLabel('awaiting_external_result')).toBe(
+      '等待外部结果',
+    );
+    expect(collaborationLabel('dependency_risk')).toBe('依赖风险');
+    expect(collaborationLabel('publish_analysis_report')).toBe(
+      '发布 Markdown 报告',
+    );
+    expect(collaborationLabel('discussion_mention')).toBe('讨论中提及了你');
     expect(collaborationLabel('Git')).toBe('Git');
     expect(collaborationLabel('Codex')).toBe('Codex');
   });
@@ -60,6 +80,13 @@ describe('Collaboration project-space v3 UI helpers', () => {
     expect(
       parseCollaborationRoute('/groups/group%3Arelease%2Fone/work-items'),
     ).toEqual({ groupId: 'group:release/one', tab: 'work-items' });
+    expect(collaborationRoute('group_1', 'analysis')).toBe(
+      '/groups/group_1/analysis',
+    );
+    expect(parseCollaborationRoute('/groups/group_1/analysis')).toEqual({
+      groupId: 'group_1',
+      tab: 'analysis',
+    });
   });
 
   it('makes Observer mode explicit and read only', () => {
@@ -214,6 +241,301 @@ describe('Collaboration project-space v3 UI helpers', () => {
     ).toBe(false);
   });
 
+  it('only lets the pending owner answer a Work Item assignment', () => {
+    const group = {
+      subscriptionMode: 'member',
+      lifecycle: 'active',
+      localPrincipalId: 'principal_alice',
+      localClientId: 'client_alice',
+      projection: {
+        members: { principal_alice: { status: 'active' } },
+      },
+    };
+    expect(
+      collaborationCanAnswerWorkItemAssignment(group, {
+        owner_principal_id: 'principal_alice',
+        assignment_status: 'pending',
+      }),
+    ).toBe(true);
+    expect(
+      collaborationCanAnswerWorkItemAssignment(group, {
+        owner_principal_id: 'principal_bob',
+        assignment_status: 'pending',
+      }),
+    ).toBe(false);
+    expect(
+      collaborationCanAnswerWorkItemAssignment(
+        { ...group, subscriptionMode: 'observer' },
+        {
+          owner_principal_id: 'principal_alice',
+          assignment_status: 'pending',
+        },
+      ),
+    ).toBe(false);
+    expect(
+      buildCollaborationAssignmentDecisionRequest({
+        expectedRevision: 4,
+        accepted: true,
+        reason: 'ignored for acceptance',
+      }),
+    ).toEqual({ expectedRevision: 4 });
+    expect(
+      buildCollaborationAssignmentDecisionRequest({
+        expectedRevision: 4,
+        accepted: false,
+        reason: 'Capacity conflict',
+      }),
+    ).toEqual({ expectedRevision: 4, reason: 'Capacity conflict' });
+  });
+
+  it('builds Discussion messages with structured deduplicated Principal ids', () => {
+    expect(
+      buildCollaborationDiscussionMessageRequest({
+        expectedRevision: 3,
+        body: ' Please review ',
+        mentions: ['principal_bob', 'principal_bob', 'principal_carol'],
+      }),
+    ).toEqual({
+      expectedRevision: 3,
+      body: 'Please review',
+      mentions: ['principal_bob', 'principal_carol'],
+    });
+    expect(() =>
+      buildCollaborationDiscussionMessageRequest({
+        expectedRevision: 3,
+        body: ' ',
+        mentions: [],
+      }),
+    ).toThrow(/不能为空/u);
+  });
+
+  it('builds cross-field-safe Analysis Run requests', () => {
+    expect(
+      buildCollaborationAnalysisRunRequest({
+        scopeType: 'work_item',
+        resourceId: 'wi_release',
+        executionChannel: 'managed_executor',
+        executorId: 'analysis_local',
+        selectedFileIds: ['file_a', 'file_a', 'file_b'],
+      }),
+    ).toEqual({
+      scope: { type: 'work_item', work_item_id: 'wi_release' },
+      executionChannel: 'managed_executor',
+      executorId: 'analysis_local',
+      selectedFileIds: ['file_a', 'file_b'],
+      includeSelectedFileContents: false,
+    });
+    expect(
+      buildCollaborationAnalysisRunRequest({
+        scopeType: 'mine',
+        executionChannel: 'external_agent',
+      }),
+    ).toEqual({
+      scope: { type: 'mine' },
+      executionChannel: 'external_agent',
+      executorId: null,
+      selectedFileIds: [],
+      includeSelectedFileContents: false,
+    });
+    expect(() =>
+      buildCollaborationAnalysisRunRequest({
+        scopeType: 'workflow_instance',
+        executionChannel: 'external_agent',
+      }),
+    ).toThrow(/选择工作流实例/u);
+    expect(() =>
+      buildCollaborationAnalysisRunRequest({
+        scopeType: 'project',
+        executionChannel: 'managed_executor',
+      }),
+    ).toThrow(/选择本地 Executor/u);
+    expect(() =>
+      buildCollaborationAnalysisRunRequest({
+        scopeType: 'project',
+        executionChannel: 'external_agent',
+        executorId: 'must_not_escape',
+      }),
+    ).toThrow(/不能绑定/u);
+  });
+
+  it('strictly parses one external JSON object without extracting Markdown', () => {
+    expect(
+      parseCollaborationExternalResult(' {"analysis_id":"analysis_1"} '),
+    ).toEqual({ analysis_id: 'analysis_1' });
+    expect(() =>
+      parseCollaborationExternalResult(
+        '```json\n{"analysis_id":"analysis_1"}\n```',
+      ),
+    ).toThrow(/完整 JSON 对象/u);
+    expect(() => parseCollaborationExternalResult('[]')).toThrow(/JSON 对象/u);
+    expect(() =>
+      parseCollaborationExternalResult('{"analysis_id":"analysis_1"} trailing'),
+    ).toThrow(/完整 JSON 对象/u);
+    expect(
+      buildCollaborationExternalResultRequest(
+        '{\n  "analysis_id": "analysis_1"\n}',
+      ),
+    ).toBe('{\n  "analysis_id": "analysis_1"\n}');
+    expect(
+      buildCollaborationExternalResultRequest(
+        '{"analysis_id":"analysis_1","analysis_id":"forged"}',
+      ),
+    ).toContain('"analysis_id":"analysis_1","analysis_id":"forged"');
+  });
+
+  it('builds explicit Finding decisions and two-step Action confirmation', () => {
+    expect(
+      buildCollaborationFindingDecisionRequest({
+        decision: 'false_positive',
+        reason: 'Evidence is obsolete',
+      }),
+    ).toEqual({ decision: 'false_positive', reason: 'Evidence is obsolete' });
+    const action = {
+      action: 'create_work_item',
+      parameters: { type: 'issue', title: 'Investigate' },
+    };
+    expect(
+      buildCollaborationActionPreviewRequest({
+        actions: [
+          {
+            requestId: 'preview_request_1',
+            findingId: 'finding_1',
+            actionOrdinal: 0,
+            action,
+          },
+        ],
+      }),
+    ).toEqual({
+      actions: [
+        {
+          requestId: 'preview_request_1',
+          findingId: 'finding_1',
+          actionOrdinal: 0,
+          action,
+        },
+      ],
+    });
+    expect(() =>
+      buildCollaborationActionPreviewRequest({ actions: [] }),
+    ).toThrow(/明确选择/u);
+    expect(
+      buildCollaborationActionApplyRequest({
+        actions: [
+          {
+            applicationId: 'application_1',
+            confirmationToken: 'x'.repeat(32),
+            action,
+          },
+        ],
+      }),
+    ).toEqual({
+      actions: [
+        {
+          applicationId: 'application_1',
+          confirmationToken: 'x'.repeat(32),
+          action,
+        },
+      ],
+    });
+    expect(() => buildCollaborationActionApplyRequest({ actions: [] })).toThrow(
+      /逐项确认/u,
+    );
+  });
+
+  it('routes evidence and notifications to exact Project Space views', () => {
+    const projection = {
+      discussions: {
+        discussion_1: {
+          discussion: { thread_id: 'discussion_1' },
+          messages: { message_1: { message_id: 'message_1' } },
+        },
+      },
+      turns: {
+        turn_1: {
+          turn_id: 'turn_1',
+          workflow_instance_id: 'workflow_1',
+        },
+      },
+    };
+    expect(
+      collaborationResourceTarget('turn', 'turn_1', projection),
+    ).toMatchObject({ tab: 'workflows', selectedInstanceId: 'workflow_1' });
+    expect(
+      collaborationResourceTarget('message', 'message_1', projection),
+    ).toMatchObject({
+      tab: 'discussions',
+      selectedDiscussionId: 'discussion_1',
+    });
+    expect(collaborationResourceTarget('file', 'file_1')).toMatchObject({
+      tab: 'files',
+    });
+    expect(collaborationResourceTarget('event', 'event_1')).toMatchObject({
+      tab: 'audit',
+    });
+    expect(
+      collaborationResourceTarget('principal', 'principal_1'),
+    ).toMatchObject({ tab: 'members' });
+    expect(
+      collaborationNotificationTarget(
+        { resourceType: 'analysis_run', resourceId: 'analysis_1' },
+        projection,
+      ),
+    ).toMatchObject({ tab: 'analysis', selectedAnalysisId: 'analysis_1' });
+  });
+
+  it('keeps Observer read-only while stale reviews still require Host CAS', () => {
+    const activeGroup = {
+      subscriptionMode: 'member',
+      lifecycle: 'active',
+      localPrincipalId: 'principal_alice',
+      localClientId: 'client_alice',
+      projection: {
+        members: { principal_alice: { status: 'active' } },
+      },
+    };
+    const detail = {
+      run: {
+        status: 'ready_for_review',
+        executionChannel: 'managed_executor',
+      },
+      stale: false,
+    };
+    expect(collaborationAnalysisRunAccess(activeGroup, detail)).toMatchObject({
+      canDecideFinding: true,
+      canPreviewActions: true,
+      canApplyActions: true,
+    });
+    expect(
+      collaborationAnalysisRunAccess(
+        { ...activeGroup, subscriptionMode: 'observer' },
+        detail,
+      ),
+    ).toMatchObject({
+      canDecideFinding: true,
+      canPreviewActions: false,
+      canApplyActions: false,
+    });
+    expect(
+      collaborationAnalysisRunAccess(activeGroup, { ...detail, stale: true }),
+    ).toMatchObject({ canPreviewActions: false, canApplyActions: true });
+    expect(
+      collaborationAnalysisRunAccess(activeGroup, {
+        run: {
+          status: 'running',
+          executionChannel: 'managed_executor',
+        },
+      }),
+    ).toMatchObject({ canCancel: false });
+    expect(
+      collaborationAnalysisRunAccess(activeGroup, {
+        run: {
+          status: 'awaiting_external_result',
+          executionChannel: 'external_agent',
+        },
+      }),
+    ).toMatchObject({ canCancel: true });
+  });
+
   it('uses stable short IDs and Credential state for recovery authority', () => {
     const principalId = 'principal_00000000-0000-4000-8000-000000000001';
     const group = {
@@ -236,9 +558,7 @@ describe('Collaboration project-space v3 UI helpers', () => {
         permissionGrants: {},
       },
     };
-    expect(collaborationShortId(principalId)).toBe(
-      'principal_00000000...0001',
-    );
+    expect(collaborationShortId(principalId)).toBe('principal_00000000...0001');
     expect(collaborationLocalCredential(group)).toMatchObject({
       status: 'active',
     });
@@ -571,6 +891,29 @@ describe('Collaboration project-space v3 UI helpers', () => {
         ],
       }),
     ).toHaveLength(1);
+    expect(
+      collaborationNotificationTarget(
+        { resourceType: 'turn', resourceId: 'turn_1' },
+        {
+          turns: {
+            turn_1: { workflow_instance_id: 'instance_1' },
+          },
+        },
+      ),
+    ).toMatchObject({
+      tab: 'workflows',
+      selectedInstanceId: 'instance_1',
+      resourceId: 'turn_1',
+    });
+    expect(
+      collaborationResourceTarget('analysis_run', 'analysis_1'),
+    ).toMatchObject({
+      tab: 'analysis',
+      selectedAnalysisId: 'analysis_1',
+    });
+    expect(collaborationResourceTarget('protocol', 'group_1')).toMatchObject({
+      tab: 'diagnostics',
+    });
     expect(
       collaborationAuditEventTimeline([
         { event_id: 'event_2', commit_order: 2 },

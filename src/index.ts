@@ -2906,6 +2906,7 @@ async function main(): Promise<void> {
     storeDir: STORE_DIR,
     defaultGitSshKeyPath: SSH_KEY_PATH ?? undefined,
     runOnceService: internalRunOnceService,
+    analysisAgentJid: resolveAssistantActionJid(),
     workflowHost: workflowRuntimeStore
       ? new WorkflowExecutionHostService(workflowRuntimeStore)
       : null,

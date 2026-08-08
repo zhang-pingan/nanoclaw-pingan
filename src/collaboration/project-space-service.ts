@@ -1039,6 +1039,7 @@ export class CollaborationProjectSpaceService {
   async postProgress(input: {
     readonly groupId: string;
     readonly expectedRevision: number;
+    readonly updateId?: string;
     readonly summary: string;
     readonly completed?: readonly string[];
     readonly inProgress?: readonly string[];
@@ -1059,7 +1060,7 @@ export class CollaborationProjectSpaceService {
       payload: {
         update: {
           format: 'icarus.collaboration-progress-update/1',
-          update_id: newId('update'),
+          update_id: input.updateId ?? newId('update'),
           principal_id: group.localPrincipalId,
           summary: input.summary,
           completed: input.completed ?? [],
@@ -2715,6 +2716,27 @@ export class CollaborationProjectSpaceService {
         code: 'SYNC_VALIDATION_FAILED',
         message: error instanceof Error ? error.message : String(error),
       });
+      if (group.localPrincipalId && group.localClientId)
+        this.store.enqueueNotification({
+          groupId,
+          recipientPrincipalId: group.localPrincipalId,
+          recipientClientId: group.localClientId,
+          kind: 'protocol_sync_failure',
+          resourceType: 'protocol',
+          resourceId: groupId,
+          reason: 'verified_sync_failed',
+          dedupeKey: `protocol-sync:${group.lastVerifiedHead ?? 'none'}:${crypto
+            .createHash('sha256')
+            .update(error instanceof Error ? error.message : String(error))
+            .digest('hex')
+            .slice(0, 16)}`,
+          severity: 'critical',
+          payload: {
+            last_verified_head: group.lastVerifiedHead,
+            error_class: error instanceof Error ? error.name : 'Error',
+          },
+          nowMs: this.now(),
+        });
       throw error;
     }
   }
@@ -2980,6 +3002,7 @@ export class CollaborationProjectSpaceService {
     groupId: string,
     history: ValidatedProjectSpaceHistory,
   ): void {
+    const previousProjection = this.store.getGroup(groupId)?.projection ?? null;
     const knownEventIds = new Set(
       this.store
         .listEventRecords(groupId)
@@ -3103,6 +3126,235 @@ export class CollaborationProjectSpaceService {
         continue;
       }
       if (
+        record.event.aggregate_type === 'work_item' &&
+        [
+          'work_item_created',
+          'work_item_assignment_changed',
+          'work_item_assignment_acknowledged',
+          'work_item_assignment_declined',
+          'work_item_status_changed',
+          'work_item_relation_changed',
+          'work_item_details_updated',
+        ].includes(record.event.event_type)
+      ) {
+        const item = history.projection.workItems[record.event.aggregate_id];
+        if (!item) continue;
+        const localIsOwner = item.owner_principal_id === group.localPrincipalId;
+        const localIsWatcher = item.watchers.includes(group.localPrincipalId);
+        const activeBlockers = item.blocked_by.filter((id) => {
+          const blocker = history.projection.workItems[id];
+          return (
+            blocker &&
+            !blocker.archived &&
+            !['done', 'cancelled'].includes(blocker.status)
+          );
+        });
+        const currentlyBlocked =
+          item.status === 'blocked' || activeBlockers.length > 0;
+        if (
+          localIsOwner &&
+          item.assignment_status === 'pending' &&
+          ['work_item_created', 'work_item_assignment_changed'].includes(
+            record.event.event_type,
+          )
+        )
+          this.store.enqueueNotification({
+            groupId,
+            recipientPrincipalId: group.localPrincipalId,
+            recipientClientId: group.localClientId,
+            kind: 'work_item_assignment',
+            resourceType: 'work_item',
+            resourceId: item.work_item_id,
+            reason: 'assignment_confirmation_required',
+            dedupeKey: `work-item-assignment:${item.work_item_id}:${String(item.revision)}`,
+            severity: ['high', 'urgent'].includes(item.priority)
+              ? 'high'
+              : 'medium',
+            dueAtMs: item.due_at ? Date.parse(item.due_at) : null,
+            payload: {
+              title: item.title,
+              assignment_status: item.assignment_status,
+              priority: item.priority,
+            },
+            nowMs: this.now(),
+          });
+        if (localIsOwner && currentlyBlocked)
+          this.store.enqueueNotification({
+            groupId,
+            recipientPrincipalId: group.localPrincipalId,
+            recipientClientId: group.localClientId,
+            kind: 'work_item_blocked',
+            resourceType: 'work_item',
+            resourceId: item.work_item_id,
+            reason: 'active_blocker',
+            dedupeKey: `work-item-blocked:${item.work_item_id}:${activeBlockers
+              .map((id) => {
+                const blocker = history.projection.workItems[id]!;
+                return `${id}@${String(blocker.revision)}:${blocker.status}`;
+              })
+              .sort()
+              .join(',')}:${item.status}`,
+            severity: ['high', 'urgent'].includes(item.priority)
+              ? 'high'
+              : 'medium',
+            payload: {
+              title: item.title,
+              status: item.status,
+              active_blocker_ids: activeBlockers,
+            },
+            nowMs: this.now(),
+          });
+        if (
+          record.event.actor.principal_id !== group.localPrincipalId &&
+          (localIsOwner || localIsWatcher) &&
+          ['work_item_status_changed', 'work_item_assignment_changed'].includes(
+            record.event.event_type,
+          )
+        )
+          this.store.enqueueNotification({
+            groupId,
+            recipientPrincipalId: group.localPrincipalId,
+            recipientClientId: group.localClientId,
+            kind: 'work_item_status_change',
+            resourceType: 'work_item',
+            resourceId: item.work_item_id,
+            reason: item.status,
+            dedupeKey: `work-item-status:${item.work_item_id}:${String(item.revision)}:${item.status}`,
+            severity:
+              item.status === 'blocked' ||
+              (item.due_at && Date.parse(item.due_at) <= this.now())
+                ? 'high'
+                : 'low',
+            payload: {
+              title: item.title,
+              status: item.status,
+              assignment_status: item.assignment_status,
+            },
+            nowMs: this.now(),
+          });
+        continue;
+      }
+      if (
+        record.event.aggregate_type === 'workflow_instance' &&
+        [
+          'workflow_instance_started',
+          'workflow_instance_resumed',
+          'workflow_state_assignee_changed',
+          'turn_completed',
+          'turn_cancelled',
+          'turn_recovered',
+        ].includes(record.event.event_type)
+      ) {
+        const instance =
+          history.projection.workflowInstances[record.event.aggregate_id];
+        if (
+          instance?.lifecycle === 'running' &&
+          !instance.active_turn_id &&
+          instance.resolved_assignments[instance.business_state] ===
+            group.localPrincipalId
+        )
+          this.store.enqueueNotification({
+            groupId,
+            recipientPrincipalId: group.localPrincipalId,
+            recipientClientId: group.localClientId,
+            kind: 'workflow_state_action',
+            resourceType: 'workflow_instance',
+            resourceId: instance.instance_id,
+            reason: 'state_assignment_ready',
+            dedupeKey: `workflow-state:${instance.instance_id}:${String(instance.revision)}:${instance.business_state}`,
+            severity: 'medium',
+            payload: {
+              state_id: instance.business_state,
+              lifecycle: instance.lifecycle,
+            },
+            nowMs: this.now(),
+          });
+        continue;
+      }
+      if (
+        [
+          'turn_created',
+          'action_waiting_input',
+          'action_waiting_approval',
+          'action_completed',
+          'turn_recovery_requested',
+        ].includes(record.event.event_type)
+      ) {
+        const parsedTurn = collaborationTurnV3Schema.safeParse(
+          record.event.payload.turn,
+        );
+        const instance =
+          history.projection.workflowInstances[record.event.aggregate_id];
+        const turn = parsedTurn.success
+          ? parsedTurn.data
+          : instance?.active_turn_id
+            ? history.projection.turns[instance.active_turn_id]
+            : null;
+        if (!turn || turn.assignee_principal_id !== group.localPrincipalId)
+          continue;
+        this.store.enqueueNotification({
+          groupId,
+          recipientPrincipalId: group.localPrincipalId,
+          recipientClientId: group.localClientId,
+          kind: 'workflow_turn_action',
+          resourceType: 'turn',
+          resourceId: turn.turn_id,
+          reason: turn.state,
+          dedupeKey: `workflow-turn:${turn.turn_id}:${String(turn.attempt)}:${turn.state}`,
+          severity: turn.state === 'recovery_required' ? 'critical' : 'medium',
+          dueAtMs:
+            turn.execution_deadline_at || turn.start_deadline_at
+              ? Date.parse(
+                  turn.execution_deadline_at ?? turn.start_deadline_at!,
+                )
+              : null,
+          payload: {
+            workflow_instance_id: turn.workflow_instance_id,
+            state_id: turn.state_id,
+            state: turn.state,
+          },
+          nowMs: this.now(),
+        });
+        continue;
+      }
+      if (
+        ['credential_revoked', 'client_revoked'].includes(
+          record.event.event_type,
+        ) &&
+        record.event.aggregate_id === group.localPrincipalId
+      ) {
+        const credential =
+          history.projection.credentials[group.localPrincipalId]?.[
+            group.localCredentialId!
+          ];
+        const client =
+          history.projection.clients[group.localPrincipalId]?.[
+            group.localClientId
+          ];
+        if (credential?.status === 'active' && client?.status === 'active')
+          continue;
+        this.store.enqueueNotification({
+          groupId,
+          recipientPrincipalId: group.localPrincipalId,
+          recipientClientId: group.localClientId,
+          kind: 'local_identity_invalid',
+          resourceType: 'credential',
+          resourceId: group.localCredentialId!,
+          reason:
+            credential?.status !== 'active'
+              ? 'credential_revoked'
+              : 'client_revoked',
+          dedupeKey: `local-identity:${group.localCredentialId}:${credential?.status ?? 'missing'}:${client?.status ?? 'missing'}`,
+          severity: 'critical',
+          payload: {
+            credential_status: credential?.status ?? 'missing',
+            client_status: client?.status ?? 'missing',
+          },
+          nowMs: this.now(),
+        });
+        continue;
+      }
+      if (
         !['message_posted', 'message_revised'].includes(record.event.event_type)
       )
         continue;
@@ -3131,6 +3383,188 @@ export class CollaborationProjectSpaceService {
         nowMs: this.now(),
       });
     }
+    for (const item of Object.values(history.projection.workItems)) {
+      const previousItem = previousProjection?.workItems[item.work_item_id];
+      if (
+        item.owner_principal_id !== group.localPrincipalId ||
+        !previousItem ||
+        item.archived ||
+        ['done', 'cancelled'].includes(item.status)
+      )
+        continue;
+      const previousWasBlocked =
+        previousItem.status === 'blocked' ||
+        previousItem.blocked_by.some((id) => {
+          const blocker = previousProjection?.workItems[id];
+          return (
+            blocker &&
+            !blocker.archived &&
+            !['done', 'cancelled'].includes(blocker.status)
+          );
+        });
+      const currentlyBlocked =
+        item.status === 'blocked' ||
+        item.blocked_by.some((id) => {
+          const blocker = history.projection.workItems[id];
+          return (
+            blocker &&
+            !blocker.archived &&
+            !['done', 'cancelled'].includes(blocker.status)
+          );
+        });
+      if (previousWasBlocked && !currentlyBlocked)
+        this.store.enqueueNotification({
+          groupId,
+          recipientPrincipalId: group.localPrincipalId,
+          recipientClientId: group.localClientId,
+          kind: 'work_item_unblocked',
+          resourceType: 'work_item',
+          resourceId: item.work_item_id,
+          reason: 'blockers_resolved',
+          dedupeKey: `work-item-unblocked:${item.work_item_id}:${history.head}`,
+          severity: 'low',
+          payload: {
+            title: item.title,
+            status: item.status,
+          },
+          nowMs: this.now(),
+        });
+    }
+    for (const item of Object.values(history.projection.workItems)) {
+      if (
+        item.owner_principal_id !== group.localPrincipalId ||
+        item.archived ||
+        ['done', 'cancelled'].includes(item.status)
+      )
+        continue;
+      const blockedHighPriority = Object.values(
+        history.projection.workItems,
+      ).filter(
+        (dependent) =>
+          !dependent.archived &&
+          !['done', 'cancelled'].includes(dependent.status) &&
+          ['high', 'urgent'].includes(dependent.priority) &&
+          dependent.blocked_by.includes(item.work_item_id),
+      );
+      if (blockedHighPriority.length)
+        this.store.enqueueNotification({
+          groupId,
+          recipientPrincipalId: group.localPrincipalId,
+          recipientClientId: group.localClientId,
+          kind: 'work_item_blocking_others',
+          resourceType: 'work_item',
+          resourceId: item.work_item_id,
+          reason: 'blocking_high_priority_work',
+          dedupeKey: `work-item-blocking:${item.work_item_id}:${blockedHighPriority
+            .map(
+              (dependent) =>
+                `${dependent.work_item_id}@${String(dependent.revision)}:${dependent.status}`,
+            )
+            .sort()
+            .join(',')}`,
+          severity: 'high',
+          payload: {
+            title: item.title,
+            blocked_work_item_ids: blockedHighPriority.map(
+              (dependent) => dependent.work_item_id,
+            ),
+          },
+          nowMs: this.now(),
+        });
+      else
+        this.store.handleNotificationsByKind({
+          groupId,
+          resourceType: 'work_item',
+          resourceId: item.work_item_id,
+          kinds: ['work_item_blocking_others'],
+          nowMs: this.now(),
+        });
+    }
+    for (const item of Object.values(history.projection.workItems)) {
+      if (item.archived || ['done', 'cancelled'].includes(item.status))
+        this.store.handleNotificationsForResource({
+          groupId,
+          resourceType: 'work_item',
+          resourceId: item.work_item_id,
+          nowMs: this.now(),
+        });
+      else {
+        if (item.assignment_status !== 'pending')
+          this.store.handleNotificationsByKind({
+            groupId,
+            resourceType: 'work_item',
+            resourceId: item.work_item_id,
+            kinds: ['work_item_assignment'],
+            nowMs: this.now(),
+          });
+        const blocked =
+          item.status === 'blocked' ||
+          item.blocked_by.some((id) => {
+            const blocker = history.projection.workItems[id];
+            return (
+              blocker &&
+              !blocker.archived &&
+              !['done', 'cancelled'].includes(blocker.status)
+            );
+          });
+        if (!blocked)
+          this.store.handleNotificationsByKind({
+            groupId,
+            resourceType: 'work_item',
+            resourceId: item.work_item_id,
+            kinds: ['work_item_blocked'],
+            nowMs: this.now(),
+          });
+      }
+    }
+    for (const discussion of Object.values(history.projection.discussions))
+      if (discussion.discussion.status === 'resolved')
+        this.store.handleNotificationsForResource({
+          groupId,
+          resourceType: 'discussion',
+          resourceId: discussion.discussion.thread_id,
+          nowMs: this.now(),
+        });
+    for (const request of Object.values(history.projection.recoveryRequests))
+      if (request.status !== 'pending')
+        this.store.handleNotificationsForResource({
+          groupId,
+          resourceType: 'recovery_request',
+          resourceId: request.request_id,
+          nowMs: this.now(),
+        });
+    for (const turn of Object.values(history.projection.turns))
+      if (['completed', 'cancelled'].includes(turn.state))
+        this.store.handleNotificationsForResource({
+          groupId,
+          resourceType: 'turn',
+          resourceId: turn.turn_id,
+          nowMs: this.now(),
+        });
+    for (const instance of Object.values(history.projection.workflowInstances))
+      if (
+        instance.lifecycle !== 'running' ||
+        Boolean(instance.active_turn_id) ||
+        instance.resolved_assignments[instance.business_state] !==
+          group.localPrincipalId
+      )
+        this.store.handleNotificationsByKind({
+          groupId,
+          resourceType: 'workflow_instance',
+          resourceId: instance.instance_id,
+          kinds: ['workflow_state_action'],
+          nowMs: this.now(),
+        });
+    if (
+      history.projection.integrityStatus === 'OK' &&
+      group.protocolStatus === 'OK'
+    )
+      this.store.handleNotificationsForResource({
+        groupId,
+        resourceType: 'protocol',
+        resourceId: groupId,
+        nowMs: this.now(),
+      });
     this.refreshDueNotifications(groupId);
   }
 

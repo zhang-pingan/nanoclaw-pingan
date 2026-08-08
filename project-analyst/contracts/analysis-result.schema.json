@@ -1,0 +1,627 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "icarus.collaboration-analysis-result/1"
+    },
+    "contract_version": {
+      "type": "number",
+      "const": 1
+    },
+    "analysis_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "snapshot_head": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40,64}$"
+    },
+    "context_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "prompt_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "challenge": {
+      "type": "string",
+      "minLength": 32,
+      "maxLength": 240
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "health": {
+          "type": "string",
+          "enum": [
+            "healthy",
+            "needs_attention",
+            "at_risk",
+            "critical",
+            "unknown"
+          ]
+        },
+        "headline": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "details": {
+          "type": "string",
+          "maxLength": 16000
+        }
+      },
+      "required": [
+        "health",
+        "headline",
+        "details"
+      ],
+      "additionalProperties": false
+    },
+    "findings": {
+      "maxItems": 200,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "finding_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fact",
+              "inference",
+              "question"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "delivery_risk",
+              "schedule_risk",
+              "dependency_risk",
+              "workflow_stall",
+              "assignment_gap",
+              "quality_gap",
+              "missing_evidence",
+              "collaboration_gap",
+              "information_conflict",
+              "capacity_risk",
+              "identity_risk",
+              "protocol_risk",
+              "question"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low",
+              "info"
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "affected_refs": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 1200,
+              "pattern": "^(?:work_item|workflow_instance|turn|discussion|message|event|file|principal|recovery|group):[^\\s]+$"
+            }
+          },
+          "evidence_refs": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 1200,
+              "pattern": "^(?:work_item|workflow_instance|turn|discussion|message|event|file|principal|recovery|group):[^\\s]+$"
+            }
+          },
+          "recommendations": {
+            "default": [],
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          },
+          "proposed_actions": {
+            "default": [],
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "create_work_item"
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "task",
+                            "issue",
+                            "decision",
+                            "milestone"
+                          ]
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        },
+                        "description": {
+                          "default": "",
+                          "type": "string",
+                          "maxLength": 32000
+                        },
+                        "priority": {
+                          "default": "normal",
+                          "type": "string",
+                          "enum": [
+                            "low",
+                            "normal",
+                            "high",
+                            "urgent"
+                          ]
+                        },
+                        "due_at": {
+                          "default": null,
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "labels": {
+                          "default": [],
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          }
+                        },
+                        "related_work_item_ids": {
+                          "default": [],
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          }
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "description",
+                        "priority",
+                        "due_at",
+                        "labels",
+                        "related_work_item_ids"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "parameters"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "open_discussion"
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        },
+                        "body": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64000
+                        },
+                        "scope": {
+                          "default": {
+                            "type": "group"
+                          },
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "group"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "work_item"
+                                },
+                                "ref": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "ref"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "workflow_instance"
+                                },
+                                "ref": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "ref"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "turn"
+                                },
+                                "ref": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 240
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "ref"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "mentions": {
+                          "default": [],
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          }
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "body",
+                        "scope",
+                        "mentions"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "parameters"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "post_progress"
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "properties": {
+                        "summary": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 4000
+                        },
+                        "completed": {
+                          "default": [],
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "next_steps": {
+                          "default": [],
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "blockers": {
+                          "default": [],
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "work_item_refs": {
+                          "default": [],
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          }
+                        },
+                        "workflow_instance_refs": {
+                          "default": [],
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          }
+                        }
+                      },
+                      "required": [
+                        "summary",
+                        "completed",
+                        "next_steps",
+                        "blockers",
+                        "work_item_refs",
+                        "workflow_instance_refs"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "parameters"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "watch_work_item"
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "properties": {
+                        "work_item_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        }
+                      },
+                      "required": [
+                        "work_item_id"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "parameters"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "request_information"
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        },
+                        "question": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64000
+                        },
+                        "affected_refs": {
+                          "default": [],
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 3,
+                            "maxLength": 1200,
+                            "pattern": "^(?:work_item|workflow_instance|turn|discussion|message|event|file|principal|recovery|group):[^\\s]+$"
+                          }
+                        },
+                        "mentions": {
+                          "default": [],
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          }
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "question",
+                        "affected_refs",
+                        "mentions"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "parameters"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "const": "publish_analysis_report"
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 240
+                        },
+                        "include_finding_ids": {
+                          "minItems": 1,
+                          "maxItems": 200,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 240
+                          }
+                        },
+                        "destination": {
+                          "type": "string",
+                          "enum": [
+                            "principal_workspace",
+                            "shared_files"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "title",
+                        "include_finding_ids",
+                        "destination"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "action",
+                    "parameters"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "finding_id",
+          "kind",
+          "category",
+          "severity",
+          "confidence",
+          "title",
+          "summary",
+          "affected_refs",
+          "evidence_refs",
+          "recommendations",
+          "proposed_actions"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "format",
+    "contract_version",
+    "analysis_id",
+    "snapshot_head",
+    "context_hash",
+    "prompt_hash",
+    "challenge",
+    "summary",
+    "findings"
+  ],
+  "additionalProperties": false
+}

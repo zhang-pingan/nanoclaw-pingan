@@ -172,11 +172,15 @@ const notification: CollaborationNotificationV3 = {
   resourceType: 'turn',
   resourceId: 'turn_1',
   reason: 'execution deadline passed',
+  severity: 'high',
   dedupeKey: 'timeout:turn_1:1',
   reminderOrdinal: 0,
   dueAtMs: 1,
   firstObservedAtMs: 2,
   deliveredAtMs: null,
+  readAtMs: null,
+  handledAtMs: null,
+  updatedAtMs: 2,
   payload: { private: true },
 };
 

@@ -664,10 +664,11 @@ describe('Collaboration project space v3 Group and identity service', () => {
     });
     await owner.service.sync('group_recovery_cancel');
     expect(
-      owner.store.listPendingNotifications({
+      owner.store.listNotifications({
         groupId: 'group_recovery_cancel',
         principalId: ALICE.principalId,
         clientId: ALICE.clientId,
+        includeHandled: true,
       }),
     ).toEqual(
       expect.arrayContaining([
@@ -675,6 +676,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
           kind: 'recovery_cancelled',
           resourceId: requested.requestId,
           reason: 'cancelled',
+          handledAtMs: expect.any(Number),
         }),
       ]),
     );
@@ -959,6 +961,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
       workItemId: 'wi_api',
       type: 'task',
       title: 'Implement API',
+      priority: 'high',
       dueAt: '2026-08-05T12:00:00.000Z',
     });
     await owner.service.createWorkItem({
@@ -1035,12 +1038,64 @@ describe('Collaboration project space v3 Group and identity service', () => {
         clientId: ALICE.clientId,
         groupId: 'group_project',
       }),
-    ).toEqual([
-      expect.objectContaining({
-        kind: 'work_item_due',
-        resourceId: 'wi_api',
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'work_item_due',
+          resourceId: 'wi_api',
+        }),
+        expect.objectContaining({
+          kind: 'work_item_blocked',
+          resourceId: 'wi_api',
+        }),
+        expect.objectContaining({
+          kind: 'work_item_blocking_others',
+          resourceId: 'wi_test',
+        }),
+      ]),
+    );
+    await owner.service.changeWorkItemStatus({
+      groupId: 'group_project',
+      workItemId: 'wi_test',
+      expectedRevision: 1,
+      status: 'in_progress',
+    });
+    await owner.service.changeWorkItemStatus({
+      groupId: 'group_project',
+      workItemId: 'wi_test',
+      expectedRevision: 2,
+      status: 'done',
+    });
+    expect(
+      owner.store.listPendingNotifications({
+        principalId: ALICE.principalId,
+        clientId: ALICE.clientId,
+        groupId: 'group_project',
       }),
-    ]);
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'work_item_unblocked',
+          resourceId: 'wi_api',
+        }),
+      ]),
+    );
+    expect(
+      owner.store.listNotifications({
+        principalId: ALICE.principalId,
+        clientId: ALICE.clientId,
+        groupId: 'group_project',
+        includeHandled: true,
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'work_item_blocking_others',
+          resourceId: 'wi_test',
+          handledAtMs: expect.any(Number),
+        }),
+      ]),
+    );
     owner.store.close();
   });
 
@@ -2444,12 +2499,54 @@ describe('Collaboration project space v3 Group and identity service', () => {
       instanceId: 'wfi_timeout',
       expectedRevision: 1,
     });
+    expect(
+      owner.store.listNotifications({
+        groupId: 'group_project',
+        principalId: ALICE.principalId,
+        clientId: ALICE.clientId,
+        resourceType: 'workflow_instance',
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        kind: 'workflow_state_action',
+        resourceId: 'wfi_timeout',
+        handledAtMs: null,
+      }),
+    ]);
     await owner.service.createTurn({
       groupId: 'group_project',
       instanceId: 'wfi_timeout',
       expectedRevision: 2,
       turnId: 'turn_timeout',
     });
+    expect(
+      owner.store.listNotifications({
+        groupId: 'group_project',
+        principalId: ALICE.principalId,
+        clientId: ALICE.clientId,
+        includeHandled: true,
+        resourceType: 'workflow_instance',
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        kind: 'workflow_state_action',
+        resourceId: 'wfi_timeout',
+        handledAtMs: expect.any(Number),
+      }),
+    ]);
+    expect(
+      owner.store.listNotifications({
+        groupId: 'group_project',
+        principalId: ALICE.principalId,
+        clientId: ALICE.clientId,
+        resourceType: 'turn',
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        kind: 'workflow_turn_action',
+        resourceId: 'turn_timeout',
+      }),
+    ]);
 
     nowMs += 60_000;
     await expect(
@@ -2477,10 +2574,13 @@ describe('Collaboration project space v3 Group and identity service', () => {
           groupId: 'group_project',
         })
         .map((notification) => notification.dedupeKey),
-    ).toEqual([
-      expect.stringContaining('workflow-timeout:'),
-      expect.stringContaining('workflow-timeout:'),
-    ]);
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('workflow-turn:'),
+        expect.stringContaining('workflow-timeout:'),
+        expect.stringContaining('workflow-timeout:'),
+      ]),
+    );
     owner.store.close();
   });
 });

@@ -2,6 +2,7 @@ import http from 'node:http';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import type { CollaborationAnalysisRunDetail } from './analysis-service.js';
 import type {
   CollaborationActionExecutionV3,
   CollaborationExecutorBindingV3,
@@ -161,11 +162,110 @@ function execution(): CollaborationActionExecutionV3 {
   };
 }
 
+function analysisDetail(): CollaborationAnalysisRunDetail {
+  return {
+    run: {
+      analysisId: 'analysis_1',
+      groupId: 'group_test',
+      principalId: 'principal_alice',
+      clientId: 'client_alice',
+      subscriptionMode: 'member',
+      snapshotHead: 'a'.repeat(40),
+      scope: { type: 'project' },
+      trigger: 'manual',
+      executionChannel: 'external_agent',
+      executorId: null,
+      executorKind: null,
+      contractVersion: 1,
+      capabilityVersion: 1,
+      contextHash: hash('c'),
+      promptHash: hash('p'),
+      challenge: 'challenge-must-not-leak-1234567890',
+      status: 'ready_for_review',
+      attempt: 1,
+      operationKey: hash('o'),
+      executionRef: 'provider:secret-execution-ref',
+      providerMetadata: { api_token: 'run-provider-secret' },
+      validationErrors: [],
+      error:
+        'fetch https://private-token@example.test/result?access_token=run-secret failed',
+      createdAtMs: 1,
+      startedAtMs: 2,
+      finishedAtMs: 3,
+      updatedAtMs: 4,
+    },
+    stale: false,
+    result: {
+      resultId: 'result_1',
+      analysisId: 'analysis_1',
+      attempt: 1,
+      rawJson: '{"api_token":"raw-result-secret"}',
+      rawHash: hash('r'),
+      normalized: null,
+      validationErrors: [],
+      providerMetadata: { provider_secret: 'result-provider-secret' },
+      receivedAtMs: 3,
+    },
+    findings: [
+      {
+        analysisId: 'analysis_1',
+        findingId: 'finding_1',
+        groupId: 'group_test',
+        dedupeKey: hash('d'),
+        lifecycle: 'new',
+        finding: {
+          finding_id: 'finding_1',
+          kind: 'fact',
+          category: 'delivery_risk',
+          severity: 'high',
+          confidence: 0.9,
+          title: 'Delivery is blocked',
+          summary: 'The current Work Item has an unresolved blocker.',
+          affected_refs: ['work_item:work_1'],
+          evidence_refs: ['work_item:work_1'],
+          recommendations: ['Resolve the blocker.'],
+          proposed_actions: [],
+        },
+        decision: null,
+        decisionReason: null,
+        decidedAtMs: null,
+        createdAtMs: 3,
+        updatedAtMs: 3,
+      },
+    ],
+    applications: [
+      {
+        applicationId: 'application_1',
+        operationKey: hash('k'),
+        analysisId: 'analysis_1',
+        findingId: 'finding_1',
+        actionOrdinal: 0,
+        action: {
+          action: 'watch_work_item',
+          parameters: { work_item_id: 'work_1' },
+        },
+        preview: { label: 'Watch Work Item' },
+        state: 'previewed',
+        snapshotHead: 'a'.repeat(40),
+        confirmationTokenHash: hash('t'),
+        confirmedAtMs: null,
+        resultingEventIds: [],
+        error: 'failed at /private/analysis/provider-secret',
+        createdAtMs: 3,
+        updatedAtMs: 3,
+      },
+    ],
+    exportScope: { scope: { type: 'project' }, file_count: 0 },
+    repairPrompt: null,
+  };
+}
+
 function runtime(
   input: {
     selectedGroup?: CollaborationProjectSpaceGroupRecord;
     groups?: Record<string, unknown>;
     store?: Record<string, unknown>;
+    analysis?: Record<string, unknown>;
   } = {},
 ): CollaborationRuntime {
   const selectedGroup = input.selectedGroup ?? group();
@@ -186,6 +286,7 @@ function runtime(
       ...input.store,
     },
     groups: { ...input.groups },
+    analysis: { ...input.analysis },
   } as unknown as CollaborationRuntime;
 }
 
@@ -1097,6 +1198,423 @@ describe('Collaboration project-space v3 Web API', () => {
         expect(completeTurn).toHaveBeenCalledWith(
           expect.objectContaining({ artifactIds: ['artifact_turn'] }),
         );
+      },
+    );
+  });
+
+  it('routes Project Insight, My Items, and local notification state', async () => {
+    const projectInsight = vi.fn(() => ({
+      insight: { snapshot_head: 'a'.repeat(40), health: 'needs_attention' },
+    }));
+    const myItems = vi.fn(() => ({
+      items: [{ resource_type: 'work_item', resource_id: 'work_1' }],
+    }));
+    const listNotifications = vi.fn(() => [
+      {
+        notificationId: 'notification_1',
+        resourceType: 'work_item',
+        resourceId: 'work_1',
+        severity: 'high',
+      },
+    ]);
+    const markNotificationRead = vi.fn(() => true);
+    const markNotificationHandled = vi.fn(() => false);
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({
+          analysis: { projectInsight, myItems },
+          store: {
+            listNotifications,
+            markNotificationRead,
+            markNotificationHandled,
+          },
+        }),
+      ),
+      async (baseUrl) => {
+        const insight = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/insights?mark_viewed=false`,
+        );
+        expect(insight.status).toBe(200);
+        expect(await insight.json()).toMatchObject({
+          insight: { health: 'needs_attention' },
+        });
+        expect(projectInsight).toHaveBeenCalledWith('group_test', false);
+
+        const mine = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/my-items`,
+        );
+        expect(mine.status).toBe(200);
+        expect(await mine.json()).toMatchObject({
+          items: [{ resource_id: 'work_1' }],
+        });
+        expect(myItems).toHaveBeenCalledWith('group_test');
+
+        const notifications = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/notifications?severity=high&include_handled=true&resource_type=work_item`,
+        );
+        expect(notifications.status).toBe(200);
+        expect(await notifications.json()).toMatchObject({
+          notifications: [{ notificationId: 'notification_1' }],
+        });
+        expect(listNotifications).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          principalId: 'principal_alice',
+          clientId: 'client_alice',
+          includeHandled: true,
+          severity: 'high',
+          resourceType: 'work_item',
+        });
+
+        const read = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/notifications/notification_1/read`,
+          { method: 'POST' },
+        );
+        expect(read.status).toBe(200);
+        expect(await read.json()).toEqual({ changed: true });
+        expect(markNotificationRead).toHaveBeenCalledWith(
+          'notification_1',
+          'principal_alice',
+          'client_alice',
+        );
+
+        const handled = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/notifications/notification_1/handled`,
+          { method: 'POST' },
+        );
+        expect(handled.status).toBe(200);
+        expect(await handled.json()).toEqual({ changed: false });
+        expect(markNotificationHandled).toHaveBeenCalledWith(
+          'notification_1',
+          'principal_alice',
+          'client_alice',
+        );
+      },
+    );
+  });
+
+  it('routes managed and external Analysis Runs with explicit request shapes', async () => {
+    const detail = analysisDetail();
+    const listManagedExecutors = vi.fn(() => [
+      { id: 'executor_codex', label: 'Icarus managed Codex' },
+    ]);
+    const list = vi.fn(() => [detail]);
+    const getDetail = vi.fn(() => detail);
+    const createRun = vi.fn(async () => detail);
+    const startManaged = vi.fn(async () => detail);
+    const cancel = vi.fn(async () => detail);
+    const retry = vi.fn(async () => detail);
+    const completeReview = vi.fn(() => detail);
+    const externalPackage = vi.fn(async () => ({
+      format: 'icarus.collaboration-analysis-package/1',
+      manifest: { analysis_id: 'analysis_1', challenge: 'handoff-challenge' },
+      files: [],
+    }));
+    const externalPrompt = vi.fn(
+      () => 'Analyze the frozen snapshot and return exactly one JSON object.',
+    );
+    const submitExternalResult = vi.fn(async () => detail);
+    const decideFinding = vi.fn(() => detail.findings[0]);
+    const previewActions = vi.fn(() => [
+      {
+        application: detail.applications[0],
+        confirmationToken: 'confirmation-token-that-is-long-enough',
+      },
+    ]);
+    const applyActions = vi.fn(async () => detail);
+    const analysis = {
+      listManagedExecutors,
+      list,
+      detail: getDetail,
+      createRun,
+      startManaged,
+      cancel,
+      retry,
+      completeReview,
+      externalPackage,
+      externalPrompt,
+      submitExternalResult,
+      decideFinding,
+      previewActions,
+      applyActions,
+    };
+    await withApiServer(
+      new CollaborationWebApi(runtime({ analysis })),
+      async (baseUrl) => {
+        const prefix = `${baseUrl}/api/collaboration/groups/group_test`;
+        const executors = await fetch(`${prefix}/analysis-executors`);
+        expect(executors.status).toBe(200);
+        expect(await executors.json()).toMatchObject({
+          executors: [{ id: 'executor_codex' }],
+        });
+
+        const created = await fetch(`${prefix}/analysis-runs`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            scope: { type: 'work_item', work_item_id: 'work_1' },
+            executionChannel: 'external_agent',
+            executorId: null,
+            selectedFileIds: ['file_1'],
+            includeSelectedFileContents: true,
+          }),
+        });
+        expect(created.status).toBe(201);
+        expect(createRun).toHaveBeenCalledWith('group_test', {
+          scope: { type: 'work_item', work_item_id: 'work_1' },
+          executionChannel: 'external_agent',
+          executorId: null,
+          selectedFileIds: ['file_1'],
+          includeSelectedFileContents: true,
+        });
+
+        const runs = await fetch(`${prefix}/analysis-runs`);
+        expect(runs.status).toBe(200);
+        expect(list).toHaveBeenCalledWith('group_test');
+        const listedText = JSON.stringify(await runs.json());
+        expect(listedText).not.toContain('challenge-must-not-leak');
+        expect(listedText).not.toContain('secret-execution-ref');
+        expect(listedText).not.toContain('run-provider-secret');
+        expect(listedText).not.toContain('raw-result-secret');
+        expect(listedText).not.toContain('result-provider-secret');
+        expect(listedText).not.toContain(hash('t'));
+        expect(listedText).not.toContain('/private/analysis');
+
+        const fetched = await fetch(`${prefix}/analysis-runs/analysis_1`);
+        expect(fetched.status).toBe(200);
+        expect(getDetail).toHaveBeenCalledWith('group_test', 'analysis_1');
+
+        for (const [operation, method] of [
+          ['start', startManaged],
+          ['cancel', cancel],
+          ['retry', retry],
+          ['complete', completeReview],
+        ] as const) {
+          const response = await fetch(
+            `${prefix}/analysis-runs/analysis_1/${operation}`,
+            { method: 'POST' },
+          );
+          expect(response.status, operation).toBe(200);
+          expect(method).toHaveBeenCalledWith('group_test', 'analysis_1');
+        }
+
+        const packageResponse = await fetch(
+          `${prefix}/analysis-runs/analysis_1/external-package`,
+        );
+        expect(packageResponse.status).toBe(200);
+        expect(await packageResponse.json()).toMatchObject({
+          format: 'icarus.collaboration-analysis-package/1',
+        });
+        expect(externalPackage).toHaveBeenCalledWith(
+          'group_test',
+          'analysis_1',
+        );
+
+        const promptResponse = await fetch(
+          `${prefix}/analysis-runs/analysis_1/external-prompt`,
+        );
+        expect(promptResponse.status).toBe(200);
+        expect(await promptResponse.json()).toEqual({
+          prompt:
+            'Analyze the frozen snapshot and return exactly one JSON object.',
+        });
+        expect(externalPrompt).toHaveBeenCalledWith('group_test', 'analysis_1');
+
+        const resultJson = JSON.stringify({
+          format: 'icarus.collaboration-analysis-result/1',
+          analysis_id: 'analysis_1',
+        });
+        const resultResponse = await fetch(
+          `${prefix}/analysis-runs/analysis_1/external-result`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: resultJson,
+          },
+        );
+        expect(resultResponse.status).toBe(200);
+        expect(submitExternalResult).toHaveBeenCalledWith(
+          'group_test',
+          'analysis_1',
+          resultJson,
+        );
+
+        const uploadedJson = JSON.stringify({
+          format: 'icarus.collaboration-analysis-result/1',
+          analysis_id: 'analysis_1',
+          source: 'file',
+        });
+        const upload = new FormData();
+        upload.append('file', new Blob([uploadedJson]), 'result.json');
+        const uploadResponse = await fetch(
+          `${prefix}/analysis-runs/analysis_1/external-result`,
+          { method: 'POST', body: upload },
+        );
+        expect(uploadResponse.status).toBe(200);
+        expect(submitExternalResult).toHaveBeenLastCalledWith(
+          'group_test',
+          'analysis_1',
+          uploadedJson,
+        );
+
+        const decision = await fetch(
+          `${prefix}/analysis-runs/analysis_1/findings/finding_1/decision`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              decision: 'deferred',
+              reason: 'Needs owner review',
+            }),
+          },
+        );
+        expect(decision.status).toBe(200);
+        expect(decideFinding).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          analysisId: 'analysis_1',
+          findingId: 'finding_1',
+          decision: 'deferred',
+          reason: 'Needs owner review',
+        });
+
+        const action = {
+          action: 'watch_work_item' as const,
+          parameters: { work_item_id: 'work_1' },
+        };
+        const preview = await fetch(
+          `${prefix}/analysis-runs/analysis_1/actions/preview`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              actions: [
+                {
+                  requestId: 'preview_request_1',
+                  findingId: 'finding_1',
+                  actionOrdinal: 0,
+                  action,
+                },
+              ],
+            }),
+          },
+        );
+        expect(preview.status).toBe(200);
+        expect(previewActions).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          analysisId: 'analysis_1',
+          actions: [
+            {
+              requestId: 'preview_request_1',
+              findingId: 'finding_1',
+              actionOrdinal: 0,
+              action,
+            },
+          ],
+        });
+
+        const confirmationToken = 'x'.repeat(40);
+        const apply = await fetch(
+          `${prefix}/analysis-runs/analysis_1/actions/apply`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              actions: [
+                {
+                  applicationId: 'application_1',
+                  confirmationToken,
+                  action,
+                },
+              ],
+            }),
+          },
+        );
+        expect(apply.status).toBe(200);
+        expect(applyActions).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          analysisId: 'analysis_1',
+          actions: [
+            {
+              applicationId: 'application_1',
+              confirmationToken,
+              action,
+            },
+          ],
+        });
+      },
+    );
+  });
+
+  it('rejects malformed external results and keeps Observer group writes read-only', async () => {
+    const submitExternalResult = vi.fn();
+    const createRun = vi.fn(async () => analysisDetail());
+    const previewActions = vi.fn(() => {
+      throw new Error('Observer subscription is read-only');
+    });
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({
+          selectedGroup: group('observer'),
+          analysis: { submitExternalResult, createRun, previewActions },
+        }),
+      ),
+      async (baseUrl) => {
+        const prefix = `${baseUrl}/api/collaboration/groups/group_test`;
+        const naturalLanguage = await fetch(
+          `${prefix}/analysis-runs/analysis_1/external-result`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'text/plain' },
+            body: 'The project looks healthy.',
+          },
+        );
+        expect(naturalLanguage.status).toBe(400);
+
+        const duplicate = await fetch(
+          `${prefix}/analysis-runs/analysis_1/external-result`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: '{"analysis_id":"first","analysis_id":"second"}',
+          },
+        );
+        expect(duplicate.status).toBe(400);
+        expect(submitExternalResult).not.toHaveBeenCalled();
+
+        const observerWrite = await fetch(`${prefix}/analysis-runs`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            scope: { type: 'project' },
+            executionChannel: 'managed_executor',
+            executorId: 'executor_codex',
+          }),
+        });
+        expect(observerWrite.status).toBe(201);
+
+        const preview = await fetch(
+          `${prefix}/analysis-runs/analysis_1/actions/preview`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              actions: [
+                {
+                  requestId: 'observer_preview_request',
+                  findingId: 'finding_1',
+                  actionOrdinal: 0,
+                  action: {
+                    action: 'watch_work_item',
+                    parameters: { work_item_id: 'work_1' },
+                  },
+                },
+              ],
+            }),
+          },
+        );
+        expect(preview.status).toBe(400);
+        expect(await preview.json()).toMatchObject({
+          error: 'Observer subscription is read-only',
+        });
       },
     );
   });

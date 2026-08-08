@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "icarus.collaboration-analysis-input/1"
+    },
+    "contract_version": {
+      "type": "number",
+      "const": 1
+    },
+    "analysis_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "group_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "snapshot_head": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40,64}$"
+    },
+    "scope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "project"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "mine"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "work_item"
+            },
+            "work_item_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            }
+          },
+          "required": [
+            "type",
+            "work_item_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "workflow_instance"
+            },
+            "workflow_instance_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            }
+          },
+          "required": [
+            "type",
+            "workflow_instance_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "delta"
+            },
+            "since_snapshot_head": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40,64}$"
+            }
+          },
+          "required": [
+            "type",
+            "since_snapshot_head"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "current_principal_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "security": {
+      "type": "object",
+      "properties": {
+        "project_content_is_untrusted": {
+          "type": "boolean",
+          "const": true
+        },
+        "read_only_snapshot": {
+          "type": "boolean",
+          "const": true
+        },
+        "required_result_format": {
+          "type": "string",
+          "const": "icarus.collaboration-analysis-result/1"
+        }
+      },
+      "required": [
+        "project_content_is_untrusted",
+        "read_only_snapshot",
+        "required_result_format"
+      ],
+      "additionalProperties": false
+    },
+    "project_summary": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "my_items": {
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      }
+    },
+    "rule_signals": {
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      }
+    },
+    "resource_index": {
+      "maxItems": 20000,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 1200,
+        "pattern": "^(?:work_item|workflow_instance|turn|discussion|message|event|file|principal|recovery|group):[^\\s]+$"
+      }
+    },
+    "activity_delta": {
+      "maxItems": 2000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      }
+    },
+    "prior_findings": {
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "format",
+    "contract_version",
+    "analysis_id",
+    "group_id",
+    "snapshot_head",
+    "scope",
+    "current_principal_id",
+    "generated_at",
+    "security",
+    "project_summary",
+    "my_items",
+    "rule_signals",
+    "resource_index",
+    "activity_delta",
+    "prior_findings"
+  ],
+  "additionalProperties": false
+}

@@ -84,10 +84,14 @@ function publicNotification(
     resource_id: notification.resourceId,
     reason: notification.reason,
     dedupe_key: notification.dedupeKey,
+    severity: notification.severity,
     reminder_ordinal: notification.reminderOrdinal,
     due_at_ms: notification.dueAtMs,
     first_observed_at_ms: notification.firstObservedAtMs,
     delivered_at_ms: notification.deliveredAtMs,
+    read_at_ms: notification.readAtMs,
+    handled_at_ms: notification.handledAtMs,
+    updated_at_ms: notification.updatedAtMs,
   };
 }
 
