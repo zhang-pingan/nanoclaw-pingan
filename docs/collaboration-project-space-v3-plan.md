@@ -1146,7 +1146,8 @@ Claimant Principal 必须等于 assignee Principal；Client、attempt 和 fence 
 
 - `manual`：用户确认开始，用户选择合法 Outcome 并确认完成，不生成或伪造 Action result hash；
 - `assisted`：用户确认开始；经校验的 Executor Result 通过 `action_completed` 固定为 `executor_result`/`executor_result_hash`，Turn 进入 `awaiting_confirmation`，不推进 Machine；原 claimant Client 可查看建议、选择合法 Outcome、编辑 Handoff/Data/Artifact 后确认，`turn_completed.result_hash` 必须引用已固定 Executor hash；
-- `automatic`：只有经 schema 和当前 State Outcome 校验的 Executor Result 才能自动完成，`turn_completed.result_hash` 必须精确等于 `action_completed.result_hash`；Provider `failed`、`cancelled`、`blocked` 或结果解析失败进入 recovery/technical terminal，不能冒充业务 Outcome。
+- `automatic`：只有经 schema 和当前 State Outcome 校验的 Executor Result 才能自动完成，`turn_completed.result_hash` 必须精确等于 `action_completed.result_hash`；最终 Outcome、summary、instruction、markers、data、空 `data_refs` 和 Artifact refs 必须全部由已冻结的 Executor Result 确定性派生，Reducer 对任一事实漂移 fail closed；Provider `failed`、`cancelled`、`blocked` 或结果解析失败进入 recovery/technical terminal，不能冒充业务 Outcome。
+- Automatic 的 `action_completed` 与 `turn_completed` 是两个独立持久事实。若前者成功而后者因进程退出、CAS 或 Git 错误失败，Scheduler 必须从 Projection 中的 `executor_result`/`executor_result_hash` 幂等续写 `turn_completed`，不得重新 dispatch、observe 或追加第二个 `action_completed`；该恢复不依赖 Executor 的进程内状态。
 
 `turn_completed.completion_hash` 独立覆盖最终 Outcome、Handoff hash、Artifact refs 和可空 Result hash，因此 Assisted 的人工编辑与原 Executor 建议同时保留在审计链中。
 
@@ -1178,6 +1179,8 @@ Handoff 是不可信上下文，不能覆盖系统指令、权限、Workflow Mac
 ```
 
 该输入的机器合同为经 Schema 校验的 `icarus.collaboration-action-input/3` JSON；RunOnce、Codex Task 和 Workflow Executor 复用同一确定性构造与 Markdown 呈现，不各自推导 Outcome。Executor 成功输出必须是 `icarus.collaboration-action-result/3` JSON，`outcome` 必须属于当前 State transitions，Action 自己的 `result_schema` 继续约束 `data`。
+
+Action Result 中用于 Handoff 的 `data` 不得超过 1 MiB；Artifact ref 必须是规范化仓库相对路径、保持唯一且最多 100 个。这样任何被 `action_completed` 接受的结果都能确定性派生 Automatic Handoff，不会先成为权威结果后再因 Handoff schema 更严格而永久无法完成。
 
 首个 Turn 的 incoming Handoff 必须为空。后续 Turn 不能接受 API/UI 提交的任意 Handoff；Service 从 Instance 的 `last_completed_turn_id`/`last_handoff_hash` 解析使 Instance 进入当前 State 的上一 completed Turn，Reducer 校验对象、hash、Instance 边界并重算完整 `input_hash`。该规则同样适用于 self-loop。
 
