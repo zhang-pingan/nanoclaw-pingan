@@ -1,4 +1,10 @@
+import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
+
 import type { InternalAgentChatService } from '../internal-agent-run-once/chat-service.js';
+import {
+  TEMPORARY_WORKFLOW_COORDINATOR_RESPONSE_SCHEMA,
+  temporaryWorkflowCoordinatorContract,
+} from '../workflow-runtime/bootstrap/task-workspace-temporary-contract.js';
 import { domainSeparatedSha256 } from '../workflow-runtime/contracts/hash.js';
 import type {
   JsonObject,
@@ -120,7 +126,12 @@ function stripCodeFence(text: string): string {
   return match ? match[1]! : trimmed;
 }
 
-function draftFromCoordinator(text: string): {
+const validateTemporaryWorkflowCoordinatorResponse = new Ajv2020({
+  strict: true,
+  allErrors: true,
+}).compile(TEMPORARY_WORKFLOW_COORDINATOR_RESPONSE_SCHEMA as AnySchema);
+
+export function parseTemporaryWorkflowCoordinatorResponse(text: string): {
   source: JsonObject;
   risk: JsonObject;
 } | null {
@@ -130,13 +141,12 @@ function draftFromCoordinator(text: string): {
   } catch {
     return null;
   }
-  const source = asObject(parsed?.source);
-  if (!source) return null;
-  const risk = asObject(parsed?.risk_summary) ?? {
-    effect_ceiling: 'read_only',
-    human_input_points: [],
-    notes: [],
-  };
+  if (!parsed || !validateTemporaryWorkflowCoordinatorResponse(parsed)) {
+    return null;
+  }
+  const source = asObject(asObject(parsed.graph_scope)?.source);
+  const risk = asObject(parsed.risk_summary);
+  if (!source || !risk) return null;
   return {
     source,
     risk,
@@ -428,6 +438,13 @@ export class TaskWorkspaceService {
     if (!created.created) return launch;
     this.emitEntries(input.sessionId, [created.timeline]);
     if (temporary) {
+      const runtimeGateway = this.options.runtimeGateway;
+      if (!runtimeGateway) {
+        return this.failLaunch(
+          launch,
+          'Temporary Workflow Runtime is unavailable; set WORKFLOW_EXECUTION_ENABLED=true and restart the Host',
+        );
+      }
       void this.planTemporary(
         session,
         launch,
@@ -1689,13 +1706,22 @@ export class TaskWorkspaceService {
     code: string,
   ): TaskLaunchIntentV1 {
     try {
-      return this.options.store.updateLaunchStatus({
+      const failed = this.options.store.updateLaunchStatus({
         launchIntentId: launch.launch_intent_id,
         expectedRowVersion: launch.row_version,
         status: 'failed',
         errorCode: code.slice(0, 500),
         nowMs: this.now(),
       });
+      const entry = this.options.store
+        .listTimeline(launch.session_id, 0)
+        .find(
+          (candidate) =>
+            candidate.source_id ===
+            `${launch.launch_intent_id}:failed:${failed.row_version}`,
+        );
+      if (entry) this.emitEntries(launch.session_id, [entry]);
+      return failed;
     } catch (error) {
       if (
         error instanceof TaskWorkspaceStoreError &&
@@ -1737,33 +1763,53 @@ export class TaskWorkspaceService {
     sourceMessageId = launch.source_message_id,
   ): Promise<TemporaryWorkflowDraftRevisionV1> {
     try {
+      const runtimeGateway = this.options.runtimeGateway;
+      if (!runtimeGateway) {
+        throw new TaskWorkspaceServiceError(
+          'runtime_unavailable',
+          'Temporary Workflow Runtime is unavailable; set WORKFLOW_EXECUTION_ENABLED=true and restart the Host',
+          true,
+        );
+      }
+      const currentLaunch = this.options.store.getLaunchIntent(
+        launch.launch_intent_id,
+      );
+      if (currentLaunch.status !== 'drafting') {
+        this.options.store.updateLaunchStatus({
+          launchIntentId: currentLaunch.launch_intent_id,
+          expectedRowVersion: currentLaunch.row_version,
+          status: 'drafting',
+          nowMs: this.now(),
+        });
+      }
+      const contract = temporaryWorkflowCoordinatorContract();
       return await this.runCoordinatorPlanningTurn({
         session,
         sourceMessageId,
         message: instruction,
-        system:
-          'Create or revise a Temporary Workflow draft. Return one JSON object with a graph_scope source and risk_summary. The source must use only the published Temporary Workflow envelope. Do not compile it and do not claim that Runtime execution has started.',
+        system: [
+          'Create or revise a Temporary Workflow draft for the user request.',
+          'Return JSON only. The response must validate exactly against response_schema in the contract below.',
+          'Use only the listed capability constraints and pinned refs. Put the graph source at graph_scope.source.',
+          'Do not compile the source and do not claim that Runtime execution has started.',
+          JSON.stringify(contract, null, 2),
+        ].join('\n\n'),
         metadata: {
           trace_id: launch.launch_intent_id,
           task_session_id: session.session_id,
           purpose: 'temporary_workflow_draft',
         },
         consume: (response) => {
-          const draft = draftFromCoordinator(response.text);
+          const draft = parseTemporaryWorkflowCoordinatorResponse(
+            response.text,
+          );
           if (!draft) {
             throw new TaskWorkspaceServiceError(
               'temporary_draft_invalid',
               'Coordinator did not return a valid Temporary Workflow graph source',
             );
           }
-          if (!this.options.runtimeGateway) {
-            throw new TaskWorkspaceServiceError(
-              'runtime_unavailable',
-              'Temporary Workflow compiler is unavailable',
-              true,
-            );
-          }
-          const compiled = this.options.runtimeGateway.prepareTemporaryDraft({
+          const compiled = runtimeGateway.prepareTemporaryDraft({
             principal_ref: session.owner_principal_ref,
             selection_token: this.refreshLaunchSelection(session, launch),
             source_json: draft.source,

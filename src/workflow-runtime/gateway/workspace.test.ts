@@ -9,6 +9,11 @@ import { WorkflowAdapterExecutionStore } from '../../workflow-execution/executio
 import type { WorkflowExecutionAdapter } from '../../workflow-execution/types.js';
 import { WorkflowExecutionWorker } from '../../workflow-execution/worker.js';
 import { ensureTaskWorkspaceCore } from '../bootstrap/task-workspace-core.js';
+import {
+  cloneJson,
+  TASK_WORKSPACE_TEMPORARY_REFS,
+  TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE,
+} from '../bootstrap/task-workspace-temporary-contract.js';
 import { buildDeploymentCapacityPublication } from '../contracts/capacity-control-plane-source.js';
 import type { DeploymentRuntimeCapacitySnapshot } from '../contracts/capacity-control-plane-types.js';
 import { buildDeploymentRuntimeCapacityBaseline } from '../contracts/safety-sqlite-artifacts.js';
@@ -1264,6 +1269,174 @@ describe('RuntimeWorkspaceGateway', () => {
       scope_kind: 'expansion',
     });
   });
+
+  it('executes a Temporary Codex capability through T5, Worker callback, and T6a close', async () => {
+    const store = openFresh();
+    ensureTaskWorkspaceCore(store, 1_000);
+    const gateway = new RuntimeWorkspaceGateway(store, Buffer.alloc(32, 7));
+    const recipe = gateway
+      .listRecipes({
+        principal_ref: 'human:local-owner',
+        now_ms: 2_000,
+      })
+      .items.find((item) => item.recipe_ref.id === 'ad_hoc_personal_task')!;
+    expect(recipe.recipe_ref.version).toBe('1.1.0');
+    const response = cloneJson(TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE);
+    const source = (response.graph_scope as JsonObject).source as JsonObject;
+    const compilation = gateway.prepareTemporaryDraft({
+      principal_ref: 'human:local-owner',
+      selection_token: recipe.selection_token,
+      source_json: source,
+      now_ms: 2_001,
+    });
+    const capabilityNode = (
+      compilation.compiled_plan_json.nodes as JsonObject[]
+    ).find((node) => node.type === 'delegation')!;
+    expect(capabilityNode.outbox_execution_binding).toMatchObject({
+      adapter_identity: {
+        ref: TASK_WORKSPACE_TEMPORARY_REFS.adapter,
+      },
+    });
+    const effectiveInput: JsonObject = { text: 'Complete the Codex task' };
+    const attachmentManifest: JsonValue = [];
+    const receipt = gateway.launchTemporary({
+      principal_ref: 'human:local-owner',
+      selection_token: recipe.selection_token,
+      authorization_ref: 'temporary-confirmation:codex-e2e',
+      launch: {
+        request_id: 'launch:codex-e2e',
+        creation_domain: 'task-workspace-test',
+        creation_key: 'codex-e2e',
+        effective_input_json: effectiveInput,
+        effective_input_hash: hash('input', effectiveInput),
+        attachment_manifest_json: attachmentManifest,
+        attachment_manifest_hash: hash('attachments', attachmentManifest),
+        deadline_at_ms: null,
+      },
+      now_ms: 2_002,
+      confirmed_revision_id: 'revision:codex-e2e',
+      confirmed_source_json: source,
+      confirmed_source_hash: compilation.source_hash,
+      confirmed_plan_hash: compilation.compiled_plan_hash,
+      resource_closure_hash: compilation.resource_closure_hash,
+      policy_ceiling_hash: compilation.policy_ceiling_hash,
+    });
+
+    const executionRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-workspace-codex-e2e-'),
+    );
+    roots.push(executionRoot);
+    const executionStore = new WorkflowAdapterExecutionStore(
+      path.join(executionRoot, 'workflow-adapter-executions.db'),
+    );
+    const registry = new WorkflowExecutionAdapterRegistry();
+    let adapterStarts = 0;
+    registry.register({
+      refId: TASK_WORKSPACE_TEMPORARY_REFS.adapter.id,
+      preflight: async () => undefined,
+      start: async (context, request) => {
+        adapterStarts += 1;
+        expect(request.result_schema).toMatchObject(
+          TASK_WORKSPACE_TEMPORARY_REFS.resultSchema,
+        );
+        return {
+          providerMetadata: { source: 'temporary-codex-e2e' },
+          completion: Promise.resolve({
+            state: 'succeeded' as const,
+            result: {
+              format: 'icarus.workflow-agent-result/1' as const,
+              outcome: 'success' as const,
+              summary: 'Codex task completed',
+              provider: {
+                adapter: TASK_WORKSPACE_TEMPORARY_REFS.adapter.id,
+                execution_id: context.executionId,
+                metadata: { source: 'temporary-codex-e2e' },
+              },
+              artifacts: [],
+              error: null,
+            },
+          }),
+          cancel: async () => undefined,
+        };
+      },
+      recover: async () => {
+        throw new Error('Recovery is not expected');
+      },
+    } satisfies WorkflowExecutionAdapter);
+    let workerNow = 3_000;
+    const worker = new WorkflowExecutionWorker({
+      runtimeStore: store,
+      executionStore,
+      registry,
+      pollIntervalMs: 100,
+      leaseOwner: 'worker:temporary-codex-e2e',
+      now: () => workerNow,
+    });
+    const authority = new WorkflowRuntimeTransactionAuthority(store);
+
+    try {
+      for (let iteration = 0; iteration < 120; iteration += 1) {
+        for (const phase of [
+          'compile',
+          'materialize',
+          'reconcile',
+          'schedule',
+          'recover',
+          'close',
+        ] as const) {
+          authority.advance(phase, 32, workerNow);
+          workerNow += 1;
+        }
+        await worker.tick();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        const workflow = store.queryOne<{ status: string }>(
+          'SELECT status FROM workflows WHERE id = ?',
+          [receipt.workflowId],
+        );
+        if (workflow?.status !== 'active') break;
+      }
+
+      expect(adapterStarts).toBe(1);
+      expect(
+        store.queryOne<{ count: number }>(
+          `SELECT count(*) AS count FROM workflow_outbox
+            WHERE adapter_resource_id = ? AND status = 'succeeded'`,
+          [
+            `registry-resource:outbox_adapter:${TASK_WORKSPACE_TEMPORARY_REFS.adapter.id}@1.1.0`,
+          ],
+        ),
+      ).toEqual({ count: 1 });
+      expect(
+        store.queryOne<{
+          phase: string;
+          execution_outcome: string | null;
+          acceptance_state: string;
+        }>(
+          `SELECT attempt.phase, attempt.execution_outcome,
+                  attempt.acceptance_state
+             FROM workflow_graph_node_attempts attempt
+             JOIN workflow_graph_nodes node ON node.id = attempt.node_id
+            WHERE attempt.graph_run_id = ? AND node.node_key = 'codex_task'`,
+          [receipt.activation.graphRunId],
+        ),
+      ).toEqual({
+        phase: 'terminal',
+        execution_outcome: 'succeeded',
+        acceptance_state: 'fenced',
+      });
+      expect(
+        store.queryOne<{
+          status: string;
+          final_outcome_kind: string | null;
+        }>('SELECT status, final_outcome_kind FROM workflows WHERE id = ?', [
+          receipt.workflowId,
+        ]),
+      ).toEqual({ status: 'completed', final_outcome_kind: 'normal' });
+    } finally {
+      await worker.stop();
+      executionStore.close();
+    }
+  }, 30_000);
 
   it('resolves a closed Workspace approval interaction with canonical replay', () => {
     const target = armedApprovalWait('accepted-duplicate-conflict');

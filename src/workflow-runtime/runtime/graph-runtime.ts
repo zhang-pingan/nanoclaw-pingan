@@ -787,14 +787,21 @@ export function requestScopeCloseT7aInTransaction(
     id: string;
     scope_id: string;
     status: string;
+    recovery_kind: string | null;
   }>(
-    `SELECT id, scope_id, status FROM workflow_graph_effect_operations
-      WHERE graph_run_id = ? AND scope_id IN (
+    `SELECT effect.id, effect.scope_id, effect.status,
+            json_extract(node.normalized_node_json,
+                         '$.capability_binding.effect.type') AS recovery_kind
+       FROM workflow_graph_effect_operations effect
+       JOIN workflow_graph_nodes node
+         ON node.graph_run_id = effect.graph_run_id
+        AND node.scope_id = effect.scope_id AND node.id = effect.node_id
+      WHERE effect.graph_run_id = ? AND effect.scope_id IN (
         SELECT id FROM temp.workflow_runtime_transient_id_sets WHERE set_key = ?
       )
-        AND execution_lane = 'normal'
-        AND status IN ('intended', 'dispatched', 'succeeded', 'failed')
-      ORDER BY id COLLATE BINARY`,
+        AND effect.execution_lane = 'normal'
+        AND effect.status IN ('intended', 'dispatched', 'succeeded', 'failed')
+      ORDER BY effect.id COLLATE BINARY`,
     [input.graphRunId, subtreeSetKey],
   );
 
@@ -880,7 +887,8 @@ export function requestScopeCloseT7aInTransaction(
 
   for (const effect of effects) {
     const request = requestByScope.get(effect.scope_id)!;
-    const terminalWithoutApply = effect.status !== 'succeeded';
+    const compensationNotRequired =
+      effect.status !== 'succeeded' || effect.recovery_kind === 'pure';
     requireSingleChange(
       transaction.execute(
         `UPDATE workflow_graph_effect_operations
@@ -891,11 +899,11 @@ export function requestScopeCloseT7aInTransaction(
           WHERE id = ? AND execution_lane = 'normal' AND status = ?`,
         [
           request.id,
-          terminalWithoutApply
+          compensationNotRequired
             ? 'compensation_not_required'
             : 'compensation_pending',
-          terminalWithoutApply ? cleanupKeysValueId : null,
-          terminalWithoutApply ? cleanupKeysHash : null,
+          compensationNotRequired ? cleanupKeysValueId : null,
+          compensationNotRequired ? cleanupKeysHash : null,
           input.nowMs,
           effect.id,
           effect.status,

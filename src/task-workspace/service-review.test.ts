@@ -4,9 +4,22 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { Sha256Hash } from '../workflow-runtime/contracts/types.js';
+import {
+  cloneJson,
+  TASK_WORKSPACE_TEMPORARY_REFS,
+  TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE,
+  WORKFLOW_AGENT_RESULT_SCHEMA_HASH,
+} from '../workflow-runtime/bootstrap/task-workspace-temporary-contract.js';
+import type {
+  JsonObject,
+  Sha256Hash,
+} from '../workflow-runtime/contracts/types.js';
+import type { TaskWorkspaceTimelineDeltaV1 } from './contracts.js';
 import { RuntimeEventHub } from './runtime-event-hub.js';
-import { TaskWorkspaceService } from './service.js';
+import {
+  parseTemporaryWorkflowCoordinatorResponse,
+  TaskWorkspaceService,
+} from './service.js';
 import { TaskWorkspaceStore } from './store.js';
 
 const roots: string[] = [];
@@ -29,7 +42,10 @@ function openStore(): TaskWorkspaceStore {
 function service(
   store: TaskWorkspaceStore,
   runtimeGateway: Record<string, unknown> | null,
-  coordinator: { chat: (...args: never[]) => unknown } | null = null,
+  coordinator: {
+    chat: (input: Record<string, unknown>) => unknown;
+  } | null = null,
+  onTimelineDelta?: (delta: TaskWorkspaceTimelineDeltaV1) => void,
 ): TaskWorkspaceService {
   return new TaskWorkspaceService({
     store,
@@ -38,6 +54,7 @@ function service(
     coordinator: coordinator as never,
     coordinatorAgentJid: () => (coordinator ? 'agent:coordinator' : null),
     now: () => 100,
+    onTimelineDelta,
   });
 }
 
@@ -103,6 +120,64 @@ afterEach(() => {
 });
 
 describe('TaskWorkspaceService review hardening', () => {
+  it('parses only the documented Temporary Coordinator response contract', () => {
+    const response = cloneJson(TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE);
+    expect(
+      parseTemporaryWorkflowCoordinatorResponse(JSON.stringify(response)),
+    ).toEqual({
+      source: (response.graph_scope as Record<string, unknown>).source,
+      risk: response.risk_summary,
+    });
+    expect(
+      parseTemporaryWorkflowCoordinatorResponse(
+        JSON.stringify({
+          source: (response.graph_scope as Record<string, unknown>).source,
+          risk_summary: response.risk_summary,
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it('fails a Temporary launch immediately when Runtime is disabled', async () => {
+    const store = openStore();
+    const coordinator = { chat: vi.fn() };
+    const deltas: TaskWorkspaceTimelineDeltaV1[] = [];
+    const workspace = service(store, null, coordinator, (delta) =>
+      deltas.push(delta),
+    );
+    const session = workspace.createSession({
+      principalRef: 'human:local-owner',
+      title: 'Runtime disabled',
+    });
+
+    const launch = await workspace.run({
+      sessionId: session.session_id,
+      principalRef: session.owner_principal_ref,
+      text: 'run this temporary workflow',
+      idempotencyKey: 'run:runtime-disabled',
+    });
+
+    expect(launch).toMatchObject({
+      status: 'failed',
+      last_error_code: expect.stringContaining(
+        'WORKFLOW_EXECUTION_ENABLED=true',
+      ),
+    });
+    expect(coordinator.chat).not.toHaveBeenCalled();
+    expect(store.getSession(session.session_id).attention_state).toBe('failed');
+    expect(
+      deltas
+        .flatMap((delta) => delta.entries)
+        .some(
+          (entry) =>
+            entry.payload_json.status === 'failed' &&
+            String(entry.payload_json.error_code).includes(
+              'WORKFLOW_EXECUTION_ENABLED=true',
+            ),
+        ),
+    ).toBe(true);
+  });
+
   it('makes interrupted Temporary planning actionable after Host restart', async () => {
     const initial = openStore();
     const target = appendLaunch(initial, 'temporary_workflow');
@@ -251,12 +326,9 @@ describe('TaskWorkspaceService review hardening', () => {
     const store = openStore();
     const target = appendLaunch(store, 'temporary_workflow');
     const coordinator = {
-      chat: vi.fn(async () => ({
+      chat: vi.fn(async (_input: Record<string, unknown>) => ({
         ok: true as const,
-        text: JSON.stringify({
-          source: { format: 'icarus.workflow-graph-scope/1' },
-          risk_summary: { notes: ['reviewed'] },
-        }),
+        text: JSON.stringify(TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE),
         session_id: 'agent-session:planner',
         run_id: 'agent-run:planner',
         query_id: 'query:planner',
@@ -289,7 +361,14 @@ describe('TaskWorkspaceService review hardening', () => {
     expect(prepareTemporaryDraft.mock.calls[0]?.[0]).toMatchObject({
       selection_token: 'fresh-token',
       principal_ref: target.session.owner_principal_ref,
+      source_json: (
+        TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE.graph_scope as JsonObject
+      ).source,
     });
+    const system = String(coordinator.chat.mock.calls[0]?.[0]?.system);
+    expect(system).toContain(TASK_WORKSPACE_TEMPORARY_REFS.capability.id);
+    expect(system).toContain(WORKFLOW_AGENT_RESULT_SCHEMA_HASH);
+    expect(system).toContain('response_schema');
     expect(revision.source_message_id).not.toBe(target.message.message_id);
     expect(
       store.getSession(target.session.session_id).coordinator_agent_session_id,
@@ -370,7 +449,10 @@ describe('TaskWorkspaceService review hardening', () => {
       refreshRecipeSelection: vi.fn(() => ({ selection_token: 'fresh-token' })),
       prepareTemporaryDraft: vi.fn(),
     };
-    const workspace = service(store, runtime, coordinator);
+    const deltas: TaskWorkspaceTimelineDeltaV1[] = [];
+    const workspace = service(store, runtime, coordinator, (delta) =>
+      deltas.push(delta),
+    );
     const session = workspace.createSession({
       principalRef: 'human:local-owner',
       title: 'Invalid planner output',
@@ -397,6 +479,12 @@ describe('TaskWorkspaceService review hardening', () => {
       query_id: 'query:invalid',
     });
     expect(runtime.prepareTemporaryDraft).not.toHaveBeenCalled();
+    expect(store.getSession(session.session_id).attention_state).toBe('failed');
+    expect(
+      deltas
+        .flatMap((delta) => delta.entries)
+        .some((entry) => entry.payload_json.status === 'failed'),
+    ).toBe(true);
     expect(
       store
         .listTimeline(session.session_id)

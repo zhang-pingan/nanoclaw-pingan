@@ -4,25 +4,60 @@ import path from 'node:path';
 import { compileWorkflow } from '../compiler/compiler.js';
 import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
-import type { JsonObject, JsonValue, Sha256Hash } from '../contracts/types.js';
+import type {
+  JsonObject,
+  JsonValue,
+  Sha256Hash,
+  VersionedRef,
+} from '../contracts/types.js';
 import type {
   WorkflowRuntimeStore,
   WorkflowRuntimeWriteTransaction,
 } from '../store/runtime-store/index.js';
+import {
+  TASK_WORKSPACE_CORE_VERSION,
+  TASK_WORKSPACE_TEMPORARY_REFS,
+  WORKFLOW_AGENT_DISPATCH_REQUEST_SCHEMA,
+  WORKFLOW_AGENT_RESULT_SCHEMA,
+} from './task-workspace-temporary-contract.js';
 
-const CORE_OWNER = 'icarus.core.task-workspace@1.0.0';
-const CORE_VERSION = '1.0.0';
+const CORE_OWNER = `icarus.core.task-workspace@${TASK_WORKSPACE_CORE_VERSION}`;
+const CORE_VERSION = TASK_WORKSPACE_CORE_VERSION;
 
 function hash(kind: string, value: JsonValue): Sha256Hash {
   return domainSeparatedSha256(`icarus:task-workspace-core-${kind}:1\n`, value);
 }
 
-function rowId(resourceType: string, resourceId: string): string {
-  return `registry-resource:${resourceType}:${resourceId}@${CORE_VERSION}`;
+function rowId(
+  resourceType: string,
+  resourceId: string,
+  version = CORE_VERSION,
+): string {
+  return `registry-resource:${resourceType}:${resourceId}@${version}`;
 }
 
-function valueId(resourceType: string, resourceId: string): string {
-  return `registry-value:${resourceType}:${resourceId}@${CORE_VERSION}`;
+function valueId(
+  resourceType: string,
+  resourceId: string,
+  version = CORE_VERSION,
+): string {
+  return `registry-value:${resourceType}:${resourceId}@${version}`;
+}
+
+function registryResourceContentHash(
+  resourceType: string,
+  ref: VersionedRef,
+  content: JsonObject,
+): Sha256Hash {
+  return domainSeparatedSha256(
+    'icarus:workflow-registry-resource-content:1\n',
+    {
+      format: 'icarus.workflow-registry-resource/1',
+      resource_type: resourceType,
+      ref,
+      content,
+    },
+  );
 }
 
 function readExpandFixture(): { source: JsonObject; snapshot: JsonObject } {
@@ -58,8 +93,20 @@ function readExpandFixture(): { source: JsonObject; snapshot: JsonObject } {
 interface CoreResource {
   readonly type: string;
   readonly id: string;
+  readonly version?: string;
   readonly content: JsonObject;
   readonly contentHash?: Sha256Hash;
+}
+
+function coreResourceContentHash(resource: CoreResource): Sha256Hash {
+  return (
+    resource.contentHash ??
+    registryResourceContentHash(
+      resource.type,
+      { id: resource.id, version: resource.version ?? CORE_VERSION },
+      resource.content,
+    )
+  );
 }
 
 function insertResource(
@@ -69,15 +116,9 @@ function insertResource(
   schemaHash: Sha256Hash,
   nowMs: number,
 ): void {
-  const id = rowId(resource.type, resource.id);
-  const contentHash =
-    resource.contentHash ??
-    hash('resource', {
-      resource_type: resource.type,
-      resource_id: resource.id,
-      resource_version: CORE_VERSION,
-      content: resource.content,
-    });
+  const version = resource.version ?? CORE_VERSION;
+  const id = rowId(resource.type, resource.id, version);
+  const contentHash = coreResourceContentHash(resource);
   const existing = transaction.queryOne<{
     content_hash: string;
     publication_state: string;
@@ -107,7 +148,7 @@ function insertResource(
                ?, ?, 'icarus.task-workspace-core/1', 'pinned', 'live', NULL,
                ?, 1)`,
     [
-      valueId(resource.type, resource.id),
+      valueId(resource.type, resource.id, version),
       canonical,
       contentHash,
       Buffer.byteLength(canonical, 'utf8'),
@@ -126,14 +167,230 @@ function insertResource(
       id,
       resource.type,
       resource.id,
-      CORE_VERSION,
+      version,
       CORE_OWNER,
-      valueId(resource.type, resource.id),
+      valueId(resource.type, resource.id, version),
       contentHash,
       nowMs,
       nowMs,
     ],
   );
+}
+
+function augmentCompilerSnapshot(input: JsonObject): {
+  snapshot: JsonObject;
+  resources: CoreResource[];
+} {
+  const snapshot = JSON.parse(JSON.stringify(input)) as JsonObject;
+  const registrySnapshot = snapshot.registry_snapshot as JsonObject;
+  const registryResources = registrySnapshot.resources as JsonObject[];
+  const dependencyClosures =
+    registrySnapshot.dependency_closures as JsonObject[];
+  const policySnapshot = snapshot.policy_snapshot as JsonObject;
+  const completePolicy = policySnapshot.complete_policy as JsonObject;
+  const rootPolicy = completePolicy.root_policy as JsonObject;
+  const childProfiles = completePolicy.child_profiles as JsonObject[];
+  const refs = TASK_WORKSPACE_TEMPORARY_REFS;
+
+  const adapterBase: JsonObject = {
+    format: 'icarus.workflow-outbox-adapter/1',
+    ref: refs.adapter,
+    supported_effect_types: ['capability_dispatch'],
+    supported_delivery_lanes: ['normal_execution'],
+    supported_reconciliation: ['not_required'],
+    supported_idempotency: ['provider_key'],
+  };
+  const adapter: JsonObject = {
+    ...adapterBase,
+    adapter_hash: domainSeparatedSha256(
+      'icarus:workflow-outbox-adapter:1\n',
+      adapterBase,
+    ),
+  };
+  const policyBase: JsonObject = {
+    format: 'icarus.workflow-outbox-delivery-policy/1',
+    ref: refs.outboxPolicy,
+    max_delivery_attempts: 3,
+    max_reconcile_attempts: 0,
+    delivery_duration_ms: 3_600_000,
+    attempt_timeout_ms: 3_600_000,
+    initial_backoff_ms: 1_000,
+    max_backoff_ms: 30_000,
+    backoff: 'exponential',
+    deterministic_jitter_micros: 100_000,
+    honor_retry_after: true,
+    retryable_error_codes: [
+      'provider_unavailable',
+      'rate_limited',
+      'workflow_adapter_completion_failed',
+    ],
+    permanent_error_codes: ['contract_rejected', 'permission_denied'],
+  };
+  const outboxPolicy: JsonObject = {
+    ...policyBase,
+    policy_hash: domainSeparatedSha256(
+      'icarus:workflow-outbox-delivery-policy:1\n',
+      policyBase,
+    ),
+  };
+  const executor: JsonObject = {
+    ref: refs.executor,
+    contract_kind: 'executor',
+    contract_hash: domainSeparatedSha256(
+      'icarus:task-workspace-codex-executor:1\n',
+      { ref: refs.executor, adapter_ref: refs.adapter },
+    ),
+  };
+  const dependencies: CoreResource[] = [
+    {
+      type: 'outbox_adapter',
+      id: refs.adapter.id,
+      content: adapter,
+    },
+    {
+      type: 'executor_implementation',
+      id: refs.executor.id,
+      content: executor,
+    },
+    {
+      type: 'outbox_policy',
+      id: refs.outboxPolicy.id,
+      content: outboxPolicy,
+    },
+    {
+      type: 'schema',
+      id: refs.requestSchema.id,
+      content: WORKFLOW_AGENT_DISPATCH_REQUEST_SCHEMA,
+    },
+    {
+      type: 'schema',
+      id: refs.resultSchema.id,
+      content: WORKFLOW_AGENT_RESULT_SCHEMA,
+    },
+  ];
+  const closureMembers = dependencies
+    .map((resource) => ({
+      resource_type: resource.type,
+      ref: {
+        id: resource.id,
+        version: resource.version ?? CORE_VERSION,
+      },
+      content_hash: coreResourceContentHash(resource),
+    }))
+    .sort((left, right) => {
+      const leftKey = `${left.ref.id}@${left.ref.version}`;
+      const rightKey = `${right.ref.id}@${right.ref.version}`;
+      return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+    });
+  const closurePayload: JsonObject = {
+    format: 'icarus.workflow-registry-dependency-closure/1',
+    root_resource_type: 'capability',
+    root_ref: refs.capability,
+    members: closureMembers,
+    member_count: closureMembers.length,
+  };
+  const dependencyClosureHash = domainSeparatedSha256(
+    'icarus:workflow-registry-dependency-closure:1\n',
+    closurePayload,
+  );
+  const capability: JsonObject = {
+    ref: refs.capability,
+    node_type: 'delegation',
+    executor_ref: refs.executor,
+    skill_refs: [],
+    input_ports: {
+      request: {
+        schema_ref: refs.requestSchema,
+        max_bytes: 1_048_576,
+        aggregation: { type: 'single', required: true, select: 'only' },
+      },
+    },
+    output_ports: {
+      result: {
+        schema_ref: refs.resultSchema,
+        max_bytes: 1_048_576,
+        required: true,
+      },
+    },
+    no_artifact_expected: false,
+    no_evaluation_expected: true,
+    quality_revision_policy: null,
+    required_tools: [],
+    required_mcp_methods: [],
+    required_file_scopes: [],
+    required_claims: [],
+    allowed_groups: [],
+    retry_policy: {
+      max_attempts: 1,
+      retry_on: [],
+      backoff: 'fixed',
+    },
+    timeout_ceiling_ms: 3_600_000,
+    effect_impact: 'read_only',
+    effect: { type: 'pure' },
+    cancellation: { type: 'fence_only', safe_to_abandon: true },
+    dependency_closure_hash: dependencyClosureHash,
+    outbox_effect: {
+      effect_type: 'capability_dispatch',
+      adapter_ref: refs.adapter,
+      delivery_policy_ref: refs.outboxPolicy,
+      delivery_lane: 'normal_execution',
+      reconciliation: { type: 'not_required' },
+      idempotency: 'provider_key',
+      delivery_requirement: 'required',
+    },
+  };
+  const capabilityResource: CoreResource = {
+    type: 'capability',
+    id: refs.capability.id,
+    content: capability,
+  };
+  const resources = [...dependencies, capabilityResource];
+
+  for (const resource of resources) {
+    registryResources.push({
+      resource_type: resource.type,
+      ref: {
+        id: resource.id,
+        version: resource.version ?? CORE_VERSION,
+      },
+      content: resource.content,
+      publication_state: 'published',
+      launchability: 'production',
+      content_hash: coreResourceContentHash(resource),
+    });
+  }
+  dependencyClosures.push({
+    ...closurePayload,
+    closure_hash: dependencyClosureHash,
+  });
+  registrySnapshot.dependency_closure_count = dependencyClosures.length;
+
+  const allowedCapabilities = rootPolicy.allowed_capabilities as JsonObject[];
+  allowedCapabilities.push(refs.capability);
+  const childProfile = childProfiles.find(
+    (candidate) =>
+      (candidate.ref as JsonObject).id === 'fixture.policy.child-tight',
+  );
+  if (!childProfile) {
+    throw new Error('Task Workspace Core child policy fixture is unavailable');
+  }
+  const childRequest = childProfile.request as JsonObject;
+  childRequest.allowed_node_types = ['delegation', 'terminal'];
+  childRequest.allowed_capabilities = [refs.capability];
+  const { policy_hash: _priorPolicyHash, ...policyWithoutHash } =
+    completePolicy;
+  completePolicy.policy_hash = domainSeparatedSha256(
+    'icarus:task-workspace-core-compiler-policy:1\n',
+    policyWithoutHash,
+  );
+  const { snapshot_hash: _priorSnapshotHash, ...snapshotWithoutHash } =
+    snapshot;
+  snapshot.snapshot_hash = domainSeparatedSha256(
+    'icarus:task-workspace-core-compiler-snapshot:1\n',
+    snapshotWithoutHash,
+  );
+  return { snapshot, resources };
 }
 
 export type EnsureTaskWorkspaceCoreResult = 'initialized' | 'preserved';
@@ -155,11 +412,12 @@ export function ensureTaskWorkspaceCore(
   }
 
   const fixture = readExpandFixture();
+  const augmented = augmentCompilerSnapshot(fixture.snapshot);
   const compiled = compileWorkflow({
     caseId: 'core.ad-hoc-personal-task.outer',
     sourceKind: 'graph_scope',
     rawSourceBytes: Buffer.from(canonicalJson(fixture.source), 'utf8'),
-    inputSnapshot: fixture.snapshot,
+    inputSnapshot: augmented.snapshot,
   });
   if (!compiled.ok) {
     throw new Error('Fixed Task Workspace Core outer Plan no longer compiles');
@@ -170,12 +428,11 @@ export function ensureTaskWorkspaceCore(
     $id: 'urn:icarus:task-workspace:generic-json:1',
     title: 'Task Workspace JSON',
   };
-  const genericSchemaHash = hash('resource', {
-    resource_type: 'schema',
-    resource_id: 'icarus.task-workspace.generic-json',
-    resource_version: CORE_VERSION,
-    content: genericSchema,
-  });
+  const genericSchemaHash = registryResourceContentHash(
+    'schema',
+    { id: 'icarus.task-workspace.generic-json', version: CORE_VERSION },
+    genericSchema,
+  );
   const genericSchemaRowId = rowId(
     'schema',
     'icarus.task-workspace.generic-json',
@@ -268,10 +525,11 @@ export function ensureTaskWorkspaceCore(
     launch_policy: 'confirm',
     effect_ceiling: 'read_only',
     input_summary: { accepts_text: true, accepts_attachments: true },
-    compiler_input_snapshot: fixture.snapshot,
+    compiler_input_snapshot: augmented.snapshot,
   };
 
   const resources: CoreResource[] = [
+    ...augmented.resources,
     {
       type: 'schema',
       id: 'icarus.task-workspace.generic-json',
@@ -321,6 +579,7 @@ export function ensureTaskWorkspaceCore(
   ).map((resource) => ({
     type: String(resource.resource_type),
     id: String((resource.ref as JsonObject).id),
+    version: String((resource.ref as JsonObject).version),
     content: resource.content as JsonObject,
     contentHash: resource.content_hash as Sha256Hash,
   }));
@@ -328,7 +587,9 @@ export function ensureTaskWorkspaceCore(
     if (
       !resources.some(
         (candidate) =>
-          candidate.type === resource.type && candidate.id === resource.id,
+          candidate.type === resource.type &&
+          candidate.id === resource.id &&
+          (candidate.version ?? CORE_VERSION) === resource.version,
       )
     ) {
       resources.push(resource);
@@ -345,19 +606,16 @@ export function ensureTaskWorkspaceCore(
         nowMs,
       );
     }
-    const closureId = 'registry-closure:icarus.task-workspace-core@1.0.0';
-    const snapshotId = 'registry-snapshot:icarus.task-workspace-core@1.0.0';
+    const closureId = `registry-closure:icarus.task-workspace-core@${CORE_VERSION}`;
+    const snapshotId = `registry-snapshot:icarus.task-workspace-core@${CORE_VERSION}`;
     const closureMembers = resources.map((resource) => ({
-      resource_id: rowId(resource.type, resource.id),
+      resource_id: rowId(
+        resource.type,
+        resource.id,
+        resource.version ?? CORE_VERSION,
+      ),
       resource_type: resource.type,
-      content_hash:
-        resource.contentHash ??
-        hash('resource', {
-          resource_type: resource.type,
-          resource_id: resource.id,
-          resource_version: CORE_VERSION,
-          content: resource.content,
-        }),
+      content_hash: coreResourceContentHash(resource),
     }));
     const closureHash = hash('closure', closureMembers);
     const closureManifest: JsonObject = {
@@ -367,8 +625,7 @@ export function ensureTaskWorkspaceCore(
       closure_hash: closureHash,
     };
     const manifestHash = hash('closure-manifest', closureManifest);
-    const manifestValueId =
-      'registry-value:closure:icarus.task-workspace-core@1.0.0';
+    const manifestValueId = `registry-value:closure:icarus.task-workspace-core@${CORE_VERSION}`;
     const manifestCanonical = canonicalJson(closureManifest);
     transaction.execute(
       `INSERT INTO workflow_values (

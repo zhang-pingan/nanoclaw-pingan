@@ -33,6 +33,14 @@ import type {
   TemporaryWorkflowDraftRevisionV1,
 } from './contracts.js';
 
+function attentionForLaunchStatus(
+  status: TaskLaunchStatus,
+): TaskAttentionState {
+  if (status === 'awaiting_confirmation') return 'waiting_user';
+  if (status === 'failed' || status === 'unsupported') return 'failed';
+  return 'none';
+}
+
 export const CURRENT_TASK_WORKSPACE_SCHEMA_VERSION = 3;
 
 const SCHEMA = `
@@ -1783,7 +1791,7 @@ export class TaskWorkspaceStore {
       });
       this.database
         .prepare(
-          `UPDATE task_workspace_sessions SET updated_at_ms = ?,
+          `UPDATE task_workspace_sessions SET attention_state = 'none', updated_at_ms = ?,
             row_version = row_version + 1 WHERE session_id = ?`,
         )
         .run(nowMs, input.sessionId);
@@ -2014,6 +2022,18 @@ export class TaskWorkspaceStore {
           input.expectedRowVersion,
         ).changes;
       if (count === 1) {
+        this.database
+          .prepare(
+            `UPDATE task_workspace_sessions
+                SET attention_state = ?, updated_at_ms = ?,
+                    row_version = row_version + 1
+              WHERE session_id = ?`,
+          )
+          .run(
+            attentionForLaunchStatus(input.status),
+            nowMs,
+            current.session_id,
+          );
         this.insertTimeline({
           sessionId: current.session_id,
           kind: 'launch_status',
@@ -2114,6 +2134,14 @@ export class TaskWorkspaceStore {
           'Temporary confirmation CAS failed',
         );
       }
+      this.database
+        .prepare(
+          `UPDATE task_workspace_sessions
+              SET attention_state = 'none', updated_at_ms = ?,
+                  row_version = row_version + 1
+            WHERE session_id = ?`,
+        )
+        .run(nowMs, launch.session_id);
       this.insertTimeline({
         sessionId: launch.session_id,
         kind: 'launch_status',
@@ -2237,10 +2265,19 @@ export class TaskWorkspaceStore {
       this.database
         .prepare(
           `UPDATE task_workspace_launch_intents
-              SET status = 'awaiting_confirmation', updated_at_ms = ?,
+              SET status = 'awaiting_confirmation', last_error_code = NULL,
+                  updated_at_ms = ?,
                   row_version = row_version + 1 WHERE launch_intent_id = ?`,
         )
         .run(nowMs, input.launchIntentId);
+      this.database
+        .prepare(
+          `UPDATE task_workspace_sessions
+              SET attention_state = 'waiting_user', updated_at_ms = ?,
+                  row_version = row_version + 1
+            WHERE session_id = ?`,
+        )
+        .run(nowMs, launch.session_id);
       this.insertTimeline({
         sessionId: launch.session_id,
         kind: 'launch_status',

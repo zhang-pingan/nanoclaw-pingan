@@ -3691,8 +3691,8 @@ export class RuntimeWorkspaceGateway {
         `SELECT id, content_hash FROM workflow_registry_resources
           WHERE resource_type = 'schema'
             AND resource_id = 'icarus.task-workspace.generic-json'
-            AND resource_version = '1.0.0'
-            AND publication_state = 'published'`,
+            AND publication_state = 'published'
+          ORDER BY resource_version COLLATE BINARY DESC LIMIT 1`,
         [],
       );
       if (!payloadSchema || !authorizationSchema) {

@@ -395,6 +395,50 @@ describe('TaskWorkspaceStore', () => {
     expect(store.listMessages(session.session_id)).toEqual([]);
   });
 
+  it('preserves failed attention for messages and clears it for a new Run', () => {
+    const store = openStore();
+    const session = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Retry failed Run',
+      nowMs: 1,
+    });
+    const first = store.createRunLaunchIntent({
+      sessionId: session.session_id,
+      messageText: 'First attempt',
+      mode: 'temporary_workflow',
+      effectiveInput: { text: 'First attempt', attachments: [] },
+      attachmentManifestHash: sha('a'),
+      idempotencyKey: 'run:first-attempt',
+      nowMs: 2,
+    });
+    store.updateLaunchStatus({
+      launchIntentId: first.launch.launch_intent_id,
+      expectedRowVersion: first.launch.row_version,
+      status: 'failed',
+      errorCode: 'planning_failed',
+      nowMs: 3,
+    });
+
+    store.appendMessage({
+      sessionId: session.session_id,
+      role: 'system',
+      bodyText: 'Failure details',
+      nowMs: 4,
+    });
+    expect(store.getSession(session.session_id).attention_state).toBe('failed');
+
+    store.createRunLaunchIntent({
+      sessionId: session.session_id,
+      messageText: 'Second attempt',
+      mode: 'temporary_workflow',
+      effectiveInput: { text: 'Second attempt', attachments: [] },
+      attachmentManifestHash: sha('b'),
+      idempotencyKey: 'run:second-attempt',
+      nowMs: 5,
+    });
+    expect(store.getSession(session.session_id).attention_state).toBe('none');
+  });
+
   it('only confirms the current revision belonging to the LaunchIntent Draft', () => {
     const store = openStore();
     const session = store.createSession({
@@ -427,6 +471,9 @@ describe('TaskWorkspaceStore', () => {
       });
     const oldRevision = revision('a');
     const currentRevision = revision('b');
+    expect(store.getSession(session.session_id).attention_state).toBe(
+      'waiting_user',
+    );
     const awaiting = store.getLaunchIntent(run.launch.launch_intent_id);
     expect(() =>
       store.confirmCurrentTemporaryRevision({
@@ -447,6 +494,7 @@ describe('TaskWorkspaceStore', () => {
       confirmed_draft_revision_id: currentRevision.revision_id,
     });
     expect(confirmed.revision).toEqual(currentRevision);
+    expect(store.getSession(session.session_id).attention_state).toBe('none');
   });
 
   it('serializes persisted Coordinator turns and allows Agent session recovery', () => {

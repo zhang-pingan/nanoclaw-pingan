@@ -14,9 +14,11 @@ import {
 } from './runtime/reconciler.js';
 import { scheduleReadyNodeT4 } from './runtime/basic-scheduler.js';
 import {
+  acceptInternalResultT6a,
   consumeRetryScheduleT6d,
   fireAttemptWatchdogT6d,
 } from './runtime/node-execution.js';
+import { prepareCapabilityDispatchT5 } from './runtime/outbox.js';
 import {
   finalizeChildScopeT7b,
   materializeDynamicScopeT2b,
@@ -256,6 +258,12 @@ function parseObject(value: string): JsonObject {
   const result = object(parsed);
   if (!result) throw new Error('Expected a JSON object');
   return result;
+}
+
+function finiteDeadline(nowMs: number, durationMs: number): number {
+  const duration =
+    Number.isSafeInteger(durationMs) && durationMs > 0 ? durationMs : 1;
+  return Math.min(Number.MAX_SAFE_INTEGER, nowMs + duration);
 }
 
 function runtimeRef(value: unknown): RuntimeRegistryRef | null {
@@ -948,6 +956,103 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
       });
       processed += 1;
     }
+    let evaluatingHasMore = false;
+    if (processed < limit) {
+      const remaining = limit - processed;
+      const evaluatingRows = this.store.queryAll<{
+        attempt_id: string;
+        graph_run_id: string;
+        scope_id: string;
+        node_id: string;
+        attempt_row_version: number;
+        run_work_fence_epoch: number;
+        scope_work_fence_epoch: number;
+        lease_owner: string | null;
+        lease_token: string | null;
+        result_value_id: string;
+        result_hash: Sha256Hash;
+        result_json: string;
+      }>(
+        `SELECT attempt.id AS attempt_id, attempt.graph_run_id,
+                attempt.scope_id, attempt.node_id,
+                attempt.row_version AS attempt_row_version,
+                attempt.run_work_fence_epoch, attempt.scope_work_fence_epoch,
+                attempt.lease_owner, attempt.lease_token,
+                attempt.result_value_id, attempt.result_hash,
+                result.inline_canonical_json AS result_json
+           FROM workflow_graph_node_attempts attempt
+           JOIN workflow_graph_nodes node
+             ON node.graph_run_id = attempt.graph_run_id
+            AND node.scope_id = attempt.scope_id AND node.id = attempt.node_id
+           JOIN workflow_graph_runs run ON run.id = attempt.graph_run_id
+           JOIN workflow_graph_scopes scope
+             ON scope.graph_run_id = attempt.graph_run_id
+            AND scope.id = attempt.scope_id
+           JOIN workflow_values result ON result.id = attempt.result_value_id
+          WHERE attempt.phase = 'evaluating'
+            AND attempt.acceptance_state = 'open'
+            AND attempt.result_value_id IS NOT NULL
+            AND attempt.result_hash IS NOT NULL
+            AND node.node_type = 'delegation'
+            AND result.storage_kind = 'inline' AND result.payload_state = 'live'
+            AND result.content_hash = attempt.result_hash
+            AND json_extract(result.inline_canonical_json, '$.format') =
+                'icarus.workflow-agent-result/1'
+            AND run.lifecycle = 'executing' AND run.control = 'running'
+            AND run.operational_state = 'healthy' AND scope.lifecycle = 'active'
+          ORDER BY attempt.updated_at_ms, attempt.id COLLATE BINARY LIMIT ?`,
+        [remaining + 1],
+      );
+      evaluatingHasMore = evaluatingRows.length > remaining;
+      for (const row of evaluatingRows.slice(0, remaining)) {
+        const result = parseObject(row.result_json);
+        const outcome = String(result.outcome);
+        const error = object(result.error);
+        const succeeded =
+          result.format === 'icarus.workflow-agent-result/1' &&
+          outcome === 'success';
+        const cancelled = outcome === 'cancelled';
+        const executionOutcome = succeeded
+          ? 'succeeded'
+          : cancelled
+            ? 'cancelled'
+            : 'failed';
+        const resultRef = {
+          id: row.result_value_id,
+          hash: row.result_hash,
+        };
+        acceptInternalResultT6a(this.store, {
+          graphRunId: row.graph_run_id,
+          scopeId: row.scope_id,
+          nodeId: row.node_id,
+          attemptId: row.attempt_id,
+          expectedAttemptRowVersion: row.attempt_row_version,
+          leaseOwner: row.lease_owner,
+          leaseToken: row.lease_token,
+          expectedRunWorkFenceEpoch: row.run_work_fence_epoch,
+          expectedScopeWorkFenceEpoch: row.scope_work_fence_epoch,
+          executionOutcome,
+          qualityDecision: succeeded ? 'pass' : null,
+          result: resultRef,
+          outputPorts: succeeded ? { result: resultRef } : null,
+          evaluation: null,
+          feedback: null,
+          errorCode:
+            succeeded || cancelled
+              ? null
+              : typeof error?.code === 'string'
+                ? error.code
+                : outcome === 'blocked'
+                  ? 'workflow_agent_blocked'
+                  : result.format === 'icarus.workflow-agent-result/1'
+                    ? 'workflow_agent_failed'
+                    : 'workflow_agent_result_invalid',
+          factPayload: resultRef,
+          nowMs,
+        });
+        processed += 1;
+      }
+    }
     if (processed < limit) {
       const remaining = limit - processed;
       const terminalRows = this.store.queryAll<{
@@ -1027,10 +1132,18 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
       return {
         processed,
         has_more:
-          initializationRows.length > limit || terminalRows.length > remaining,
+          initializationRows.length > limit ||
+          evaluatingHasMore ||
+          terminalRows.length > remaining,
       };
     }
-    return { processed, has_more: initializationRows.length > limit };
+    return {
+      processed,
+      has_more:
+        processed >= limit ||
+        initializationRows.length > limit ||
+        evaluatingHasMore,
+    };
   }
 
   private schedule(limit: number, nowMs: number): WorkflowRuntimeAdvanceResult {
@@ -1087,9 +1200,100 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
       if (receipt.disposition !== 'backpressure') processed += 1;
     }
     if (processed >= limit) {
-      return { processed, has_more: rows.length > limit };
+      return { processed, has_more: true };
     }
-    const remaining = limit - processed;
+    let remaining = limit - processed;
+    const preparing = this.store.queryAll<{
+      attempt_id: string;
+      graph_run_id: string;
+      scope_id: string;
+      node_id: string;
+      attempt_row_version: number;
+      run_work_fence_epoch: number;
+      scope_work_fence_epoch: number;
+      context_pack_value_id: string;
+      context_pack_hash: Sha256Hash;
+      normalized_node_json: string;
+      state_config_json: string;
+    }>(
+      `SELECT attempt.id AS attempt_id, attempt.graph_run_id,
+              attempt.scope_id, attempt.node_id,
+              attempt.row_version AS attempt_row_version,
+              attempt.run_work_fence_epoch, attempt.scope_work_fence_epoch,
+              attempt.context_pack_value_id, attempt.context_pack_hash,
+              node.normalized_node_json,
+              state_value.inline_canonical_json AS state_config_json
+         FROM workflow_graph_node_attempts attempt
+         JOIN workflow_graph_nodes node
+           ON node.graph_run_id = attempt.graph_run_id
+          AND node.scope_id = attempt.scope_id AND node.id = attempt.node_id
+         JOIN workflow_graph_runs run ON run.id = attempt.graph_run_id
+         JOIN workflow_graph_scopes scope
+           ON scope.graph_run_id = attempt.graph_run_id
+          AND scope.id = attempt.scope_id
+         JOIN workflow_values state_value ON state_value.id = run.state_config_value_id
+        WHERE attempt.phase = 'preparing'
+          AND attempt.acceptance_state = 'open'
+          AND attempt.context_pack_value_id IS NOT NULL
+          AND attempt.context_pack_hash IS NOT NULL
+          AND node.node_type = 'delegation'
+          AND json_array_length(
+                json_extract(node.normalized_node_json,
+                             '$.capability_binding.required_claims')) = 0
+          AND run.lifecycle = 'executing' AND run.control = 'running'
+          AND run.operational_state = 'healthy' AND scope.lifecycle = 'active'
+        ORDER BY attempt.updated_at_ms, attempt.id COLLATE BINARY LIMIT ?`,
+      [remaining + 1],
+    );
+    const preparingHasMore = preparing.length > remaining;
+    for (const row of preparing.slice(0, remaining)) {
+      const node = parseObject(row.normalized_node_json);
+      const state = parseObject(row.state_config_json);
+      const policySnapshotSchema =
+        runtimeRef(state.manifest_schema) ?? this.firstResource('schema');
+      const effectiveLimits = object(node.effective_limits);
+      const outboxBinding = object(node.outbox_execution_binding);
+      const policySnapshot = object(outboxBinding?.effective_policy_snapshot);
+      const effectivePolicy = object(policySnapshot?.effective_policy);
+      if (!policySnapshotSchema || !effectiveLimits || !effectivePolicy) {
+        throw new Error(
+          `Capability dispatch authority is incomplete: ${row.attempt_id}`,
+        );
+      }
+      prepareCapabilityDispatchT5(this.store, {
+        graphRunId: row.graph_run_id,
+        scopeId: row.scope_id,
+        nodeId: row.node_id,
+        attemptId: row.attempt_id,
+        expectedAttemptRowVersion: row.attempt_row_version,
+        expectedRunWorkFenceEpoch: row.run_work_fence_epoch,
+        expectedScopeWorkFenceEpoch: row.scope_work_fence_epoch,
+        request: {
+          id: row.context_pack_value_id,
+          hash: row.context_pack_hash,
+        },
+        policySnapshotSchema,
+        operationKey: `runtime-service:${row.attempt_id}:capability-dispatch`,
+        requiredClaims: [],
+        dispatchDeadlineAtMs: finiteDeadline(
+          nowMs,
+          Number(effectiveLimits.timeout_ms),
+        ),
+        outboxDeadlineAtMs: finiteDeadline(
+          nowMs,
+          Number(effectivePolicy.delivery_duration_ms),
+        ),
+        nowMs,
+      });
+      processed += 1;
+    }
+    if (processed >= limit) {
+      return {
+        processed,
+        has_more: true,
+      };
+    }
+    remaining = limit - processed;
     const owners = this.store.queryAll<{
       graph_run_id: string;
       scope_id: string;
@@ -1145,7 +1349,8 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
     }
     return {
       processed,
-      has_more: rows.length > limit || owners.length > remaining,
+      has_more:
+        rows.length > limit || preparingHasMore || owners.length > remaining,
     };
   }
 
