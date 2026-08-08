@@ -704,7 +704,7 @@ class TaskWorkspaceRenderer {
             renderTimelineEntry(entry, this.resolvedInteraction(entry)),
           )
           .join('')
-      : '<div class="tw-empty tw-empty-conversation"><strong>就绪</strong></div>';
+      : '';
     if (scrollToBottom) timeline.scrollTop = timeline.scrollHeight;
   }
 

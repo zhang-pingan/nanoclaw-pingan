@@ -332,7 +332,7 @@ var componentManagementNavKeys = [
   'memory-management',
   'knowledge-management',
 ];
-var componentManagementNavExpanded = true;
+var componentManagementNavExpanded = false;
 var agentsList = document.getElementById('agents-list');
 var refreshAgentsBtn = document.getElementById('refresh-agents');
 var resetAllSessionsBtn = document.getElementById('reset-all-sessions');

@@ -48,14 +48,14 @@
             </button>
             <div
               id="component-management-nav-group"
-              class="primary-nav-group expanded"
+              class="primary-nav-group collapsed"
               data-nav-group="component-management"
             >
               <button
                 id="component-management-nav-toggle"
                 class="primary-nav-group-toggle"
                 type="button"
-                aria-expanded="true"
+                aria-expanded="false"
                 aria-controls="component-management-nav-children"
               >
                 <span class="primary-nav-dot"></span>
@@ -76,6 +76,7 @@
               <div
                 id="component-management-nav-children"
                 class="primary-nav-children"
+                hidden
               >
                 <button
                   class="primary-nav-item primary-nav-child"
@@ -2311,8 +2312,15 @@
               role="status"
             ></div>
             <div id="collaboration-empty" class="collaboration-empty">
-              <div class="collaboration-empty-mark" aria-hidden="true">群</div>
-              <h2>选择一个群组</h2>
+              <img
+                class="collaboration-empty-mascot"
+                src="/assets/avatar-assistant.png"
+                alt="Assistant avatar"
+              />
+              <p>Select a Group from the sidebar to start collaborating</p>
+              <span class="messages-empty-sub"
+                >选择左侧群组，查看动态并开始协作</span
+              >
             </div>
             <div id="collaboration-detail" class="collaboration-detail hidden">
               <header class="collaboration-detail-header">
