@@ -11,6 +11,7 @@ import { WorkflowExecutionWorker } from '../../workflow-execution/worker.js';
 import { ensureTaskWorkspaceCore } from '../bootstrap/task-workspace-core.js';
 import {
   cloneJson,
+  TASK_WORKSPACE_CORE_VERSION,
   TASK_WORKSPACE_TEMPORARY_REFS,
   TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE,
 } from '../bootstrap/task-workspace-temporary-contract.js';
@@ -70,7 +71,7 @@ function terminalChildSource(nodeId = 'child_done'): JsonObject {
   return {
     format: 'icarus.workflow-graph-scope/1',
     scope_key: `dynamic_child_${nodeId}`,
-    interface_ref: { id: 'fixture.interface.child', version: '1.0.0' },
+    interface_ref: TASK_WORKSPACE_TEMPORARY_REFS.interface,
     nodes: [
       {
         id: nodeId,
@@ -1100,6 +1101,57 @@ describe('RuntimeWorkspaceGateway', () => {
     });
   }, 20_000);
 
+  it('publishes a self-contained Core release without fixture dependencies', () => {
+    const store = openFresh();
+    expect(ensureTaskWorkspaceCore(store, 1_000)).toBe('initialized');
+
+    const members = store.queryAll<{
+      resource_id: string;
+      resource_version: string;
+      owner_core_ref: string | null;
+    }>(
+      `SELECT resource.resource_id, resource.resource_version,
+              resource.owner_core_ref
+         FROM workflow_registry_closure_members member
+         JOIN workflow_registry_resources resource
+           ON resource.id = member.resource_id
+        WHERE member.closure_manifest_id = ?
+        ORDER BY member.member_index`,
+      [
+        `registry-closure:icarus.task-workspace-core@${TASK_WORKSPACE_CORE_VERSION}`,
+      ],
+    );
+    expect(members.length).toBeGreaterThan(0);
+    expect(
+      members.every(
+        (member) =>
+          member.resource_version === TASK_WORKSPACE_CORE_VERSION &&
+          member.owner_core_ref ===
+            `icarus.core.task-workspace@${TASK_WORKSPACE_CORE_VERSION}` &&
+          !member.resource_id.startsWith('fixture.'),
+      ),
+    ).toBe(true);
+
+    const releaseDocuments = store.queryAll<{ content: string }>(
+      `SELECT value.inline_canonical_json AS content
+         FROM workflow_registry_resources resource
+         JOIN workflow_values value ON value.id = resource.canonical_value_id
+        WHERE resource.owner_core_ref = ?`,
+      [`icarus.core.task-workspace@${TASK_WORKSPACE_CORE_VERSION}`],
+    );
+    expect(releaseDocuments.length).toBe(members.length);
+    for (const document of releaseDocuments) {
+      expect(document.content).not.toContain('fixture.');
+      expect(document.content).not.toContain('test-only:');
+    }
+    expect(
+      members.some(
+        (member) =>
+          member.resource_id === TASK_WORKSPACE_TEMPORARY_REFS.interface.id,
+      ),
+    ).toBe(true);
+  });
+
   it('launches and advances the fixed Temporary Workflow through its Dynamic Child', async () => {
     const store = openFresh();
     expect(ensureTaskWorkspaceCore(store, 1_000)).toBe('initialized');
@@ -1280,7 +1332,7 @@ describe('RuntimeWorkspaceGateway', () => {
         now_ms: 2_000,
       })
       .items.find((item) => item.recipe_ref.id === 'ad_hoc_personal_task')!;
-    expect(recipe.recipe_ref.version).toBe('1.1.0');
+    expect(recipe.recipe_ref.version).toBe(TASK_WORKSPACE_CORE_VERSION);
     const response = cloneJson(TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE);
     const source = (response.graph_scope as JsonObject).source as JsonObject;
     const compilation = gateway.prepareTemporaryDraft({
@@ -1402,7 +1454,7 @@ describe('RuntimeWorkspaceGateway', () => {
           `SELECT count(*) AS count FROM workflow_outbox
             WHERE adapter_resource_id = ? AND status = 'succeeded'`,
           [
-            `registry-resource:outbox_adapter:${TASK_WORKSPACE_TEMPORARY_REFS.adapter.id}@1.1.0`,
+            `registry-resource:outbox_adapter:${TASK_WORKSPACE_TEMPORARY_REFS.adapter.id}@${TASK_WORKSPACE_TEMPORARY_REFS.adapter.version}`,
           ],
         ),
       ).toEqual({ count: 1 });

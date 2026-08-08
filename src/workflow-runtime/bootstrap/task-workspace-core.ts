@@ -1,9 +1,8 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import { compileWorkflow } from '../compiler/compiler.js';
 import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
+import { buildClosedSchemaArtifacts } from '../contracts/closed-schema-artifacts.js';
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
+import { buildSafetySqliteSemanticArtifacts } from '../contracts/safety-sqlite-artifacts.js';
 import type {
   JsonObject,
   JsonValue,
@@ -23,6 +22,24 @@ import {
 
 const CORE_OWNER = `icarus.core.task-workspace@${TASK_WORKSPACE_CORE_VERSION}`;
 const CORE_VERSION = TASK_WORKSPACE_CORE_VERSION;
+const CORE_COMPILER_REFS = {
+  rootInterface: {
+    id: 'icarus.core.task-workspace.interface.root',
+    version: CORE_VERSION,
+  },
+  childPolicy: {
+    id: 'icarus.core.task-workspace.policy.child',
+    version: CORE_VERSION,
+  },
+  rootPolicy: {
+    id: 'icarus.core.task-workspace.policy.root',
+    version: CORE_VERSION,
+  },
+  graphScopeSchema: {
+    id: 'icarus.core.task-workspace.schema.graph-scope',
+    version: CORE_VERSION,
+  },
+} as const satisfies Record<string, VersionedRef>;
 
 function hash(kind: string, value: JsonValue): Sha256Hash {
   return domainSeparatedSha256(`icarus:task-workspace-core-${kind}:1\n`, value);
@@ -60,36 +77,6 @@ function registryResourceContentHash(
   );
 }
 
-function readExpandFixture(): { source: JsonObject; snapshot: JsonObject } {
-  const candidates = [
-    path.resolve(import.meta.dirname, '../compiler/golden/cases@1.json'),
-    path.resolve(
-      process.cwd(),
-      'src/workflow-runtime/compiler/golden/cases@1.json',
-    ),
-  ];
-  const file = candidates.find((candidate) => fs.existsSync(candidate));
-  if (!file) throw new Error('Workflow compiler Core fixture is unavailable');
-  const corpus = JSON.parse(fs.readFileSync(file, 'utf8')) as {
-    cases: Array<{
-      case_id: string;
-      raw_source_base64: string;
-      registry_snapshot: JsonObject;
-    }>;
-  };
-  const entry = corpus.cases.find(
-    (candidate) => candidate.case_id === 'positive.expand',
-  );
-  if (!entry)
-    throw new Error('Workflow compiler Expand fixture is unavailable');
-  return {
-    source: JSON.parse(
-      Buffer.from(entry.raw_source_base64, 'base64').toString('utf8'),
-    ) as JsonObject,
-    snapshot: entry.registry_snapshot,
-  };
-}
-
 interface CoreResource {
   readonly type: string;
   readonly id: string;
@@ -107,6 +94,379 @@ function coreResourceContentHash(resource: CoreResource): Sha256Hash {
       resource.content,
     )
   );
+}
+
+const GRAPH_LIMIT_KEYS = [
+  'max_scopes',
+  'max_nodes',
+  'max_nodes_per_scope',
+  'max_edges_per_scope',
+  'max_nesting_depth',
+  'max_map_items',
+  'max_concurrency',
+  'max_total_attempts',
+  'max_total_waits',
+  'max_total_output_bytes',
+  'max_scope_spec_bytes',
+  'max_condition_steps',
+  'max_wait_duration_ms',
+  'max_pending_signals',
+  'max_fixed_point_facts',
+  'max_frontier_bytes',
+] as const;
+
+function cloneJson<T extends JsonValue>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function graphLimits(
+  overrides: Partial<Record<(typeof GRAPH_LIMIT_KEYS)[number], number>> = {},
+): JsonObject {
+  return Object.fromEntries(
+    GRAPH_LIMIT_KEYS.map((key) => [key, overrides[key] ?? null]),
+  ) as JsonObject;
+}
+
+function usageBudget(): JsonObject {
+  return {
+    max_total_tool_calls: null,
+    max_total_input_tokens: null,
+    max_total_output_tokens: null,
+    max_total_cost_micros: null,
+  };
+}
+
+function graphScopeSchema(): JsonObject {
+  const artifact = buildClosedSchemaArtifacts().find(
+    ([artifactPath]) =>
+      artifactPath === 'schemas/graph-scope-source-schema.json',
+  )?.[1];
+  if (!artifact || !artifact.payload || Array.isArray(artifact.payload)) {
+    throw new Error('Canonical Graph Scope schema is unavailable');
+  }
+  return cloneJson(artifact.payload as JsonObject);
+}
+
+function runtimeSafetyProfile(): {
+  readonly hash: Sha256Hash;
+  readonly ceilings: JsonObject;
+} {
+  const artifact = buildSafetySqliteSemanticArtifacts().find(
+    ([, candidate]) =>
+      candidate.format === 'icarus.workflow-runtime-safety-profile/1',
+  )?.[1];
+  const payload = artifact?.payload;
+  if (
+    !artifact ||
+    !payload ||
+    Array.isArray(payload) ||
+    !payload.ceilings ||
+    typeof payload.ceilings !== 'object' ||
+    Array.isArray(payload.ceilings)
+  ) {
+    throw new Error('Canonical Runtime safety profile is unavailable');
+  }
+  return {
+    hash: artifact.hash,
+    ceilings: cloneJson(payload.ceilings as JsonObject),
+  };
+}
+
+function scopeInterface(ref: VersionedRef): JsonObject {
+  const snapshot: JsonObject = {
+    ref,
+    inputs: {},
+    exits: { done: { output_ports: {} } },
+  };
+  return {
+    format: 'icarus.workflow-scope-interface/1',
+    ...snapshot,
+    interface_hash: domainSeparatedSha256(
+      'icarus:workflow-scope-interface:1\n',
+      snapshot,
+    ),
+  };
+}
+
+function graphPolicyResource(
+  ref: VersionedRef,
+  request: JsonObject,
+): JsonObject {
+  const content: JsonObject = {
+    format: 'icarus.workflow-graph-policy/1',
+    ref,
+    request,
+  };
+  return {
+    ...content,
+    policy_hash: domainSeparatedSha256(
+      'icarus:workflow-graph-policy:1\n',
+      content,
+    ),
+  };
+}
+
+interface CoreCompilerBase {
+  readonly source: JsonObject;
+  readonly snapshot: JsonObject;
+  readonly resources: CoreResource[];
+}
+
+function buildCoreCompilerBase(): CoreCompilerBase {
+  const refs = TASK_WORKSPACE_TEMPORARY_REFS;
+  const childInterface = scopeInterface(refs.interface);
+  const rootInterface = scopeInterface(CORE_COMPILER_REFS.rootInterface);
+  const childPolicy: JsonObject = {
+    allowed_node_types: ['delegation', 'terminal'],
+    allowed_capabilities: [refs.capability],
+    allowed_templates: [],
+    allowed_interface_refs: [refs.interface],
+    allowed_wait_contracts: [],
+    allowed_child_policy_refs: [],
+    allowed_claim_ids: [],
+    allow_early_close: false,
+    allow_indefinite_waits: false,
+    effect_policy: {
+      allowed_recovery_kinds: ['pure'],
+      max_impact: 'read_only',
+    },
+    build_retry: null,
+    limits: graphLimits({ max_nodes: 16, max_edges_per_scope: 32 }),
+    usage_budget: usageBudget(),
+  };
+  const rootPolicy: JsonObject = {
+    allowed_node_types: ['expand', 'delegation', 'terminal'],
+    allowed_capabilities: [refs.capability],
+    allowed_templates: [],
+    allowed_interface_refs: [refs.interface, CORE_COMPILER_REFS.rootInterface],
+    allowed_wait_contracts: [],
+    allowed_child_policy_refs: [CORE_COMPILER_REFS.childPolicy],
+    allowed_claim_ids: [],
+    allow_early_close: true,
+    allow_indefinite_waits: false,
+    effect_policy: {
+      allowed_recovery_kinds: ['pure'],
+      max_impact: 'read_only',
+    },
+    build_retry: null,
+    limits: graphLimits(),
+    usage_budget: usageBudget(),
+  };
+  const graphSchemaResource: CoreResource = {
+    type: 'schema',
+    id: CORE_COMPILER_REFS.graphScopeSchema.id,
+    content: graphScopeSchema(),
+  };
+  const rootInterfaceResource: CoreResource = {
+    type: 'scope_interface',
+    id: CORE_COMPILER_REFS.rootInterface.id,
+    content: rootInterface,
+  };
+  const childInterfaceResource: CoreResource = {
+    type: 'scope_interface',
+    id: refs.interface.id,
+    content: childInterface,
+  };
+  const rootPolicyResource: CoreResource = {
+    type: 'graph_policy',
+    id: CORE_COMPILER_REFS.rootPolicy.id,
+    content: graphPolicyResource(CORE_COMPILER_REFS.rootPolicy, rootPolicy),
+  };
+  const childPolicyResource: CoreResource = {
+    type: 'graph_policy',
+    id: CORE_COMPILER_REFS.childPolicy.id,
+    content: graphPolicyResource(CORE_COMPILER_REFS.childPolicy, childPolicy),
+  };
+  const resources = [
+    graphSchemaResource,
+    rootInterfaceResource,
+    childInterfaceResource,
+    rootPolicyResource,
+    childPolicyResource,
+  ];
+  const registryResources = resources.map((resource) => ({
+    resource_type: resource.type,
+    ref: { id: resource.id, version: resource.version ?? CORE_VERSION },
+    content: resource.content,
+    publication_state: 'published',
+    launchability: 'production',
+    content_hash: coreResourceContentHash(resource),
+  }));
+  const registrySnapshotWithoutHash: JsonObject = {
+    snapshot_ref: `icarus:task-workspace:registry@${CORE_VERSION}`,
+    resource_count: registryResources.length,
+    resources: registryResources,
+    dependency_closure_count: 0,
+    dependency_closures: [],
+  };
+  const registrySnapshot: JsonObject = {
+    ...registrySnapshotWithoutHash,
+    snapshot_hash: domainSeparatedSha256(
+      'icarus:task-workspace-core-compiler-registry-snapshot:1\n',
+      registrySnapshotWithoutHash,
+    ),
+  };
+  const interfaceEntries = [childInterface, rootInterface];
+  const interfaceSnapshotWithoutHash: JsonObject = {
+    snapshot_ref: `icarus:task-workspace:interfaces@${CORE_VERSION}`,
+    interface_count: interfaceEntries.length,
+    interfaces: interfaceEntries,
+  };
+  const interfaceSnapshot: JsonObject = {
+    ...interfaceSnapshotWithoutHash,
+    snapshot_hash: domainSeparatedSha256(
+      'icarus:task-workspace-core-compiler-interface-snapshot:1\n',
+      interfaceSnapshotWithoutHash,
+    ),
+  };
+  const completePolicyWithoutHash: JsonObject = {
+    root_policy_ref: CORE_COMPILER_REFS.rootPolicy,
+    root_policy: rootPolicy,
+    child_profiles: [
+      { ref: CORE_COMPILER_REFS.childPolicy, request: childPolicy },
+    ],
+    intersection_order: [
+      'global',
+      'workflow',
+      'state',
+      'parent',
+      'child_request',
+      'runtime_safety',
+    ],
+  };
+  const policySnapshot: JsonObject = {
+    snapshot_ref: `icarus:task-workspace:policy@${CORE_VERSION}`,
+    complete_policy: {
+      ...completePolicyWithoutHash,
+      policy_hash: domainSeparatedSha256(
+        'icarus:task-workspace-core-compiler-policy:1\n',
+        completePolicyWithoutHash,
+      ),
+    },
+  };
+  const safetyProfile = runtimeSafetyProfile();
+  const safetySnapshot: JsonObject = {
+    snapshot_ref: `icarus:task-workspace:safety@${CORE_VERSION}`,
+    source_artifact_hash: safetyProfile.hash,
+    ceilings: safetyProfile.ceilings,
+  };
+  const snapshotWithoutHash: JsonObject = {
+    format: 'icarus.workflow-compiler-input-snapshot/2',
+    snapshot_id: `icarus.task-workspace.compiler@${CORE_VERSION}`,
+    launchability: 'production',
+    registry_snapshot: registrySnapshot,
+    interface_snapshot: interfaceSnapshot,
+    policy_snapshot: policySnapshot,
+    safety_snapshot: safetySnapshot,
+  };
+  const snapshot: JsonObject = {
+    ...snapshotWithoutHash,
+    snapshot_hash: domainSeparatedSha256(
+      'icarus:task-workspace-core-compiler-snapshot:1\n',
+      snapshotWithoutHash,
+    ),
+  };
+  const source: JsonObject = {
+    format: 'icarus.workflow-graph-scope/1',
+    scope_key: 'task_workspace_outer',
+    interface_ref: CORE_COMPILER_REFS.rootInterface,
+    nodes: [
+      {
+        id: 'expand_child',
+        type: 'expand',
+        trigger: { type: 'root' },
+        child_interface_ref: refs.interface,
+        input_ports: {
+          graph_spec: {
+            schema_ref: CORE_COMPILER_REFS.graphScopeSchema,
+            max_bytes: 1_048_576,
+            aggregation: { type: 'single', required: true, select: 'only' },
+          },
+        },
+        graph_spec_input_port: 'graph_spec',
+        child_input_bindings: {},
+        completion_output_port: 'completion',
+        expose: {},
+        child_policy_ref: CORE_COMPILER_REFS.childPolicy,
+      },
+      {
+        id: 'done',
+        type: 'terminal',
+        trigger: { type: 'all', edge_ids: ['edge.expanded'] },
+        exit: 'done',
+      },
+    ],
+    control_edges: [
+      {
+        id: 'edge.expanded',
+        kind: 'control',
+        from_node_id: 'expand_child',
+        to_node_id: 'done',
+        on: { statuses: ['succeeded'] },
+      },
+    ],
+    data_edges: [
+      {
+        id: 'data.graph-spec',
+        kind: 'data',
+        from: {
+          type: 'literal',
+          value: {
+            format: 'icarus.workflow-graph-scope/1',
+            scope_key: 'dynamic_child',
+            interface_ref: refs.interface,
+            nodes: [
+              {
+                id: 'child_done',
+                type: 'terminal',
+                trigger: { type: 'root' },
+                exit: 'done',
+              },
+            ],
+            control_edges: [],
+            data_edges: [],
+            completion: {
+              settled_rules: [
+                {
+                  id: 'select_done',
+                  phase: 'settled',
+                  priority: 100,
+                  when: { fact: 'all_nodes_terminal' },
+                  select: {
+                    exits: ['done'],
+                    pick: { type: 'lowest_terminal_node_id' },
+                  },
+                },
+              ],
+              no_match: 'error',
+              early_close: 'cancel_and_fence_remaining',
+            },
+            requested_limits: graphLimits(),
+          },
+        },
+        to: { node_id: 'expand_child', port: 'graph_spec' },
+      },
+    ],
+    completion: {
+      settled_rules: [
+        {
+          id: 'select_done',
+          phase: 'settled',
+          priority: 100,
+          when: { fact: 'all_nodes_terminal' },
+          select: {
+            exits: ['done'],
+            pick: { type: 'lowest_terminal_node_id' },
+          },
+        },
+      ],
+      no_match: 'error',
+      early_close: 'cancel_and_fence_remaining',
+    },
+    requested_limits: graphLimits(),
+    metadata: { owner: CORE_OWNER },
+  };
+  return { source, snapshot, resources };
 }
 
 function insertResource(
@@ -186,10 +546,6 @@ function augmentCompilerSnapshot(input: JsonObject): {
   const registryResources = registrySnapshot.resources as JsonObject[];
   const dependencyClosures =
     registrySnapshot.dependency_closures as JsonObject[];
-  const policySnapshot = snapshot.policy_snapshot as JsonObject;
-  const completePolicy = policySnapshot.complete_policy as JsonObject;
-  const rootPolicy = completePolicy.root_policy as JsonObject;
-  const childProfiles = completePolicy.child_profiles as JsonObject[];
   const refs = TASK_WORKSPACE_TEMPORARY_REFS;
 
   const adapterBase: JsonObject = {
@@ -364,25 +720,13 @@ function augmentCompilerSnapshot(input: JsonObject): {
     ...closurePayload,
     closure_hash: dependencyClosureHash,
   });
+  registrySnapshot.resource_count = registryResources.length;
   registrySnapshot.dependency_closure_count = dependencyClosures.length;
-
-  const allowedCapabilities = rootPolicy.allowed_capabilities as JsonObject[];
-  allowedCapabilities.push(refs.capability);
-  const childProfile = childProfiles.find(
-    (candidate) =>
-      (candidate.ref as JsonObject).id === 'fixture.policy.child-tight',
-  );
-  if (!childProfile) {
-    throw new Error('Task Workspace Core child policy fixture is unavailable');
-  }
-  const childRequest = childProfile.request as JsonObject;
-  childRequest.allowed_node_types = ['delegation', 'terminal'];
-  childRequest.allowed_capabilities = [refs.capability];
-  const { policy_hash: _priorPolicyHash, ...policyWithoutHash } =
-    completePolicy;
-  completePolicy.policy_hash = domainSeparatedSha256(
-    'icarus:task-workspace-core-compiler-policy:1\n',
-    policyWithoutHash,
+  const { snapshot_hash: _priorRegistryHash, ...registryWithoutHash } =
+    registrySnapshot;
+  registrySnapshot.snapshot_hash = domainSeparatedSha256(
+    'icarus:task-workspace-core-compiler-registry-snapshot:1\n',
+    registryWithoutHash,
   );
   const { snapshot_hash: _priorSnapshotHash, ...snapshotWithoutHash } =
     snapshot;
@@ -411,12 +755,12 @@ export function ensureTaskWorkspaceCore(
     return 'preserved';
   }
 
-  const fixture = readExpandFixture();
-  const augmented = augmentCompilerSnapshot(fixture.snapshot);
+  const compilerBase = buildCoreCompilerBase();
+  const augmented = augmentCompilerSnapshot(compilerBase.snapshot);
   const compiled = compileWorkflow({
     caseId: 'core.ad-hoc-personal-task.outer',
     sourceKind: 'graph_scope',
-    rawSourceBytes: Buffer.from(canonicalJson(fixture.source), 'utf8'),
+    rawSourceBytes: Buffer.from(canonicalJson(compilerBase.source), 'utf8'),
     inputSnapshot: augmented.snapshot,
   });
   if (!compiled.ok) {
@@ -447,7 +791,7 @@ export function ensureTaskWorkspaceCore(
     states: {
       run: {
         type: 'graph',
-        graph_source: fixture.source,
+        graph_source: compilerBase.source,
         exit_routes: { done: { target: 'completed' } },
         on_error: { target: 'failed' },
         on_local_cancel: { target: 'cancelled' },
@@ -529,6 +873,7 @@ export function ensureTaskWorkspaceCore(
   };
 
   const resources: CoreResource[] = [
+    ...compilerBase.resources,
     ...augmented.resources,
     {
       type: 'schema',
@@ -573,28 +918,6 @@ export function ensureTaskWorkspaceCore(
       content: { profile: 'local_single_user_sqlite' },
     },
   ];
-
-  const compilerResources = (
-    (fixture.snapshot.registry_snapshot as JsonObject).resources as JsonObject[]
-  ).map((resource) => ({
-    type: String(resource.resource_type),
-    id: String((resource.ref as JsonObject).id),
-    version: String((resource.ref as JsonObject).version),
-    content: resource.content as JsonObject,
-    contentHash: resource.content_hash as Sha256Hash,
-  }));
-  for (const resource of compilerResources) {
-    if (
-      !resources.some(
-        (candidate) =>
-          candidate.type === resource.type &&
-          candidate.id === resource.id &&
-          (candidate.version ?? CORE_VERSION) === resource.version,
-      )
-    ) {
-      resources.push(resource);
-    }
-  }
 
   store.withImmediateTransaction((transaction) => {
     for (const resource of resources) {

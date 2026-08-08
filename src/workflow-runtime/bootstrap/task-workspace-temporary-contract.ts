@@ -6,10 +6,13 @@ import type {
   VersionedRef,
 } from '../contracts/types.js';
 
-export const TASK_WORKSPACE_CORE_VERSION = '1.1.0';
+export const TASK_WORKSPACE_CORE_VERSION = '1.2.0';
 
 export const TASK_WORKSPACE_TEMPORARY_REFS = {
-  interface: { id: 'fixture.interface.child', version: '1.0.0' },
+  interface: {
+    id: 'icarus.core.task-workspace.interface.child',
+    version: TASK_WORKSPACE_CORE_VERSION,
+  },
   capability: {
     id: 'icarus.core.capability.codex-task',
     version: TASK_WORKSPACE_CORE_VERSION,
