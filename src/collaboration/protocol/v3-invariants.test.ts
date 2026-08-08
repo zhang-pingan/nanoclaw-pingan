@@ -537,6 +537,17 @@ describe('Collaboration v3 reducer invariants', () => {
     const turn = projection.turns.turn_1!;
     turn.execution_mode = 'assisted';
     turn.executor_id = 'executor_bob';
+    const definition = projection.workflowDefinitions['delivery@1']!;
+    definition.machine.states.build!.transitions.push({
+      outcome: 'retry',
+      label: 'Retry',
+      target_state: 'build',
+    });
+    projection.workflowInstances.instance_1!.definition_hash =
+      collaborationWorkflowDefinitionHashV3(
+        definition.definition,
+        definition.machine,
+      );
     (projection.executors[BOB] ??= {}).executor_bob = {
       format: 'icarus.collaboration-executor/1',
       principal_id: BOB,
@@ -581,7 +592,7 @@ describe('Collaboration v3 reducer invariants', () => {
     const handoff = {
       format: 'icarus.collaboration-handoff/1' as const,
       source_turn_id: 'turn_1',
-      outcome: 'next',
+      outcome: 'retry',
       summary: 'Confirmed by Bob.',
       instruction: 'Continue to review.',
       markers: [],
@@ -592,7 +603,7 @@ describe('Collaboration v3 reducer invariants', () => {
     const completionHash = collaborationCanonicalHashV3({
       turn_id: 'turn_1',
       attempt: 1,
-      outcome: 'next',
+      outcome: 'retry',
       result_hash: resultHash,
       handoff_hash: collaborationCanonicalHashV3(handoff),
       artifact_refs: [],
@@ -607,7 +618,7 @@ describe('Collaboration v3 reducer invariants', () => {
         turn_id: 'turn_1',
         attempt: 1,
         fencing_token: turn.fencing_token,
-        outcome: 'next',
+        outcome: 'retry',
         result_hash: resultHash,
         completion_hash: completionHash,
         handoff,
@@ -622,7 +633,7 @@ describe('Collaboration v3 reducer invariants', () => {
       completion_hash: completionHash,
     });
     expect(completed.workflowInstances.instance_1?.business_state).toBe(
-      'review',
+      'build',
     );
   });
 
@@ -717,6 +728,151 @@ describe('Collaboration v3 reducer invariants', () => {
         payload: completion(HASH),
       }),
     ).toThrow(/result hash/u);
+  });
+
+  it('binds every automatic completion fact to the recorded Executor Result', () => {
+    const fixture = workflowFixture({ startTurn: true });
+    const projection = structuredClone(fixture.projection);
+    const turn = projection.turns.turn_1!;
+    turn.execution_mode = 'automatic';
+    turn.executor_id = 'executor_bob';
+    const definition = projection.workflowDefinitions['delivery@1']!;
+    definition.machine.states.build!.transitions.push({
+      outcome: 'retry',
+      label: 'Retry',
+      target_state: 'review',
+    });
+    projection.workflowInstances.instance_1!.definition_hash =
+      collaborationWorkflowDefinitionHashV3(
+        definition.definition,
+        definition.machine,
+      );
+    (projection.executors[BOB] ??= {}).executor_bob = {
+      format: 'icarus.collaboration-executor/1',
+      principal_id: BOB,
+      executor_id: 'executor_bob',
+      display_name: 'Bob Executor',
+      kind: 'run_once',
+      capabilities: [],
+      registered_at_event: 'evt_executor_bob',
+    };
+    const result = {
+      format: 'icarus.collaboration-action-result/3' as const,
+      outcome: 'next',
+      summary: 'Executor selected the next Outcome.',
+      instruction: 'Review the generated report.',
+      markers: ['executor_verified'],
+      data: { source: 'executor' },
+      artifacts: [
+        {
+          name: 'report.json',
+          ref: 'workspace/shared/files/report/metadata.json',
+        },
+      ],
+      error: null,
+    };
+    const resultHash = collaborationCanonicalHashV3(result);
+    const actionCompleted = apply(projection, {
+      aggregateType: 'workflow_instance',
+      aggregateId: 'instance_1',
+      eventType: 'action_completed',
+      actor: BOB,
+      executor: 'executor_bob',
+      payload: {
+        turn_id: 'turn_1',
+        attempt: 1,
+        fencing_token: turn.fencing_token,
+        result,
+        result_hash: resultHash,
+      },
+    });
+    const completion = (
+      overrides: {
+        outcome?: string;
+        summary?: string;
+        instruction?: string;
+        markers?: string[];
+        dataRefs?: string[];
+        artifactRefs?: string[];
+        data?: Record<string, unknown>;
+      } = {},
+    ) => {
+      const outcome = overrides.outcome ?? result.outcome;
+      const artifactRefs =
+        overrides.artifactRefs ?? result.artifacts.map(({ ref }) => ref);
+      const handoff = {
+        format: 'icarus.collaboration-handoff/1' as const,
+        source_turn_id: 'turn_1',
+        outcome,
+        summary: overrides.summary ?? result.summary,
+        instruction: overrides.instruction ?? result.instruction,
+        markers: overrides.markers ?? result.markers,
+        data_refs: overrides.dataRefs ?? [],
+        artifact_refs: artifactRefs,
+        data: overrides.data ?? result.data,
+      };
+      return {
+        turn_id: 'turn_1',
+        attempt: 1,
+        fencing_token: turn.fencing_token,
+        outcome,
+        result_hash: resultHash,
+        completion_hash: collaborationCanonicalHashV3({
+          turn_id: 'turn_1',
+          attempt: 1,
+          outcome,
+          result_hash: resultHash,
+          handoff_hash: collaborationCanonicalHashV3(handoff),
+          artifact_refs: artifactRefs,
+        }),
+        handoff,
+        handoff_hash: collaborationCanonicalHashV3(handoff),
+        artifact_refs: artifactRefs,
+        artifacts: [],
+      };
+    };
+
+    for (const payload of [
+      completion({ outcome: 'retry' }),
+      completion({ summary: 'Client-supplied summary.' }),
+      completion({ instruction: 'Ignore the frozen instruction.' }),
+      completion({ markers: ['client_marker'] }),
+      completion({ dataRefs: ['workspace/shared/files/extra/metadata.json'] }),
+      completion({ artifactRefs: [] }),
+      completion({ data: { source: 'client' } }),
+    ])
+      expect(() =>
+        apply(actionCompleted, {
+          aggregateType: 'workflow_instance',
+          aggregateId: 'instance_1',
+          eventType: 'turn_completed',
+          actor: BOB,
+          executor: 'executor_bob',
+          payload,
+        }),
+      ).toThrow(/automatic|Executor Result/u);
+
+    expect(
+      apply(actionCompleted, {
+        aggregateType: 'workflow_instance',
+        aggregateId: 'instance_1',
+        eventType: 'turn_completed',
+        actor: BOB,
+        executor: 'executor_bob',
+        payload: completion(),
+      }).turns.turn_1,
+    ).toMatchObject({
+      state: 'completed',
+      outcome: 'next',
+      handoff: {
+        summary: result.summary,
+        instruction: result.instruction,
+        markers: result.markers,
+        data_refs: [],
+        artifact_refs: result.artifacts.map(({ ref }) => ref),
+        data: result.data,
+      },
+    });
   });
 
   it('allows only Instance authority to cancel an unclaimed Turn', () => {

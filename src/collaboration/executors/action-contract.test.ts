@@ -139,6 +139,29 @@ describe('Collaboration Action contract v3', () => {
         outcome: 'success',
       }),
     ).toThrow(/legal Outcome/u);
+    for (const artifacts of [
+      [{ name: 'external', ref: 'https://provider.example/output' }],
+      [
+        { name: 'first', ref: 'artifacts/result/metadata.json' },
+        { name: 'duplicate', ref: 'artifacts/result/metadata.json' },
+      ],
+      Array.from({ length: 101 }, (_, index) => ({
+        name: `result-${String(index)}`,
+        ref: `artifacts/results/${String(index)}/metadata.json`,
+      })),
+    ])
+      expect(() =>
+        parseCollaborationActionResult(action, machine.states.verification!, {
+          ...valid,
+          artifacts,
+        }),
+      ).toThrow();
+    expect(() =>
+      parseCollaborationActionResult(action, machine.states.verification!, {
+        ...valid,
+        data: { oversized: 'x'.repeat(1024 * 1024) },
+      }),
+    ).toThrow(/1 MiB/u);
   });
 
   it('keeps technical terminal states separate from business results', () => {

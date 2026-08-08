@@ -32,6 +32,7 @@ import {
   workItemStatusSchema,
   type ActionDefinitionV3,
   type ArtifactMetadataV3,
+  type CollaborationActionResultV3,
   type ClientDefinition,
   type CollaborationAggregateType,
   type CollaborationEventTypeV3,
@@ -425,6 +426,29 @@ export function collaborationTurnCompletionHashV3(input: {
     handoff_hash: input.handoffHash,
     artifact_refs: [...input.artifactRefs],
   });
+}
+
+export function collaborationAutomaticCompletionFactsV3(
+  input: CollaborationActionResultV3,
+): {
+  readonly outcome: string;
+  readonly summary: string;
+  readonly instruction: string;
+  readonly markers: readonly string[];
+  readonly dataRefs: readonly string[];
+  readonly artifactRefs: readonly string[];
+  readonly data: Readonly<Record<string, unknown>>;
+} {
+  const result = collaborationActionResultV3Schema.parse(input);
+  return {
+    outcome: result.outcome,
+    summary: result.summary,
+    instruction: result.instruction,
+    markers: [...result.markers],
+    dataRefs: [],
+    artifactRefs: result.artifacts.map((artifact) => artifact.ref),
+    data: { ...result.data },
+  };
 }
 
 export function collaborationEventHashV3(event: CollaborationEventV3): string {
@@ -2267,6 +2291,29 @@ export function reduceCollaborationEventV3(
         conflict(
           'Turn completion must reference its recorded Action result hash',
         );
+      }
+      if (turn.execution_mode === 'automatic') {
+        const expected = collaborationAutomaticCompletionFactsV3(
+          turn.executor_result!,
+        );
+        const actual = {
+          outcome: parsed.outcome,
+          summary: parsed.handoff.summary,
+          instruction: parsed.handoff.instruction,
+          markers: parsed.handoff.markers,
+          dataRefs: parsed.handoff.data_refs,
+          artifactRefs: parsed.handoff.artifact_refs,
+          data: parsed.handoff.data,
+        };
+        if (
+          collaborationCanonicalHashV3(actual) !==
+            collaborationCanonicalHashV3(expected) ||
+          collaborationCanonicalHashV3(parsed.artifact_refs) !==
+            collaborationCanonicalHashV3(expected.artifactRefs)
+        )
+          conflict(
+            'Automatic Turn completion must exactly match its recorded Executor Result',
+          );
       }
       for (const artifact of parsed.artifacts) {
         const artifactRef = `artifacts/workflows/${event.aggregate_id}/${turn.turn_id}/${artifact.artifact_id}/metadata.json`;

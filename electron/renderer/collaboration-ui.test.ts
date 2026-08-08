@@ -23,6 +23,8 @@ import {
   collaborationTurnDeadline,
   collaborationTurnHistory,
   buildCollaborationStartTurnRequest,
+  buildCollaborationCompleteTurnRequest,
+  collaborationTurnCompletionDraft,
   collaborationVerifiedFileTree,
   collaborationWorkItemColumns,
 } from './collaboration-ui.js';
@@ -363,7 +365,83 @@ describe('Collaboration project-space v3 UI helpers', () => {
       remainingMs: -30_000,
       overdue: true,
     });
+    expect(
+      collaborationTurnDeadline(
+        {
+          state: 'awaiting_confirmation',
+          start_deadline_at: '2026-08-06T12:00:00.000Z',
+          execution_deadline_at: '2026-08-06T12:03:00.000Z',
+        },
+        now,
+      ),
+    ).toEqual({
+      deadlineKind: 'execution',
+      deadlineAt: '2026-08-06T12:03:00.000Z',
+      remainingMs: 90_000,
+      overdue: false,
+    });
     expect(collaborationDuration(3_600_000)).toBe('1 小时');
+  });
+
+  it('prefills Assisted completion markers and submits the edited identifiers', () => {
+    const turn = {
+      attempt: 2,
+      fencing_token: 'fence_2',
+      executor_result: {
+        outcome: 'ready_for_test',
+        summary: 'Executor summary',
+        instruction: 'Review the evidence',
+        markers: ['executor_suggested', 'needs_review'],
+        data: { confidence: 0.8 },
+      },
+    };
+    expect(
+      collaborationTurnCompletionDraft(turn, [
+        { outcome: 'retry' },
+        { outcome: 'ready_for_test' },
+      ]),
+    ).toEqual({
+      outcome: 'ready_for_test',
+      summary: 'Executor summary',
+      instruction: 'Review the evidence',
+      markers: 'executor_suggested, needs_review',
+      data: '{\n  "confidence": 0.8\n}',
+    });
+
+    expect(
+      buildCollaborationCompleteTurnRequest({
+        expectedRevision: 7,
+        turn,
+        outcome: 'ready_for_test',
+        summary: 'Confirmed summary',
+        instruction: 'Continue to validation',
+        markers: 'confirmed, release_candidate\nconfirmed',
+        data: { confidence: 1 },
+        artifactIds: ['artifact_1'],
+      }),
+    ).toEqual({
+      expectedRevision: 7,
+      attempt: 2,
+      fencingToken: 'fence_2',
+      outcome: 'ready_for_test',
+      summary: 'Confirmed summary',
+      instruction: 'Continue to validation',
+      markers: ['confirmed', 'release_candidate'],
+      data: { confidence: 1 },
+      artifactIds: ['artifact_1'],
+    });
+    expect(() =>
+      buildCollaborationCompleteTurnRequest({
+        expectedRevision: 7,
+        turn,
+        outcome: 'ready_for_test',
+        summary: 'Confirmed summary',
+        instruction: '',
+        markers: 'valid, not valid',
+        data: {},
+        artifactIds: [],
+      }),
+    ).toThrow(/Marker must be an identifier/u);
   });
 
   it('builds verified virtual files and Work Item board columns', () => {

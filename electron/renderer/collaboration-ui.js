@@ -82,6 +82,50 @@ export function buildCollaborationStartTurnRequest(
   return { expectedRevision, executorId: selected };
 }
 
+const collaborationMarkerPattern = /^[A-Za-z0-9][A-Za-z0-9._:@-]*$/u;
+
+export function parseCollaborationMarkers(value) {
+  const markers = [
+    ...new Set(
+      String(value || '')
+        .split(/[,\r\n]+/u)
+        .map((marker) => marker.trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (markers.length > 100) throw new Error('At most 100 Markers are allowed');
+  for (const marker of markers) {
+    if (marker.length > 160 || !collaborationMarkerPattern.test(marker))
+      throw new Error(`Marker must be an identifier: ${marker}`);
+  }
+  return markers;
+}
+
+export function collaborationTurnCompletionDraft(turn, routes = []) {
+  const suggestion = turn?.executor_result || null;
+  return {
+    outcome: suggestion?.outcome || routes[0]?.outcome || '',
+    summary: suggestion?.summary || '',
+    instruction: suggestion?.instruction || '',
+    markers: (suggestion?.markers || []).join(', '),
+    data: JSON.stringify(suggestion?.data || {}, null, 2),
+  };
+}
+
+export function buildCollaborationCompleteTurnRequest(input) {
+  return {
+    expectedRevision: input.expectedRevision,
+    attempt: input.turn.attempt,
+    fencingToken: input.turn.fencing_token,
+    outcome: String(input.outcome || ''),
+    summary: String(input.summary || ''),
+    instruction: String(input.instruction || ''),
+    markers: parseCollaborationMarkers(input.markers),
+    data: input.data,
+    artifactIds: [...input.artifactIds],
+  };
+}
+
 export function collaborationPrincipalName(projection, principalId) {
   return projection?.members?.[principalId]?.display_name || principalId || '-';
 }
@@ -186,9 +230,12 @@ export function collaborationTurnDeadline(turn, nowMs = Date.now()) {
     ['completed', 'cancelled', 'recovery_required'].includes(turn.state)
   )
     return null;
-  const execution = ['running', 'waiting_input', 'waiting_approval'].includes(
-    turn.state,
-  );
+  const execution = [
+    'running',
+    'waiting_input',
+    'waiting_approval',
+    'awaiting_confirmation',
+  ].includes(turn.state);
   const deadlineAt = execution
     ? turn.execution_deadline_at
     : turn.start_deadline_at;

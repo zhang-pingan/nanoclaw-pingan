@@ -1386,7 +1386,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
       outcome: 'complete',
       summary: 'Executor suggests completion.',
       instruction: 'Review the generated changes.',
-      markers: [],
+      markers: ['executor_suggested', 'needs_review'],
       data: { provider: 'test' },
       artifacts: [],
       error: null,
@@ -1436,6 +1436,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
             outcome: 'complete',
             summary: 'User reviewed and confirmed completion.',
             instruction: 'Proceed with the verified result.',
+            markers: ['user_confirmed', 'release_candidate'],
             data: { confirmed: true },
             artifactIds: [confirmedArtifact.metadata.artifact_id],
           }),
@@ -1450,6 +1451,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
       completion_hash: expect.stringMatching(/^sha256:/u),
       handoff: {
         artifact_refs: [confirmedArtifact.artifactRef],
+        markers: ['user_confirmed', 'release_candidate'],
       },
     });
     expect(confirmed!.projection.workflowInstances.wfi_assisted).toMatchObject({
@@ -1631,8 +1633,38 @@ describe('Collaboration project space v3 Group and identity service', () => {
       { ownerId: 'test-scheduler' },
     );
 
-    await scheduler.syncNow('group_automatic');
-    await scheduler.syncNow('group_automatic');
+    const completeTurn = owner.service.completeTurn.bind(owner.service);
+    vi.spyOn(owner.service, 'completeTurn')
+      .mockRejectedValueOnce(
+        new Error('injected failure after Action Result commit'),
+      )
+      .mockImplementation(completeTurn);
+    await expect(scheduler.syncNow('group_automatic')).rejects.toThrow(
+      /injected failure/u,
+    );
+    const interrupted = owner.store.getGroup('group_automatic')!.projection!;
+    expect(interrupted.turns.turn_automatic).toMatchObject({
+      state: 'running',
+      executor_result: {
+        outcome: 'ready_for_test',
+        summary: 'Verification is ready for testing.',
+      },
+      executor_result_hash: expect.stringMatching(/^sha256:/u),
+      completion_hash: null,
+    });
+    expect(
+      owner.store
+        .listEventRecords('group_automatic', 5_000)
+        .filter(({ event }) => event.event_type === 'action_completed'),
+    ).toHaveLength(1);
+
+    const restartedScheduler = new CollaborationScheduler(
+      owner.store,
+      owner.service,
+      new ActionExecutorRegistry(),
+      { ownerId: 'restarted-test-scheduler' },
+    );
+    await restartedScheduler.syncNow('group_automatic');
 
     const completed = owner.store.getGroup('group_automatic')!.projection!;
     expect(completed.turns.turn_automatic).toMatchObject({
@@ -1650,6 +1682,11 @@ describe('Collaboration project space v3 Group and identity service', () => {
       business_state: 'completed',
     });
     expect(runOnce).toHaveBeenCalledOnce();
+    expect(
+      owner.store
+        .listEventRecords('group_automatic', 5_000)
+        .filter(({ event }) => event.event_type === 'action_completed'),
+    ).toHaveLength(1);
     owner.store.close();
   });
 

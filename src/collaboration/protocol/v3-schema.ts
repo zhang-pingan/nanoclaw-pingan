@@ -777,13 +777,14 @@ export const collaborationActionResultV3Schema = z
         z
           .object({
             name: z.string().min(1),
-            ref: z.string().min(1),
+            ref: collaborationRelativePathSchema,
             sha256: collaborationSha256Schema.optional(),
             size: z.number().int().nonnegative().optional(),
             content_type: z.string().optional(),
           })
           .strict(),
       )
+      .max(100)
       .default([]),
     error: z
       .object({
@@ -794,7 +795,22 @@ export const collaborationActionResultV3Schema = z
       .strict()
       .nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine((result, context) => {
+    const artifactRefs = result.artifacts.map((artifact) => artifact.ref);
+    if (new Set(artifactRefs).size !== artifactRefs.length)
+      context.addIssue({
+        code: 'custom',
+        path: ['artifacts'],
+        message: 'Action result Artifact refs must be unique',
+      });
+    if (Buffer.byteLength(JSON.stringify(result.data), 'utf8') > 1024 * 1024)
+      context.addIssue({
+        code: 'custom',
+        path: ['data'],
+        message: 'Action result data exceeds the 1 MiB Handoff limit',
+      });
+  });
 export type CollaborationActionResultV3 = z.infer<
   typeof collaborationActionResultV3Schema
 >;

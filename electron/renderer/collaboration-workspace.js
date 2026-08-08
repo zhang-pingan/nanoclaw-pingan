@@ -14,6 +14,7 @@ import { mountCollaborationFsmEditor } from './collaboration-fsm-editor.js';
 import {
   collaborationArtifactName,
   collaborationAuditEventTimeline,
+  buildCollaborationCompleteTurnRequest,
   buildCollaborationStartTurnRequest,
   collaborationCanApproveMembers,
   collaborationCanCreateTurn,
@@ -29,6 +30,7 @@ import {
   collaborationPrincipalName,
   stageCollaborationArtifactFiles,
   collaborationTurnAccess,
+  collaborationTurnCompletionDraft,
   collaborationTurnDeadline,
   collaborationTurnHistory,
   collaborationTurnLifecycle,
@@ -1052,12 +1054,12 @@ export function createCollaborationWorkspace(options) {
         entry.definition.version === instance.definition_version,
     );
     const routes = collaborationOutcomeRoutes(definition, turn);
-    const suggestion = turn.executor_result || null;
+    const draft = collaborationTurnCompletionDraft(turn, routes);
     const artifactIds = [];
     let selectedFiles = null;
     openDialog({
       title: `Complete ${turn.state_id}`,
-      body: `<div class="collaboration-form-grid">${field('Outcome', 'outcome', suggestion?.outcome || routes[0]?.outcome, { options: routes.map((route) => [route.outcome, `${route.label} → ${route.target_state}`]) })}${field('Summary', 'summary', suggestion?.summary || '', { multiline: true })}${field('Instruction', 'instruction', suggestion?.instruction || '', { multiline: true, required: false })}${field('Data JSON', 'data', JSON.stringify(suggestion?.data || {}, null, 2), { multiline: true })}${field('Artifacts', 'artifacts', '', { type: 'file', required: false, multiple: true })}</div>`,
+      body: `<div class="collaboration-form-grid">${field('Outcome', 'outcome', draft.outcome, { options: routes.map((route) => [route.outcome, `${route.label} → ${route.target_state}`]) })}${field('Summary', 'summary', draft.summary, { multiline: true })}${field('Instruction', 'instruction', draft.instruction, { multiline: true, required: false })}${field('Markers', 'markers', draft.markers, { multiline: true, required: false })}${field('Data JSON', 'data', draft.data, { multiline: true })}${field('Artifacts', 'artifacts', '', { type: 'file', required: false, multiple: true })}</div>`,
       onSubmit: async (formData) => {
         const fileControl = elements.dialogForm.elements.artifacts;
         if (selectedFiles === null) {
@@ -1084,20 +1086,22 @@ export function createCollaborationWorkspace(options) {
             `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/turns/${encodeURIComponent(turn.turn_id)}/complete`,
             {
               method: 'POST',
-              body: JSON.stringify({
-                expectedRevision: aggregateRevision(
-                  currentGroup.projection,
-                  'workflow_instance',
-                  instance.instance_id,
-                ),
-                attempt: turn.attempt,
-                fencingToken: turn.fencing_token,
-                outcome: formData.get('outcome'),
-                summary: formData.get('summary'),
-                instruction: formData.get('instruction') || '',
-                data: JSON.parse(String(formData.get('data') || '{}')),
-                artifactIds,
-              }),
+              body: JSON.stringify(
+                buildCollaborationCompleteTurnRequest({
+                  expectedRevision: aggregateRevision(
+                    currentGroup.projection,
+                    'workflow_instance',
+                    instance.instance_id,
+                  ),
+                  turn,
+                  outcome: formData.get('outcome'),
+                  summary: formData.get('summary'),
+                  instruction: formData.get('instruction') || '',
+                  markers: formData.get('markers') || '',
+                  data: JSON.parse(String(formData.get('data') || '{}')),
+                  artifactIds,
+                }),
+              ),
             },
           );
         } catch (error) {

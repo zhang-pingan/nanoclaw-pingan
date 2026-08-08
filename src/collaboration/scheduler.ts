@@ -17,6 +17,7 @@ import {
 } from './protocol/v3-schema.js';
 import type { CollaborationEventV3 } from './protocol/v3-schema.js';
 import {
+  collaborationAutomaticCompletionFactsV3,
   collaborationCanonicalHashV3,
   workflowDefinitionVersionKey,
 } from './protocol/v3-reducer.js';
@@ -213,6 +214,16 @@ export class CollaborationScheduler {
       const latest =
         this.store.getGroup(groupId)?.projection?.turns[turn.turn_id];
       if (
+        latest?.execution_mode === 'automatic' &&
+        latest.state === 'running' &&
+        latest.claimant_client_id === group.localClientId &&
+        latest.executor_result &&
+        latest.executor_result_hash
+      ) {
+        await this.resumeAutomaticCompletion(groupId, latest);
+        continue;
+      }
+      if (
         latest &&
         ['running', 'waiting_input', 'waiting_approval'].includes(
           latest.state,
@@ -222,6 +233,63 @@ export class CollaborationScheduler {
       )
         await this.driveAction(groupId, latest);
     }
+  }
+
+  private async resumeAutomaticCompletion(
+    groupId: string,
+    turn: CollaborationTurnV3,
+  ): Promise<void> {
+    if (
+      turn.execution_mode !== 'automatic' ||
+      !turn.fencing_token ||
+      !turn.executor_id ||
+      !turn.executor_result ||
+      !turn.executor_result_hash
+    )
+      return;
+    if (
+      collaborationCanonicalHashV3(turn.executor_result) !==
+      turn.executor_result_hash
+    ) {
+      await this.requestRecovery(
+        groupId,
+        turn,
+        'Persisted Executor Result does not match its canonical hash',
+      );
+      return;
+    }
+    let completion: ReturnType<typeof collaborationAutomaticCompletionFactsV3>;
+    try {
+      completion = collaborationAutomaticCompletionFactsV3(
+        turn.executor_result,
+      );
+    } catch (error) {
+      await this.requestRecovery(
+        groupId,
+        turn,
+        `Persisted Executor Result cannot be completed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return;
+    }
+    await this.groups.completeTurn({
+      groupId,
+      instanceId: turn.workflow_instance_id,
+      turnId: turn.turn_id,
+      expectedRevision: await this.currentInstanceRevision(
+        groupId,
+        turn.workflow_instance_id,
+      ),
+      attempt: turn.attempt,
+      fencingToken: turn.fencing_token,
+      outcome: completion.outcome,
+      summary: completion.summary,
+      instruction: completion.instruction,
+      markers: completion.markers,
+      dataRefs: completion.dataRefs,
+      artifactRefs: completion.artifactRefs,
+      data: completion.data,
+      executorId: turn.executor_id,
+    });
   }
 
   private bindingForTurn(
@@ -517,26 +585,11 @@ export class CollaborationScheduler {
       );
       return;
     }
-    await this.groups.completeTurn({
-      groupId,
-      instanceId: turn.workflow_instance_id,
-      turnId: turn.turn_id,
-      expectedRevision: await this.currentInstanceRevision(
-        groupId,
-        turn.workflow_instance_id,
-      ),
-      attempt: turn.attempt,
-      fencingToken: turn.fencing_token,
-      outcome: observation.result.outcome,
-      summary: observation.result.summary,
-      instruction: observation.result.instruction,
-      markers: observation.result.markers,
-      data: observation.result.data,
-      artifactRefs: observation.result.artifacts.map(
-        (artifact) => artifact.ref,
-      ),
-      executorId: execution.executorId,
-    });
+    const persisted =
+      this.store.getGroup(groupId)?.projection?.turns[turn.turn_id];
+    if (!persisted)
+      throw new Error('Recorded Automatic Executor Result is unavailable');
+    await this.resumeAutomaticCompletion(groupId, persisted);
   }
 
   private async failClosedAfterDispatch(

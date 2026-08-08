@@ -170,21 +170,22 @@ function actionExecution(
 }
 
 function succeeded(): ActionObservation {
+  const result = {
+    format: 'icarus.collaboration-action-result/3' as const,
+    outcome: 'done',
+    summary: 'Implemented',
+    instruction: '',
+    markers: [],
+    data: {},
+    artifacts: [],
+    error: null,
+  };
   return {
     state: 'succeeded',
     executionRef: 'provider:1',
     providerMetadata: { provider: 'test' },
-    result: {
-      format: 'icarus.collaboration-action-result/3',
-      outcome: 'done',
-      summary: 'Implemented',
-      instruction: '',
-      markers: [],
-      data: {},
-      artifacts: [],
-      error: null,
-    },
-    resultHash: hash('r'),
+    result,
+    resultHash: collaborationCanonicalHashV3(result),
   };
 }
 
@@ -340,8 +341,20 @@ function harness(input: {
         input.promptByCommit?.[request.verifiedCommit ?? ''] ?? PROMPT,
       ),
     ),
-    recordActionState: vi.fn(async () => {
+    recordActionState: vi.fn(async (command) => {
       order.push('git-action-state');
+      if (command.state === 'completed') {
+        currentTurn = {
+          ...currentTurn,
+          state:
+            currentTurn.execution_mode === 'assisted'
+              ? 'awaiting_confirmation'
+              : 'running',
+          executor_result: command.result,
+          executor_result_hash: command.resultHash,
+        };
+        projection.turns.turn_1 = currentTurn;
+      }
       return group;
     }),
     completeTurn: vi.fn(async () => {
@@ -517,6 +530,32 @@ describe('Collaboration project-space v3 Scheduler', () => {
     expect(selected.store.releaseProcessLock).toHaveBeenCalledWith(
       'group_test',
       'scheduler_test',
+    );
+  });
+
+  it('routes a corrupted persisted automatic Result to recovery without redispatch', async () => {
+    const invalidResult = {
+      ...succeeded().result!,
+      artifacts: [{ name: 'external', ref: 'https://provider.example/output' }],
+    };
+    const selected = harness({
+      acquired: false,
+      existingExecutionRef: 'provider:1',
+      turnOverrides: {
+        executor_result: invalidResult,
+        executor_result_hash: collaborationCanonicalHashV3(invalidResult),
+      },
+    });
+
+    await selected.scheduler.syncNow('group_test');
+
+    expect(selected.executor.dispatch).not.toHaveBeenCalled();
+    expect(selected.executor.observe).not.toHaveBeenCalled();
+    expect(selected.groups.completeTurn).not.toHaveBeenCalled();
+    expect(selected.groups.requestTurnRecovery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: expect.stringMatching(/persisted Executor Result/i),
+      }),
     );
   });
 
