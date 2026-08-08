@@ -36,6 +36,88 @@ export function readableLabel(value: unknown): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+const WORKSPACE_DISPLAY_LABELS: Readonly<Record<string, string>> = {
+  active: '进行中',
+  action_required: '需要处理',
+  accepted: '已接受',
+  activating: '激活中',
+  approved: '已批准',
+  approval: '审批',
+  applied: '已应用',
+  applying: '应用中',
+  archived: '已归档',
+  armed: '待处理',
+  awaiting_confirmation: '等待确认',
+  blocked: '已阻塞',
+  cancelling: '取消中',
+  cancelled: '已取消',
+  catching_up: '同步中',
+  closed: '已结束',
+  command: '命令',
+  completed: '已完成',
+  confirmed: '已确认',
+  conflict: '冲突',
+  creating: '创建中',
+  degraded: '已降级',
+  denied: '已拒绝',
+  discarded: '已丢弃',
+  draft: '草稿',
+  drafting: '生成中',
+  dry_run_passed: 'Dry Run 已通过',
+  duplicate: '重复',
+  executing: '执行中',
+  expired: '已过期',
+  failed: '失败',
+  idle: '空闲',
+  interaction: '交互',
+  interrupted: '已中断',
+  late: '已超时',
+  linked: '已关联',
+  none: '无',
+  open: '进行中',
+  paused: '已暂停',
+  pending: '待处理',
+  processing: '处理中',
+  published: '已发布',
+  publishing: '发布中',
+  ready: '就绪',
+  rejected: '已拒绝',
+  resolved: '已解决',
+  retrying: '重试中',
+  reviewed: '已审核',
+  running: '运行中',
+  skipped: '已跳过',
+  succeeded: '成功',
+  terminal: '已结束',
+  temporary_confirmation: 'Temporary 确认',
+  temporary_replan_confirmation: 'Temporary Replan 确认',
+  temporary_replan_request: 'Temporary Replan 请求',
+  runtime_command_confirmation: 'Runtime 命令确认',
+  runtime_wait: 'Runtime 等待',
+  signal: 'Signal',
+  unavailable: '不可用',
+  unknown: '未知',
+  unsupported: '不支持',
+  validated: '已验证',
+  waiting: '等待中',
+  waiting_user: '等待用户',
+  approve: '批准',
+  cancel: '取消',
+  pause: '暂停',
+  reject: '拒绝',
+  resume: '继续',
+  submit: '提交',
+  overview: '概览',
+  artifacts: '产物',
+  trace: 'Trace',
+};
+
+export function workspaceDisplayLabel(value: unknown): string {
+  const key = String(value ?? '');
+  if (!key || key === '--') return key;
+  return WORKSPACE_DISPLAY_LABELS[key] ?? readableLabel(key);
+}
+
 export function safeAssetUrl(value: unknown): string {
   const url = String(value ?? '').trim();
   if (url.startsWith('/') || /^https?:\/\//i.test(url) || /^blob:/i.test(url)) {
@@ -182,6 +264,6 @@ export function renderArtifact(payload: Record<string, unknown>): string {
     <article class="tw-artifact" data-artifact-ref="${escapeAttribute(artifact.artifact_ref ?? artifact.ref ?? '')}">
       <header><strong>${escapeHtml(title)}</strong><span>${escapeHtml(mime || format || 'data')}</span></header>
       ${preview}
-      ${url ? `<a class="tw-command-link" href="${escapeAttribute(url)}" target="_blank" rel="noreferrer" download>Download</a>` : ''}
+      ${url ? `<a class="tw-command-link" href="${escapeAttribute(url)}" target="_blank" rel="noreferrer" download>下载</a>` : ''}
     </article>`;
 }

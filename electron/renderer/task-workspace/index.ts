@@ -21,6 +21,7 @@ import {
   renderArtifact,
   renderMarkdown,
   stringifyJson,
+  workspaceDisplayLabel,
 } from './rendering.js';
 import {
   renderExecutionOptions,
@@ -91,7 +92,7 @@ export function createTaskWorkspaceHost(options: {
     navButton.className = 'primary-nav-item';
     navButton.dataset.navKey = 'task-workspace';
     navButton.innerHTML =
-      '<span class="primary-nav-dot"></span><span class="primary-nav-label">Tasks</span>';
+      '<span class="primary-nav-dot"></span><span class="primary-nav-label">Task</span>';
     options.navigation.insertBefore(navButton, options.navInsertBefore ?? null);
   }
   let screen = options.screenParent.querySelector<HTMLElement>(
@@ -189,7 +190,7 @@ function eventSummary(payload: Record<string, unknown>): string {
       payload.summary ??
       payload.message ??
       payload.event_type ??
-      'Runtime updated',
+      'Runtime 已更新',
   );
 }
 
@@ -211,7 +212,7 @@ function renderTimelineEntry(
     const human = entry.kind === 'human_message';
     return `
       <article class="tw-message ${human ? 'is-human' : 'is-coordinator'}" data-entry-id="${escapeAttribute(entry.entry_id)}">
-        <header><strong>${human ? 'You' : 'Coordinator'}</strong><time>${escapeHtml(formatTime(entry.occurred_at_ms))}</time></header>
+        <header><strong>${human ? '你' : 'Coordinator'}</strong><time>${escapeHtml(formatTime(entry.occurred_at_ms))}</time></header>
         <div class="tw-markdown">${renderMarkdown(messageBody(payload))}</div>
         ${payload.query_id ? `<span class="tw-query-ref" title="${escapeAttribute(payload.query_id)}">Trace ${escapeHtml(compactId(payload.query_id))}</span>` : ''}
       </article>`;
@@ -317,12 +318,12 @@ class TaskWorkspaceRenderer {
   private shell(): string {
     return `
       <div class="tw-shell">
-        <aside class="tw-sessions" aria-label="Task Sessions">
-          <header class="tw-pane-header"><h1>Tasks</h1><button type="button" class="tw-icon-btn" data-tw-action="new-session" title="New task" aria-label="New task"><span aria-hidden="true">+</span></button></header>
+        <aside class="tw-sessions" aria-label="Task 会话">
+          <header class="tw-pane-header"><h1>Task</h1><button type="button" class="tw-icon-btn" data-tw-action="new-session" title="新建 Task" aria-label="新建 Task"><span aria-hidden="true">+</span></button></header>
           <div class="tw-session-tools">
-            <input type="search" data-role="session-search" placeholder="Search tasks" aria-label="Search tasks">
-            <div class="tw-segments" role="tablist" aria-label="Task state">
-              ${(['active', 'waiting', 'completed', 'archived'] as const).map((filter) => `<button type="button" role="tab" data-tw-action="session-filter" data-filter="${filter}" class="${filter === 'active' ? 'is-active' : ''}">${escapeHtml(readableLabel(filter))}</button>`).join('')}
+            <input type="search" data-role="session-search" placeholder="搜索 Task" aria-label="搜索 Task">
+            <div class="tw-segments" role="tablist" aria-label="Task 状态">
+              ${(['active', 'waiting', 'completed', 'archived'] as const).map((filter) => `<button type="button" role="tab" data-tw-action="session-filter" data-filter="${filter}" class="${filter === 'active' ? 'is-active' : ''}">${escapeHtml(workspaceDisplayLabel(filter))}</button>`).join('')}
             </div>
           </div>
           <div class="tw-session-list" data-role="session-list"></div>
@@ -332,44 +333,44 @@ class TaskWorkspaceRenderer {
           <div class="tw-timeline" data-role="timeline" aria-live="polite"></div>
           <footer class="tw-composer-dock">
             <div class="tw-composer">
-              <textarea data-role="composer-input" rows="2" placeholder="Message or describe a task" aria-label="Task message"></textarea>
+              <textarea data-role="composer-input" rows="2" placeholder="输入消息或描述 Task" aria-label="Task 消息"></textarea>
               <div class="tw-composer-footer">
                 <div class="tw-composer-context">
-                  <label class="tw-selector"><span>Workflow</span><select data-role="recipe-selector" aria-label="Workflow recipe"></select></label>
+                  <label class="tw-selector"><span>Workflow</span><select data-role="recipe-selector" aria-label="Workflow Recipe"></select></label>
                   <span class="tw-cursor-state" data-role="cursor-state"></span>
                 </div>
                 <span class="tw-error" data-role="error" aria-live="assertive"></span>
-                <div class="tw-composer-actions"><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="send" disabled>Send</button><button type="button" class="tw-btn tw-btn-primary" data-tw-action="run" disabled>Run</button></div>
+                <div class="tw-composer-actions"><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="send" disabled>发送</button><button type="button" class="tw-btn tw-btn-primary" data-tw-action="run" disabled>Run</button></div>
               </div>
             </div>
           </footer>
         </main>
-        <aside class="tw-inspector" aria-label="Runtime Inspector">
-          <header class="tw-inspector-header"><h2>Runtime</h2><button type="button" class="tw-icon-btn tw-inspector-close" data-tw-action="toggle-inspector" data-inspector-control="close" title="Close Runtime" aria-label="Close Runtime"><span aria-hidden="true">&times;</span></button></header>
-          <label class="tw-execution-selector"><span>Workflow run</span><select data-role="execution-selector" aria-label="Linked Workflow and Run"></select></label>
-          <nav class="tw-inspector-tabs" aria-label="Inspector panels">
-            ${(['overview', 'dag', 'artifacts', 'pending', 'trace'] as const).map((panel) => `<button type="button" data-tw-action="inspector-tab" data-panel="${panel}" class="${panel === 'overview' ? 'is-active' : ''}">${panel === 'dag' ? 'DAG' : escapeHtml(readableLabel(panel))}</button>`).join('')}
+        <aside class="tw-inspector" aria-label="Runtime 检查器">
+          <header class="tw-inspector-header"><h2>Runtime</h2><button type="button" class="tw-icon-btn tw-inspector-close" data-tw-action="toggle-inspector" data-inspector-control="close" title="关闭 Runtime" aria-label="关闭 Runtime"><span aria-hidden="true">&times;</span></button></header>
+          <label class="tw-execution-selector"><span>Workflow Run</span><select data-role="execution-selector" aria-label="已关联的 Workflow 和 Run"></select></label>
+          <nav class="tw-inspector-tabs" aria-label="检查器面板">
+            ${(['overview', 'dag', 'artifacts', 'pending', 'trace'] as const).map((panel) => `<button type="button" data-tw-action="inspector-tab" data-panel="${panel}" class="${panel === 'overview' ? 'is-active' : ''}">${panel === 'dag' ? 'DAG' : escapeHtml(workspaceDisplayLabel(panel))}</button>`).join('')}
           </nav>
           <div class="tw-inspector-content" data-role="inspector-content"></div>
         </aside>
         <dialog class="tw-new-task-dialog" data-role="new-session-dialog" aria-labelledby="tw-new-task-title">
           <div class="tw-new-task-form">
-            <header><h2 id="tw-new-task-title">New task</h2><button type="button" class="tw-icon-btn" data-tw-action="cancel-new-session" title="Close" aria-label="Close"><span aria-hidden="true">&times;</span></button></header>
-            <label><span>Title</span><input type="text" data-role="new-session-title" maxlength="240" autocomplete="off" placeholder="Task title"></label>
-            <div class="tw-new-task-actions"><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="cancel-new-session">Cancel</button><button type="button" class="tw-btn tw-btn-primary" data-tw-action="confirm-new-session" disabled>Create</button></div>
+            <header><h2 id="tw-new-task-title">新建 Task</h2><button type="button" class="tw-icon-btn" data-tw-action="cancel-new-session" title="关闭" aria-label="关闭"><span aria-hidden="true">&times;</span></button></header>
+            <label><span>标题</span><input type="text" data-role="new-session-title" maxlength="240" autocomplete="off" placeholder="Task 标题"></label>
+            <div class="tw-new-task-actions"><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="cancel-new-session">取消</button><button type="button" class="tw-btn tw-btn-primary" data-tw-action="confirm-new-session" disabled>创建</button></div>
           </div>
         </dialog>
-        <div class="tw-session-context-menu" data-role="session-context-menu" role="menu" aria-label="Task actions" hidden>
-          <button type="button" role="menuitem" data-tw-action="request-delete-session">Delete</button>
+        <div class="tw-session-context-menu" data-role="session-context-menu" role="menu" aria-label="Task 操作" hidden>
+          <button type="button" role="menuitem" data-tw-action="request-delete-session">删除</button>
         </div>
         <dialog class="tw-delete-task-dialog" data-role="delete-session-dialog" aria-labelledby="tw-delete-task-title">
           <div class="tw-delete-task-form">
-            <header><h2 id="tw-delete-task-title">Delete task?</h2><button type="button" class="tw-icon-btn" data-tw-action="cancel-delete-session" title="Close" aria-label="Close"><span aria-hidden="true">&times;</span></button></header>
+            <header><h2 id="tw-delete-task-title">删除 Task？</h2><button type="button" class="tw-icon-btn" data-tw-action="cancel-delete-session" title="关闭" aria-label="关闭"><span aria-hidden="true">&times;</span></button></header>
             <div class="tw-delete-task-copy">
               <strong data-role="delete-session-name"></strong>
-              <p>This permanently removes the conversation and Task history. Linked Runtime workflows are not deleted.</p>
+              <p>此操作会永久删除对话和 Task 历史，但不会删除已关联的 Runtime Workflow。</p>
             </div>
-            <div class="tw-delete-task-actions"><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="cancel-delete-session">Cancel</button><button type="button" class="tw-btn tw-btn-danger" data-tw-action="confirm-delete-session">Delete</button></div>
+            <div class="tw-delete-task-actions"><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="cancel-delete-session">取消</button><button type="button" class="tw-btn tw-btn-danger" data-tw-action="confirm-delete-session">删除</button></div>
           </div>
         </dialog>
       </div>`;
@@ -605,7 +606,7 @@ class TaskWorkspaceRenderer {
             const attention =
               session.attention_state === 'none'
                 ? ''
-                : `<span class="tw-attention is-${escapeAttribute(session.attention_state)}">${escapeHtml(readableLabel(session.attention_state))}</span>`;
+                : `<span class="tw-attention is-${escapeAttribute(session.attention_state)}">${escapeHtml(workspaceDisplayLabel(session.attention_state))}</span>`;
             return `
               <button type="button" class="tw-session-item ${active ? 'is-active' : ''}" data-tw-action="select-session" data-session-id="${escapeAttribute(session.session_id)}"${active ? ' aria-current="page"' : ''}>
                 <span class="tw-session-title">${escapeHtml(session.title)}</span>
@@ -613,7 +614,7 @@ class TaskWorkspaceRenderer {
               </button>`;
           })
           .join('')
-      : `<div class="tw-empty tw-empty-compact">No ${escapeHtml(readableLabel(this.state.sessionFilter).toLocaleLowerCase())} tasks</div>`;
+      : `<div class="tw-empty tw-empty-compact">暂无${escapeHtml(workspaceDisplayLabel(this.state.sessionFilter))}的 Task</div>`;
     this.options.root
       .querySelectorAll('[data-tw-action="session-filter"]')
       .forEach((button) => {
@@ -630,18 +631,18 @@ class TaskWorkspaceRenderer {
     const session = this.state.activeSession;
     if (!session) {
       header.innerHTML = `
-        <div class="tw-session-heading"><h2>No task selected</h2></div>
+        <div class="tw-session-heading"><h2>未选择 Task</h2></div>
         <div class="tw-header-actions"><button type="button" class="tw-runtime-toggle" data-tw-action="toggle-inspector" aria-expanded="false"><span class="tw-runtime-toggle-dot" aria-hidden="true"></span>Runtime</button></div>`;
       return;
     }
     const controls =
       session.status === 'open'
-        ? `<button type="button" class="tw-btn tw-btn-quiet" data-tw-action="session-status" data-status-action="complete">Complete</button><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="session-status" data-status-action="archive">Archive</button>`
+        ? `<button type="button" class="tw-btn tw-btn-quiet" data-tw-action="session-status" data-status-action="complete">完成</button><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="session-status" data-status-action="archive">归档</button>`
         : session.status === 'archived'
-          ? `<button type="button" class="tw-btn tw-btn-quiet" data-tw-action="session-status" data-status-action="reopen">Reopen</button>`
-          : `<button type="button" class="tw-btn tw-btn-quiet" data-tw-action="session-status" data-status-action="reopen">Reopen</button><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="session-status" data-status-action="archive">Archive</button>`;
+          ? `<button type="button" class="tw-btn tw-btn-quiet" data-tw-action="session-status" data-status-action="reopen">重新打开</button>`
+          : `<button type="button" class="tw-btn tw-btn-quiet" data-tw-action="session-status" data-status-action="reopen">重新打开</button><button type="button" class="tw-btn tw-btn-quiet" data-tw-action="session-status" data-status-action="archive">归档</button>`;
     header.innerHTML = `
-      <div class="tw-session-heading"><h2 title="${escapeAttribute(session.title)}">${escapeHtml(session.title)}</h2><span class="tw-status is-${escapeAttribute(session.status)}">${escapeHtml(session.status)}</span></div>
+      <div class="tw-session-heading"><h2 title="${escapeAttribute(session.title)}">${escapeHtml(session.title)}</h2><span class="tw-status is-${escapeAttribute(session.status)}">${escapeHtml(workspaceDisplayLabel(session.status))}</span></div>
       <div class="tw-header-actions">${controls}<button type="button" class="tw-runtime-toggle" data-tw-action="toggle-inspector" aria-expanded="false"><span class="tw-runtime-toggle-dot" aria-hidden="true"></span>Runtime</button></div>`;
   }
 
@@ -679,9 +680,7 @@ class TaskWorkspaceRenderer {
     );
     if (input) {
       input.disabled = !session || session.status !== 'open' || this.state.busy;
-      input.placeholder = session
-        ? 'Message or describe a task'
-        : 'Select a task';
+      input.placeholder = session ? '输入消息或描述 Task' : '请选择 Task';
     }
     this.element('.tw-composer')?.classList.toggle(
       'is-disabled',
@@ -696,7 +695,7 @@ class TaskWorkspaceRenderer {
     if (!timeline) return;
     if (!this.state.activeSession) {
       timeline.innerHTML =
-        '<div class="tw-empty tw-empty-conversation"><strong>No task selected</strong><button type="button" class="tw-btn tw-btn-primary" data-tw-action="new-session">New task</button></div>';
+        '<div class="tw-empty tw-empty-conversation"><strong>未选择 Task</strong><button type="button" class="tw-btn tw-btn-primary" data-tw-action="new-session">新建 Task</button></div>';
       return;
     }
     timeline.innerHTML = this.state.timeline.length
@@ -705,7 +704,7 @@ class TaskWorkspaceRenderer {
             renderTimelineEntry(entry, this.resolvedInteraction(entry)),
           )
           .join('')
-      : '<div class="tw-empty tw-empty-conversation"><strong>Ready</strong></div>';
+      : '<div class="tw-empty tw-empty-conversation"><strong>就绪</strong></div>';
     if (scrollToBottom) timeline.scrollTop = timeline.scrollHeight;
   }
 
@@ -767,10 +766,10 @@ class TaskWorkspaceRenderer {
     target.className = `tw-cursor-state is-${this.state.timelineSourceState}`;
     target.textContent =
       this.state.timelineSourceState === 'ready'
-        ? `Live / ${this.state.timelineCursor}`
+        ? `实时 / ${this.state.timelineCursor}`
         : this.state.timelineSourceState === 'catching_up'
-          ? 'Catching up'
-          : 'Timeline degraded';
+          ? '同步中'
+          : '时间线已降级';
   }
 
   private renderInspector(): void {
@@ -797,13 +796,13 @@ class TaskWorkspaceRenderer {
           Boolean(this.state.selectedRunId),
         );
         if (closeControl) return;
-        button.title = expanded ? 'Close Runtime' : 'Open Runtime';
+        button.title = expanded ? '关闭 Runtime' : '打开 Runtime';
         button.setAttribute('aria-label', button.title);
       });
     if (selector) {
       selector.innerHTML =
         renderExecutionOptions(this.state) ||
-        '<option value="">No linked Run</option>';
+        '<option value="">未关联 Run</option>';
       selector.disabled = !this.state.selectedRunId;
     }
     this.options.root
@@ -853,7 +852,7 @@ class TaskWorkspaceRenderer {
   private report(error: unknown): void {
     const message =
       error instanceof TaskWorkspaceApiError
-        ? `${error.message}${error.retryable ? ' (retryable)' : ''}`
+        ? `${error.message}${error.retryable ? '（可重试）' : ''}`
         : error instanceof Error
           ? error.message
           : String(error);
@@ -982,7 +981,7 @@ class TaskWorkspaceRenderer {
       } else {
         this.renderSessionList();
       }
-      this.options.showToast?.('Task deleted', 1800);
+      this.options.showToast?.('Task 已删除', 1800);
     } catch (error) {
       this.report(error);
     } finally {
@@ -1113,7 +1112,7 @@ class TaskWorkspaceRenderer {
       workflow &&
       ['active', 'paused'].includes(String(workflow.status)) &&
       !window.confirm(
-        'This TaskSession still has an active Workflow. The Runtime will continue unless you control it separately.',
+        '此 TaskSession 仍有活跃的 Workflow。除非单独控制，否则 Runtime 会继续运行。',
       )
     ) {
       return;
@@ -1221,7 +1220,7 @@ class TaskWorkspaceRenderer {
         if (!isCurrentTemporaryRevision(launch, interaction.revisionId)) {
           throw new TaskWorkspaceApiError(
             'revision_stale',
-            'This Temporary revision has been replaced. Refreshing the current revision.',
+            '此 Temporary 版本已被替换，正在刷新当前版本。',
             409,
             false,
           );
@@ -1237,7 +1236,7 @@ class TaskWorkspaceRenderer {
         const instruction = container
           .querySelector<HTMLTextAreaElement>('[data-role="interaction-value"]')
           ?.value.trim();
-        if (!instruction) throw new Error('Add a revision instruction first.');
+        if (!instruction) throw new Error('请先填写版本修改说明。');
         await this.api.reviseTemporary(interaction.launchIntentId, instruction);
       }
       await this.poll();
@@ -1263,7 +1262,7 @@ class TaskWorkspaceRenderer {
       {
         interaction_id: `replan-request:${workflowId}:${runId}`,
         interaction_kind: 'temporary_replan_request',
-        title: 'Replan remaining work',
+        title: 'Replan 剩余工作',
         status: 'pending',
         workflow_id: workflowId,
         run_id: runId,
@@ -1290,7 +1289,7 @@ class TaskWorkspaceRenderer {
         const instruction = container
           .querySelector<HTMLTextAreaElement>('[data-role="interaction-value"]')
           ?.value.trim();
-        if (!instruction) throw new Error('Add a replan instruction first.');
+        if (!instruction) throw new Error('请先填写 Replan 说明。');
         const response = await this.api.createReplan(
           session.session_id,
           String(interaction.raw.workflow_id ?? ''),
@@ -1360,16 +1359,15 @@ class TaskWorkspaceRenderer {
         {
           interaction_id: String(proposal.proposal_id ?? ''),
           interaction_kind: 'runtime_command_confirmation',
-          title: `${readableLabel(action)} Workflow`,
-          prompt:
-            'Confirm this Runtime command against the latest authoritative state.',
+          title: `${workspaceDisplayLabel(action)} Workflow`,
+          prompt: '请根据最新权威状态确认此 Runtime 命令。',
           status: String(proposal.status ?? 'pending'),
           target_row_version: Number(proposal.row_version ?? 0),
           proposal,
           actions: [
             {
               action_id: 'confirm-runtime-command',
-              label: `Confirm ${readableLabel(action)}`,
+              label: `确认${workspaceDisplayLabel(action)}`,
               tone: action === 'cancel' ? 'danger' : 'primary',
             },
           ],

@@ -2,8 +2,8 @@ import {
   escapeAttribute,
   escapeHtml,
   isRecord,
-  readableLabel,
   stringifyJson,
+  workspaceDisplayLabel,
 } from '../rendering.js';
 import type { TimelineEntry } from '../state.js';
 
@@ -36,7 +36,7 @@ function actionsFrom(value: unknown): NormalizedInteraction['actions'] {
       id: String(action.action_id ?? action.id ?? ''),
       label: String(
         action.label ??
-          readableLabel(action.action_id ?? action.id ?? 'Submit'),
+          workspaceDisplayLabel(action.action_id ?? action.id ?? 'submit'),
       ),
       payload: action.payload_json ?? action.payload ?? null,
       payloadHash: String(action.payload_hash ?? ''),
@@ -55,7 +55,7 @@ export function replanInteraction(
   return {
     interaction_id: replan.replan_id,
     interaction_kind: 'temporary_replan_confirmation',
-    title: 'Temporary Replan',
+    title: 'Temporary Replan 确认',
     prompt: proposal.instruction ?? '',
     status: replan.status,
     target_row_version: replan.row_version,
@@ -102,21 +102,21 @@ export function normalizeInteraction(
     actions = [
       {
         id: 'confirm-temporary',
-        label: 'Run this revision',
+        label: '运行此版本',
         payload: null,
         payloadHash: '',
         tone: 'primary',
       },
       {
         id: 'revise-temporary',
-        label: 'Revise',
+        label: '修改',
         payload: null,
         payloadHash: '',
         tone: '',
       },
       {
         id: 'cancel-temporary',
-        label: 'Cancel',
+        label: '取消',
         payload: null,
         payloadHash: '',
         tone: 'danger',
@@ -127,7 +127,7 @@ export function normalizeInteraction(
     actions = [
       {
         id: 'confirm-runtime-command',
-        label: `Confirm ${readableLabel(nested.action ?? 'Command')}`,
+        label: `确认${workspaceDisplayLabel(nested.action ?? 'command')}`,
         payload: null,
         payloadHash: '',
         tone: nested.action === 'cancel' ? 'danger' : 'primary',
@@ -138,7 +138,7 @@ export function normalizeInteraction(
     actions = [
       {
         id: 'prepare-replan',
-        label: 'Prepare replan',
+        label: '准备 Replan',
         payload: null,
         payloadHash: '',
         tone: 'primary',
@@ -149,14 +149,14 @@ export function normalizeInteraction(
     actions = [
       {
         id: 'confirm-replan',
-        label: 'Apply replan',
+        label: '应用 Replan',
         payload: null,
         payloadHash: '',
         tone: 'primary',
       },
       {
         id: 'cancel-replan',
-        label: 'Cancel',
+        label: '取消',
         payload: null,
         payloadHash: '',
         tone: 'danger',
@@ -167,14 +167,14 @@ export function normalizeInteraction(
     actions = [
       {
         id: 'approve',
-        label: 'Approve',
+        label: '批准',
         payload: { approved: true },
         payloadHash: '',
         tone: 'primary',
       },
       {
         id: 'reject',
-        label: 'Reject',
+        label: '拒绝',
         payload: { approved: false },
         payloadHash: '',
         tone: 'danger',
@@ -192,7 +192,9 @@ export function normalizeInteraction(
     ),
     kind,
     status,
-    title: String(snapshot.title ?? nested.title ?? readableLabel(kind)),
+    title: String(
+      snapshot.title ?? nested.title ?? workspaceDisplayLabel(kind),
+    ),
     prompt: String(
       snapshot.prompt ??
         snapshot.description ??
@@ -310,15 +312,15 @@ export function renderInteractionCard(
   return `
     <section class="tw-interaction" data-interaction-id="${escapeAttribute(identifier)}" data-interaction-kind="${escapeAttribute(interaction.kind)}" data-launch-intent-id="${escapeAttribute(interaction.launchIntentId)}" data-revision-id="${escapeAttribute(interaction.revisionId)}">
       <header>
-        <span class="tw-interaction-kind">${escapeHtml(readableLabel(interaction.kind))}</span>
-        <span class="tw-status ${resolved ? 'is-resolved' : 'is-pending'}">${escapeHtml(interaction.status)}</span>
+        <span class="tw-interaction-kind">${escapeHtml(workspaceDisplayLabel(interaction.kind))}</span>
+        <span class="tw-status ${resolved ? 'is-resolved' : 'is-pending'}">${escapeHtml(workspaceDisplayLabel(interaction.status))}</span>
       </header>
       <h3>${escapeHtml(interaction.title)}</h3>
       ${interaction.prompt ? `<p>${escapeHtml(interaction.prompt)}</p>` : ''}
-      ${revision ? `<dl class="tw-inline-facts"><div><dt>Revision</dt><dd>${escapeHtml(revision.revision_no ?? '--')}</dd></div><div><dt>Plan hash</dt><dd title="${escapeAttribute(revision.compiled_plan_hash ?? '')}">${escapeHtml(String(revision.compiled_plan_hash ?? '--').slice(0, 16))}</dd></div></dl>` : ''}
-      ${risk ? `<details class="tw-disclosure"><summary>Risk summary</summary><pre>${escapeHtml(stringifyJson(risk))}</pre></details>` : ''}
-      ${diff ? `<details class="tw-disclosure tw-replan-diff" open><summary>Plan diff</summary><pre class="tw-diff">${escapeHtml(stringifyJson(diff))}</pre></details>` : ''}
-      ${needsPayload && !resolved ? `<textarea class="tw-interaction-input" data-role="interaction-value" rows="2" placeholder="${interaction.kind === 'temporary_confirmation' ? 'Revision instruction' : interaction.kind === 'temporary_replan_request' ? 'Replan instruction' : 'Response'}"></textarea>` : ''}
+      ${revision ? `<dl class="tw-inline-facts"><div><dt>版本</dt><dd>${escapeHtml(revision.revision_no ?? '--')}</dd></div><div><dt>Plan hash</dt><dd title="${escapeAttribute(revision.compiled_plan_hash ?? '')}">${escapeHtml(String(revision.compiled_plan_hash ?? '--').slice(0, 16))}</dd></div></dl>` : ''}
+      ${risk ? `<details class="tw-disclosure"><summary>风险摘要</summary><pre>${escapeHtml(stringifyJson(risk))}</pre></details>` : ''}
+      ${diff ? `<details class="tw-disclosure tw-replan-diff" open><summary>Plan 差异</summary><pre class="tw-diff">${escapeHtml(stringifyJson(diff))}</pre></details>` : ''}
+      ${needsPayload && !resolved ? `<textarea class="tw-interaction-input" data-role="interaction-value" rows="2" placeholder="${interaction.kind === 'temporary_confirmation' ? '版本修改说明' : interaction.kind === 'temporary_replan_request' ? 'Replan 说明' : '回复内容'}"></textarea>` : ''}
       <div class="tw-interaction-actions">
         ${interaction.actions
           .map(
@@ -327,6 +329,6 @@ export function renderInteractionCard(
           )
           .join('')}
       </div>
-      ${interaction.result != null ? `<div class="tw-canonical-result"><strong>Result</strong><pre>${escapeHtml(stringifyJson(interaction.result))}</pre></div>` : ''}
+      ${interaction.result != null ? `<div class="tw-canonical-result"><strong>结果</strong><pre>${escapeHtml(stringifyJson(interaction.result))}</pre></div>` : ''}
     </section>`;
 }

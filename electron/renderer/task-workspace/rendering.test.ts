@@ -6,7 +6,11 @@ import {
   resolveTemporaryConfirmation,
 } from './interactions/index.js';
 import { calculateInteractionPayloadHash } from './index.js';
-import { renderArtifact, renderMarkdown } from './rendering.js';
+import {
+  renderArtifact,
+  renderMarkdown,
+  workspaceDisplayLabel,
+} from './rendering.js';
 import {
   renderArtifacts,
   renderDag,
@@ -77,7 +81,8 @@ describe('Task Workspace generic renderers', () => {
       'timeline',
     );
 
-    expect(html).toContain('Approve');
+    expect(html).toContain('批准');
+    expect(html).toContain('data-interaction-action="approve"');
     expect(html).not.toContain('disabled');
   });
 
@@ -96,7 +101,7 @@ describe('Task Workspace generic renderers', () => {
       'pending',
     );
 
-    expect(html).toContain('Plan diff');
+    expect(html).toContain('Plan 差异');
     expect(html).toContain('review_summary');
     expect(html).toContain('applying');
     expect(html).toContain('disabled');
@@ -191,6 +196,14 @@ describe('Task Workspace generic renderers', () => {
     }
   });
 
+  it('localizes display labels without changing persisted values', () => {
+    expect(workspaceDisplayLabel('open')).toBe('进行中');
+    expect(workspaceDisplayLabel('pending')).toBe('待处理');
+    expect(workspaceDisplayLabel('temporary_workflow')).toBe(
+      'Temporary Workflow',
+    );
+  });
+
   it('renders structured Runtime command hints and keeps unavailable history read-only', () => {
     const state = createTaskWorkspaceState();
     state.activeSession = {
@@ -228,7 +241,7 @@ describe('Task Workspace generic renderers', () => {
 
     state.runtimeDetail.workflows[0]!.availability = 'unavailable';
     const historical = renderOverview(state);
-    expect(historical).toContain('Workflow is read-only');
+    expect(historical).toContain('Workflow 仅可查看');
     expect(historical).not.toContain('data-command="pause"');
     expect(historical).not.toContain('data-tw-action="begin-replan"');
   });
@@ -348,12 +361,12 @@ describe('Task Workspace generic renderers', () => {
     state.selectedRunId = 'run:1';
 
     const dag = renderDag(state);
-    expect(dag).toContain('1 edges');
-    expect(dag).toContain('1 attempts');
-    expect(dag).toContain('1 completion cuts');
+    expect(dag).toContain('1 条边');
+    expect(dag).toContain('1 次 Attempt');
+    expect(dag).toContain('1 个 Completion Cut');
     expect(dag).toContain('collect');
     expect(dag).toContain('publish');
-    expect(dag).toContain('succeeded');
+    expect(dag).toContain('成功');
 
     const artifacts = renderArtifacts(state);
     expect(artifacts).toContain('Workspace report');

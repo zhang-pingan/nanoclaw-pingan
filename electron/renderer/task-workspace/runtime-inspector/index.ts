@@ -10,6 +10,7 @@ import {
   isRecord,
   readableLabel,
   renderArtifact,
+  workspaceDisplayLabel,
 } from '../rendering.js';
 import {
   currentRun,
@@ -57,7 +58,7 @@ function artifactGraphRunId(artifact: Record<string, unknown>): string {
 export function renderOverview(state: TaskWorkspaceState): string {
   const workflow = currentWorkflow(state);
   const run = currentRun(state);
-  if (!workflow) return empty('No linked Workflow yet.');
+  if (!workflow) return empty('尚未关联 Workflow。');
   const available = workflow.availability !== 'unavailable';
   const hints =
     available && Array.isArray(workflow.command_hints)
@@ -83,28 +84,28 @@ export function renderOverview(state: TaskWorkspaceState): string {
   return `
     <section class="tw-inspector-section">
       <div class="tw-freshness ${state.runtimeDetail?.freshness === 'degraded' ? 'is-degraded' : ''}">
-        ${!available ? 'Historical Runtime detail is unavailable. This Workflow is read-only.' : state.runtimeDetail?.freshness === 'degraded' ? 'Runtime snapshot is degraded. Fresh-state actions are disabled.' : 'Runtime snapshot is current.'}
+        ${!available ? '历史 Runtime 详情不可用，此 Workflow 仅可查看。' : state.runtimeDetail?.freshness === 'degraded' ? 'Runtime 快照已降级，依赖最新状态的操作已禁用。' : 'Runtime 快照为最新状态。'}
       </div>
       <dl class="tw-facts">
         ${fact('Workflow', compactId(workflowIdentity(workflow)), workflowIdentity(workflow))}
-        ${fact('Status', workflow.status)}
-        ${fact('Operational', workflow.operational_state)}
+        ${fact('状态', workspaceDisplayLabel(workflow.status ?? '--'))}
+        ${fact('运行状态', workspaceDisplayLabel(workflow.operational_state ?? '--'))}
         ${fact('Run', compactId(run?.id), String(run?.id ?? ''))}
-        ${fact('Run lifecycle', run?.lifecycle)}
-        ${fact('Control', run?.control)}
-        ${fact('Deadline', formatTime(workflow.deadline_at_ms))}
-        ${fact('Pending', pending.length)}
-        ${fact('Outcome', workflow.final_outcome_kind)}
-        ${fact('Last error', workflow.final_error_code ?? run?.error_code)}
+        ${fact('Run 生命周期', workspaceDisplayLabel(run?.lifecycle ?? '--'))}
+        ${fact('控制状态', workspaceDisplayLabel(run?.control ?? '--'))}
+        ${fact('截止时间', formatTime(workflow.deadline_at_ms))}
+        ${fact('待处理', pending.length)}
+        ${fact('结果', workspaceDisplayLabel(workflow.final_outcome_kind ?? '--'))}
+        ${fact('最近错误', workflow.final_error_code ?? run?.error_code)}
       </dl>
-      ${hints.length || replanAvailable ? `<div class="tw-command-bar" aria-label="Runtime commands">${hints.map((hint) => `<button type="button" class="tw-btn ${hint === 'cancel' ? 'tw-btn-danger' : 'tw-btn-quiet'}" data-tw-action="runtime-command" data-command="${escapeAttribute(hint)}"${state.runtimeDetail?.freshness === 'degraded' ? ' disabled' : ''}>${escapeHtml(readableLabel(hint))}</button>`).join('')}${replanAvailable ? '<button type="button" class="tw-btn tw-btn-quiet" data-tw-action="begin-replan">Replan</button>' : ''}</div>` : ''}
+      ${hints.length || replanAvailable ? `<div class="tw-command-bar" aria-label="Runtime 命令">${hints.map((hint) => `<button type="button" class="tw-btn ${hint === 'cancel' ? 'tw-btn-danger' : 'tw-btn-quiet'}" data-tw-action="runtime-command" data-command="${escapeAttribute(hint)}"${state.runtimeDetail?.freshness === 'degraded' ? ' disabled' : ''}>${escapeHtml(workspaceDisplayLabel(hint))}</button>`).join('')}${replanAvailable ? '<button type="button" class="tw-btn tw-btn-quiet" data-tw-action="begin-replan">Replan</button>' : ''}</div>` : ''}
     </section>`;
 }
 
 export function renderDag(state: TaskWorkspaceState): string {
   const workflow = currentWorkflow(state);
   const run = currentRun(state);
-  if (!workflow || !run) return empty('No materialized DAG is linked.');
+  if (!workflow || !run) return empty('尚未关联已物化的 DAG。');
   const runId = String(run.id ?? '');
   const allScopes = records(workflow.scopes).filter(
     (scope) => scope.graph_run_id === runId,
@@ -140,8 +141,8 @@ export function renderDag(state: TaskWorkspaceState): string {
   );
   return `
     <section class="tw-inspector-section">
-      ${temporary && childScopes.length ? '<div class="tw-context-note">Dynamic Child DAG shown. The fixed Runtime wrapper is hidden.</div>' : ''}
-      <div class="tw-dag-summary"><span>${nodes.length} nodes</span><span>${edges.length} edges</span><span>${attempts.length} attempts</span><span>${completionCuts.length} completion cuts</span><span>${allScopes.length} scopes</span></div>
+      ${temporary && childScopes.length ? '<div class="tw-context-note">当前显示 Dynamic Child DAG，已隐藏固定的 Runtime 包装层。</div>' : ''}
+      <div class="tw-dag-summary"><span>${nodes.length} 个节点</span><span>${edges.length} 条边</span><span>${attempts.length} 次 Attempt</span><span>${completionCuts.length} 个 Completion Cut</span><span>${allScopes.length} 个 Scope</span></div>
       <div class="tw-dag-list">
         ${
           nodes.length
@@ -151,16 +152,16 @@ export function renderDag(state: TaskWorkspaceState): string {
                   <div class="tw-dag-node">
                     <span class="tw-node-state is-${escapeAttribute(String(node.phase ?? 'unknown'))}"></span>
                     <div><strong>${escapeHtml(node.node_key ?? compactId(node.id))}</strong><span>${escapeHtml(readableLabel(node.node_type ?? 'node'))}</span></div>
-                    <div class="tw-dag-node-state"><span>${escapeHtml(node.phase ?? '--')}</span><small>${escapeHtml(node.terminal_status ?? node.trigger_state ?? '')}</small></div>
+                    <div class="tw-dag-node-state"><span>${escapeHtml(workspaceDisplayLabel(node.phase ?? '--'))}</span><small>${escapeHtml(workspaceDisplayLabel(node.terminal_status ?? node.trigger_state ?? ''))}</small></div>
                   </div>`,
                 )
                 .join('')
-            : empty('The current Run has no materialized nodes.')
+            : empty('当前 Run 尚无已物化节点。')
         }
       </div>
-      ${edges.length ? `<details class="tw-disclosure"><summary>Edges</summary><div class="tw-edge-list">${edges.map((edge) => `<div title="${escapeAttribute(String(edge.edge_kind ?? edge.resolution_state ?? ''))}"><span>${escapeHtml(edge.from_node_key ?? nodeKeys.get(String(edge.from_node_id)) ?? compactId(edge.from_node_id))}</span><span aria-hidden="true">-&gt;</span><span>${escapeHtml(edge.to_node_key ?? nodeKeys.get(String(edge.to_node_id)) ?? compactId(edge.to_node_id))}</span></div>`).join('')}</div></details>` : ''}
-      ${attempts.length ? `<details class="tw-disclosure"><summary>Attempts</summary><dl class="tw-facts">${attempts.map((attempt) => fact(`${nodeKeys.get(String(attempt.node_id)) ?? compactId(attempt.node_id)} / #${attempt.attempt_no ?? '?'}`, attempt.execution_outcome ?? attempt.quality_decision ?? attempt.phase ?? '--', String(attempt.query_id ?? attempt.id ?? ''))).join('')}</dl></details>` : ''}
-      ${completionCuts.length ? `<details class="tw-disclosure"><summary>Completion cuts</summary><dl class="tw-facts">${completionCuts.map((cut) => fact(String(cut.exit_name ?? compactId(cut.scope_id) ?? 'Completion'), cut.outcome_kind ?? '--', String(cut.cut_hash ?? cut.id ?? ''))).join('')}</dl></details>` : ''}
+      ${edges.length ? `<details class="tw-disclosure"><summary>边</summary><div class="tw-edge-list">${edges.map((edge) => `<div title="${escapeAttribute(String(edge.edge_kind ?? edge.resolution_state ?? ''))}"><span>${escapeHtml(edge.from_node_key ?? nodeKeys.get(String(edge.from_node_id)) ?? compactId(edge.from_node_id))}</span><span aria-hidden="true">-&gt;</span><span>${escapeHtml(edge.to_node_key ?? nodeKeys.get(String(edge.to_node_id)) ?? compactId(edge.to_node_id))}</span></div>`).join('')}</div></details>` : ''}
+      ${attempts.length ? `<details class="tw-disclosure"><summary>Attempt</summary><dl class="tw-facts">${attempts.map((attempt) => fact(`${nodeKeys.get(String(attempt.node_id)) ?? compactId(attempt.node_id)} / #${attempt.attempt_no ?? '?'}`, workspaceDisplayLabel(attempt.execution_outcome ?? attempt.quality_decision ?? attempt.phase ?? '--'), String(attempt.query_id ?? attempt.id ?? ''))).join('')}</dl></details>` : ''}
+      ${completionCuts.length ? `<details class="tw-disclosure"><summary>Completion Cut</summary><dl class="tw-facts">${completionCuts.map((cut) => fact(String(cut.exit_name ?? compactId(cut.scope_id) ?? '完成'), workspaceDisplayLabel(cut.outcome_kind ?? '--'), String(cut.cut_hash ?? cut.id ?? ''))).join('')}</dl></details>` : ''}
     </section>`;
 }
 
@@ -196,7 +197,7 @@ export function renderArtifacts(state: TaskWorkspaceState): string {
     artifacts.set(recordIdentity(artifact, `artifact-${index}`), artifact);
   });
   if (!artifacts.size)
-    return empty('No Workspace attachment or Runtime Artifact is linked.');
+    return empty('尚未关联 Workspace 附件或 Runtime Artifact。');
   return `<section class="tw-inspector-section tw-artifact-list">${[...artifacts.values()].map(renderArtifact).join('')}</section>`;
 }
 
@@ -247,14 +248,14 @@ export function renderPending(state: TaskWorkspaceState): string {
     );
     unique.set(key, candidate);
   });
-  if (!unique.size) return empty('No action is waiting for you.');
+  if (!unique.size) return empty('当前没有等待处理的操作。');
   return `<section class="tw-inspector-section tw-pending-list">${[...unique.values()].map((item) => renderInteractionCard(item, 'pending')).join('')}</section>`;
 }
 
 export function renderTrace(state: TaskWorkspaceState): string {
   const workflow = currentWorkflow(state);
   const run = currentRun(state);
-  if (!workflow) return empty('No Runtime correlation is available.');
+  if (!workflow) return empty('暂无 Runtime 关联信息。');
   const hasExactRun =
     workflowIdentity(workflow).trim().length > 0 &&
     String(run?.id ?? '').trim().length > 0;
@@ -263,16 +264,16 @@ export function renderTrace(state: TaskWorkspaceState): string {
     .filter((value): value is string => typeof value === 'string');
   return `
     <section class="tw-inspector-section">
-      <p class="tw-context-note">Task-scoped correlation only. Full event payloads stay in Runtime Center.</p>
+      <p class="tw-context-note">此处仅显示 Task 范围内的关联信息，完整事件内容保留在 Runtime Center。</p>
       <dl class="tw-facts tw-trace-facts">
         ${fact('Workflow ID', workflowIdentity(workflow), workflowIdentity(workflow))}
         ${fact('Run ID', run?.id, String(run?.id ?? ''))}
         ${fact('Recipe', workflow.recipe_id ?? workflow.recipe_resource_id)}
-        ${fact('Recipe version', workflow.recipe_ref_version ?? workflow.recipe_version)}
-        ${fact('Event cursor', run?.next_event_seq)}
+        ${fact('Recipe 版本', workflow.recipe_ref_version ?? workflow.recipe_version)}
+        ${fact('事件游标', run?.next_event_seq)}
         ${fact('Query IDs', queryIds.length ? [...new Set(queryIds)].join(', ') : '--')}
       </dl>
-      <button type="button" class="tw-btn tw-btn-primary" data-tw-action="open-runtime-center"${hasExactRun ? '' : ' disabled'}>Open Runtime Center</button>
+      <button type="button" class="tw-btn tw-btn-primary" data-tw-action="open-runtime-center"${hasExactRun ? '' : ' disabled'}>打开 Runtime Center</button>
     </section>`;
 }
 
@@ -303,7 +304,8 @@ export function renderExecutionOptions(state: TaskWorkspaceState): string {
         const selected =
           workflowId === state.selectedWorkflowId &&
           runId === state.selectedRunId;
-        return `<option value="${escapeAttribute(value)}"${selected ? ' selected' : ''}>${escapeHtml(`${compactId(workflowId)} / ${String(run.lifecycle ?? run.state_key ?? compactId(runId))}`)}</option>`;
+        const runLabel = run.lifecycle ?? run.state_key;
+        return `<option value="${escapeAttribute(value)}"${selected ? ' selected' : ''}>${escapeHtml(`${compactId(workflowId)} / ${runLabel ? workspaceDisplayLabel(runLabel) : compactId(runId)}`)}</option>`;
       }),
     )
     .join('');
