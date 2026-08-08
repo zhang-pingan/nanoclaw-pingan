@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { readGoldenCorpus } from './compiler/golden.js';
+import { compileWorkflow } from './compiler/compiler.js';
+import type { CompiledScopePlanV2Document } from './contracts/compiler-contract-repair-types.js';
+import type { WorkflowCompilerStaticChildPlanBundle } from './contracts/static-child-plan-bundle-types.js';
 import type { JsonObject, Sha256Hash } from './contracts/types.js';
+import { canonicalJson } from './contracts/hash.js';
 import {
   createG6MapFixture,
   type G6MapFixture,
@@ -20,6 +24,114 @@ function expandCompilerInputSnapshot(): JsonObject {
   );
   if (!testCase) throw new Error('positive.expand compiler fixture is missing');
   return testCase.registry_snapshot;
+}
+
+function cancelledExitFixture(): {
+  source: JsonObject;
+  snapshot: JsonObject;
+  plan: CompiledScopePlanV2Document;
+  staticChildPlanBundle: WorkflowCompilerStaticChildPlanBundle;
+  childSource: JsonObject;
+  childPlan: CompiledScopePlanV2Document;
+} {
+  const testCase = readGoldenCorpus().cases.cases.find(
+    (candidate) => candidate.case_id === 'positive.subgraph',
+  );
+  if (!testCase)
+    throw new Error('positive.subgraph compiler fixture is missing');
+  const snapshot = JSON.parse(
+    JSON.stringify(testCase.registry_snapshot),
+  ) as JsonObject;
+  const interfaceSnapshot = snapshot.interface_snapshot as JsonObject;
+  const rootInterface = (interfaceSnapshot.interfaces as JsonObject[]).find(
+    (entry) => (entry.ref as JsonObject).id === 'fixture.interface.root',
+  );
+  if (!rootInterface)
+    throw new Error('positive.subgraph root interface is missing');
+  (rootInterface.exits as JsonObject).cancelled = { output_ports: {} };
+  const source = JSON.parse(
+    Buffer.from(testCase.raw_source_base64, 'base64').toString('utf8'),
+  ) as JsonObject;
+  const terminal = (source.nodes as JsonObject[]).find(
+    (node) => node.type === 'terminal',
+  );
+  if (!terminal) throw new Error('positive.subgraph terminal is missing');
+  terminal.trigger = { type: 'root' };
+  terminal.exit = 'cancelled';
+  source.nodes = [terminal];
+  source.control_edges = [];
+  const completion = source.completion as JsonObject;
+  const settledRule = (completion.settled_rules as JsonObject[])[0]!;
+  const select = settledRule.select as JsonObject;
+  select.exits = ['cancelled'];
+  const compiled = compileWorkflow({
+    caseId: 'service-exit-named-cancelled',
+    sourceKind: 'graph_scope',
+    rawSourceBytes: Buffer.from(canonicalJson(source), 'utf8'),
+    inputSnapshot: snapshot,
+  });
+  if (!compiled.ok) {
+    throw new Error(
+      `cancelled exit fixture did not compile: ${JSON.stringify(compiled.value)}`,
+    );
+  }
+  return {
+    source,
+    snapshot,
+    plan: compiled.value.plan,
+    staticChildPlanBundle: compiled.value.staticChildPlanBundle,
+    childSource: source,
+    childPlan: compiled.value.plan,
+  };
+}
+
+function advanceToTerminal(
+  fixture: G6MapFixture,
+  authority: WorkflowRuntimeTransactionAuthority,
+): { status: string; final_outcome_kind: string | null } {
+  let nowMs = 100;
+  for (let iteration = 0; iteration < 100; iteration += 1) {
+    let processed = 0;
+    for (const phase of [
+      'compile',
+      'materialize',
+      'reconcile',
+      'schedule',
+      'recover',
+      'close',
+    ] as const) {
+      processed += authority.advance(phase, 32, nowMs).processed;
+      nowMs += 1;
+    }
+    const workflow = fixture.instance.store.queryOne<{
+      status: string;
+      final_outcome_kind: string | null;
+    }>('SELECT status, final_outcome_kind FROM workflows WHERE id = ?', [
+      fixture.workflowId,
+    ])!;
+    if (workflow.status !== 'active') return workflow;
+    if (processed === 0) break;
+  }
+  throw new Error(
+    `Workflow did not reach a terminal state: ${JSON.stringify({
+      workflow: fixture.instance.store.queryOne<Record<string, unknown>>(
+        'SELECT status, operational_state, current_graph_run_id, row_version FROM workflows WHERE id = ?',
+        [fixture.workflowId],
+      ),
+      run: fixture.instance.store.queryOne<Record<string, unknown>>(
+        'SELECT lifecycle, control, operational_state, root_close_request_id, completion_cut_id, row_version FROM workflow_graph_runs WHERE id = ?',
+        [fixture.graphRunId],
+      ),
+      scopes: fixture.instance.store.queryAll<Record<string, unknown>>(
+        'SELECT id, scope_kind, lifecycle, close_request_id, completion_cut_id FROM workflow_graph_scopes WHERE graph_run_id = ?',
+        [fixture.graphRunId],
+      ),
+      nodes: fixture.instance.store.queryAll<Record<string, unknown>>(
+        'SELECT node_key, node_type, phase, trigger_state, terminal_status FROM workflow_graph_nodes WHERE graph_run_id = ?',
+        [fixture.graphRunId],
+      ),
+    })}`,
+  );
 }
 
 function createDynamicCompileCandidate(
@@ -124,6 +236,89 @@ function operationalState(fixture: G6MapFixture): {
     [fixture.graphRunId],
   )!;
 }
+
+describe('WorkflowRuntimeTransactionAuthority Definition terminal routing', () => {
+  const scenarios: Array<{
+    name: string;
+    target: string;
+    terminal: JsonObject;
+    expected: { status: string; final_outcome_kind: string };
+  }> = [
+    {
+      name: 'normal',
+      target: 'completed',
+      terminal: { type: 'terminal', terminal_kind: 'normal' },
+      expected: { status: 'completed', final_outcome_kind: 'normal' },
+    },
+    {
+      name: 'errored',
+      target: 'failed',
+      terminal: {
+        type: 'terminal',
+        terminal_kind: 'errored',
+        error_code: 'cancelled_business_exit_failed',
+      },
+      expected: { status: 'errored', final_outcome_kind: 'errored' },
+    },
+    {
+      name: 'cancelled',
+      target: 'cancelled_terminal',
+      terminal: {
+        type: 'terminal',
+        terminal_kind: 'cancelled',
+        cancel_reason: 'definition_declared_cancelled',
+      },
+      expected: { status: 'cancelled', final_outcome_kind: 'cancelled' },
+    },
+  ];
+
+  it.each(scenarios)(
+    'uses the Definition $name terminal for an exit literally named cancelled',
+    (scenario) => {
+      const fixture = createG6MapFixture(
+        `definition-cancelled-exit-${scenario.name}`,
+        {
+          compiledFixture: cancelledExitFixture(),
+          definitionStates: {
+            run: {
+              type: 'graph',
+              exit_routes: { cancelled: { target: scenario.target } },
+              on_error: { target: 'failed' },
+              on_local_cancel: { target: 'cancelled_terminal' },
+            },
+            completed: { type: 'terminal', terminal_kind: 'normal' },
+            failed: {
+              type: 'terminal',
+              terminal_kind: 'errored',
+              error_code: 'fixture_failed',
+            },
+            cancelled_terminal: {
+              type: 'terminal',
+              terminal_kind: 'cancelled',
+              cancel_reason: 'fixture_cancelled',
+            },
+            [scenario.target]: scenario.terminal,
+          },
+        },
+      );
+      fixtures.push(fixture);
+
+      expect(
+        advanceToTerminal(
+          fixture,
+          new WorkflowRuntimeTransactionAuthority(fixture.instance.store),
+        ),
+      ).toEqual(scenario.expected);
+      expect(
+        fixture.instance.store.queryOne<{ target_state_key: string }>(
+          `SELECT target_state_key FROM workflow_state_transition_history
+            WHERE workflow_id = ? ORDER BY created_at_ms DESC LIMIT 1`,
+          [fixture.workflowId],
+        ),
+      ).toEqual({ target_state_key: scenario.target });
+    },
+  );
+});
 
 describe('WorkflowRuntimeTransactionAuthority compile failures', () => {
   it('persists a rejected root build instead of leaving poison compile work', () => {

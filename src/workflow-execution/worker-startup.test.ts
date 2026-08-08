@@ -5,7 +5,10 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { WorkflowRuntimeConnectionFactory } from '../workflow-runtime/gateway/connection.js';
-import { WorkflowExecutionAdapterRegistry } from './adapter-registry.js';
+import {
+  WorkflowExecutionAdapterRegistry,
+  WorkflowExecutionAdapterUnavailableError,
+} from './adapter-registry.js';
 import { WorkflowAdapterExecutionStore } from './execution-store.js';
 import { WorkflowExecutionWorker } from './worker.js';
 import type { WorkflowExecutionAdapter } from './types.js';
@@ -23,7 +26,10 @@ describe('WorkflowExecutionWorker startup', () => {
     const registry = new WorkflowExecutionAdapterRegistry();
     const readyPreflight = vi.fn(async () => undefined);
     const unavailablePreflight = vi.fn(async () => {
-      throw new Error('WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED=true');
+      throw new WorkflowExecutionAdapterUnavailableError(
+        'WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED=true',
+        'configuration',
+      );
     });
     registry.register({
       refId: 'icarus.adapter.container-agent',
@@ -63,13 +69,16 @@ describe('WorkflowExecutionWorker startup', () => {
       await expect(worker.start()).resolves.toBeUndefined();
       expect(readyPreflight).toHaveBeenCalledOnce();
       expect(unavailablePreflight).toHaveBeenCalledOnce();
-      expect(registry.getReadiness('icarus.adapter.container-agent')).toEqual({
+      expect(
+        registry.getReadiness('icarus.adapter.container-agent'),
+      ).toMatchObject({
         status: 'ready',
         error: null,
       });
-      expect(registry.getReadiness('icarus.adapter.codex-task')).toEqual({
+      expect(registry.getReadiness('icarus.adapter.codex-task')).toMatchObject({
         status: 'unavailable',
         error: 'WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED=true',
+        failureKind: 'configuration',
       });
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({

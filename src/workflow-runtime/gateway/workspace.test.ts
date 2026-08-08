@@ -2,8 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { RuntimeEventHub } from '../../task-workspace/runtime-event-hub.js';
+import { TaskWorkspaceService } from '../../task-workspace/service.js';
+import { TaskWorkspaceStore } from '../../task-workspace/store.js';
 import { WorkflowExecutionAdapterRegistry } from '../../workflow-execution/adapter-registry.js';
 import { WorkflowAdapterExecutionStore } from '../../workflow-execution/execution-store.js';
 import type { WorkflowExecutionAdapter } from '../../workflow-execution/types.js';
@@ -1202,8 +1205,8 @@ describe('RuntimeWorkspaceGateway', () => {
       effect: { type: 'idempotent', key: { scope: 'node' } },
       cancellation: {
         type: 'cooperative',
-        ack_required_before_close: false,
-        safe_if_cancel_lost: true,
+        ack_required_before_close: true,
+        safe_if_cancel_lost: false,
       },
       required_file_scopes: [
         { ref: 'workspace', access: 'write', impact: 'mutable_effects' },
@@ -1678,6 +1681,414 @@ describe('RuntimeWorkspaceGateway', () => {
     },
     30_000,
   );
+
+  it('durably cancels the exact running Codex execution after a Host restart', async () => {
+    const store = openFresh();
+    ensureTaskWorkspaceCore(store, 1_000);
+    const gateway = new RuntimeWorkspaceGateway(store, Buffer.alloc(32, 7));
+    const recipe = gateway
+      .listRecipes({
+        principal_ref: 'human:local-owner',
+        now_ms: 2_000,
+      })
+      .items.find((item) => item.recipe_ref.id === 'ad_hoc_personal_task')!;
+    const response = cloneJson(TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE);
+    const source = (response.graph_scope as JsonObject).source as JsonObject;
+    const compilation = gateway.prepareTemporaryDraft({
+      principal_ref: 'human:local-owner',
+      selection_token: recipe.selection_token,
+      source_json: source,
+      now_ms: 2_001,
+    });
+    const effectiveInput: JsonObject = {
+      text: 'Keep running until the user cancels',
+    };
+    const attachmentManifest: JsonValue = [];
+    const receipt = gateway.launchTemporary({
+      principal_ref: 'human:local-owner',
+      selection_token: recipe.selection_token,
+      authorization_ref: 'temporary-confirmation:codex-user-cancel',
+      launch: {
+        request_id: 'launch:codex-user-cancel',
+        creation_domain: 'task-workspace-test',
+        creation_key: 'codex-user-cancel',
+        effective_input_json: effectiveInput,
+        effective_input_hash: hash('input', effectiveInput),
+        attachment_manifest_json: attachmentManifest,
+        attachment_manifest_hash: hash('attachments', attachmentManifest),
+        deadline_at_ms: null,
+      },
+      now_ms: 2_002,
+      confirmed_revision_id: 'revision:codex-user-cancel',
+      confirmed_source_json: source,
+      confirmed_source_hash: compilation.source_hash,
+      confirmed_plan_hash: compilation.compiled_plan_hash,
+      resource_closure_hash: compilation.resource_closure_hash,
+      policy_ceiling_hash: compilation.policy_ceiling_hash,
+    });
+
+    const executionRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-workspace-codex-cancel-'),
+    );
+    roots.push(executionRoot);
+    const executionDatabasePath = path.join(
+      executionRoot,
+      'workflow-adapter-executions.db',
+    );
+    const firstExecutionStore = new WorkflowAdapterExecutionStore(
+      executionDatabasePath,
+    );
+    const firstRegistry = new WorkflowExecutionAdapterRegistry();
+    let firstExecutionId: string | null = null;
+    let firstContext: Parameters<WorkflowExecutionAdapter['start']>[0] | null =
+      null;
+    const firstHandleCancel = vi.fn(async () => undefined);
+    const neverCompletes = new Promise<never>(() => undefined);
+    firstRegistry.register({
+      refId: TASK_WORKSPACE_TEMPORARY_REFS.adapter.id,
+      preflight: async () => undefined,
+      start: async (context) => {
+        firstExecutionId = context.executionId;
+        firstContext = context;
+        return {
+          providerMetadata: {
+            source: 'temporary-codex-cancel',
+            thread_id: 'thread:codex-user-cancel',
+            turn_id: 'turn:codex-user-cancel',
+          },
+          completion: neverCompletes,
+          cancel: firstHandleCancel,
+        };
+      },
+      recover: async () => {
+        throw new Error('The first Worker must not recover');
+      },
+    });
+    let workerNow = 3_000;
+    const firstWorker = new WorkflowExecutionWorker({
+      runtimeStore: store,
+      executionStore: firstExecutionStore,
+      registry: firstRegistry,
+      pollIntervalMs: 10_000,
+      leaseOwner: 'worker:codex-cancel:first',
+      now: () => workerNow,
+    });
+    const authority = new WorkflowRuntimeTransactionAuthority(store);
+    let secondExecutionStore: WorkflowAdapterExecutionStore | null = null;
+    let secondWorker: WorkflowExecutionWorker | null = null;
+    let taskStore: TaskWorkspaceStore | null = null;
+
+    try {
+      for (
+        let iteration = 0;
+        iteration < 120 && !firstExecutionId;
+        iteration += 1
+      ) {
+        for (const phase of [
+          'compile',
+          'materialize',
+          'reconcile',
+          'schedule',
+          'recover',
+        ] as const) {
+          authority.advance(phase, 32, workerNow);
+          workerNow += 1;
+        }
+        await firstWorker.tick();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+      expect(firstExecutionId).not.toBeNull();
+      expect(firstContext).not.toBeNull();
+      const persistedBeforeRestart = firstExecutionStore.get(firstExecutionId!);
+      expect(persistedBeforeRestart).toMatchObject({
+        executionId: firstExecutionId,
+        state: 'running',
+        context: {
+          graphRunId: receipt.activation.graphRunId,
+          attemptId: firstContext!.attemptId,
+          outboxId: firstContext!.outboxId,
+        },
+      });
+      for (let iteration = 0; iteration < 30; iteration += 1) {
+        for (const phase of [
+          'compile',
+          'materialize',
+          'reconcile',
+          'schedule',
+          'recover',
+          'close',
+        ] as const) {
+          authority.advance(phase, 32, workerNow);
+          workerNow += 1;
+        }
+        const attempt = store.queryOne<{ phase: string }>(
+          'SELECT phase FROM workflow_graph_node_attempts WHERE id = ?',
+          [firstContext!.attemptId],
+        );
+        if (attempt?.phase === 'running') break;
+      }
+      expect(
+        store.queryOne<{ phase: string; external_execution_id: string }>(
+          `SELECT phase, external_execution_id
+             FROM workflow_graph_node_attempts WHERE id = ?`,
+          [firstContext!.attemptId],
+        ),
+      ).toEqual({
+        phase: 'running',
+        external_execution_id: firstExecutionId,
+      });
+      expect(
+        store.queryOne<{ count: number }>(
+          `SELECT count(*) AS count FROM workflow_graph_events
+            WHERE graph_run_id = ? AND event_type = 'attempt_phase_changed'
+              AND idempotency_key LIKE 'delegation-execution-reserved:%'`,
+          [receipt.activation.graphRunId],
+        ),
+      ).toEqual({ count: 1 });
+
+      const run = store.queryOne<{ row_version: number }>(
+        'SELECT row_version FROM workflow_graph_runs WHERE id = ?',
+        [receipt.activation.graphRunId],
+      )!;
+      expect(
+        gateway.submitCommand({
+          principal_ref: 'human:local-owner',
+          workflow_id: receipt.workflowId,
+          run_id: receipt.activation.graphRunId,
+          action: 'cancel',
+          expected_target_row_version: run.row_version,
+          idempotency_key: 'workspace-command:codex-user-cancel',
+          operation_ref: 'proposal:codex-user-cancel',
+          now_ms: workerNow,
+        }).execution_result,
+      ).toBe('applied');
+      workerNow += 1;
+      const cancellation = store.queryOne<{
+        status: string;
+        external_execution_id: string;
+        attempt_id: string;
+        outbox_id: string;
+      }>(
+        `SELECT status, external_execution_id, attempt_id, outbox_id
+           FROM workflow_provider_cancellation_requests
+          WHERE graph_run_id = ?`,
+        [receipt.activation.graphRunId],
+      );
+      expect(cancellation).toEqual({
+        status: 'requested',
+        external_execution_id: firstExecutionId,
+        attempt_id: firstContext!.attemptId,
+        outbox_id: firstContext!.outboxId,
+      });
+      expect(firstHandleCancel).not.toHaveBeenCalled();
+
+      firstExecutionStore.close();
+      secondExecutionStore = new WorkflowAdapterExecutionStore(
+        executionDatabasePath,
+      );
+      const secondRegistry = new WorkflowExecutionAdapterRegistry();
+      const recoveredIdentities: Array<{
+        executionId: string;
+        attemptId: string;
+        outboxId: string;
+      }> = [];
+      const secondHandleCancel = vi
+        .fn<() => Promise<void>>()
+        .mockRejectedValueOnce(
+          new Error('Codex interrupt transport unavailable'),
+        )
+        .mockResolvedValueOnce();
+      const recover = vi.fn(
+        async (record: NonNullable<typeof persistedBeforeRestart>) => {
+          recoveredIdentities.push({
+            executionId: record.executionId,
+            attemptId: record.context.attemptId,
+            outboxId: record.context.outboxId,
+          });
+          return {
+            providerMetadata: record.providerMetadata,
+            completion: neverCompletes,
+            cancel: secondHandleCancel,
+          };
+        },
+      );
+      secondRegistry.register({
+        refId: TASK_WORKSPACE_TEMPORARY_REFS.adapter.id,
+        preflight: async () => undefined,
+        start: async () => {
+          throw new Error('A restarted Worker must recover, not start');
+        },
+        recover,
+      });
+      secondWorker = new WorkflowExecutionWorker({
+        runtimeStore: store,
+        executionStore: secondExecutionStore,
+        registry: secondRegistry,
+        pollIntervalMs: 10_000,
+        leaseOwner: 'worker:codex-cancel:restarted',
+        now: () => workerNow,
+      });
+
+      await secondWorker.start();
+      expect(recover).toHaveBeenCalledOnce();
+      expect(recoveredIdentities).toEqual([
+        {
+          executionId: firstExecutionId,
+          attemptId: firstContext!.attemptId,
+          outboxId: firstContext!.outboxId,
+        },
+      ]);
+      expect(secondHandleCancel).toHaveBeenCalledOnce();
+      expect(
+        store.queryOne<{
+          status: string;
+          attempt_count: number;
+          last_error: string;
+        }>(
+          `SELECT status, attempt_count, last_error
+             FROM workflow_provider_cancellation_requests
+            WHERE graph_run_id = ?`,
+          [receipt.activation.graphRunId],
+        ),
+      ).toEqual({
+        status: 'retry_wait',
+        attempt_count: 1,
+        last_error: 'Codex interrupt transport unavailable',
+      });
+      expect(
+        store.queryOne<{ count: number }>(
+          `SELECT count(*) AS count FROM workflow_graph_events
+            WHERE graph_run_id = ?
+              AND event_type = 'provider_cancellation_retry_scheduled'`,
+          [receipt.activation.graphRunId],
+        ),
+      ).toEqual({ count: 1 });
+
+      workerNow = store.queryOne<{ next_attempt_at_ms: number }>(
+        `SELECT next_attempt_at_ms
+           FROM workflow_provider_cancellation_requests
+          WHERE graph_run_id = ?`,
+        [receipt.activation.graphRunId],
+      )!.next_attempt_at_ms;
+      await secondWorker.tick();
+      expect(secondHandleCancel).toHaveBeenCalledTimes(2);
+      expect(
+        store.queryOne<{ status: string; attempt_count: number }>(
+          `SELECT status, attempt_count
+             FROM workflow_provider_cancellation_requests
+            WHERE graph_run_id = ?`,
+          [receipt.activation.graphRunId],
+        ),
+      ).toEqual({ status: 'acknowledged', attempt_count: 2 });
+
+      for (let iteration = 0; iteration < 120; iteration += 1) {
+        for (const phase of [
+          'compile',
+          'materialize',
+          'reconcile',
+          'schedule',
+          'recover',
+          'close',
+        ] as const) {
+          authority.advance(phase, 32, workerNow);
+          workerNow += 1;
+        }
+        const workflow = store.queryOne<{ status: string }>(
+          'SELECT status FROM workflows WHERE id = ?',
+          [receipt.workflowId],
+        );
+        if (workflow?.status !== 'active') break;
+      }
+      expect(
+        store.queryOne<{
+          status: string;
+          final_outcome_kind: string;
+          final_cancel_reason: string;
+        }>(
+          `SELECT status, final_outcome_kind, final_cancel_reason
+             FROM workflows WHERE id = ?`,
+          [receipt.workflowId],
+        ),
+      ).toEqual({
+        status: 'cancelled',
+        final_outcome_kind: 'cancelled',
+        final_cancel_reason: 'ad_hoc_workflow_cancelled',
+      });
+
+      taskStore = new TaskWorkspaceStore(
+        path.join(executionRoot, 'task-workspace.db'),
+      );
+      const taskSession = taskStore.createSession({
+        ownerPrincipalRef: 'human:local-owner',
+        title: 'Cancelled Codex workflow',
+        nowMs: workerNow,
+      });
+      const taskMessage = taskStore.appendMessage({
+        sessionId: taskSession.session_id,
+        role: 'human',
+        bodyText: 'Run until cancelled',
+        nowMs: workerNow + 1,
+      });
+      const taskLaunch = taskStore.createLaunchIntent({
+        sessionId: taskSession.session_id,
+        sourceMessageId: taskMessage.message.message_id,
+        mode: 'temporary_workflow',
+        effectiveInput,
+        attachmentManifestHash: hash('attachments', attachmentManifest),
+        idempotencyKey: 'task-launch:codex-user-cancel',
+        nowMs: workerNow + 2,
+      });
+      taskStore.addExecutionLink({
+        session_id: taskSession.session_id,
+        workflow_id: receipt.workflowId,
+        intake_id: receipt.intakeId,
+        creation_request_id: receipt.creationRequestId,
+        launch_intent_id: taskLaunch.launch_intent_id,
+        created_at_ms: workerNow + 3,
+      });
+      const taskWorkspace = new TaskWorkspaceService({
+        store: taskStore,
+        runtimeGateway: gateway,
+        runtimeEventHub: new RuntimeEventHub(),
+        coordinator: null,
+        coordinatorAgentJid: () => null,
+        now: () => workerNow,
+      });
+      const task = await taskWorkspace.getSession(
+        taskSession.session_id,
+        taskSession.owner_principal_ref,
+      );
+      expect(task.session).toMatchObject({
+        status: 'open',
+        attention_state: 'none',
+      });
+      const runtimeDetail = await taskWorkspace.runtimeDetail(
+        taskSession.session_id,
+        taskSession.owner_principal_ref,
+      );
+      expect(runtimeDetail.workflows[0]).toMatchObject({
+        id: receipt.workflowId,
+        status: 'cancelled',
+        final_outcome_kind: 'cancelled',
+      });
+      expect(
+        taskStore
+          .listTimeline(taskSession.session_id)
+          .some(
+            (entry) =>
+              entry.source_kind === 'runtime' &&
+              entry.payload_json.event_type ===
+                'provider_cancellation_acknowledged',
+          ),
+      ).toBe(true);
+    } finally {
+      if (secondWorker) await secondWorker.stop();
+      await firstWorker.stop();
+      if (secondExecutionStore) secondExecutionStore.close();
+      else firstExecutionStore.close();
+      taskStore?.close();
+    }
+  }, 30_000);
 
   it('resolves a closed Workspace approval interaction with canonical replay', () => {
     const target = armedApprovalWait('accepted-duplicate-conflict');

@@ -14,9 +14,14 @@ import type {
 } from '../workflow-runtime/contracts/types.js';
 import {
   acceptDelegationCallbackT6b,
+  hasUnsettledProviderCancellation,
   insertInlineValue,
+  leaseProviderCancellationRequests,
   leaseOutboxWork,
+  recordDelegationAcceptance,
+  recordProviderCancellationResult,
   recordOutboxResult,
+  reserveDelegationExecutionIdentityT6b,
   runtimeObjectHash,
   stableRuntimeId,
   type OutboxLease,
@@ -199,6 +204,7 @@ export class WorkflowExecutionWorker {
   }
 
   private async tickInternal(): Promise<void> {
+    await this.processProviderCancellations();
     await this.retryPendingCallbacks();
     const adapterIds = this.options.registry
       .list()
@@ -268,10 +274,24 @@ export class WorkflowExecutionWorker {
     }
     const adapter = this.options.registry.resolve(loaded.adapterRefId);
     if (record.state === 'reserved') {
+      reserveDelegationExecutionIdentityT6b(this.options.runtimeStore, {
+        graphRunId: record.context.graphRunId,
+        scopeId: record.context.scopeId,
+        nodeId: record.context.nodeId,
+        attemptId: record.context.attemptId,
+        delegationId: record.context.delegationId,
+        outboxId: record.context.outboxId,
+        externalExecutionId: record.executionId,
+        expectedRunWorkFenceEpoch: record.context.runWorkFenceEpoch,
+        expectedScopeWorkFenceEpoch: record.context.scopeWorkFenceEpoch,
+        nowMs: this.now(),
+      });
       let handle: WorkflowAdapterRunHandle;
       try {
         handle = await adapter.start(record.context, record.request);
+        this.options.registry.markReady(loaded.adapterRefId);
       } catch (error) {
+        this.options.registry.markUnavailable(loaded.adapterRefId, error);
         this.recordNotApplied(lease, startedAtMs);
         throw error;
       }
@@ -296,7 +316,9 @@ export class WorkflowExecutionWorker {
     if (!record.result) {
       try {
         handle = await adapter.recover(record);
+        this.options.registry.markReady(loaded.adapterRefId);
       } catch (error) {
+        this.options.registry.markUnavailable(loaded.adapterRefId, error);
         recoveryFailure = terminalFailure(
           record,
           error instanceof Error ? error.message : String(error),
@@ -410,17 +432,20 @@ export class WorkflowExecutionWorker {
     startedAtMs: number,
   ): void {
     const finishedAtMs = this.now();
-    // The frozen Runtime requires three immutable snapshots. Dispatch has only
-    // accepted execution here, so the exact request Value is the stable receipt.
-    recordOutboxResult(this.options.runtimeStore, lease, {
-      resultKind: 'applied_with_receipt',
-      resultCode: null,
-      receipt: lease.request,
-      afterState: lease.request,
-      immutableOutput: lease.request,
-      externalId: executionId,
-      nextAttemptAtMs: null,
-      attemptsExhausted: lease.kindAttemptNo >= lease.maxAttempts,
+    const record = this.options.executionStore.get(executionId);
+    if (!record)
+      throw new Error(`Workflow Adapter execution is missing: ${executionId}`);
+    // Provider acceptance and the Runtime running identity commit atomically.
+    recordDelegationAcceptance(this.options.runtimeStore, {
+      lease,
+      graphRunId: record.context.graphRunId,
+      scopeId: record.context.scopeId,
+      nodeId: record.context.nodeId,
+      attemptId: record.context.attemptId,
+      delegationId: record.context.delegationId,
+      externalExecutionId: executionId,
+      expectedRunWorkFenceEpoch: record.context.runWorkFenceEpoch,
+      expectedScopeWorkFenceEpoch: record.context.scopeWorkFenceEpoch,
       startedAtMs,
       finishedAtMs,
     });
@@ -530,6 +555,7 @@ export class WorkflowExecutionWorker {
         this.restoreOutboxAcceptance(record);
         const adapter = this.options.registry.resolve(record.adapterRefId);
         const handle = await adapter.recover(record);
+        this.options.registry.markReady(record.adapterRefId);
         if (record.state !== 'running')
           this.options.executionStore.markRunning(
             record.executionId,
@@ -537,6 +563,19 @@ export class WorkflowExecutionWorker {
           );
         this.monitor(record, handle);
       } catch (error) {
+        this.options.registry.markUnavailable(record.adapterRefId, error);
+        if (
+          hasUnsettledProviderCancellation(
+            this.options.runtimeStore,
+            record.executionId,
+          )
+        ) {
+          this.log.warn(
+            { executionId: record.executionId, ...errorDetails(error) },
+            'Workflow execution recovery deferred to durable provider cancellation retry',
+          );
+          continue;
+        }
         await this.finish(
           record.executionId,
           terminalFailure(
@@ -548,6 +587,116 @@ export class WorkflowExecutionWorker {
       }
     }
     await this.retryPendingCallbacks();
+  }
+
+  private async processProviderCancellations(): Promise<void> {
+    const leases = leaseProviderCancellationRequests(
+      this.options.runtimeStore,
+      {
+        leaseOwner: this.options.leaseOwner,
+        leaseToken: () => crypto.randomUUID(),
+        leaseDurationMs: Math.max(30_000, this.options.pollIntervalMs * 4),
+        nowMs: this.now(),
+      },
+    );
+    for (const lease of leases) {
+      try {
+        const record = this.options.executionStore.get(
+          lease.externalExecutionId,
+        );
+        if (
+          !record ||
+          record.executionId !== lease.externalExecutionId ||
+          record.adapterRefId !== lease.adapterRefId ||
+          record.adapterResourceHash !== lease.adapterResourceHash ||
+          record.context.adapterResourceId !== lease.adapterResourceId ||
+          record.context.graphRunId !== lease.graphRunId ||
+          record.context.scopeId !== lease.scopeId ||
+          record.context.nodeId !== lease.nodeId ||
+          record.context.attemptId !== lease.attemptId ||
+          record.context.effectOperationId !== lease.effectOperationId ||
+          record.context.outboxId !== lease.outboxId
+        ) {
+          throw new Error(
+            'Provider cancellation execution identity is unavailable or drifted',
+          );
+        }
+        if (
+          ['succeeded', 'failed', 'cancelled', 'blocked'].includes(record.state)
+        ) {
+          recordProviderCancellationResult(this.options.runtimeStore, lease, {
+            disposition: 'not_required',
+            nowMs: this.now(),
+          });
+          this.notifyRuntimeCommitForOutbox(lease.outboxId);
+          continue;
+        }
+        let handle = this.handles.get(record.executionId);
+        if (!handle) {
+          const adapter = this.options.registry.resolve(record.adapterRefId);
+          try {
+            handle = await adapter.recover(record);
+            this.options.registry.markReady(record.adapterRefId);
+          } catch (error) {
+            this.options.registry.markUnavailable(record.adapterRefId, error);
+            throw error;
+          }
+          this.options.executionStore.markRunning(
+            record.executionId,
+            this.now(),
+          );
+          this.monitor(record, handle);
+        }
+        await handle.cancel();
+        recordProviderCancellationResult(this.options.runtimeStore, lease, {
+          disposition: 'acknowledged',
+          nowMs: this.now(),
+        });
+        this.notifyRuntimeCommitForOutbox(lease.outboxId);
+        this.log.info(
+          {
+            cancellationRequestId: lease.requestId,
+            executionId: lease.externalExecutionId,
+            attemptId: lease.attemptId,
+          },
+          'Workflow provider cancellation acknowledged',
+        );
+      } catch (error) {
+        const failedAtMs = this.now();
+        const retryDelay = Math.min(
+          60_000,
+          Math.max(
+            this.options.pollIntervalMs,
+            this.options.pollIntervalMs * 2 ** Math.min(lease.attemptCount, 6),
+          ),
+        );
+        try {
+          recordProviderCancellationResult(this.options.runtimeStore, lease, {
+            disposition: 'retry_wait',
+            error: error instanceof Error ? error.message : String(error),
+            nextAttemptAtMs: failedAtMs + retryDelay,
+            nowMs: failedAtMs,
+          });
+          this.notifyRuntimeCommitForOutbox(lease.outboxId);
+        } catch (recordError) {
+          this.log.error(
+            {
+              cancellationRequestId: lease.requestId,
+              ...errorDetails(recordError),
+            },
+            'Workflow provider cancellation retry could not be persisted',
+          );
+        }
+        this.log.warn(
+          {
+            cancellationRequestId: lease.requestId,
+            executionId: lease.externalExecutionId,
+            ...errorDetails(error),
+          },
+          'Workflow provider cancellation failed and will retry',
+        );
+      }
+    }
   }
 
   private restoreOutboxAcceptance(

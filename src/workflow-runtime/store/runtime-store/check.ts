@@ -18,9 +18,9 @@ try {
     'SELECT count(*) AS table_count FROM sqlite_schema WHERE type = ? AND name NOT LIKE ?',
     ['table', 'sqlite_%'],
   );
-  if (tableCount?.table_count !== 92) {
+  if (tableCount?.table_count !== 93) {
     throw new Error(
-      `Expected 92 current Workflow Runtime tables, received ${String(tableCount?.table_count)}`,
+      `Expected 93 current Workflow Runtime tables, received ${String(tableCount?.table_count)}`,
     );
   }
   const schemaVersion = store.schemaVersion;

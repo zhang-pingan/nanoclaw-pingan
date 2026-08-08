@@ -537,9 +537,9 @@ function validateSource(source: LogicalSchemaSourcePayload): void {
     throw new LogicalSchemaContractError('Logical table or column count drift');
   }
   const tables = new Map(source.tables.map((table) => [table.name, table]));
-  if (tables.size !== source.tables.length || source.tables.length !== 78) {
+  if (tables.size !== source.tables.length || source.tables.length !== 79) {
     throw new LogicalSchemaContractError(
-      'All 78 Normative Logical Schema tables must appear exactly once',
+      'All 79 Normative Logical Schema tables must appear exactly once',
     );
   }
   const globalRelationIds = new Set<string>();

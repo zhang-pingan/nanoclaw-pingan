@@ -1176,36 +1176,32 @@ export class TaskWorkspaceStore {
     return this.getSession(input.sessionId, input.principalRef);
   }
 
-  projectRuntimeOutcome(input: {
+  setAttentionState(input: {
     sessionId: string;
-    outcome: 'normal' | 'errored' | 'cancelled';
-    errorCode?: string | null;
+    attention: TaskAttentionState;
     nowMs?: number;
   }): TaskSessionV1 {
     const current = this.getSession(input.sessionId);
-    if (current.status === 'archived') return current;
-    const cancelled =
-      input.outcome === 'cancelled' ||
-      input.errorCode === 'ad_hoc_workflow_cancelled';
-    const status: TaskSessionStatus =
-      input.outcome === 'normal'
-        ? 'completed'
-        : cancelled
-          ? 'cancelled'
-          : 'open';
-    const attention: TaskAttentionState =
-      input.outcome === 'errored' && !cancelled ? 'failed' : 'none';
-    if (current.status === status && current.attention_state === attention)
-      return current;
+    if (current.attention_state === input.attention) return current;
     const nowMs = input.nowMs ?? Date.now();
-    this.database
+    const changed = this.database
       .prepare(
         `UPDATE task_workspace_sessions
-            SET status = ?, attention_state = ?, updated_at_ms = ?,
+            SET attention_state = ?, updated_at_ms = ?,
                 row_version = row_version + 1
           WHERE session_id = ? AND row_version = ?`,
       )
-      .run(status, attention, nowMs, input.sessionId, current.row_version);
+      .run(
+        input.attention,
+        nowMs,
+        input.sessionId,
+        current.row_version,
+      ).changes;
+    if (changed !== 1)
+      throw new TaskWorkspaceStoreError(
+        'conflict',
+        'TaskSession attention CAS failed',
+      );
     return this.getSession(input.sessionId);
   }
 

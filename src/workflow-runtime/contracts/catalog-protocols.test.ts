@@ -96,7 +96,7 @@ describe('G0.4 catalog and protocol Contract Pack', () => {
       event_class: string;
       fact_kind: string | null;
     }>;
-    expect(entries).toHaveLength(39);
+    expect(entries).toHaveLength(43);
     expect(
       entries
         .filter((entry) => entry.event_class === 'fact_backed')

@@ -1862,33 +1862,21 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
     if (!targetKey) return false;
     const targetState = object(states[targetKey]);
     if (!targetState || targetState.type !== 'terminal') return false;
-    if (routeSource === 'exit:cancelled') {
-      commitRootT8(this.store, {
-        workflowId: row.workflow_id,
-        sourceActivationId: row.activation_id,
-        sourceRunId: row.graph_run_id,
-        rootScopeId: row.root_scope_id,
-        closeRequestId: row.close_request_id,
-        expectedWorkflowRowVersion: row.workflow_row_version,
-        expectedSourceActivationRowVersion: row.activation_row_version,
-        expectedSourceRunRowVersion: row.run_row_version,
-        expectedRootScopeRowVersion: row.root_row_version,
-        routeSource,
-        target: { kind: 'global_cancel' },
-        contextValueSchema: schema,
-        requiredChildren: [],
-        bestEffortOutbox: [],
-        nowMs,
-      });
-      return true;
-    }
     const definitionRef: RuntimeRegistryRef = {
       rowId: row.definition_row_id,
       resourceType: row.definition_resource_type,
       ref: { id: row.definition_id, version: row.definition_version },
       hash: row.definition_hash,
     };
-    const normal = targetState.terminal_kind === 'normal';
+    const terminalKind =
+      targetState.terminal_kind === 'normal' ||
+      targetState.terminal_kind === 'errored' ||
+      targetState.terminal_kind === 'cancelled'
+        ? targetState.terminal_kind
+        : null;
+    if (!terminalKind) return false;
+    const normal = terminalKind === 'normal';
+    const errored = terminalKind === 'errored';
     const rootOutput = this.store.queryOne<{
       output_value_id: string | null;
       output_hash: Sha256Hash | null;
@@ -1927,7 +1915,7 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
           id: row.state_config_value_id,
           hash: row.state_config_hash,
         },
-        terminalKind: normal ? 'normal' : 'errored',
+        terminalKind,
         output:
           normal && rootOutput?.output_value_id && rootOutput.output_hash
             ? { id: rootOutput.output_value_id, hash: rootOutput.output_hash }
@@ -1936,19 +1924,24 @@ export class WorkflowRuntimeTransactionAuthority implements WorkflowRuntimeAdvan
           normal && rootOutput?.output_value_id && rootOutput.output_hash
             ? rootOutput.output_schema_hash
             : null,
-        errorCode: normal
-          ? null
-          : typeof targetState.error_code === 'string'
+        errorCode: errored
+          ? typeof targetState.error_code === 'string'
             ? targetState.error_code
-            : row.close_error_code,
+            : row.close_error_code
+          : null,
         errorDetail:
-          !normal &&
+          errored &&
           row.close_error_detail_value_id &&
           row.close_error_detail_hash
             ? {
                 id: row.close_error_detail_value_id,
                 hash: row.close_error_detail_hash,
               }
+            : null,
+        cancelReason:
+          terminalKind === 'cancelled' &&
+          typeof targetState.cancel_reason === 'string'
+            ? targetState.cancel_reason
             : null,
       },
       contextValueSchema: schema,

@@ -10,7 +10,7 @@
     "schema_id": "workflow-runtime-schema-v1",
     "executable_status": "non_executable",
     "sql_text_status": "absent",
-    "query_count": 24,
+    "query_count": 25,
     "queries": [
       {
         "query_id": "query:scheduler_ready_nodes",
@@ -235,6 +235,30 @@
         ],
         "result_cardinality": "bounded_batch",
         "required_index_id": "idx:node_attempts:lease_expiry",
+        "execution_status": "intent_only"
+      },
+      {
+        "query_id": "query:provider_cancellation_due",
+        "owner": "recovery",
+        "purpose": "claim requested, retryable, or expired provider cancellation work",
+        "table": "workflow_provider_cancellation_requests",
+        "join_tables": [],
+        "equality_columns": [
+          "status"
+        ],
+        "range_columns": [
+          "next_attempt_at_ms",
+          "lease_expires_at_ms"
+        ],
+        "state_predicate_intent": "status in ('requested','processing','retry_wait')",
+        "order_by": [
+          {
+            "column": "id",
+            "direction": "asc"
+          }
+        ],
+        "result_cardinality": "bounded_batch",
+        "required_index_id": "idx:provider_cancellations:due",
         "execution_status": "intent_only"
       },
       {
@@ -615,5 +639,5 @@
       }
     ]
   },
-  "hash": "sha256:6a6368f1300a5d732a6a63b73f593b9dd930880beafdd14958517bc92463ed2d"
+  "hash": "sha256:29ac87ec2b99578796c0421100b5eed181aef6f7832245938d1e3b93565286f9"
 }

@@ -55,6 +55,15 @@ import type { T6cWaitResolutionReceipt } from '../runtime/waits.js';
 import { resolveWaitT6c } from '../runtime/waits.js';
 import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
 
+export {
+  cloneJson,
+  TASK_WORKSPACE_TEMPORARY_REFS,
+  TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE,
+  TEMPORARY_WORKFLOW_COORDINATOR_RESPONSE_SCHEMA,
+  temporaryWorkflowCoordinatorContract,
+  WORKFLOW_AGENT_RESULT_SCHEMA_HASH,
+} from '../bootstrap/task-workspace-temporary-contract.js';
+
 export type WorkspaceRecipeKind = 'core' | 'feature' | 'personal';
 export type WorkspaceLaunchPolicy = 'auto' | 'confirm' | 'manual_only';
 

@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-closed-schemas:1\n",
-  "hash": "sha256:31f3ed64e9de0b54579e69b7282861b7f7749d8e196a4d3ae136ceb4339fd193",
+  "hash": "sha256:6de0957563dcedcaeab7dce4aee0bd6d5dcac5c39a87d2e2fb62af9cf1bab79f",
   "payload": {
     "gate": "G0.3",
     "status": "closed_schemas",
@@ -118,7 +118,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-compiled-scope-plan-schema:1\n",
-        "hash": "sha256:7e0c1c995359246aa8e534973c99ae114f3431078d35ebbfaae84634c5fa8b1e"
+        "hash": "sha256:b543f0c35be7f8d97e666d0c6ba0fb759cb4c78835b5b5c2919a578f02a39630"
       },
       {
         "path": "schemas/feature-manifest-v2-schema.json",
@@ -151,7 +151,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-definition-schema:1\n",
-        "hash": "sha256:baf4d792429ff5f3a6241e0c4d2fdf80b703bc78da0a0aebaba070cc1e5948a1"
+        "hash": "sha256:9ad868f62bd8a5049e9a3ee2ffe4c19892fbee408ea102cffef48578f9ed32c5"
       },
       {
         "path": "schemas/workflow-recipe-schema.json",

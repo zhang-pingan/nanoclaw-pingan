@@ -804,6 +804,47 @@ export function requestScopeCloseT7aInTransaction(
       ORDER BY effect.id COLLATE BINARY`,
     [input.graphRunId, subtreeSetKey],
   );
+  const providerCancellations = transaction.queryAll<{
+    attempt_id: string;
+    scope_id: string;
+    node_id: string;
+    effect_operation_id: string;
+    outbox_id: string;
+    adapter_resource_id: string;
+    adapter_resource_hash: Sha256Hash;
+    adapter_ref_id: string;
+    external_execution_id: string;
+  }>(
+    `SELECT attempt.id AS attempt_id, attempt.scope_id, attempt.node_id,
+            effect.id AS effect_operation_id, outbox.id AS outbox_id,
+            outbox.adapter_resource_id, outbox.adapter_resource_hash,
+            adapter.resource_id AS adapter_ref_id,
+            attempt.external_execution_id
+       FROM workflow_graph_node_attempts attempt
+       JOIN workflow_graph_nodes node
+         ON node.graph_run_id = attempt.graph_run_id
+        AND node.scope_id = attempt.scope_id AND node.id = attempt.node_id
+       JOIN workflow_graph_effect_operations effect
+         ON effect.attempt_id = attempt.id
+        AND effect.graph_run_id = attempt.graph_run_id
+       JOIN workflow_outbox outbox ON outbox.effect_operation_id = effect.id
+       JOIN workflow_registry_resources adapter
+         ON adapter.id = outbox.adapter_resource_id
+        AND adapter.content_hash = outbox.adapter_resource_hash
+      WHERE attempt.graph_run_id = ? AND attempt.scope_id IN (
+        SELECT id FROM temp.workflow_runtime_transient_id_sets WHERE set_key = ?
+      )
+        AND attempt.phase IN ('dispatch_pending', 'running')
+        AND attempt.external_execution_id IS NOT NULL
+        AND json_extract(node.normalized_node_json,
+                         '$.capability_binding.cancellation.type') = 'cooperative'
+        AND json_extract(node.normalized_node_json,
+                         '$.capability_binding.cancellation.ack_required_before_close') = 1
+        AND json_extract(node.normalized_node_json,
+                         '$.capability_binding.cancellation.safe_if_cancel_lost') = 0
+      ORDER BY attempt.id COLLATE BINARY`,
+    [input.graphRunId, subtreeSetKey],
+  );
 
   const scopeEpochs = fenceableScopes.map((scope) => ({
     scope_id: scope.id,
@@ -913,6 +954,62 @@ export function requestScopeCloseT7aInTransaction(
       ).changes,
       `T7a cleanup effect ${effect.id}`,
     );
+  }
+
+  for (const cancellation of providerCancellations) {
+    const request = requestByScope.get(cancellation.scope_id)!;
+    const cancellationId = stableRuntimeId('provider-cancellation', {
+      graph_run_id: input.graphRunId,
+      attempt_id: cancellation.attempt_id,
+      external_execution_id: cancellation.external_execution_id,
+      close_request_id: request.id,
+    });
+    transaction.execute(
+      `INSERT INTO workflow_provider_cancellation_requests (
+         id, graph_run_id, scope_id, node_id, attempt_id,
+         effect_operation_id, outbox_id, close_request_id,
+         adapter_resource_id, adapter_resource_hash, adapter_ref_id,
+         external_execution_id, status, attempt_count, next_attempt_at_ms,
+         lease_owner, lease_token, lease_expires_at_ms, last_error,
+         requested_at_ms, settled_at_ms, updated_at_ms, row_version
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', 0, ?,
+                 NULL, NULL, NULL, NULL, ?, NULL, ?, 1)`,
+      [
+        cancellationId,
+        input.graphRunId,
+        cancellation.scope_id,
+        cancellation.node_id,
+        cancellation.attempt_id,
+        cancellation.effect_operation_id,
+        cancellation.outbox_id,
+        request.id,
+        cancellation.adapter_resource_id,
+        cancellation.adapter_resource_hash,
+        cancellation.adapter_ref_id,
+        cancellation.external_execution_id,
+        input.nowMs,
+        input.nowMs,
+        input.nowMs,
+      ],
+    );
+    sequence += 1;
+    insertGraphEvent(transaction, {
+      graphRunId: input.graphRunId,
+      sequence,
+      scopeId: cancellation.scope_id,
+      nodeId: cancellation.node_id,
+      attemptId: cancellation.attempt_id,
+      eventType: 'provider_cancellation_requested',
+      idempotencyKey: `provider-cancellation-requested:${cancellationId}`,
+      payloadJson: {
+        cancellation_request_id: cancellationId,
+        external_execution_id: cancellation.external_execution_id,
+        adapter_ref_id: cancellation.adapter_ref_id,
+        close_request_id: request.id,
+      },
+      occurredAtMs: input.nowMs,
+      createdAtMs: input.nowMs,
+    });
   }
 
   for (const scope of fenceableScopes) {

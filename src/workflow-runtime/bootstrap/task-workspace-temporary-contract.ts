@@ -6,7 +6,7 @@ import type {
   VersionedRef,
 } from '../contracts/types.js';
 
-export const TASK_WORKSPACE_CORE_VERSION = '1.3.0';
+export const TASK_WORKSPACE_CORE_VERSION = '1.4.0';
 
 export const TASK_WORKSPACE_TEMPORARY_REFS = {
   interface: {
@@ -583,6 +583,11 @@ export function temporaryWorkflowCoordinatorContract(): JsonObject {
       recovery_kind: 'idempotent',
       file_access: 'workspace_write',
       automatic_file_rollback: false,
+      cancellation: {
+        type: 'cooperative',
+        provider_ack_required_before_close: true,
+        safe_if_cancel_lost: false,
+      },
       required_outcome_routes: {
         succeeded: 'done',
         failed: 'failed',

@@ -3,10 +3,6 @@ import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 import type { InternalAgentChatService } from '../internal-agent-run-once/chat-service.js';
 import type { WorkflowExecutionAdapterReadiness } from '../workflow-execution/adapter-registry.js';
 import { CODEX_TASK_ADAPTER_ID } from '../workflow-execution/types.js';
-import {
-  TEMPORARY_WORKFLOW_COORDINATOR_RESPONSE_SCHEMA,
-  temporaryWorkflowCoordinatorContract,
-} from '../workflow-runtime/bootstrap/task-workspace-temporary-contract.js';
 import { domainSeparatedSha256 } from '../workflow-runtime/contracts/hash.js';
 import type {
   JsonObject,
@@ -21,9 +17,14 @@ import type {
   WorkspaceRuntimeDetail,
   WorkspaceTemporaryReplanPreparation,
 } from '../workflow-runtime/gateway/workspace.js';
-import { calculateWorkspaceTemporaryReplanConfirmationHash } from '../workflow-runtime/gateway/workspace.js';
+import {
+  calculateWorkspaceTemporaryReplanConfirmationHash,
+  TEMPORARY_WORKFLOW_COORDINATOR_RESPONSE_SCHEMA,
+  temporaryWorkflowCoordinatorContract,
+} from '../workflow-runtime/gateway/workspace.js';
 import type {
   TaskExecutionLinkV1,
+  TaskAttentionState,
   TaskLaunchIntentV1,
   TaskInteractionSubmissionV1,
   TaskPendingInteractionV1,
@@ -80,6 +81,9 @@ export interface TaskWorkspaceServiceOptions {
   readonly adapterReadiness?: (
     adapterRefId: string,
   ) => WorkflowExecutionAdapterReadiness;
+  readonly refreshAdapterReadiness?: (
+    adapterRefId: string,
+  ) => Promise<WorkflowExecutionAdapterReadiness>;
   readonly preparePublishedCreation?: (input: {
     readonly session: TaskSessionV1;
     readonly launch: TaskLaunchIntentV1;
@@ -285,6 +289,22 @@ export class TaskWorkspaceService {
     }
   }
 
+  private async refreshTemporaryAdapterError(): Promise<string | null> {
+    if (!this.options.refreshAdapterReadiness)
+      return this.temporaryAdapterError();
+    try {
+      const readiness = await this.options.refreshAdapterReadiness(
+        CODEX_TASK_ADAPTER_ID,
+      );
+      if (readiness.status === 'ready') return null;
+      return readiness.status === 'unavailable'
+        ? readiness.error
+        : 'Codex Task Adapter readiness has not been checked';
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  }
+
   async start(): Promise<void> {
     if (this.pollTimer) return;
     this.stopping = false;
@@ -411,7 +431,7 @@ export class TaskWorkspaceService {
     });
   }
 
-  listRecipes(principalRef: string): WorkspaceRecipeCatalog {
+  async listRecipes(principalRef: string): Promise<WorkspaceRecipeCatalog> {
     if (!this.options.runtimeGateway) {
       return {
         format: 'icarus.workspace-recipe-catalog/1',
@@ -423,7 +443,7 @@ export class TaskWorkspaceService {
       principal_ref: principalRef,
       now_ms: this.now(),
     });
-    if (!this.temporaryAdapterError()) return catalog;
+    if (!(await this.refreshTemporaryAdapterError())) return catalog;
     return {
       ...catalog,
       items: catalog.items.filter(
@@ -466,6 +486,9 @@ export class TaskWorkspaceService {
     const nowMs = this.now();
     const temporary =
       session.current_run_selection.kind === 'temporary_workflow';
+    const adapterError = temporary
+      ? await this.refreshTemporaryAdapterError()
+      : null;
     const effectiveInput = {
       format: 'icarus.task-workspace-effective-input/1',
       text: input.text,
@@ -540,7 +563,6 @@ export class TaskWorkspaceService {
           'Temporary Workflow Runtime is unavailable; set WORKFLOW_EXECUTION_ENABLED=true and restart the Host',
         );
       }
-      const adapterError = this.temporaryAdapterError();
       if (adapterError) return this.failLaunch(launch, adapterError);
       void this.planTemporary(
         session,
@@ -606,6 +628,8 @@ export class TaskWorkspaceService {
       launch.session_id,
       input.principalRef,
     );
+    const adapterError = await this.refreshTemporaryAdapterError();
+    if (adapterError) return this.failLaunch(launch, adapterError);
     const confirmed = this.options.store.confirmCurrentTemporaryRevision({
       launchIntentId: launch.launch_intent_id,
       revisionId: input.revisionId,
@@ -1697,7 +1721,7 @@ export class TaskWorkspaceService {
     launch: TaskLaunchIntentV1,
     revision: TemporaryWorkflowDraftRevisionV1,
   ): Promise<TaskLaunchIntentV1> {
-    const adapterError = this.temporaryAdapterError();
+    const adapterError = await this.refreshTemporaryAdapterError();
     if (adapterError) return this.failLaunch(launch, adapterError);
     if (
       !this.options.runtimeGateway ||
@@ -1870,7 +1894,7 @@ export class TaskWorkspaceService {
           true,
         );
       }
-      const adapterError = this.temporaryAdapterError();
+      const adapterError = await this.refreshTemporaryAdapterError();
       if (adapterError) {
         throw new TaskWorkspaceServiceError(
           'runtime_unavailable',
@@ -2332,11 +2356,7 @@ export class TaskWorkspaceService {
     hint?: RuntimeEventHint,
   ): Promise<void> {
     if (!this.options.runtimeGateway) return;
-    const links = this.options.store
-      .listExecutionLinks(session.session_id)
-      .filter(
-        (link) => !hint?.workflow_id || link.workflow_id === hint.workflow_id,
-      );
+    const links = this.options.store.listExecutionLinks(session.session_id);
     if (links.length === 0) return;
     const detail = this.options.runtimeGateway.getRuntimeDetail({
       principal_ref: session.owner_principal_ref,
@@ -2345,6 +2365,8 @@ export class TaskWorkspaceService {
     this.syncPendingInteractions(session, detail);
     this.syncArtifactLinks(session, detail);
     for (const workflow of detail.workflows) {
+      const pullEvents = !hint?.workflow_id || workflow.id === hint.workflow_id;
+      if (!pullEvents) continue;
       if (!Array.isArray(workflow.runs)) continue;
       for (const value of workflow.runs) {
         const run = asObject(value);
@@ -2381,22 +2403,38 @@ export class TaskWorkspaceService {
           hasMore = page.has_more;
         }
       }
+    }
+    this.options.store.setAttentionState({
+      sessionId: session.session_id,
+      attention: this.aggregateRuntimeAttention(detail),
+      nowMs: this.now(),
+    });
+  }
+
+  private aggregateRuntimeAttention(
+    detail: WorkspaceRuntimeDetail,
+  ): TaskAttentionState {
+    let failed = false;
+    let actionRequired = false;
+    for (const workflow of detail.workflows) {
+      if (Array.isArray(workflow.pending) && workflow.pending.length > 0)
+        return 'waiting_user';
       if (
-        workflow.final_outcome_kind === 'normal' ||
-        workflow.final_outcome_kind === 'errored' ||
-        workflow.final_outcome_kind === 'cancelled'
+        workflow.availability !== 'available' ||
+        (workflow.status === 'active' &&
+          workflow.operational_state !== undefined &&
+          workflow.operational_state !== 'healthy')
       ) {
-        this.options.store.projectRuntimeOutcome({
-          sessionId: session.session_id,
-          outcome: workflow.final_outcome_kind,
-          errorCode:
-            typeof workflow.final_error_code === 'string'
-              ? workflow.final_error_code
-              : null,
-          nowMs: this.now(),
-        });
+        actionRequired = true;
+      }
+      if (
+        workflow.final_outcome_kind === 'errored' ||
+        workflow.status === 'errored'
+      ) {
+        failed = true;
       }
     }
+    return actionRequired ? 'action_required' : failed ? 'failed' : 'none';
   }
 
   private syncArtifactLinks(

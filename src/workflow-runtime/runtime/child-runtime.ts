@@ -2762,10 +2762,25 @@ export function finalizeChildScopeT7b(
             LIMIT 1`,
         [input.childScopeId],
       );
-      if (unsettledEffect)
+      const unsettledProviderCancellation = transaction.queryOne<{
+        id: string;
+      }>(
+        `WITH RECURSIVE subtree(id) AS (
+           SELECT ?
+           UNION ALL
+           SELECT child.id FROM workflow_graph_scopes child
+           JOIN subtree parent ON child.parent_scope_id = parent.id
+         ) SELECT cancellation.id
+             FROM workflow_provider_cancellation_requests cancellation
+             JOIN subtree ON subtree.id = cancellation.scope_id
+            WHERE cancellation.status NOT IN ('acknowledged', 'not_required')
+            LIMIT 1`,
+        [input.childScopeId],
+      );
+      if (unsettledEffect || unsettledProviderCancellation)
         throw new G5RuntimeError(
           'precondition_failed',
-          'T7b required compensation barrier is not settled',
+          'T7b required compensation barrier or provider cancellation barrier is not settled',
         );
       const childPlan = loadScopePlan(
         transaction,

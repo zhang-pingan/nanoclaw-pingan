@@ -9,8 +9,8 @@
   "payload": {
     "schema_id": "workflow-runtime-schema-v1",
     "executable_status": "non_executable",
-    "internal_relation_count": 352,
-    "external_reference_count": 46,
+    "internal_relation_count": 357,
+    "external_reference_count": 48,
     "relations": [
       {
         "relation_id": "ext:workflow_backups:database_snapshot_ref",
@@ -389,6 +389,34 @@
         "deferrability": null,
         "validator_owner": "personal_workflow_registry",
         "reference_domain": "personal_workflow_release"
+      },
+      {
+        "relation_id": "ext:workflow_provider_cancellation_requests:external_execution_id",
+        "relation_kind": "external_reference",
+        "source_table": "workflow_provider_cancellation_requests",
+        "source_columns": [
+          "external_execution_id"
+        ],
+        "target_table": null,
+        "target_columns": [],
+        "on_delete": null,
+        "deferrability": null,
+        "validator_owner": "executor_adapter_registry",
+        "reference_domain": "external_execution"
+      },
+      {
+        "relation_id": "ext:workflow_provider_cancellation_requests:lease_owner",
+        "relation_kind": "external_reference",
+        "source_table": "workflow_provider_cancellation_requests",
+        "source_columns": [
+          "lease_owner"
+        ],
+        "target_table": null,
+        "target_columns": [],
+        "on_delete": null,
+        "deferrability": null,
+        "validator_owner": "runtime_worker_registry",
+        "reference_domain": "worker_lease"
       },
       {
         "relation_id": "ext:workflow_registry_resources:owner_core_ref",
@@ -4037,6 +4065,98 @@
         "reference_domain": null
       },
       {
+        "relation_id": "fk:provider_cancellations:adapter",
+        "relation_kind": "foreign_key",
+        "source_table": "workflow_provider_cancellation_requests",
+        "source_columns": [
+          "adapter_resource_id",
+          "adapter_resource_hash"
+        ],
+        "target_table": "workflow_registry_resources",
+        "target_columns": [
+          "id",
+          "content_hash"
+        ],
+        "on_delete": "restrict",
+        "deferrability": "deferred",
+        "validator_owner": null,
+        "reference_domain": null
+      },
+      {
+        "relation_id": "fk:provider_cancellations:attempt",
+        "relation_kind": "foreign_key",
+        "source_table": "workflow_provider_cancellation_requests",
+        "source_columns": [
+          "graph_run_id",
+          "scope_id",
+          "node_id",
+          "attempt_id"
+        ],
+        "target_table": "workflow_graph_node_attempts",
+        "target_columns": [
+          "graph_run_id",
+          "scope_id",
+          "node_id",
+          "id"
+        ],
+        "on_delete": "restrict",
+        "deferrability": "deferred",
+        "validator_owner": null,
+        "reference_domain": null
+      },
+      {
+        "relation_id": "fk:provider_cancellations:close_request",
+        "relation_kind": "foreign_key",
+        "source_table": "workflow_provider_cancellation_requests",
+        "source_columns": [
+          "graph_run_id",
+          "scope_id",
+          "close_request_id"
+        ],
+        "target_table": "workflow_graph_scope_close_requests",
+        "target_columns": [
+          "graph_run_id",
+          "scope_id",
+          "id"
+        ],
+        "on_delete": "restrict",
+        "deferrability": "deferred",
+        "validator_owner": null,
+        "reference_domain": null
+      },
+      {
+        "relation_id": "fk:provider_cancellations:effect",
+        "relation_kind": "foreign_key",
+        "source_table": "workflow_provider_cancellation_requests",
+        "source_columns": [
+          "effect_operation_id"
+        ],
+        "target_table": "workflow_graph_effect_operations",
+        "target_columns": [
+          "id"
+        ],
+        "on_delete": "restrict",
+        "deferrability": "deferred",
+        "validator_owner": null,
+        "reference_domain": null
+      },
+      {
+        "relation_id": "fk:provider_cancellations:outbox",
+        "relation_kind": "foreign_key",
+        "source_table": "workflow_provider_cancellation_requests",
+        "source_columns": [
+          "outbox_id"
+        ],
+        "target_table": "workflow_outbox",
+        "target_columns": [
+          "id"
+        ],
+        "on_delete": "restrict",
+        "deferrability": "deferred",
+        "validator_owner": null,
+        "reference_domain": null
+      },
+      {
         "relation_id": "fk:registry_dependencies:dependency",
         "relation_kind": "foreign_key",
         "source_table": "workflow_registry_resource_dependencies",
@@ -6826,5 +6946,5 @@
       }
     ]
   },
-  "hash": "sha256:28bd7086d8d359ab82c31f4dc08f2f4ecdee42a632baee7e7458a8927874502d"
+  "hash": "sha256:e600c01fd539af8a42dc9644ceae9304a17f4936b67f7d85ba2e9b0fffe52007"
 }

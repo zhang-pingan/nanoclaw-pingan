@@ -289,7 +289,7 @@ export class TaskWorkspaceWebApi {
       }
     }
     if (pathname === `${API_PREFIX}/recipes` && method === 'GET') {
-      send(res, 200, this.service.listRecipes(this.principalRef));
+      send(res, 200, await this.service.listRecipes(this.principalRef));
       return;
     }
     if (pathname === `${PERSONAL_PREFIX}` && method === 'GET') {
@@ -467,9 +467,9 @@ export class TaskWorkspaceWebApi {
         selection = { kind };
       } else if (kind === 'published_recipe') {
         const token = string(body, 'selection_token', { max: 16_384 })!;
-        const item = this.service
-          .listRecipes(this.principalRef)
-          .items.find((candidate) => candidate.selection_token === token);
+        const item = (
+          await this.service.listRecipes(this.principalRef)
+        ).items.find((candidate) => candidate.selection_token === token);
         if (!item) {
           throw new RuntimeWorkspaceGatewayError(
             'selection_stale',

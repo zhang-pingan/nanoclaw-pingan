@@ -10,7 +10,7 @@ import {
   TASK_WORKSPACE_TEMPORARY_REFS,
   TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE,
   WORKFLOW_AGENT_RESULT_SCHEMA_HASH,
-} from '../workflow-runtime/bootstrap/task-workspace-temporary-contract.js';
+} from '../workflow-runtime/gateway/workspace.js';
 import type {
   JsonObject,
   Sha256Hash,
@@ -48,14 +48,17 @@ function service(
   } | null = null,
   onTimelineDelta?: (delta: TaskWorkspaceTimelineDeltaV1) => void,
   adapterReadiness?: () => WorkflowExecutionAdapterReadiness,
+  refreshAdapterReadiness?: () => Promise<WorkflowExecutionAdapterReadiness>,
+  runtimeEventHub = new RuntimeEventHub(),
 ): TaskWorkspaceService {
   return new TaskWorkspaceService({
     store,
     runtimeGateway: runtimeGateway as never,
-    runtimeEventHub: new RuntimeEventHub(),
+    runtimeEventHub,
     coordinator: coordinator as never,
     coordinatorAgentJid: () => (coordinator ? 'agent:coordinator' : null),
     adapterReadiness,
+    refreshAdapterReadiness,
     now: () => 100,
     onTimelineDelta,
   });
@@ -233,9 +236,9 @@ describe('TaskWorkspaceService review hardening', () => {
       title: 'Codex preflight unavailable',
     });
 
-    expect(workspace.listRecipes(session.owner_principal_ref).items).toEqual(
-      [],
-    );
+    expect(
+      (await workspace.listRecipes(session.owner_principal_ref)).items,
+    ).toEqual([]);
     const launch = await workspace.run({
       sessionId: session.session_id,
       principalRef: session.owner_principal_ref,
@@ -265,6 +268,104 @@ describe('TaskWorkspaceService review hardening', () => {
             ),
         ),
     ).toBe(true);
+  });
+
+  it('retries a transient Adapter launch failure without restarting the Host', async () => {
+    const store = openStore();
+    const coordinator = {
+      chat: vi.fn(async () => ({
+        ok: true as const,
+        text: JSON.stringify(TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE),
+        session_id: 'agent-session:readiness-retry',
+        run_id: 'agent-run:readiness-retry',
+        query_id: 'query:readiness-retry',
+        model: 'test',
+      })),
+    };
+    const runtime = {
+      listRecipes: vi.fn(() => ({
+        format: 'icarus.workspace-recipe-catalog/1',
+        expires_at_ms: 1_000,
+        items: [
+          {
+            recipe_ref: { id: 'ad_hoc_personal_task', version: '1.4.0' },
+            recipe_hash: sha('b'),
+            selection_token: 'temporary-token',
+          },
+        ],
+      })),
+      refreshRecipeSelection: vi.fn(() => ({
+        selection_token: 'temporary-token:refreshed',
+      })),
+      prepareTemporaryDraft: vi.fn(() => ({
+        source_hash: sha('d'),
+        compiled_plan_json: { format: 'compiled-plan' },
+        compiled_plan_hash: sha('e'),
+        compiler_version: 'test',
+        resource_closure_hash: sha('f'),
+        policy_ceiling_hash: sha('1'),
+        risk_summary_json: {},
+      })),
+    };
+    const refreshReadiness = vi
+      .fn<() => Promise<WorkflowExecutionAdapterReadiness>>()
+      .mockResolvedValueOnce({
+        status: 'unavailable',
+        error: 'Codex App Server connection is temporarily unavailable',
+        failureKind: 'transient',
+        checkedAtMs: 100,
+      })
+      .mockResolvedValue({
+        status: 'ready',
+        error: null,
+        checkedAtMs: 101,
+      });
+    const workspace = service(
+      store,
+      runtime,
+      coordinator,
+      undefined,
+      undefined,
+      refreshReadiness,
+    );
+    const session = workspace.createSession({
+      principalRef: 'human:local-owner',
+      title: 'Readiness retry',
+    });
+
+    await expect(
+      workspace.run({
+        sessionId: session.session_id,
+        principalRef: session.owner_principal_ref,
+        text: 'first attempt',
+        idempotencyKey: 'run:readiness:first',
+      }),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      last_error_code: 'Codex App Server connection is temporarily unavailable',
+    });
+    expect(coordinator.chat).not.toHaveBeenCalled();
+    expect(store.getSession(session.session_id).attention_state).toBe('failed');
+
+    await expect(
+      workspace.run({
+        sessionId: session.session_id,
+        principalRef: session.owner_principal_ref,
+        text: 'retry after recovery',
+        idempotencyKey: 'run:readiness:second',
+      }),
+    ).resolves.toMatchObject({ mode: 'temporary_workflow' });
+    await waitFor(() => coordinator.chat.mock.calls.length === 1);
+    const retried = store.findLaunchIntentByIdempotencyKey(
+      'run:readiness:second',
+    );
+    expect(retried).toMatchObject({
+      status: 'awaiting_confirmation',
+      last_error_code: null,
+    });
+    expect(store.getSession(session.session_id).attention_state).toBe(
+      'waiting_user',
+    );
   });
 
   it('makes interrupted Temporary planning actionable after Host restart', async () => {
@@ -720,7 +821,7 @@ describe('TaskWorkspaceService review hardening', () => {
       name: 'success',
       outcome: 'normal',
       errorCode: null,
-      status: 'completed',
+      status: 'open',
       attention: 'none',
     },
     {
@@ -734,11 +835,11 @@ describe('TaskWorkspaceService review hardening', () => {
       name: 'cancelled',
       outcome: 'cancelled',
       errorCode: null,
-      status: 'cancelled',
+      status: 'open',
       attention: 'none',
     },
   ] as const)(
-    'projects Runtime $name into the Task-visible terminal state',
+    'projects Runtime $name into Task attention without owning Task status',
     async (scenario) => {
       const store = openStore();
       const target = appendLaunch(store, 'temporary_workflow');
@@ -751,6 +852,20 @@ describe('TaskWorkspaceService review hardening', () => {
         created_at_ms: 5,
       });
       const runtime = {
+        listRecipes: () => ({
+          format: 'icarus.workspace-recipe-catalog/1',
+          expires_at_ms: 1_000,
+          items: [
+            {
+              recipe_ref: {
+                id: 'ad_hoc_personal_task',
+                version: '1.4.0',
+              },
+              recipe_hash: sha('b'),
+              selection_token: 'temporary-token',
+            },
+          ],
+        }),
         getRuntimeDetail: () => ({
           format: 'icarus.workspace-runtime-detail/1',
           freshness: 'ready',
@@ -778,6 +893,218 @@ describe('TaskWorkspaceService review hardening', () => {
         status: scenario.status,
         attention_state: scenario.attention,
       });
+      await expect(
+        workspace.send({
+          sessionId: target.session.session_id,
+          principalRef: target.session.owner_principal_ref,
+          text: `follow up after ${scenario.name}`,
+        }),
+      ).resolves.toMatchObject({ message: { role: 'human' } });
+      await expect(
+        workspace.run({
+          sessionId: target.session.session_id,
+          principalRef: target.session.owner_principal_ref,
+          text: `run again after ${scenario.name}`,
+          idempotencyKey: `run:after:${scenario.name}`,
+        }),
+      ).resolves.toMatchObject({
+        session_id: target.session.session_id,
+        mode: 'temporary_workflow',
+      });
     },
   );
+
+  it.each(['completed', 'cancelled', 'archived'] as const)(
+    'does not rewrite a manually %s Task during Runtime catch-up',
+    async (status) => {
+      const store = openStore();
+      const target = appendLaunch(store, 'temporary_workflow');
+      store.addExecutionLink({
+        session_id: target.session.session_id,
+        workflow_id: `workflow:manual:${status}`,
+        intake_id: `intake:manual:${status}`,
+        creation_request_id: `creation:manual:${status}`,
+        launch_intent_id: target.launch.launch_intent_id,
+        created_at_ms: 5,
+      });
+      const current = store.getSession(target.session.session_id);
+      store.updateSessionStatus({
+        sessionId: current.session_id,
+        principalRef: current.owner_principal_ref,
+        status,
+        expectedRowVersion: current.row_version,
+        nowMs: 6,
+      });
+      const workspace = service(store, {
+        getRuntimeDetail: () => ({
+          format: 'icarus.workspace-runtime-detail/1',
+          freshness: 'ready',
+          workflows: [
+            {
+              id: `workflow:manual:${status}`,
+              availability: 'available',
+              status: 'errored',
+              final_outcome_kind: 'errored',
+              final_error_code: 'late_runtime_failure',
+              runs: [],
+              pending: [],
+              artifacts: [],
+            },
+          ],
+        }),
+      });
+
+      const caughtUp = await workspace.getSession(
+        target.session.session_id,
+        target.session.owner_principal_ref,
+      );
+
+      expect(caughtUp.session).toMatchObject({
+        status,
+        attention_state: 'failed',
+      });
+    },
+  );
+
+  it('aggregates all linked Workflows independently of result order and event hints', async () => {
+    const store = openStore();
+    const target = appendLaunch(store, 'temporary_workflow');
+    const newerMessage = store.appendMessage({
+      sessionId: target.session.session_id,
+      role: 'human',
+      bodyText: 'run a second workflow',
+      nowMs: 5,
+    });
+    const newerLaunch = store.createLaunchIntent({
+      sessionId: target.session.session_id,
+      sourceMessageId: newerMessage.message.message_id,
+      mode: 'temporary_workflow',
+      effectiveInput: { text: 'run a second workflow' },
+      attachmentManifestHash: sha('d'),
+      idempotencyKey: 'launch:multi-workflow:newer',
+      nowMs: 6,
+    });
+    for (const [key, launchIntentId, createdAtMs] of [
+      ['older', target.launch.launch_intent_id, 7],
+      ['newer', newerLaunch.launch_intent_id, 8],
+    ] as const) {
+      store.addExecutionLink({
+        session_id: target.session.session_id,
+        workflow_id: `workflow:${key}`,
+        intake_id: `intake:${key}`,
+        creation_request_id: `creation:${key}`,
+        launch_intent_id: launchIntentId,
+        created_at_ms: createdAtMs,
+      });
+    }
+    let workflows: JsonObject[] = [
+      {
+        id: 'workflow:older',
+        availability: 'available',
+        status: 'errored',
+        final_outcome_kind: 'errored',
+        runs: [{ id: 'run:older' }],
+        pending: [],
+        artifacts: [],
+      },
+      {
+        id: 'workflow:newer',
+        availability: 'available',
+        status: 'completed',
+        final_outcome_kind: 'normal',
+        runs: [{ id: 'run:newer' }],
+        pending: [],
+        artifacts: [],
+      },
+    ];
+    const getRuntimeDetail = vi.fn(() => ({
+      format: 'icarus.workspace-runtime-detail/1',
+      freshness: 'ready',
+      workflows,
+    }));
+    const listRuntimeEvents = vi.fn((input: { workflow_id: string }) => ({
+      format: 'icarus.workspace-runtime-event-page/1',
+      workflow_id: input.workflow_id,
+      run_id:
+        input.workflow_id === 'workflow:older' ? 'run:older' : 'run:newer',
+      events: [],
+      next_event_seq: 0,
+      has_more: false,
+    }));
+    let hintListener: Parameters<RuntimeEventHub['subscribe']>[0] | null = null;
+    const runtimeEventHub = {
+      subscribe: vi.fn(
+        (listener: Parameters<RuntimeEventHub['subscribe']>[0]) => {
+          hintListener = listener;
+          return () => {
+            hintListener = null;
+          };
+        },
+      ),
+    } as unknown as RuntimeEventHub;
+    const workspace = service(
+      store,
+      { getRuntimeDetail, listRuntimeEvents },
+      null,
+      undefined,
+      undefined,
+      undefined,
+      runtimeEventHub,
+    );
+    await workspace.start();
+    expect(store.getSession(target.session.session_id).attention_state).toBe(
+      'failed',
+    );
+
+    workflows = [...workflows].reverse();
+    getRuntimeDetail.mockClear();
+    listRuntimeEvents.mockClear();
+    await hintListener!({
+      workflow_id: 'workflow:newer',
+      run_id: 'run:newer',
+      reason: 'late_terminal_hint',
+    });
+    expect(getRuntimeDetail).toHaveBeenLastCalledWith({
+      principal_ref: target.session.owner_principal_ref,
+      workflow_ids: ['workflow:older', 'workflow:newer'],
+    });
+    expect(listRuntimeEvents).toHaveBeenCalledTimes(1);
+    expect(listRuntimeEvents.mock.calls[0]?.[0]).toMatchObject({
+      workflow_id: 'workflow:newer',
+    });
+    expect(store.getSession(target.session.session_id).attention_state).toBe(
+      'failed',
+    );
+
+    workflows = [
+      {
+        ...workflows.find((workflow) => workflow.id === 'workflow:older')!,
+        availability: 'available',
+        status: 'active',
+        operational_state: 'action_required',
+        final_outcome_kind: null,
+      },
+      {
+        ...workflows.find((workflow) => workflow.id === 'workflow:newer')!,
+        pending: [{ id: 'wait:newer' }],
+      },
+    ];
+    await workspace.getSession(
+      target.session.session_id,
+      target.session.owner_principal_ref,
+    );
+    expect(store.getSession(target.session.session_id).attention_state).toBe(
+      'waiting_user',
+    );
+
+    workflows = workflows.map((workflow) => ({ ...workflow, pending: [] }));
+    await workspace.getSession(
+      target.session.session_id,
+      target.session.owner_principal_ref,
+    );
+    expect(store.getSession(target.session.session_id).attention_state).toBe(
+      'action_required',
+    );
+    await workspace.stop();
+  });
 });

@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-event-catalog:1\n",
-  "hash": "sha256:f06b2cd19314341e64df1dade1d1c497804c79cac1b0fdad5f0f03f57f3e41e5",
+  "hash": "sha256:401ce3f3ae7a762e9cbe2c447bde490aadf72ceecdc45b0e140cfdfad14df21e",
   "payload": {
     "run_protocol_major": 1,
     "sequence_scope": "graph_run",
@@ -266,6 +266,38 @@
           "T6e",
           "T7a",
           "T7b"
+        ]
+      },
+      {
+        "event_type": "provider_cancellation_requested",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "T7a"
+        ]
+      },
+      {
+        "event_type": "provider_cancellation_retry_scheduled",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "OUTBOX"
+        ]
+      },
+      {
+        "event_type": "provider_cancellation_acknowledged",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "OUTBOX"
+        ]
+      },
+      {
+        "event_type": "provider_cancellation_not_required",
+        "event_class": "audit_only",
+        "fact_kind": null,
+        "producer_protocols": [
+          "OUTBOX"
         ]
       },
       {

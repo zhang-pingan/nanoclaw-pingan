@@ -19,7 +19,7 @@ export const WORKFLOW_RUNTIME_SQLITE_CONFIG: WorkflowRuntimeSqliteConfig = {
   mmapSizeBytes: 0,
 };
 
-export const CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION = 15;
+export const CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION = 16;
 export const MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION = 3;
 
 const migrationRoot = path.resolve(import.meta.dirname, '../schema/migration');

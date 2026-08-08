@@ -6,14 +6,14 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-catalog-protocols:1\n",
-  "hash": "sha256:bd2aec341f67fed44d30df32eb43956b5813254add34a93c41853138c2de6222",
+  "hash": "sha256:29e87f05790fcf9725a1733929cef9153e01bb482a6e080fb60175430430ea86",
   "payload": {
     "gate": "G0.4",
     "status": "catalogs_and_protocol_tables",
     "run_protocol_major": 1,
     "compiler_error_code_count": 27,
     "fact_kind_count": 13,
-    "event_type_count": 39,
+    "event_type_count": 43,
     "permission_count": 9,
     "command_reason_count": 17,
     "command_denial_count": 11,
@@ -76,7 +76,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-runtime-event-catalog:1\n",
-        "hash": "sha256:f06b2cd19314341e64df1dade1d1c497804c79cac1b0fdad5f0f03f57f3e41e5"
+        "hash": "sha256:401ce3f3ae7a762e9cbe2c447bde490aadf72ceecdc45b0e140cfdfad14df21e"
       },
       {
         "path": "catalogs/workflow-runtime-fact-catalog.json",
@@ -120,7 +120,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-catalog-protocol-positive-cases:1\n",
-        "hash": "sha256:d1922e329b10676630d867bbbd407e70769d57e5327f492d46ff576e05deb854"
+        "hash": "sha256:8890456b5b4345494a3dbd35a7e94a3821b8c639fc9043dada85a87ed4e0d513"
       },
       {
         "path": "protocols/workflow-run-transaction-protocol-table.json",

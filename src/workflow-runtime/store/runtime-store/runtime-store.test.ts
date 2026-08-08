@@ -567,6 +567,57 @@ describe('Workflow Runtime Store schema compatibility', () => {
     }
   });
 
+  it('migrates Schema 15 closed enums without retargeting rebuilt foreign keys', () => {
+    const { databasePath } = temporaryDatabase();
+    createVersionDatabase(databasePath, 15);
+    const store = WorkflowRuntimeConnectionFactory.openStore({
+      databasePath,
+      databaseMode: 'open_existing',
+    });
+    stores.push(store);
+
+    expect(store.schemaVersion).toBe(CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION);
+    const activationSql = store.queryOne<{ sql: string }>(
+      `SELECT sql FROM sqlite_schema
+        WHERE type = 'table' AND name = 'workflow_state_activations'`,
+      [],
+    )!.sql;
+    const eventSql = store.queryOne<{ sql: string }>(
+      `SELECT sql FROM sqlite_schema
+        WHERE type = 'table' AND name = 'workflow_graph_events'`,
+      [],
+    )!.sql;
+    expect(activationSql).toContain("'normal', 'errored', 'cancelled'");
+    for (const eventType of [
+      'provider_cancellation_requested',
+      'provider_cancellation_retry_scheduled',
+      'provider_cancellation_acknowledged',
+      'provider_cancellation_not_required',
+    ]) {
+      expect(eventSql).toContain(`'${eventType}'`);
+    }
+    for (const table of [
+      'workflow_state_activations',
+      'workflow_graph_events',
+      'workflow_provider_cancellation_requests',
+    ]) {
+      const foreignKeys = store.queryAll<{ table: string }>(
+        `PRAGMA foreign_key_list('${table}')`,
+        [],
+      );
+      expect(foreignKeys.length).toBeGreaterThan(0);
+      expect(
+        foreignKeys.every((foreignKey) => !foreignKey.table.endsWith('_v15')),
+      ).toBe(true);
+    }
+    expect(
+      store.queryOne<{ count: number }>(
+        'SELECT count(*) AS count FROM pragma_foreign_key_check',
+        [],
+      ),
+    ).toEqual({ count: 0 });
+  });
+
   it('migrates Schema 11 while preserving Registry, definition, and Capacity state', () => {
     const { databasePath } = temporaryDatabase();
     createVersionDatabase(databasePath, 11);

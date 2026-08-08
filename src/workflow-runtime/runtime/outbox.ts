@@ -954,217 +954,218 @@ export type OutboxDeliveryResultKind =
   | 'still_running'
   | 'unknown';
 
-export function recordOutboxResult(
-  store: WorkflowRuntimeStore,
+export interface OutboxResultInput {
+  readonly resultKind: OutboxDeliveryResultKind;
+  readonly resultCode: string | null;
+  readonly receipt: RuntimeValueRef | null;
+  readonly afterState: RuntimeValueRef | null;
+  readonly immutableOutput: RuntimeValueRef | null;
+  readonly externalId: string | null;
+  readonly nextAttemptAtMs: number | null;
+  readonly attemptsExhausted: boolean;
+  readonly startedAtMs: number;
+  readonly finishedAtMs: number;
+}
+
+export function recordOutboxResultInTransaction(
+  transaction: WorkflowRuntimeWriteTransaction,
   lease: OutboxLease,
-  input: {
-    readonly resultKind: OutboxDeliveryResultKind;
-    readonly resultCode: string | null;
-    readonly receipt: RuntimeValueRef | null;
-    readonly afterState: RuntimeValueRef | null;
-    readonly immutableOutput: RuntimeValueRef | null;
-    readonly externalId: string | null;
-    readonly nextAttemptAtMs: number | null;
-    readonly attemptsExhausted: boolean;
-    readonly startedAtMs: number;
-    readonly finishedAtMs: number;
-  },
+  input: OutboxResultInput,
 ): 'succeeded' | 'pending' | 'reconciling' | 'action_required' {
-  return store.withImmediateTransaction((transaction) => {
-    const terminalSuccess = input.resultKind === 'applied_with_receipt';
-    const derivedExhaustion = lease.kindAttemptNo >= lease.maxAttempts;
-    if (input.attemptsExhausted !== derivedExhaustion)
-      throw new G5RuntimeError(
-        'contract_invalid',
-        'Outbox exhaustion must be derived from the immutable Delivery Policy',
-      );
-    const actionRequired = !terminalSuccess && derivedExhaustion;
-    const nextStatus = terminalSuccess
-      ? 'succeeded'
-      : actionRequired
-        ? 'action_required'
-        : ['unknown', 'applied_but_receipt_lost', 'still_running'].includes(
-              input.resultKind,
-            )
-          ? 'reconciling'
-          : 'pending';
-    if (
-      !terminalSuccess &&
-      !actionRequired &&
-      (!Number.isSafeInteger(input.nextAttemptAtMs) ||
-        input.nextAttemptAtMs! < input.finishedAtMs ||
-        input.nextAttemptAtMs! > lease.deadlineAtMs)
-    )
-      throw new G5RuntimeError(
-        'contract_invalid',
-        'Outbox retry must stay inside the immutable finite delivery window',
-      );
-    const row = transaction.queryOne<{
-      effect_operation_id: string | null;
-      status: string;
-      lease_owner: string | null;
-      lease_token: string | null;
-      adapter_resource_id: string;
-      adapter_resource_hash: Sha256Hash;
-      policy_snapshot_hash: Sha256Hash;
-      payload_value_id: string;
-      payload_hash: Sha256Hash;
-      delivery_attempt_count: number;
-      reconcile_attempt_count: number;
-    }>(
-      'SELECT effect_operation_id, status, lease_owner, lease_token, adapter_resource_id, adapter_resource_hash, policy_snapshot_hash, payload_value_id, payload_hash, delivery_attempt_count, reconcile_attempt_count FROM workflow_outbox WHERE id = ?',
-      [lease.outboxId],
+  const terminalSuccess = input.resultKind === 'applied_with_receipt';
+  const derivedExhaustion = lease.kindAttemptNo >= lease.maxAttempts;
+  if (input.attemptsExhausted !== derivedExhaustion)
+    throw new G5RuntimeError(
+      'contract_invalid',
+      'Outbox exhaustion must be derived from the immutable Delivery Policy',
     );
-    if (
-      !row ||
-      row.status !== 'processing' ||
-      row.lease_owner !== lease.leaseOwner ||
-      row.lease_token !== lease.leaseToken ||
-      row.adapter_resource_id !== lease.adapterResourceId ||
-      row.adapter_resource_hash !== lease.adapterResourceHash ||
-      row.policy_snapshot_hash !== lease.policyHash
-    ) {
-      const priorAttempt = transaction.queryOne<{
-        attempt_kind: string;
-        kind_attempt_no: number;
-        adapter_resource_id: string;
-        adapter_resource_hash: string;
-        policy_hash: string;
-        lease_owner: string;
-        lease_token: string;
-        request_value_id: string;
-        request_hash: string;
-        result_kind: string;
-        result_code: string | null;
-        receipt_value_id: string | null;
-        receipt_hash: string | null;
-        external_id: string | null;
-        started_at_ms: number;
-        finished_at_ms: number;
-        next_attempt_at_ms: number | null;
-      }>(
-        'SELECT attempt_kind, kind_attempt_no, adapter_resource_id, adapter_resource_hash, policy_hash, lease_owner, lease_token, request_value_id, request_hash, result_kind, result_code, receipt_value_id, receipt_hash, external_id, started_at_ms, finished_at_ms, next_attempt_at_ms FROM workflow_outbox_attempts WHERE id = ?',
-        [
-          stableRuntimeId('outbox-attempt', {
-            outbox_id: lease.outboxId,
-            history_seq: lease.historySequence,
-          }),
-        ],
-      );
-      if (priorAttempt) {
-        let exact =
-          priorAttempt.attempt_kind === lease.attemptKind &&
-          priorAttempt.kind_attempt_no === lease.kindAttemptNo &&
-          priorAttempt.adapter_resource_id === lease.adapterResourceId &&
-          priorAttempt.adapter_resource_hash === lease.adapterResourceHash &&
-          priorAttempt.policy_hash === lease.policyHash &&
-          priorAttempt.lease_owner === lease.leaseOwner &&
-          priorAttempt.lease_token === lease.leaseToken &&
-          priorAttempt.request_value_id === lease.request.id &&
-          priorAttempt.request_hash === lease.request.hash &&
-          priorAttempt.result_kind === input.resultKind &&
-          priorAttempt.result_code === input.resultCode &&
-          priorAttempt.receipt_value_id === (input.receipt?.id ?? null) &&
-          priorAttempt.receipt_hash === (input.receipt?.hash ?? null) &&
-          priorAttempt.external_id === input.externalId &&
-          priorAttempt.started_at_ms === input.startedAtMs &&
-          priorAttempt.finished_at_ms === input.finishedAtMs &&
-          priorAttempt.next_attempt_at_ms === input.nextAttemptAtMs;
-        if (
-          exact &&
-          priorAttempt.result_kind === 'applied_with_receipt' &&
-          row?.effect_operation_id
-        ) {
-          const effect = transaction.queryOne<{
-            after_state_value_id: string | null;
-            after_state_hash: string | null;
-            immutable_output_snapshot_value_id: string | null;
-            immutable_output_snapshot_hash: string | null;
-          }>(
-            `SELECT after_state_value_id, after_state_hash,
+  const actionRequired = !terminalSuccess && derivedExhaustion;
+  const nextStatus = terminalSuccess
+    ? 'succeeded'
+    : actionRequired
+      ? 'action_required'
+      : ['unknown', 'applied_but_receipt_lost', 'still_running'].includes(
+            input.resultKind,
+          )
+        ? 'reconciling'
+        : 'pending';
+  if (
+    !terminalSuccess &&
+    !actionRequired &&
+    (!Number.isSafeInteger(input.nextAttemptAtMs) ||
+      input.nextAttemptAtMs! < input.finishedAtMs ||
+      input.nextAttemptAtMs! > lease.deadlineAtMs)
+  )
+    throw new G5RuntimeError(
+      'contract_invalid',
+      'Outbox retry must stay inside the immutable finite delivery window',
+    );
+  const row = transaction.queryOne<{
+    effect_operation_id: string | null;
+    status: string;
+    lease_owner: string | null;
+    lease_token: string | null;
+    adapter_resource_id: string;
+    adapter_resource_hash: Sha256Hash;
+    policy_snapshot_hash: Sha256Hash;
+    payload_value_id: string;
+    payload_hash: Sha256Hash;
+    delivery_attempt_count: number;
+    reconcile_attempt_count: number;
+  }>(
+    'SELECT effect_operation_id, status, lease_owner, lease_token, adapter_resource_id, adapter_resource_hash, policy_snapshot_hash, payload_value_id, payload_hash, delivery_attempt_count, reconcile_attempt_count FROM workflow_outbox WHERE id = ?',
+    [lease.outboxId],
+  );
+  if (
+    !row ||
+    row.status !== 'processing' ||
+    row.lease_owner !== lease.leaseOwner ||
+    row.lease_token !== lease.leaseToken ||
+    row.adapter_resource_id !== lease.adapterResourceId ||
+    row.adapter_resource_hash !== lease.adapterResourceHash ||
+    row.policy_snapshot_hash !== lease.policyHash
+  ) {
+    const priorAttempt = transaction.queryOne<{
+      attempt_kind: string;
+      kind_attempt_no: number;
+      adapter_resource_id: string;
+      adapter_resource_hash: string;
+      policy_hash: string;
+      lease_owner: string;
+      lease_token: string;
+      request_value_id: string;
+      request_hash: string;
+      result_kind: string;
+      result_code: string | null;
+      receipt_value_id: string | null;
+      receipt_hash: string | null;
+      external_id: string | null;
+      started_at_ms: number;
+      finished_at_ms: number;
+      next_attempt_at_ms: number | null;
+    }>(
+      'SELECT attempt_kind, kind_attempt_no, adapter_resource_id, adapter_resource_hash, policy_hash, lease_owner, lease_token, request_value_id, request_hash, result_kind, result_code, receipt_value_id, receipt_hash, external_id, started_at_ms, finished_at_ms, next_attempt_at_ms FROM workflow_outbox_attempts WHERE id = ?',
+      [
+        stableRuntimeId('outbox-attempt', {
+          outbox_id: lease.outboxId,
+          history_seq: lease.historySequence,
+        }),
+      ],
+    );
+    if (priorAttempt) {
+      let exact =
+        priorAttempt.attempt_kind === lease.attemptKind &&
+        priorAttempt.kind_attempt_no === lease.kindAttemptNo &&
+        priorAttempt.adapter_resource_id === lease.adapterResourceId &&
+        priorAttempt.adapter_resource_hash === lease.adapterResourceHash &&
+        priorAttempt.policy_hash === lease.policyHash &&
+        priorAttempt.lease_owner === lease.leaseOwner &&
+        priorAttempt.lease_token === lease.leaseToken &&
+        priorAttempt.request_value_id === lease.request.id &&
+        priorAttempt.request_hash === lease.request.hash &&
+        priorAttempt.result_kind === input.resultKind &&
+        priorAttempt.result_code === input.resultCode &&
+        priorAttempt.receipt_value_id === (input.receipt?.id ?? null) &&
+        priorAttempt.receipt_hash === (input.receipt?.hash ?? null) &&
+        priorAttempt.external_id === input.externalId &&
+        priorAttempt.started_at_ms === input.startedAtMs &&
+        priorAttempt.finished_at_ms === input.finishedAtMs &&
+        priorAttempt.next_attempt_at_ms === input.nextAttemptAtMs;
+      if (
+        exact &&
+        priorAttempt.result_kind === 'applied_with_receipt' &&
+        row?.effect_operation_id
+      ) {
+        const effect = transaction.queryOne<{
+          after_state_value_id: string | null;
+          after_state_hash: string | null;
+          immutable_output_snapshot_value_id: string | null;
+          immutable_output_snapshot_hash: string | null;
+        }>(
+          `SELECT after_state_value_id, after_state_hash,
                     immutable_output_snapshot_value_id,
                     immutable_output_snapshot_hash
                FROM workflow_graph_effect_operations WHERE id = ?`,
-            [row.effect_operation_id],
-          );
-          exact =
-            !!effect &&
-            effect.after_state_value_id === (input.afterState?.id ?? null) &&
-            effect.after_state_hash === (input.afterState?.hash ?? null) &&
-            effect.immutable_output_snapshot_value_id ===
-              (input.immutableOutput?.id ?? null) &&
-            effect.immutable_output_snapshot_hash ===
-              (input.immutableOutput?.hash ?? null);
-        }
-        if (!exact)
-          throw new G5RuntimeError(
-            'integrity_violation',
-            'Outbox result replay bytes drifted',
-          );
-        if (
-          row &&
-          row.status !== 'processing' &&
-          ['succeeded', 'pending', 'reconciling', 'action_required'].includes(
-            row.status,
-          )
-        )
-          return row.status as
-            | 'succeeded'
-            | 'pending'
-            | 'reconciling'
-            | 'action_required';
+          [row.effect_operation_id],
+        );
+        exact =
+          !!effect &&
+          effect.after_state_value_id === (input.afterState?.id ?? null) &&
+          effect.after_state_hash === (input.afterState?.hash ?? null) &&
+          effect.immutable_output_snapshot_value_id ===
+            (input.immutableOutput?.id ?? null) &&
+          effect.immutable_output_snapshot_hash ===
+            (input.immutableOutput?.hash ?? null);
       }
-      throw new G5RuntimeError(
-        'cas_conflict',
-        'Outbox result lease or immutable binding is stale',
-      );
+      if (!exact)
+        throw new G5RuntimeError(
+          'integrity_violation',
+          'Outbox result replay bytes drifted',
+        );
+      if (
+        row &&
+        row.status !== 'processing' &&
+        ['succeeded', 'pending', 'reconciling', 'action_required'].includes(
+          row.status,
+        )
+      )
+        return row.status as
+          | 'succeeded'
+          | 'pending'
+          | 'reconciling'
+          | 'action_required';
     }
-    if (
-      input.resultKind === 'applied_with_receipt' &&
-      (!input.receipt || !input.afterState || !input.immutableOutput)
-    )
-      throw new G5RuntimeError(
-        'contract_invalid',
-        'Applied Outbox result requires receipt, after-state, and immutable output',
-      );
-    const inserted = transaction.execute(
-      `INSERT INTO workflow_outbox_attempts (
+    throw new G5RuntimeError(
+      'cas_conflict',
+      'Outbox result lease or immutable binding is stale',
+    );
+  }
+  if (
+    input.resultKind === 'applied_with_receipt' &&
+    (!input.receipt || !input.afterState || !input.immutableOutput)
+  )
+    throw new G5RuntimeError(
+      'contract_invalid',
+      'Applied Outbox result requires receipt, after-state, and immutable output',
+    );
+  const inserted = transaction.execute(
+    `INSERT INTO workflow_outbox_attempts (
        id, outbox_id, history_seq, attempt_kind, kind_attempt_no,
        adapter_resource_id, adapter_resource_hash, policy_hash, lease_owner,
        lease_token, request_value_id, request_hash, result_kind, result_code,
        receipt_value_id, receipt_hash, external_id, started_at_ms,
        finished_at_ms, next_attempt_at_ms
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        stableRuntimeId('outbox-attempt', {
-          outbox_id: lease.outboxId,
-          history_seq: lease.historySequence,
-        }),
-        lease.outboxId,
-        lease.historySequence,
-        lease.attemptKind,
-        lease.kindAttemptNo,
-        lease.adapterResourceId,
-        lease.adapterResourceHash,
-        lease.policyHash,
-        lease.leaseOwner,
-        lease.leaseToken,
-        lease.request.id,
-        lease.request.hash,
-        input.resultKind,
-        input.resultCode,
-        input.receipt?.id ?? null,
-        input.receipt?.hash ?? null,
-        input.externalId,
-        input.startedAtMs,
-        input.finishedAtMs,
-        input.nextAttemptAtMs,
-      ],
-    ).changes;
-    if (inserted !== 1)
-      throw new G5RuntimeError('cas_conflict', 'Outbox attempt insert failed');
-    const changed = transaction.execute(
-      `UPDATE workflow_outbox
+    [
+      stableRuntimeId('outbox-attempt', {
+        outbox_id: lease.outboxId,
+        history_seq: lease.historySequence,
+      }),
+      lease.outboxId,
+      lease.historySequence,
+      lease.attemptKind,
+      lease.kindAttemptNo,
+      lease.adapterResourceId,
+      lease.adapterResourceHash,
+      lease.policyHash,
+      lease.leaseOwner,
+      lease.leaseToken,
+      lease.request.id,
+      lease.request.hash,
+      input.resultKind,
+      input.resultCode,
+      input.receipt?.id ?? null,
+      input.receipt?.hash ?? null,
+      input.externalId,
+      input.startedAtMs,
+      input.finishedAtMs,
+      input.nextAttemptAtMs,
+    ],
+  ).changes;
+  if (inserted !== 1)
+    throw new G5RuntimeError('cas_conflict', 'Outbox attempt insert failed');
+  const changed = transaction.execute(
+    `UPDATE workflow_outbox
           SET status = ?,
               delivery_attempt_count = delivery_attempt_count + ?,
               reconcile_attempt_count = reconcile_attempt_count + ?,
@@ -1172,26 +1173,71 @@ export function recordOutboxResult(
               lease_expires_at_ms = NULL, last_result_kind = ?,
               last_error_code = ?, delivered_at_ms = ?, updated_at_ms = ?
         WHERE id = ? AND status = 'processing' AND lease_owner = ? AND lease_token = ?`,
+    [
+      nextStatus,
+      lease.attemptKind === 'deliver' ? 1 : 0,
+      lease.attemptKind === 'reconcile' ? 1 : 0,
+      terminalSuccess || actionRequired ? null : input.nextAttemptAtMs,
+      input.resultKind,
+      terminalSuccess ? null : input.resultCode,
+      terminalSuccess ? input.finishedAtMs : null,
+      input.finishedAtMs,
+      lease.outboxId,
+      lease.leaseOwner,
+      lease.leaseToken,
+    ],
+  ).changes;
+  if (changed !== 1)
+    throw new G5RuntimeError('cas_conflict', 'Outbox result CAS failed');
+  if (terminalSuccess && row.effect_operation_id) {
+    const normalExecutionChanged = transaction.execute(
+      "UPDATE workflow_graph_effect_operations SET status = 'succeeded', receipt_value_id = ?, receipt_hash = ?, after_state_value_id = ?, after_state_hash = ?, immutable_output_snapshot_value_id = ?, immutable_output_snapshot_hash = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND status IN ('intended', 'dispatched')",
       [
-        nextStatus,
-        lease.attemptKind === 'deliver' ? 1 : 0,
-        lease.attemptKind === 'reconcile' ? 1 : 0,
-        terminalSuccess || actionRequired ? null : input.nextAttemptAtMs,
-        input.resultKind,
-        terminalSuccess ? null : input.resultCode,
-        terminalSuccess ? input.finishedAtMs : null,
+        input.receipt!.id,
+        input.receipt!.hash,
+        input.afterState!.id,
+        input.afterState!.hash,
+        input.immutableOutput!.id,
+        input.immutableOutput!.hash,
         input.finishedAtMs,
-        lease.outboxId,
-        lease.leaseOwner,
-        lease.leaseToken,
+        row.effect_operation_id,
       ],
     ).changes;
-    if (changed !== 1)
-      throw new G5RuntimeError('cas_conflict', 'Outbox result CAS failed');
-    if (terminalSuccess && row.effect_operation_id) {
+    if (normalExecutionChanged !== 1) {
+      const lateCancellation =
+        input.externalId === null
+          ? null
+          : transaction.queryOne<{ id: string }>(
+              `SELECT cancellation.id
+                   FROM workflow_provider_cancellation_requests cancellation
+                   JOIN workflow_graph_effect_operations effect
+                     ON effect.id = cancellation.effect_operation_id
+                  WHERE cancellation.effect_operation_id = ?
+                    AND cancellation.outbox_id = ?
+                    AND cancellation.external_execution_id = ?
+                    AND effect.execution_lane = 'close_cleanup'
+                    AND effect.status IN (
+                      'compensation_pending', 'compensation_not_required'
+                    )`,
+              [row.effect_operation_id, lease.outboxId, input.externalId],
+            );
+      if (!lateCancellation)
+        throw new G5RuntimeError(
+          'cas_conflict',
+          'Outbox success Effect CAS failed',
+        );
       if (
         transaction.execute(
-          "UPDATE workflow_graph_effect_operations SET status = 'succeeded', receipt_value_id = ?, receipt_hash = ?, after_state_value_id = ?, after_state_hash = ?, immutable_output_snapshot_value_id = ?, immutable_output_snapshot_hash = ?, row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND status IN ('intended', 'dispatched')",
+          `UPDATE workflow_graph_effect_operations
+                SET receipt_value_id = ?, receipt_hash = ?,
+                    after_state_value_id = ?, after_state_hash = ?,
+                    immutable_output_snapshot_value_id = ?,
+                    immutable_output_snapshot_hash = ?,
+                    row_version = row_version + 1, updated_at_ms = ?
+              WHERE id = ? AND execution_lane = 'close_cleanup'
+                AND status IN (
+                  'compensation_pending', 'compensation_not_required'
+                )`,
           [
             input.receipt!.id,
             input.receipt!.hash,
@@ -1203,27 +1249,38 @@ export function recordOutboxResult(
             row.effect_operation_id,
           ],
         ).changes !== 1
-      )
+      ) {
         throw new G5RuntimeError(
           'cas_conflict',
-          'Outbox success Effect CAS failed',
+          'Late Outbox success cleanup Effect CAS failed',
         );
-    } else if (actionRequired && row.effect_operation_id) {
-      if (
-        transaction.execute(
-          "UPDATE workflow_graph_effect_operations SET status = 'action_required', row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND status IN ('intended', 'dispatched')",
-          [input.finishedAtMs, row.effect_operation_id],
-        ).changes !== 1
-      )
-        throw new G5RuntimeError(
-          'cas_conflict',
-          'Outbox action-required Effect CAS failed',
-        );
+      }
     }
-    return nextStatus as
-      | 'succeeded'
-      | 'pending'
-      | 'reconciling'
-      | 'action_required';
-  });
+  } else if (actionRequired && row.effect_operation_id) {
+    if (
+      transaction.execute(
+        "UPDATE workflow_graph_effect_operations SET status = 'action_required', row_version = row_version + 1, updated_at_ms = ? WHERE id = ? AND status IN ('intended', 'dispatched')",
+        [input.finishedAtMs, row.effect_operation_id],
+      ).changes !== 1
+    )
+      throw new G5RuntimeError(
+        'cas_conflict',
+        'Outbox action-required Effect CAS failed',
+      );
+  }
+  return nextStatus as
+    | 'succeeded'
+    | 'pending'
+    | 'reconciling'
+    | 'action_required';
+}
+
+export function recordOutboxResult(
+  store: WorkflowRuntimeStore,
+  lease: OutboxLease,
+  input: OutboxResultInput,
+): 'succeeded' | 'pending' | 'reconciling' | 'action_required' {
+  return store.withImmediateTransaction((transaction) =>
+    recordOutboxResultInTransaction(transaction, lease, input),
+  );
 }

@@ -599,8 +599,10 @@ function validateCapabilityContract(
     (cancellation?.type === 'fence_only' &&
       cancellation.safe_to_abandon === true) ||
     (cancellation?.type === 'cooperative' &&
-      cancellation.ack_required_before_close === false &&
-      cancellation.safe_if_cancel_lost === true) ||
+      ((cancellation.ack_required_before_close === false &&
+        cancellation.safe_if_cancel_lost === true) ||
+        (cancellation.ack_required_before_close === true &&
+          cancellation.safe_if_cancel_lost === false))) ||
     (cancellation?.type === 'requires_compensation' &&
       effect?.type === 'compensatable');
   if (!valid) {

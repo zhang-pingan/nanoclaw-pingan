@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-catalog-protocol-positive-cases:1\n",
-  "hash": "sha256:d1922e329b10676630d867bbbd407e70769d57e5327f492d46ff576e05deb854",
+  "hash": "sha256:8890456b5b4345494a3dbd35a7e94a3821b8c639fc9043dada85a87ed4e0d513",
   "payload": {
     "cases": [
       {
@@ -25,7 +25,7 @@
         "case_id": "runtime_event_catalog_exact",
         "artifact_format": "icarus.workflow-runtime-event-catalog/1",
         "assertion": "valid_exact_artifact",
-        "expected_artifact_hash": "sha256:f06b2cd19314341e64df1dade1d1c497804c79cac1b0fdad5f0f03f57f3e41e5"
+        "expected_artifact_hash": "sha256:401ce3f3ae7a762e9cbe2c447bde490aadf72ceecdc45b0e140cfdfad14df21e"
       },
       {
         "case_id": "runtime_permission_catalog_exact",

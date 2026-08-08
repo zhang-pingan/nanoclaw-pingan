@@ -515,11 +515,12 @@ export type RootTransitionTarget =
       readonly definition: RuntimeRegistryRef;
       readonly definitionVersion: string;
       readonly stateConfig: RuntimeValueRef;
-      readonly terminalKind: 'normal' | 'errored';
+      readonly terminalKind: 'normal' | 'errored' | 'cancelled';
       readonly output: RuntimeValueRef | null;
       readonly outputSchemaHash: Sha256Hash | null;
       readonly errorCode: string | null;
       readonly errorDetail: RuntimeValueRef | null;
+      readonly cancelReason?: string | null;
     }
   | { readonly kind: 'global_cancel' };
 
@@ -1053,14 +1054,10 @@ function loadTransitionAuthority(
   input: T8RootCommitInput,
   authority: RootCutAuthority,
 ): { transition: JsonObject | null; effects: JsonObject[] } {
-  const explicitCancelledExit =
-    authority.outcomeKind === 'completed' &&
-    authority.exitName === 'cancelled' &&
-    input.routeSource === 'exit:cancelled';
-  if (authority.cancelReason === 'workflow_cancel' || explicitCancelledExit) {
+  if (authority.cancelReason === 'workflow_cancel') {
     if (
       input.target.kind !== 'global_cancel' ||
-      (!explicitCancelledExit && input.routeSource !== 'workflow_cancel')
+      input.routeSource !== 'workflow_cancel'
     )
       throw new G5RuntimeError(
         'contract_invalid',
@@ -2265,10 +2262,16 @@ export function commitRootT8InTransaction(
           LIMIT 1`,
     [input.sourceRunId],
   );
-  if (descendant || unsettledCompensation)
+  const unsettledProviderCancellation = transaction.queryOne<{ id: string }>(
+    `SELECT id FROM workflow_provider_cancellation_requests
+      WHERE graph_run_id = ? AND status NOT IN ('acknowledged', 'not_required')
+      LIMIT 1`,
+    [input.sourceRunId],
+  );
+  if (descendant || unsettledCompensation || unsettledProviderCancellation)
     throw new G5RuntimeError(
       'precondition_failed',
-      'T8 requires closed descendants and successful compensation',
+      'T8 requires closed descendants, successful compensation, and a settled provider cancellation barrier',
     );
   const cut = rootCutAuthority(transaction, input);
   const expectedRootCancelScope =
@@ -2391,23 +2394,33 @@ export function commitRootT8InTransaction(
     targetActivationId = targetActivation.activationId;
     targetRunId = targetActivation.graphRunId;
   } else if (input.target.kind === 'terminal') {
+    const targetCancelReason = input.target.cancelReason ?? null;
     const completedTerminalInvalid =
       cut.outcomeKind === 'completed' &&
       (input.target.terminalKind === 'normal'
         ? input.target.output === null ||
           input.target.outputSchemaHash === null ||
           input.target.errorCode !== null ||
-          input.target.errorDetail !== null
-        : input.target.output !== null ||
-          input.target.outputSchemaHash !== null ||
-          input.target.errorCode === null);
+          input.target.errorDetail !== null ||
+          targetCancelReason !== null
+        : input.target.terminalKind === 'errored'
+          ? input.target.output !== null ||
+            input.target.outputSchemaHash !== null ||
+            input.target.errorCode === null ||
+            targetCancelReason !== null
+          : input.target.output !== null ||
+            input.target.outputSchemaHash !== null ||
+            input.target.errorCode !== null ||
+            input.target.errorDetail !== null ||
+            targetCancelReason === null);
     if (
       completedTerminalInvalid ||
       (cut.outcomeKind === 'errored' &&
         (input.target.terminalKind !== 'errored' ||
           input.target.output !== null ||
           input.target.outputSchemaHash !== null ||
-          input.target.errorCode !== cut.errorCode))
+          input.target.errorCode !== cut.errorCode ||
+          targetCancelReason !== null))
     )
       throw new G5RuntimeError(
         'contract_invalid',
@@ -2638,7 +2651,9 @@ export function commitRootT8InTransaction(
       : input.target.kind === 'terminal'
         ? input.target.terminalKind === 'normal'
           ? 'completed'
-          : 'errored'
+          : input.target.terminalKind === 'errored'
+            ? 'errored'
+            : 'cancelled'
         : 'active';
   requireSingleChange(
     transaction.execute(
@@ -2695,7 +2710,9 @@ export function commitRootT8InTransaction(
           ? (input.target.errorDetail?.hash ?? null)
           : null,
         terminalStatus === 'cancelled'
-          ? (cut.cancelReason ?? input.routeSource)
+          ? input.target.kind === 'terminal'
+            ? (input.target.cancelReason ?? null)
+            : (cut.cancelReason ?? input.routeSource)
           : null,
         terminalStatus === 'active' ? null : input.nowMs,
         input.nowMs,

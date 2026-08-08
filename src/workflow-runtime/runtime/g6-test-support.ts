@@ -82,6 +82,7 @@ export interface G6MapFixtureOptions {
   readonly errorTargetKind?: 'terminal' | 'graph';
   readonly temporaryReplanRoute?: boolean;
   readonly stateConfigContent?: JsonObject;
+  readonly definitionStates?: JsonObject;
   readonly mapCompletionPolicy?: JsonObject;
   readonly domainClaims?: readonly {
     namespace: string;
@@ -283,7 +284,7 @@ function seedG6Runtime(
                 compiler_version: compiled.plan.compiler_version,
                 provenance: 'golden_corpus',
               },
-              states: {
+              states: options.definitionStates ?? {
                 run: {
                   type: 'graph',
                   on_error: {

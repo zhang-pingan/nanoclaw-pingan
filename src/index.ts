@@ -2899,6 +2899,9 @@ async function main(): Promise<void> {
     adapterReadiness: workflowAdapters
       ? (adapterRefId) => workflowAdapters!.getReadiness(adapterRefId)
       : undefined,
+    refreshAdapterReadiness: workflowAdapters
+      ? (adapterRefId) => workflowAdapters!.refresh(adapterRefId)
+      : undefined,
     coordinator: internalAgentChatService,
     coordinatorAgentJid: () => resolveAssistantActionJid(),
     onTimelineDelta: broadcastTaskWorkspaceDelta,

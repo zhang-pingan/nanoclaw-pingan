@@ -11,6 +11,7 @@ import {
   codexProviderMetadata,
   normalizeCodexCompletion,
 } from './codex/task-mapping.js';
+import { WorkflowExecutionAdapterUnavailableError } from './adapter-registry.js';
 import {
   CODEX_TASK_ADAPTER_ID,
   type WorkflowAdapterCompletion,
@@ -188,8 +189,9 @@ export class CodexTaskAdapter implements WorkflowExecutionAdapter {
 
   private assertVisibilityGate(): void {
     if (!this.options.desktopVisibilityConfirmed)
-      throw new Error(
+      throw new WorkflowExecutionAdapterUnavailableError(
         'Codex Task Adapter is unavailable: set WORKFLOW_CODEX_DESKTOP_VISIBILITY_CONFIRMED=true and restart the Host after confirming Codex App Server tasks are visible in the desktop app',
+        'configuration',
       );
   }
 }

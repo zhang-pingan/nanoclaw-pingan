@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-definition-schema:1\n",
-  "hash": "sha256:baf4d792429ff5f3a6241e0c4d2fdf80b703bc78da0a0aebaba070cc1e5948a1",
+  "hash": "sha256:9ad868f62bd8a5049e9a3ee2ffe4c19892fbee408ea102cffef48578f9ed32c5",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-definition/1",
@@ -604,6 +604,37 @@
                         "type": "null"
                       }
                     ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "type",
+                  "terminal_kind",
+                  "cancel_reason"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "terminal"
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "terminal_kind": {
+                    "const": "cancelled"
+                  },
+                  "cancel_reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
                   }
                 }
               }

@@ -498,6 +498,14 @@ const workflowDefinitionSchema = object({
         },
         ['label', 'description'],
       ),
+      object(
+        {
+          ...stateCommon('terminal'),
+          terminal_kind: { const: 'cancelled' },
+          cancel_reason: stableKeySchema,
+        },
+        ['label', 'description'],
+      ),
     ],
   }),
   definition_hash: hashSchema,
@@ -1337,6 +1345,12 @@ const capabilityCancellationSchema: Schema = {
       cancel_action_ref: ref('versioned_ref'),
       ack_required_before_close: { const: false },
       safe_if_cancel_lost: { const: true },
+    }),
+    object({
+      type: { const: 'cooperative' },
+      cancel_action_ref: ref('versioned_ref'),
+      ack_required_before_close: { const: true },
+      safe_if_cancel_lost: { const: false },
     }),
     object({ type: { const: 'requires_compensation' } }),
   ],

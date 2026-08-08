@@ -77,12 +77,12 @@
         "target_format": "icarus.workflow-runtime-typed-relation-catalog/1",
         "mutation": {
           "operation": "replace",
-          "pointer": "/relations/46/relation_kind",
+          "pointer": "/relations/48/relation_kind",
           "value": "polymorphic"
         },
         "expected_stage": "schema",
         "expected_keyword": "enum",
-        "expected_instance_pointer": "/relations/46/relation_kind",
+        "expected_instance_pointer": "/relations/48/relation_kind",
         "expected_code": "logical_schema_contract_drift"
       },
       {
@@ -349,7 +349,7 @@
         "target_format": "icarus.workflow-runtime-typed-relation-catalog/1",
         "mutation": {
           "operation": "remove",
-          "pointer": "/relations/46"
+          "pointer": "/relations/48"
         },
         "expected_stage": "semantic",
         "expected_keyword": null,
@@ -361,7 +361,7 @@
         "target_format": "icarus.workflow-runtime-typed-relation-catalog/1",
         "mutation": {
           "operation": "replace",
-          "pointer": "/relations/46/target_table",
+          "pointer": "/relations/48/target_table",
           "value": "workflow_values"
         },
         "expected_stage": "semantic",
@@ -449,5 +449,5 @@
       }
     ]
   },
-  "hash": "sha256:8f09806c98de362e2bebee87f8a91585e38904eed3fc5260e6c66a6f1f315edc"
+  "hash": "sha256:c12352377d2d98157f715bf3442241d5ead3208a9d67a3eecc7ce50cc7a6e234"
 }

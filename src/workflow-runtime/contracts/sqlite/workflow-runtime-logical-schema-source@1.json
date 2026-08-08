@@ -13,8 +13,8 @@
     "executable_status": "non_executable",
     "ddl_generation_status": "forbidden_in_g0_6",
     "sqlite_open_status": "forbidden_in_g0_6",
-    "table_count": 78,
-    "column_count": 1254,
+    "table_count": 79,
+    "column_count": 1277,
     "tables": [
       {
         "ordinal": 1,
@@ -10984,7 +10984,8 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [
               "normal",
-              "errored"
+              "errored",
+              "cancelled"
             ],
             "relation_ids": [],
             "external_reference": null
@@ -11377,7 +11378,7 @@
               "terminal_error_code",
               "terminal_error_detail_value_id"
             ],
-            "expression_intent": "normal and errored terminal activations populate mutually exclusive fields"
+            "expression_intent": "normal, errored and cancelled terminal activations populate mutually exclusive fields"
           },
           {
             "check_id": "ck:state_activations:no_terminal_abandon",
@@ -25057,6 +25058,531 @@
       },
       {
         "ordinal": 64,
+        "name": "workflow_provider_cancellation_requests",
+        "source_section": "Edge Resolution, Candidate and Cut",
+        "columns": [
+          {
+            "ordinal": 1,
+            "name": "id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 2,
+            "name": "graph_run_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:provider_cancellations:attempt",
+              "fk:provider_cancellations:close_request"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 3,
+            "name": "scope_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:provider_cancellations:attempt",
+              "fk:provider_cancellations:close_request"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 4,
+            "name": "node_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:provider_cancellations:attempt"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 5,
+            "name": "attempt_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:provider_cancellations:attempt"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 6,
+            "name": "effect_operation_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:provider_cancellations:effect"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 7,
+            "name": "outbox_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:provider_cancellations:outbox"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 8,
+            "name": "close_request_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:provider_cancellations:close_request"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 9,
+            "name": "adapter_resource_id",
+            "logical_type": "identifier",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:provider_cancellations:adapter"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 10,
+            "name": "adapter_resource_hash",
+            "logical_type": "hash",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "fk:provider_cancellations:adapter"
+            ],
+            "external_reference": null
+          },
+          {
+            "ordinal": 11,
+            "name": "adapter_ref_id",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 12,
+            "name": "external_execution_id",
+            "logical_type": "external_reference",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "ext:workflow_provider_cancellation_requests:external_execution_id"
+            ],
+            "external_reference": {
+              "validator_owner": "executor_adapter_registry",
+              "reference_domain": "external_execution",
+              "immutable": true
+            }
+          },
+          {
+            "ordinal": 13,
+            "name": "status",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [
+              "requested",
+              "processing",
+              "retry_wait",
+              "acknowledged",
+              "not_required"
+            ],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 14,
+            "name": "attempt_count",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 15,
+            "name": "next_attempt_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 16,
+            "name": "lease_owner",
+            "logical_type": "external_reference",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [
+              "ext:workflow_provider_cancellation_requests:lease_owner"
+            ],
+            "external_reference": {
+              "validator_owner": "runtime_worker_registry",
+              "reference_domain": "worker_lease",
+              "immutable": false
+            }
+          },
+          {
+            "ordinal": 17,
+            "name": "lease_token",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 18,
+            "name": "lease_expires_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 19,
+            "name": "last_error",
+            "logical_type": "text",
+            "sqlite_type_intent": "TEXT",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "not_applicable",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 20,
+            "name": "requested_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 21,
+            "name": "settled_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": true,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 22,
+            "name": "updated_at_ms",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          },
+          {
+            "ordinal": 23,
+            "name": "row_version",
+            "logical_type": "integer",
+            "sqlite_type_intent": "INTEGER",
+            "nullable": false,
+            "default_intent": null,
+            "safe_integer_intent": "non_negative",
+            "enum_values": [],
+            "relation_ids": [],
+            "external_reference": null
+          }
+        ],
+        "primary_key": {
+          "columns": [
+            "id"
+          ],
+          "auto_increment_intent": false
+        },
+        "foreign_keys": [
+          {
+            "relation_id": "fk:provider_cancellations:attempt",
+            "source_columns": [
+              "graph_run_id",
+              "scope_id",
+              "node_id",
+              "attempt_id"
+            ],
+            "target_table": "workflow_graph_node_attempts",
+            "target_columns": [
+              "graph_run_id",
+              "scope_id",
+              "node_id",
+              "id"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:provider_cancellations:effect",
+            "source_columns": [
+              "effect_operation_id"
+            ],
+            "target_table": "workflow_graph_effect_operations",
+            "target_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:provider_cancellations:outbox",
+            "source_columns": [
+              "outbox_id"
+            ],
+            "target_table": "workflow_outbox",
+            "target_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:provider_cancellations:close_request",
+            "source_columns": [
+              "graph_run_id",
+              "scope_id",
+              "close_request_id"
+            ],
+            "target_table": "workflow_graph_scope_close_requests",
+            "target_columns": [
+              "graph_run_id",
+              "scope_id",
+              "id"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          },
+          {
+            "relation_id": "fk:provider_cancellations:adapter",
+            "source_columns": [
+              "adapter_resource_id",
+              "adapter_resource_hash"
+            ],
+            "target_table": "workflow_registry_resources",
+            "target_columns": [
+              "id",
+              "content_hash"
+            ],
+            "on_delete": "restrict",
+            "deferrability": "deferred"
+          }
+        ],
+        "unique_keys": [
+          {
+            "key_id": "uk:provider_cancellations:attempt",
+            "columns": [
+              "attempt_id"
+            ],
+            "predicate_intent": null
+          },
+          {
+            "key_id": "uk:provider_cancellations:external_execution",
+            "columns": [
+              "external_execution_id"
+            ],
+            "predicate_intent": null
+          }
+        ],
+        "checks": [
+          {
+            "check_id": "ck:workflow_provider_cancellation_requests:adapter_resource_hash:hash",
+            "kind": "hash_format",
+            "columns": [
+              "adapter_resource_hash"
+            ],
+            "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
+          },
+          {
+            "check_id": "ck:workflow_provider_cancellation_requests:status:enum",
+            "kind": "enum_membership",
+            "columns": [
+              "status"
+            ],
+            "expression_intent": "value belongs to the closed status catalog"
+          },
+          {
+            "check_id": "ck:workflow_provider_cancellation_requests:attempt_count:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "attempt_count"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:workflow_provider_cancellation_requests:next_attempt_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "next_attempt_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:workflow_provider_cancellation_requests:lease_expires_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "lease_expires_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:workflow_provider_cancellation_requests:requested_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "requested_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:workflow_provider_cancellation_requests:settled_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "settled_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:workflow_provider_cancellation_requests:updated_at_ms:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "updated_at_ms"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:workflow_provider_cancellation_requests:row_version:safe_integer",
+            "kind": "safe_integer",
+            "columns": [
+              "row_version"
+            ],
+            "expression_intent": "non-negative JavaScript safe integer"
+          },
+          {
+            "check_id": "ck:workflow_provider_cancellation_requests:lease_owner:lease_token:pair",
+            "kind": "all_or_none",
+            "columns": [
+              "lease_owner",
+              "lease_token"
+            ],
+            "expression_intent": "both columns are null or both columns are non-null"
+          },
+          {
+            "check_id": "ck:workflow_provider_cancellation_requests:lease_owner:lease_expires_at_ms:pair",
+            "kind": "all_or_none",
+            "columns": [
+              "lease_owner",
+              "lease_expires_at_ms"
+            ],
+            "expression_intent": "both columns are null or both columns are non-null"
+          }
+        ],
+        "indexes": [
+          {
+            "index_id": "idx:provider_cancellations:due",
+            "kind": "recovery",
+            "columns": [
+              "status",
+              "next_attempt_at_ms",
+              "lease_expires_at_ms",
+              "id"
+            ],
+            "predicate_intent": "status in ('requested','processing','retry_wait')",
+            "supports_query_ids": [
+              "query:provider_cancellation_due"
+            ]
+          }
+        ]
+      },
+      {
+        "ordinal": 65,
         "name": "workflow_graph_completion_cuts",
         "source_section": "Edge Resolution, Candidate and Cut",
         "columns": [
@@ -25421,7 +25947,7 @@
         "indexes": []
       },
       {
-        "ordinal": 65,
+        "ordinal": 66,
         "name": "workflow_graph_child_completion_consumptions",
         "source_section": "Edge Resolution, Candidate and Cut",
         "columns": [
@@ -25688,7 +26214,7 @@
         "indexes": []
       },
       {
-        "ordinal": 66,
+        "ordinal": 67,
         "name": "workflow_graph_subtree_fence_manifests",
         "source_section": "Edge Resolution, Candidate and Cut",
         "columns": [
@@ -25969,7 +26495,7 @@
         "indexes": []
       },
       {
-        "ordinal": 67,
+        "ordinal": 68,
         "name": "workflow_graph_inbox_events",
         "source_section": "Inbox, Late Result, Event and Effect Journal",
         "columns": [
@@ -26534,7 +27060,7 @@
         ]
       },
       {
-        "ordinal": 68,
+        "ordinal": 69,
         "name": "workflow_graph_late_results",
         "source_section": "Inbox, Late Result, Event and Effect Journal",
         "columns": [
@@ -26798,7 +27324,7 @@
         "indexes": []
       },
       {
-        "ordinal": 69,
+        "ordinal": 70,
         "name": "workflow_graph_effect_operations",
         "source_section": "Inbox, Late Result, Event and Effect Journal",
         "columns": [
@@ -27495,7 +28021,7 @@
         "indexes": []
       },
       {
-        "ordinal": 70,
+        "ordinal": 71,
         "name": "workflow_graph_effect_operation_claims",
         "source_section": "Inbox, Late Result, Event and Effect Journal",
         "columns": [
@@ -27631,7 +28157,7 @@
         "indexes": []
       },
       {
-        "ordinal": 71,
+        "ordinal": 72,
         "name": "workflow_graph_facts",
         "source_section": "Inbox, Late Result, Event and Effect Journal",
         "columns": [
@@ -27966,7 +28492,7 @@
         ]
       },
       {
-        "ordinal": 72,
+        "ordinal": 73,
         "name": "workflow_graph_events",
         "source_section": "Inbox, Late Result, Event and Effect Journal",
         "columns": [
@@ -28079,6 +28605,10 @@
               "subtree_fenced",
               "effect_operation_changed",
               "compensation_changed",
+              "provider_cancellation_requested",
+              "provider_cancellation_retry_scheduled",
+              "provider_cancellation_acknowledged",
+              "provider_cancellation_not_required",
               "completion_cut_committed",
               "child_completion_consumed",
               "run_control_changed",
@@ -28313,7 +28843,7 @@
         "indexes": []
       },
       {
-        "ordinal": 73,
+        "ordinal": 74,
         "name": "workflow_outbox",
         "source_section": "Outbox, Lease and Recovery",
         "columns": [
@@ -29108,7 +29638,7 @@
         ]
       },
       {
-        "ordinal": 74,
+        "ordinal": 75,
         "name": "workflow_outbox_attempts",
         "source_section": "Outbox, Lease and Recovery",
         "columns": [
@@ -29557,7 +30087,7 @@
         "indexes": []
       },
       {
-        "ordinal": 75,
+        "ordinal": 76,
         "name": "workflow_runtime_commands",
         "source_section": "Workflow Runtime Command authorization and audit",
         "columns": [
@@ -30154,7 +30684,7 @@
         ]
       },
       {
-        "ordinal": 76,
+        "ordinal": 77,
         "name": "workflow_runtime_command_invocations",
         "source_section": "Workflow Runtime Command authorization and audit",
         "columns": [
@@ -30685,7 +31215,7 @@
         "indexes": []
       },
       {
-        "ordinal": 77,
+        "ordinal": 78,
         "name": "workflow_runtime_command_confirmations",
         "source_section": "Workflow Runtime Command authorization and audit",
         "columns": [
@@ -31004,7 +31534,7 @@
         "indexes": []
       },
       {
-        "ordinal": 78,
+        "ordinal": 79,
         "name": "workflow_checkpoints",
         "source_section": "Snapshot and Checkpoint",
         "columns": [
@@ -31322,5 +31852,5 @@
       "generic_error_fields": "forbidden"
     }
   },
-  "hash": "sha256:e904eb77eda048c6594da0cdf138e0e10a7dd035669e574a3613600643a600bf"
+  "hash": "sha256:fa6565b9b28f0df5a06ebe228c260fc0104c80262145b3a195777d1703da0f19"
 }

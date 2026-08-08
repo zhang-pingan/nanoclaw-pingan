@@ -501,6 +501,450 @@ export function acceptInternalResultT6a(
   );
 }
 
+export interface T6bDelegationStartInput {
+  readonly graphRunId: string;
+  readonly scopeId: string;
+  readonly nodeId: string;
+  readonly attemptId: string;
+  readonly delegationId: string;
+  readonly outboxId: string;
+  readonly externalExecutionId: string;
+  readonly expectedRunWorkFenceEpoch: number;
+  readonly expectedScopeWorkFenceEpoch: number;
+  readonly nowMs: number;
+}
+
+export interface T6bDelegationReservationInput {
+  readonly graphRunId: string;
+  readonly scopeId: string;
+  readonly nodeId: string;
+  readonly attemptId: string;
+  readonly delegationId: string;
+  readonly outboxId: string;
+  readonly externalExecutionId: string;
+  readonly expectedRunWorkFenceEpoch: number;
+  readonly expectedScopeWorkFenceEpoch: number;
+  readonly nowMs: number;
+}
+
+export function reserveDelegationExecutionIdentityT6b(
+  store: WorkflowRuntimeStore,
+  input: T6bDelegationReservationInput,
+): 'registered' | 'duplicate' | 'late_cancellation_registered' | 'late' {
+  return store.withImmediateTransaction((transaction) => {
+    const row = transaction.queryOne<{
+      delegation_id: string | null;
+      external_execution_id: string | null;
+      phase: string;
+      acceptance_state: string;
+      run_work_fence_epoch: number;
+      scope_work_fence_epoch: number;
+      attempt_row_version: number;
+      normalized_node_json: string;
+      effect_operation_id: string;
+      effect_close_request_id: string | null;
+      outbox_id: string;
+      adapter_resource_id: string;
+      adapter_resource_hash: Sha256Hash;
+      adapter_ref_id: string;
+      scope_close_request_id: string | null;
+    }>(
+      `SELECT attempt.delegation_id, attempt.external_execution_id,
+              attempt.phase, attempt.acceptance_state,
+              attempt.run_work_fence_epoch, attempt.scope_work_fence_epoch,
+              attempt.row_version AS attempt_row_version,
+              node.normalized_node_json,
+              effect.id AS effect_operation_id,
+              effect.close_request_id AS effect_close_request_id,
+              outbox.id AS outbox_id, outbox.adapter_resource_id,
+              outbox.adapter_resource_hash,
+              adapter.resource_id AS adapter_ref_id,
+              scope.close_request_id AS scope_close_request_id
+         FROM workflow_graph_node_attempts attempt
+         JOIN workflow_graph_nodes node
+           ON node.graph_run_id = attempt.graph_run_id
+          AND node.scope_id = attempt.scope_id AND node.id = attempt.node_id
+         JOIN workflow_graph_scopes scope
+           ON scope.graph_run_id = attempt.graph_run_id
+          AND scope.id = attempt.scope_id
+         JOIN workflow_graph_effect_operations effect
+           ON effect.attempt_id = attempt.id
+          AND effect.graph_run_id = attempt.graph_run_id
+         JOIN workflow_outbox outbox ON outbox.effect_operation_id = effect.id
+         JOIN workflow_registry_resources adapter
+           ON adapter.id = outbox.adapter_resource_id
+          AND adapter.content_hash = outbox.adapter_resource_hash
+        WHERE attempt.id = ? AND attempt.graph_run_id = ?
+          AND attempt.scope_id = ? AND attempt.node_id = ? AND outbox.id = ?`,
+      [
+        input.attemptId,
+        input.graphRunId,
+        input.scopeId,
+        input.nodeId,
+        input.outboxId,
+      ],
+    );
+    if (!row)
+      throw new G5RuntimeError(
+        'precondition_failed',
+        'T6b delegation reservation authority is missing',
+      );
+    if (
+      row.delegation_id !== input.delegationId ||
+      (row.external_execution_id !== null &&
+        row.external_execution_id !== input.externalExecutionId)
+    ) {
+      throw new G5RuntimeError(
+        'integrity_violation',
+        'T6b delegation reservation identity drifted',
+      );
+    }
+    if (row.phase !== 'dispatch_pending') return 'late';
+
+    const identityInserted = row.external_execution_id === null;
+    if (identityInserted) {
+      if (
+        transaction.execute(
+          `UPDATE workflow_graph_node_attempts
+              SET external_execution_id = ?, row_version = row_version + 1,
+                  updated_at_ms = ?
+            WHERE id = ? AND row_version = ? AND phase = 'dispatch_pending'
+              AND external_execution_id IS NULL AND delegation_id = ?`,
+          [
+            input.externalExecutionId,
+            input.nowMs,
+            input.attemptId,
+            row.attempt_row_version,
+            input.delegationId,
+          ],
+        ).changes !== 1
+      ) {
+        throw new G5RuntimeError(
+          'cas_conflict',
+          'T6b delegation reservation identity CAS failed',
+        );
+      }
+    }
+
+    const currentFenceMatches =
+      row.run_work_fence_epoch === input.expectedRunWorkFenceEpoch &&
+      row.scope_work_fence_epoch === input.expectedScopeWorkFenceEpoch;
+    const late = row.acceptance_state !== 'open' || !currentFenceMatches;
+    const closeRequestId =
+      row.effect_close_request_id ?? row.scope_close_request_id;
+    const node = JSON.parse(row.normalized_node_json) as JsonObject;
+    const capability = node.capability_binding as JsonObject | undefined;
+    const cancellation = capability?.cancellation as JsonObject | undefined;
+    const cancellationRequired =
+      cancellation?.type === 'cooperative' &&
+      cancellation.ack_required_before_close === true &&
+      cancellation.safe_if_cancel_lost === false;
+    let cancellationInserted = false;
+    let cancellationId: string | null = null;
+    if (late && closeRequestId && cancellationRequired) {
+      cancellationId = stableRuntimeId('provider-cancellation', {
+        graph_run_id: input.graphRunId,
+        attempt_id: input.attemptId,
+        external_execution_id: input.externalExecutionId,
+        close_request_id: closeRequestId,
+      });
+      const existing = transaction.queryOne<{
+        id: string;
+        external_execution_id: string;
+        close_request_id: string;
+      }>(
+        `SELECT id, external_execution_id, close_request_id
+           FROM workflow_provider_cancellation_requests WHERE attempt_id = ?`,
+        [input.attemptId],
+      );
+      if (existing) {
+        if (
+          existing.id !== cancellationId ||
+          existing.external_execution_id !== input.externalExecutionId ||
+          existing.close_request_id !== closeRequestId
+        ) {
+          throw new G5RuntimeError(
+            'integrity_violation',
+            'T6b late provider cancellation identity drifted',
+          );
+        }
+      } else {
+        cancellationInserted =
+          transaction.execute(
+            `INSERT INTO workflow_provider_cancellation_requests (
+               id, graph_run_id, scope_id, node_id, attempt_id,
+               effect_operation_id, outbox_id, close_request_id,
+               adapter_resource_id, adapter_resource_hash, adapter_ref_id,
+               external_execution_id, status, attempt_count,
+               next_attempt_at_ms, lease_owner, lease_token,
+               lease_expires_at_ms, last_error, requested_at_ms,
+               settled_at_ms, updated_at_ms, row_version
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', 0,
+                       ?, NULL, NULL, NULL, NULL, ?, NULL, ?, 1)`,
+            [
+              cancellationId,
+              input.graphRunId,
+              input.scopeId,
+              input.nodeId,
+              input.attemptId,
+              row.effect_operation_id,
+              row.outbox_id,
+              closeRequestId,
+              row.adapter_resource_id,
+              row.adapter_resource_hash,
+              row.adapter_ref_id,
+              input.externalExecutionId,
+              input.nowMs,
+              input.nowMs,
+              input.nowMs,
+            ],
+          ).changes === 1;
+      }
+    }
+
+    if (identityInserted || cancellationInserted) {
+      const run = transaction.queryOne<{
+        next_event_seq: number;
+        row_version: number;
+      }>(
+        'SELECT next_event_seq, row_version FROM workflow_graph_runs WHERE id = ?',
+        [input.graphRunId],
+      )!;
+      let sequence = run.next_event_seq;
+      if (identityInserted) {
+        sequence += 1;
+        insertGraphEvent(transaction, {
+          graphRunId: input.graphRunId,
+          sequence,
+          scopeId: input.scopeId,
+          nodeId: input.nodeId,
+          attemptId: input.attemptId,
+          eventType: 'attempt_phase_changed',
+          idempotencyKey: `delegation-execution-reserved:${input.attemptId}:${input.externalExecutionId}`,
+          payloadJson: {
+            phase: 'dispatch_pending',
+            external_execution_id: input.externalExecutionId,
+            identity_state: 'reserved',
+          },
+          occurredAtMs: input.nowMs,
+          createdAtMs: input.nowMs,
+        });
+      }
+      if (cancellationInserted) {
+        sequence += 1;
+        insertGraphEvent(transaction, {
+          graphRunId: input.graphRunId,
+          sequence,
+          scopeId: input.scopeId,
+          nodeId: input.nodeId,
+          attemptId: input.attemptId,
+          eventType: 'provider_cancellation_requested',
+          idempotencyKey: `provider-cancellation-requested:${cancellationId}`,
+          payloadJson: {
+            cancellation_request_id: cancellationId,
+            external_execution_id: input.externalExecutionId,
+            adapter_ref_id: row.adapter_ref_id,
+            close_request_id: closeRequestId,
+          },
+          occurredAtMs: input.nowMs,
+          createdAtMs: input.nowMs,
+        });
+      }
+      if (
+        transaction.execute(
+          `UPDATE workflow_graph_runs SET next_event_seq = ?,
+                  row_version = row_version + 1, updated_at_ms = ?
+            WHERE id = ? AND row_version = ?`,
+          [sequence, input.nowMs, input.graphRunId, run.row_version],
+        ).changes !== 1
+      ) {
+        throw new G5RuntimeError(
+          'cas_conflict',
+          'T6b delegation reservation event head CAS failed',
+        );
+      }
+    }
+    if (late)
+      return cancellationRequired && closeRequestId
+        ? 'late_cancellation_registered'
+        : 'late';
+    return identityInserted ? 'registered' : 'duplicate';
+  });
+}
+
+export function acceptDelegationStartT6bInTransaction(
+  transaction: WorkflowRuntimeWriteTransaction,
+  input: T6bDelegationStartInput,
+): 'accepted' | 'duplicate' | 'late' | 'conflict' {
+  const authority = loadMaterializedNodeAuthority(
+    transaction,
+    input.graphRunId,
+    input.scopeId,
+    input.nodeId,
+  );
+  if (authority.node.type !== 'delegation')
+    throw new G5RuntimeError(
+      'contract_invalid',
+      'T6b start acceptance requires a Plan-pinned delegation node',
+    );
+  const effectiveLimits = authority.node.effective_limits;
+  const timeoutMs =
+    effectiveLimits && typeof effectiveLimits === 'object'
+      ? Number((effectiveLimits as JsonObject).timeout_ms)
+      : Number.NaN;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0)
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'T6b delegation execution timeout is not finite',
+    );
+  const executionDeadlineAtMs = input.nowMs + timeoutMs;
+  if (!Number.isSafeInteger(executionDeadlineAtMs))
+    throw new G5RuntimeError(
+      'integrity_violation',
+      'T6b delegation execution deadline exceeds the safe integer range',
+    );
+  const attempt = transaction.queryOne<{
+    delegation_id: string | null;
+    external_execution_id: string | null;
+    phase: string;
+    acceptance_state: string;
+    execution_started_at_ms: number | null;
+    execution_deadline_at_ms: number | null;
+    run_work_fence_epoch: number;
+    scope_work_fence_epoch: number;
+    row_version: number;
+  }>(
+    `SELECT delegation_id, external_execution_id, phase, acceptance_state,
+            execution_started_at_ms, execution_deadline_at_ms,
+            run_work_fence_epoch, scope_work_fence_epoch, row_version
+       FROM workflow_graph_node_attempts
+      WHERE id = ? AND graph_run_id = ? AND scope_id = ? AND node_id = ?`,
+    [input.attemptId, input.graphRunId, input.scopeId, input.nodeId],
+  );
+  if (!attempt)
+    throw new G5RuntimeError(
+      'precondition_failed',
+      'T6b delegation start attempt is missing',
+    );
+  const dispatched = transaction.queryOne<{ external_id: string }>(
+    `SELECT outbox_attempt.external_id
+       FROM workflow_graph_effect_operations effect
+       JOIN workflow_outbox outbox ON outbox.effect_operation_id = effect.id
+       JOIN workflow_outbox_attempts outbox_attempt
+         ON outbox_attempt.outbox_id = outbox.id
+      WHERE effect.attempt_id = ? AND outbox.id = ?
+        AND outbox_attempt.result_kind = 'applied_with_receipt'
+        AND outbox_attempt.external_id IS NOT NULL
+      ORDER BY outbox_attempt.history_seq DESC LIMIT 1`,
+    [input.attemptId, input.outboxId],
+  );
+  if (
+    attempt.delegation_id !== input.delegationId ||
+    dispatched?.external_id !== input.externalExecutionId ||
+    (attempt.external_execution_id !== null &&
+      attempt.external_execution_id !== input.externalExecutionId)
+  ) {
+    return 'conflict';
+  }
+  if (
+    attempt.phase === 'running' &&
+    attempt.external_execution_id === input.externalExecutionId &&
+    attempt.execution_started_at_ms !== null &&
+    attempt.execution_deadline_at_ms !== null
+  ) {
+    return 'duplicate';
+  }
+  const currentFenceMatches =
+    authority.runWorkFenceEpoch === input.expectedRunWorkFenceEpoch &&
+    authority.scopeWorkFenceEpoch === input.expectedScopeWorkFenceEpoch &&
+    attempt.run_work_fence_epoch === input.expectedRunWorkFenceEpoch &&
+    attempt.scope_work_fence_epoch === input.expectedScopeWorkFenceEpoch;
+  if (
+    attempt.acceptance_state !== 'open' ||
+    attempt.phase !== 'dispatch_pending' ||
+    !currentFenceMatches
+  ) {
+    return 'late';
+  }
+  if (
+    transaction.execute(
+      `UPDATE workflow_graph_node_attempts
+          SET external_execution_id = ?, phase = 'running',
+              execution_started_at_ms = ?, execution_deadline_at_ms = ?,
+              row_version = row_version + 1, updated_at_ms = ?
+        WHERE id = ? AND row_version = ? AND phase = 'dispatch_pending'
+          AND acceptance_state = 'open' AND delegation_id = ?
+          AND (external_execution_id IS NULL OR external_execution_id = ?)
+          AND run_work_fence_epoch = ? AND scope_work_fence_epoch = ?`,
+      [
+        input.externalExecutionId,
+        input.nowMs,
+        executionDeadlineAtMs,
+        input.nowMs,
+        input.attemptId,
+        attempt.row_version,
+        input.delegationId,
+        input.externalExecutionId,
+        input.expectedRunWorkFenceEpoch,
+        input.expectedScopeWorkFenceEpoch,
+      ],
+    ).changes !== 1
+  ) {
+    throw new G5RuntimeError(
+      'cas_conflict',
+      'T6b delegation start acceptance CAS failed',
+    );
+  }
+  const run = transaction.queryOne<{
+    next_event_seq: number;
+    row_version: number;
+  }>(
+    'SELECT next_event_seq, row_version FROM workflow_graph_runs WHERE id = ?',
+    [input.graphRunId],
+  )!;
+  const sequence = run.next_event_seq + 1;
+  insertGraphEvent(transaction, {
+    graphRunId: input.graphRunId,
+    sequence,
+    scopeId: input.scopeId,
+    nodeId: input.nodeId,
+    attemptId: input.attemptId,
+    eventType: 'attempt_phase_changed',
+    idempotencyKey: `delegation-start:${input.attemptId}:${input.externalExecutionId}`,
+    payloadJson: {
+      phase: 'running',
+      external_execution_id: input.externalExecutionId,
+      execution_deadline_at_ms: executionDeadlineAtMs,
+    },
+    occurredAtMs: input.nowMs,
+    createdAtMs: input.nowMs,
+  });
+  if (
+    transaction.execute(
+      `UPDATE workflow_graph_runs
+          SET next_event_seq = ?, row_version = row_version + 1,
+              updated_at_ms = ?
+        WHERE id = ? AND row_version = ?`,
+      [sequence, input.nowMs, input.graphRunId, run.row_version],
+    ).changes !== 1
+  ) {
+    throw new G5RuntimeError(
+      'cas_conflict',
+      'T6b delegation start event head CAS failed',
+    );
+  }
+  return 'accepted';
+}
+
+export function acceptDelegationStartT6b(
+  store: WorkflowRuntimeStore,
+  input: T6bDelegationStartInput,
+): 'accepted' | 'duplicate' | 'late' | 'conflict' {
+  return store.withImmediateTransaction((transaction) =>
+    acceptDelegationStartT6bInTransaction(transaction, input),
+  );
+}
+
 export interface T6bCallbackInput {
   readonly graphRunId: string;
   readonly scopeId: string;
@@ -563,7 +1007,9 @@ export function acceptDelegationCallbackT6b(
       );
       const identityMatches =
         attempt.delegation_id === input.delegationId &&
-        dispatched?.external_id === input.externalExecutionId;
+        dispatched?.external_id === input.externalExecutionId &&
+        (attempt.external_execution_id === null ||
+          attempt.external_execution_id === input.externalExecutionId);
       const currentFenceMatches =
         authority.runWorkFenceEpoch === input.expectedRunWorkFenceEpoch &&
         authority.scopeWorkFenceEpoch === input.expectedScopeWorkFenceEpoch &&

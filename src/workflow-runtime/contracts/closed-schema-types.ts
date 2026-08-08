@@ -205,6 +205,11 @@ export type WorkflowDefinitionState = WorkflowDefinitionStateBase &
         error_code: string;
         error_binding: WorkflowValueBinding | null;
       }
+    | {
+        type: 'terminal';
+        terminal_kind: 'cancelled';
+        cancel_reason: string;
+      }
   );
 
 export interface WorkflowDefinitionDocument {

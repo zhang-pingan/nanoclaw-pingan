@@ -745,8 +745,8 @@ function augmentCompilerSnapshot(input: JsonObject): {
     cancellation: {
       type: 'cooperative',
       cancel_action_ref: refs.executor,
-      ack_required_before_close: false,
-      safe_if_cancel_lost: true,
+      ack_required_before_close: true,
+      safe_if_cancel_lost: false,
     },
     dependency_closure_hash: dependencyClosureHash,
     outbox_effect: {
@@ -872,8 +872,8 @@ export function ensureTaskWorkspaceCore(
       },
       cancelled: {
         type: 'terminal',
-        terminal_kind: 'errored',
-        error_code: 'ad_hoc_workflow_cancelled',
+        terminal_kind: 'cancelled',
+        cancel_reason: 'ad_hoc_workflow_cancelled',
       },
     },
     compiled_plan_pin: {

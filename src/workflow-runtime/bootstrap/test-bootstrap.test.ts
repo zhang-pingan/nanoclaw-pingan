@@ -93,7 +93,7 @@ function expectFakeCode(run: () => unknown, code: G4FakeAdapterError['code']) {
 }
 
 describe('G4 Test Bootstrap', () => {
-  it('opens only a fresh Schema 11 real-file Store and emits a verifiable isolation receipt', () => {
+  it('opens only a fresh current-schema real-file Store and emits a verifiable isolation receipt', () => {
     const instance = track(createG4TestBootstrap(options('fresh')));
     expect(fs.realpathSync(instance.dataRoot)).toBe(instance.dataRoot);
     expect(instance.databasePath).toBe(
@@ -105,13 +105,13 @@ describe('G4 Test Bootstrap', () => {
         'SELECT user_version AS version FROM pragma_user_version',
         [],
       ),
-    ).toEqual({ version: 11 });
+    ).toEqual({ version: 16 });
 
     const tables = instance.store.queryAll<{ name: string }>(
       "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
       [],
     );
-    expect(tables).toHaveLength(88);
+    expect(tables).toHaveLength(93);
     const expectedRows: Record<string, number> = {
       runtime_capacity_admin_commands: 1,
       runtime_capacity_change_events: 1,

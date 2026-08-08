@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiled-scope-plan-schema:1\n",
-  "hash": "sha256:7e0c1c995359246aa8e534973c99ae114f3431078d35ebbfaae84634c5fa8b1e",
+  "hash": "sha256:b543f0c35be7f8d97e666d0c6ba0fb759cb4c78835b5b5c2919a578f02a39630",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-graph-scope-plan/2",
@@ -3677,6 +3677,30 @@
               },
               "safe_if_cancel_lost": {
                 "const": true
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "cancel_action_ref",
+              "ack_required_before_close",
+              "safe_if_cancel_lost"
+            ],
+            "properties": {
+              "type": {
+                "const": "cooperative"
+              },
+              "cancel_action_ref": {
+                "$ref": "#/$defs/versioned_ref"
+              },
+              "ack_required_before_close": {
+                "const": true
+              },
+              "safe_if_cancel_lost": {
+                "const": false
               }
             }
           },
