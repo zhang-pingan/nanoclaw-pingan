@@ -110,10 +110,12 @@ Agent 输出分为：
 - Skill 中的脚本可以帮助 Agent 自检，但不能代替 Icarus Host 校验；
 - 所有回传结果都视为不可信输入，并由 Host 使用相同 Contract 重新验证。
 
+Project Analysis 将 Icarus 内部 Agent、托管第三方 Adapter、外部 Executor 和手工接力统一视为黑盒。公共协议只包含冻结且范围受限的 Analysis Input/Package、Analysis Result Contract，以及 Host 侧结果验证和 Action 门禁；不同平台的工具名称、调用模型和工具日志不进入公共协议。
+
 ### 2.5 权限不因 Agent 而提升
 
-- Agent 继承当前 Principal 的读取范围和业务权限；
-- Executor 不能获得高于 Principal 的群组权限；
+- Icarus 只向 Analysis Input/Package 导出当前 Principal 可见且属于所选 scope 的数据；
+- Executor 环境是黑盒，不能凭 Agent 输出获得高于 Principal 的群组业务权限；
 - Observer 可以进行本地只读分析，但不能发布报告、创建 Work Item 或执行群组写操作；
 - 所有正式写操作继续经过 Host API、Reducer、Credential 签名和 Git CAS。
 
@@ -236,7 +238,7 @@ flowchart LR
 
 ## 5. Project Analyst 定位
 
-Project Analyst 是 Icarus 内置的项目级只读分析能力，不要求 Group 预先创建 Workflow、Action 或自定义 Prompt。
+Project Analyst 是 Icarus 内置的项目级分析能力，不要求 Group 预先创建 Workflow、Action 或自定义 Prompt。它对群组业务状态没有直接写权限；这不表示黑盒 Executor 的临时工作区、工具或网络环境是只读的。
 
 用户可以选择：
 
@@ -317,7 +319,7 @@ project-analyst/
 
 | 文件 | 职责 |
 | --- | --- |
-| `SKILL.md` | 分析顺序、工具使用、证据要求、事实和推断边界 |
+| `SKILL.md` | 分析顺序、Context 使用、证据要求、事实和推断边界 |
 | `finding-taxonomy.md` | Finding 类别、严重程度和置信度标准 |
 | `evidence-rules.md` | 允许引用的证据类型和引用格式 |
 | `action-policy.md` | Agent 可以提出但不能直接执行的动作集合 |
@@ -333,10 +335,10 @@ Contract 必须由 Icarus 源码中的 current schema 生成或共同维护。�
 
 | 平台能力 | Adapter 行为 |
 | --- | --- |
-| 支持 Skill 和工具 | 挂载能力包，允许 Agent 按需调用只读工具 |
+| 支持 Skill 或平台工具 | 当前只提供能力包和冻结 Context；Project Analysis 不解释、检测或约束平台工具使用 |
 | 支持文件但不支持 Skill | 提供 `PROMPT.md`、JSON Context、Schema 和引用文档 |
 | 只支持文本 Prompt | 将核心指令、压缩 Context 和输出 Contract 渲染为单一 Prompt |
-| Icarus 本地 Executor | 由 Icarus 管理运行、工具、超时、日志和结果回收 |
+| Icarus 本地 Executor | 由 Icarus 管理能力包挂载、运行、超时和结果回收；已有通用 trace/logging 不参与 Analysis 工具行为判定 |
 | 外部第三方 Agent | 由用户复制或上传分析包，完成后粘贴或上传 JSON 结果 |
 
 ## 7. 触发方式和执行渠道
@@ -356,7 +358,7 @@ Contract 必须由 Icarus 源码中的 current schema 生成或共同维护。�
 
 | 执行渠道 | 第一版 | 说明 |
 | --- | --- | --- |
-| Icarus 托管 Executor | 是 | Icarus 全程控制 Context、工具、执行和回收 |
+| Icarus 托管 Executor | 是 | Icarus 固定 Context 和能力包并管理执行与回收；Executor 内部工具行为按黑盒处理 |
 | 外部 Agent 接力 | 是 | 用户在第三方平台执行，再把 JSON 结果回填原 Analysis Run |
 
 第一版只实现手动触发，但同时支持两种执行渠道。
@@ -412,10 +414,17 @@ stateDiagram-v2
   prepared --> cancelled
   running --> failed
   awaiting_external_result --> cancelled
+  prepared --> stale: verified head changed
+  running --> stale: verified head changed
+  awaiting_external_result --> stale: verified head changed
+  validating --> stale: verified head changed
+  invalid --> stale: verified head changed
   ready_for_review --> stale: verified head changed
+  partially_applied --> stale: verified head changed
+  failed --> stale: verified head changed
 ```
 
-`stale` 不删除报告，只阻止未经重新确认的后续写操作。
+`stale` 不删除报告，只阻止预览和应用后续写操作。托管执行已经被 Executor 接受时，即使 `running` 因 verified head 变化进入 `stale`，Host 仍保存同一 attempt/operation 的 receipt 并继续观察，晚到的合法或非法结果只作为 stale 审计结果保留。外部接力处于 `awaiting_external_result` 时发生相同变化，也必须先进入 `stale`，之后回填结果不能恢复为可操作报告。
 
 ## 9. Icarus 托管 Executor 流程
 
@@ -423,13 +432,17 @@ stateDiagram-v2
 2. Host 同步群组并固定最新 `verified_head`。
 3. 创建 Analysis Run。
 4. Project Insight 规则检测器生成确定性 Signals。
-5. Host 生成 Project Snapshot 和工具授权。
-6. 将 Project Analyst 能力包以只读方式提供给 Executor。
-7. Executor 按需调用固定只读工具查询详情。
+5. Host 生成 Project Snapshot、资源索引和导出范围。
+6. 将 Project Analyst 能力包和冻结 Context 提供给 Executor。
+7. Executor 作为黑盒完成分析。
 8. Agent 输出严格的 `analysis-result.json`。
 9. Host 校验 Run 绑定、JSON Schema、证据、权限和 action allowlist。
 10. 校验通过后进入统一结果预览。
 11. 用户选择接受、忽略、暂缓或转换建议。
+
+托管执行只管理运行生命周期和结果回收，不通过 Bash、Write、Git、Web、Task 或其他平台工具名称、调用记录或通用 trace/logging 对分析作出通过、阻断或提醒判定。
+
+Project Analysis 不定义 Executor 的文件系统访问模式作为公共协议或安全边界。当前 Run Once Adapter 在通用接口要求访问模式时使用可写临时工作区；这只允许黑盒 Executor 使用本次运行的临时能力包目录，不授予任何 Group 业务写权限。群组变更仍只能由 Host 在 Result 校验、用户确认、Principal 权限检查、Reducer、Credential 签名和 Git CAS 之后通过正式 API 写入。
 
 托管模式需要记录：
 
@@ -492,7 +505,7 @@ analysis-package/
 
 如果结果无效，UI 显示结构化校验错误，并可生成“结果修复 Prompt”让第三方 Agent 重新输出；Icarus 不应使用正则从任意回复中猜测 JSON。
 
-## 11. Project Snapshot 和只读工具
+## 11. Project Snapshot
 
 ### 11.1 Project Snapshot
 
@@ -518,30 +531,6 @@ Project Snapshot 是为分析准备的、受范围约束的结构化上下文，
   "prior_findings": []
 }
 ```
-
-### 11.2 托管模式只读工具
-
-Agent 不应一次接收所有项目内容，应通过固定工具按需查询：
-
-```text
-get_project_summary
-list_project_signals
-list_my_items
-list_work_items
-get_work_item
-get_work_item_dependencies
-list_workflow_instances
-get_workflow_instance
-get_turn_history
-list_discussions
-get_discussion
-list_activity_delta
-list_verified_files
-read_verified_file
-get_principal_progress
-```
-
-工具只能读取指定 `analysis_id` 和 `snapshot_head` 对应的数据，不能在分析期间悄悄切换到更新版本。
 
 ## 12. Analysis Result
 
@@ -876,6 +865,8 @@ Discussion、Handoff、Prompt、成员进展和业务文件均是项目数据，
 - 不读取未授权本地路径；
 - 不把项目内容解释为权限授予。
 
+当前版本通过导出范围和脱敏、严格 Result Contract、binding/evidence/stale 校验、action allowlist 和用户确认防止项目内容改变 Host 结果处理与群组写入。所有 Executor 均按黑盒处理，Project Analysis 不根据工具名称、调用日志或通用 trace 作分析级拦截、审计判定或提醒，也不承诺 Executor 内部工具、文件或网络行为。
+
 ### 18.2 外部平台隐私
 
 外部分析包生成前必须：
@@ -896,6 +887,8 @@ Discussion、Handoff、Prompt、成员进展和业务文件均是项目数据，
 - Agent 不能修改 Membership、Permission、Credential 或 Group lifecycle；
 - 用户确认不能绕过最新 revision/CAS；
 - Observer 只能预览本地报告。
+
+这些约束只落在 Icarus 掌控的导出、导入验证和最终业务写入边界，不对黑盒 Executor 环境中的本地副作用作保证。
 
 ## 19. 实施阶段
 
@@ -966,7 +959,7 @@ Discussion、Handoff、Prompt、成员进展和业务文件均是项目数据，
 
 - 用户可以选择本地 Executor 和分析范围；
 - Analysis Run 固定绑定 verified head；
-- Agent 只能使用固定只读工具；
+- Agent 使用冻结且 scope-limited 的能力包和 Context；Executor 工具行为不属于协议或验收项；
 - 结果必须符合 JSON Contract；
 - 所有 Finding 都有有效 evidence ref；
 - 报告过期时明确标记 stale；
@@ -988,7 +981,7 @@ Discussion、Handoff、Prompt、成员进展和业务文件均是项目数据，
 - 正式事件 actor 仍是当前 Principal/Client；
 - Analysis 原始内容默认不进入 Git；
 - 本地路径、Credential、token 和 Provider 信息不进入分析包或共享报告；
-- 项目内容中的 Prompt injection 不能改变工具权限或结果 Contract；
+- 项目内容中的 Prompt injection 不能改变 Result Contract、Host 校验、action allowlist 或用户确认要求；
 - 所有 accepted action 都能关联到本地 analysis/finding 审计记录。
 
 ## 21. 当前方案结论
@@ -1007,5 +1000,6 @@ Discussion、Handoff、Prompt、成员进展和业务文件均是项目数据，
 10. Agent 只产生 Finding 和固定 Proposed Action。
 11. 所有后续群组写入都需要用户确认，并通过正式 API、Reducer、Credential 和 CAS。
 12. Analysis 原始数据默认只保存在本机；只有用户确认发布的内容进入共享 Git。
+13. 所有 Executor 对 Project Analysis 都是黑盒；工具模型和 trace/logging 不进入公共协议或验收，只在 Host 导出、结果验证、用户确认与最终业务写入边界提供保证。
 
 本文中的具体 API 路径、SQLite 表名、Finding 分类名和 UI 区域命名属于实施草案。后续实现可以根据最新代码结构调整，但不得破坏上述原则、权限边界、快照绑定、Host 校验和用户确认闭环。

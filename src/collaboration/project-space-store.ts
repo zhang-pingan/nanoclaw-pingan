@@ -33,10 +33,19 @@ import type {
   CollaborationProjectionV3,
   CollaborationAggregateHeadV3,
 } from './protocol/v3-reducer.js';
+import type {
+  CollaborationAnalysisInput,
+  CollaborationAnalysisResult,
+  CollaborationAnalysisRunStatus,
+  CollaborationAnalysisScope,
+  CollaborationFindingDecision,
+  CollaborationProposedAction,
+} from './analysis-contracts.js';
+import { assertCollaborationAnalysisTransition } from './analysis-contracts.js';
 
-export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 7;
+export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 9;
 export const COLLABORATION_PROJECT_SPACE_STORE_FORMAT =
-  'icarus.collaboration-local-store/7';
+  'icarus.collaboration-local-store/9';
 
 export function deterministicCollaborationPollDelay(
   groupId: string,
@@ -71,7 +80,7 @@ export class CollaborationProjectSpaceStoreError extends Error {
   }
 }
 
-const SCHEMA_V7 = `
+const SCHEMA_V9 = `
 CREATE TABLE collaboration_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -376,12 +385,17 @@ CREATE TABLE collaboration_notifications (
   resource_type TEXT NOT NULL,
   resource_id TEXT NOT NULL,
   reason TEXT NOT NULL,
-  dedupe_key TEXT NOT NULL UNIQUE,
+  dedupe_key TEXT NOT NULL,
+  severity TEXT NOT NULL CHECK (severity IN ('critical', 'high', 'medium', 'low', 'info')),
   reminder_ordinal INTEGER NOT NULL,
   due_at_ms INTEGER,
   first_observed_at_ms INTEGER NOT NULL,
   delivered_at_ms INTEGER,
-  payload_json TEXT NOT NULL
+  read_at_ms INTEGER,
+  handled_at_ms INTEGER,
+  updated_at_ms INTEGER NOT NULL,
+  payload_json TEXT NOT NULL,
+  UNIQUE (group_id, recipient_principal_id, recipient_client_id, dedupe_key)
 );
 CREATE TABLE collaboration_timeout_schedules (
   schedule_id TEXT PRIMARY KEY,
@@ -427,6 +441,109 @@ CREATE TABLE collaboration_local_audit_evidence (
   observed_at_ms INTEGER NOT NULL,
   evidence_json TEXT NOT NULL
 );
+CREATE TABLE collaboration_project_views (
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
+  viewer_key TEXT NOT NULL,
+  last_activity_event_id TEXT,
+  viewed_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (group_id, viewer_key)
+);
+CREATE TABLE collaboration_analysis_runs (
+  analysis_id TEXT PRIMARY KEY,
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
+  principal_id TEXT,
+  client_id TEXT,
+  subscription_mode TEXT NOT NULL CHECK (subscription_mode IN ('observer', 'member')),
+  snapshot_head TEXT NOT NULL,
+  scope_json TEXT NOT NULL,
+  trigger_kind TEXT NOT NULL CHECK (trigger_kind = 'manual'),
+  execution_channel TEXT NOT NULL CHECK (execution_channel IN ('managed_executor', 'external_agent')),
+  executor_id TEXT,
+  executor_kind TEXT,
+  contract_version INTEGER NOT NULL,
+  capability_version INTEGER NOT NULL,
+  context_hash TEXT NOT NULL,
+  prompt_hash TEXT NOT NULL,
+  challenge TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN (
+    'prepared', 'running', 'awaiting_external_result', 'validating',
+    'ready_for_review', 'invalid', 'partially_applied', 'completed',
+    'cancelled', 'failed', 'stale'
+  )),
+  stale_from_status TEXT,
+  attempt INTEGER NOT NULL DEFAULT 0,
+  operation_key TEXT,
+  execution_ref TEXT,
+  provider_metadata_json TEXT,
+  validation_errors_json TEXT NOT NULL DEFAULT '[]',
+  error TEXT,
+  created_at_ms INTEGER NOT NULL,
+  started_at_ms INTEGER,
+  finished_at_ms INTEGER,
+  updated_at_ms INTEGER NOT NULL,
+  UNIQUE (group_id, operation_key)
+);
+CREATE TABLE collaboration_analysis_contexts (
+  analysis_id TEXT PRIMARY KEY REFERENCES collaboration_analysis_runs(analysis_id) ON DELETE CASCADE,
+  context_json TEXT NOT NULL,
+  resource_catalog_json TEXT NOT NULL,
+  resource_index_json TEXT NOT NULL,
+  export_scope_json TEXT NOT NULL,
+  selected_file_ids_json TEXT NOT NULL,
+  prompt_markdown TEXT NOT NULL,
+  context_hash TEXT NOT NULL,
+  prompt_hash TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL
+);
+CREATE TABLE collaboration_analysis_results (
+  result_id TEXT PRIMARY KEY,
+  analysis_id TEXT NOT NULL REFERENCES collaboration_analysis_runs(analysis_id) ON DELETE CASCADE,
+  attempt INTEGER NOT NULL,
+  raw_json TEXT NOT NULL,
+  raw_hash TEXT NOT NULL,
+  normalized_json TEXT,
+  validation_errors_json TEXT NOT NULL,
+  provider_metadata_json TEXT,
+  received_at_ms INTEGER NOT NULL,
+  UNIQUE (analysis_id, attempt)
+);
+CREATE TABLE collaboration_analysis_findings (
+  analysis_id TEXT NOT NULL REFERENCES collaboration_analysis_runs(analysis_id) ON DELETE CASCADE,
+  finding_id TEXT NOT NULL,
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
+  dedupe_key TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  category TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  lifecycle TEXT NOT NULL CHECK (lifecycle IN ('new', 'ongoing', 'worsened', 'improved', 'resolved', 'dismissed')),
+  finding_json TEXT NOT NULL,
+  decision TEXT CHECK (decision IN ('accepted', 'deferred', 'ignored', 'false_positive')),
+  decision_reason TEXT,
+  decided_at_ms INTEGER,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (analysis_id, finding_id)
+);
+CREATE TABLE collaboration_analysis_action_applications (
+  application_id TEXT PRIMARY KEY,
+  operation_key TEXT NOT NULL UNIQUE,
+  analysis_id TEXT NOT NULL REFERENCES collaboration_analysis_runs(analysis_id) ON DELETE CASCADE,
+  finding_id TEXT NOT NULL,
+  action_ordinal INTEGER,
+  action_json TEXT NOT NULL,
+  preview_json TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('previewed', 'applying', 'applied', 'failed')),
+  snapshot_head TEXT NOT NULL,
+  confirmation_token_hash TEXT NOT NULL,
+  confirmed_at_ms INTEGER,
+  resulting_event_ids_json TEXT NOT NULL DEFAULT '[]',
+  error TEXT,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  FOREIGN KEY (analysis_id, finding_id)
+    REFERENCES collaboration_analysis_findings(analysis_id, finding_id) ON DELETE CASCADE
+);
 CREATE TABLE collaboration_process_locks (
   group_id TEXT PRIMARY KEY REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
   owner_id TEXT NOT NULL,
@@ -446,13 +563,21 @@ CREATE INDEX collaboration_instance_status_idx
 CREATE INDEX collaboration_turn_state_idx
   ON collaboration_turns(group_id, state, assignee_principal_id);
 CREATE INDEX collaboration_notification_pending_idx
-  ON collaboration_notifications(recipient_principal_id, recipient_client_id, delivered_at_ms, first_observed_at_ms);
+  ON collaboration_notifications(recipient_principal_id, recipient_client_id, handled_at_ms, read_at_ms, first_observed_at_ms);
 CREATE INDEX collaboration_timeout_due_idx
   ON collaboration_timeout_schedules(active, next_reminder_at_ms);
 CREATE INDEX collaboration_sync_group_idx
   ON collaboration_sync_attempts(group_id, started_at_ms DESC);
 CREATE INDEX collaboration_incident_group_idx
   ON collaboration_integrity_incidents(group_id, created_at_ms DESC);
+CREATE INDEX collaboration_analysis_run_group_idx
+  ON collaboration_analysis_runs(group_id, created_at_ms DESC);
+CREATE INDEX collaboration_analysis_run_status_idx
+  ON collaboration_analysis_runs(status, updated_at_ms);
+CREATE INDEX collaboration_analysis_result_history_idx
+  ON collaboration_analysis_results(analysis_id, attempt DESC, received_at_ms DESC);
+CREATE INDEX collaboration_analysis_finding_dedupe_idx
+  ON collaboration_analysis_findings(group_id, dedupe_key, created_at_ms DESC);
 `;
 
 const REQUIRED_TABLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
@@ -557,6 +682,34 @@ const REQUIRED_TABLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   collaboration_sync_attempts: ['id', 'group_id', 'outcome'],
   collaboration_integrity_incidents: ['incident_id', 'group_id', 'code'],
   collaboration_local_audit_evidence: ['evidence_id', 'group_id'],
+  collaboration_project_views: ['group_id', 'viewer_key', 'viewed_at_ms'],
+  collaboration_analysis_runs: [
+    'analysis_id',
+    'group_id',
+    'snapshot_head',
+    'context_hash',
+    'prompt_hash',
+    'challenge',
+    'status',
+    'stale_from_status',
+  ],
+  collaboration_analysis_contexts: [
+    'analysis_id',
+    'context_json',
+    'resource_catalog_json',
+  ],
+  collaboration_analysis_results: ['result_id', 'analysis_id', 'raw_hash'],
+  collaboration_analysis_findings: [
+    'analysis_id',
+    'finding_id',
+    'dedupe_key',
+    'lifecycle',
+  ],
+  collaboration_analysis_action_applications: [
+    'application_id',
+    'operation_key',
+    'analysis_id',
+  ],
   collaboration_process_locks: ['group_id', 'owner_id'],
 };
 
@@ -598,7 +751,7 @@ function initialize(database: Database.Database): void {
     );
   if (version === 0)
     database.transaction(() => {
-      database.exec(SCHEMA_V7);
+      database.exec(SCHEMA_V9);
       database
         .prepare('INSERT INTO collaboration_meta (key, value) VALUES (?, ?)')
         .run('format', COLLABORATION_PROJECT_SPACE_STORE_FORMAT);
@@ -709,11 +862,116 @@ export interface CollaborationNotificationV3 {
   readonly resourceId: string;
   readonly reason: string;
   readonly dedupeKey: string;
+  readonly severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
   readonly reminderOrdinal: number;
   readonly dueAtMs: number | null;
   readonly firstObservedAtMs: number;
   readonly deliveredAtMs: number | null;
+  readonly readAtMs: number | null;
+  readonly handledAtMs: number | null;
+  readonly updatedAtMs: number;
   readonly payload: Record<string, unknown>;
+}
+
+export interface CollaborationAnalysisRunRecord {
+  readonly analysisId: string;
+  readonly groupId: string;
+  readonly principalId: string | null;
+  readonly clientId: string | null;
+  readonly subscriptionMode: 'observer' | 'member';
+  readonly snapshotHead: string;
+  readonly scope: CollaborationAnalysisScope;
+  readonly trigger: 'manual';
+  readonly executionChannel: 'managed_executor' | 'external_agent';
+  readonly executorId: string | null;
+  readonly executorKind: string | null;
+  readonly contractVersion: 1;
+  readonly capabilityVersion: 1;
+  readonly contextHash: string;
+  readonly promptHash: string;
+  readonly challenge: string;
+  readonly status: CollaborationAnalysisRunStatus;
+  readonly staleFromStatus: CollaborationAnalysisRunStatus | null;
+  readonly attempt: number;
+  readonly operationKey: string | null;
+  readonly executionRef: string | null;
+  readonly providerMetadata: Record<string, unknown> | null;
+  readonly validationErrors: readonly CollaborationAnalysisValidationError[];
+  readonly error: string | null;
+  readonly createdAtMs: number;
+  readonly startedAtMs: number | null;
+  readonly finishedAtMs: number | null;
+  readonly updatedAtMs: number;
+}
+
+export interface CollaborationAnalysisValidationError {
+  readonly code: string;
+  readonly path: string;
+  readonly message: string;
+  readonly findingId?: string;
+}
+
+export interface CollaborationAnalysisContextRecord {
+  readonly analysisId: string;
+  readonly context: CollaborationAnalysisInput;
+  readonly resourceCatalog: Record<string, unknown>;
+  readonly resourceIndex: readonly string[];
+  readonly exportScope: Record<string, unknown>;
+  readonly selectedFileIds: readonly string[];
+  readonly promptMarkdown: string;
+  readonly contextHash: string;
+  readonly promptHash: string;
+  readonly createdAtMs: number;
+}
+
+export interface CollaborationAnalysisResultRecord {
+  readonly resultId: string;
+  readonly analysisId: string;
+  readonly attempt: number;
+  readonly rawJson: string;
+  readonly rawHash: string;
+  readonly normalized: CollaborationAnalysisResult | null;
+  readonly validationErrors: readonly CollaborationAnalysisValidationError[];
+  readonly providerMetadata: Record<string, unknown> | null;
+  readonly receivedAtMs: number;
+}
+
+export interface CollaborationAnalysisFindingRecord {
+  readonly analysisId: string;
+  readonly findingId: string;
+  readonly groupId: string;
+  readonly dedupeKey: string;
+  readonly lifecycle:
+    | 'new'
+    | 'ongoing'
+    | 'worsened'
+    | 'improved'
+    | 'resolved'
+    | 'dismissed';
+  readonly finding: CollaborationAnalysisResult['findings'][number];
+  readonly decision: CollaborationFindingDecision | null;
+  readonly decisionReason: string | null;
+  readonly decidedAtMs: number | null;
+  readonly createdAtMs: number;
+  readonly updatedAtMs: number;
+}
+
+export interface CollaborationAnalysisActionApplicationRecord {
+  readonly applicationId: string;
+  readonly operationKey: string;
+  readonly analysisId: string;
+  readonly findingId: string;
+  readonly actionOrdinal: number | null;
+  readonly action: CollaborationProposedAction;
+  readonly preview: Record<string, unknown>;
+  readonly state: 'previewed' | 'applying' | 'applied' | 'failed';
+  readonly snapshotHead: string;
+  readonly confirmationTokenHash: string;
+  readonly confirmedAtMs: number | null;
+  readonly resultingEventIds: readonly string[];
+  readonly error: string | null;
+  readonly createdAtMs: number;
+  readonly updatedAtMs: number;
 }
 
 export interface CollaborationActionExecutionV3 {
@@ -1186,6 +1444,17 @@ export class CollaborationProjectSpaceStore {
         input.verifiedHead,
         nowMs,
       );
+      this.database
+        .prepare(
+          `UPDATE collaboration_analysis_runs
+              SET stale_from_status = status,
+                  status = 'stale',
+                  finished_at_ms = COALESCE(finished_at_ms, ?),
+                  updated_at_ms = ?
+            WHERE group_id = ? AND snapshot_head <> ?
+              AND status NOT IN ('cancelled', 'stale')`,
+        )
+        .run(nowMs, nowMs, input.groupId, input.verifiedHead);
       this.database
         .prepare(
           `UPDATE collaboration_integrity_incidents SET resolved_at_ms = ?
@@ -2366,6 +2635,7 @@ export class CollaborationProjectSpaceStore {
     readonly resourceId: string;
     readonly reason: string;
     readonly dedupeKey: string;
+    readonly severity?: 'critical' | 'high' | 'medium' | 'low' | 'info';
     readonly reminderOrdinal?: number;
     readonly dueAtMs?: number | null;
     readonly payload?: Record<string, unknown>;
@@ -2377,14 +2647,42 @@ export class CollaborationProjectSpaceStore {
     this.assertOpen();
     const notificationId = `notification_${crypto.randomUUID()}`;
     const nowMs = input.nowMs ?? Date.now();
+    const candidate: CollaborationNotificationV3 = {
+      notificationId,
+      groupId: input.groupId,
+      recipientPrincipalId: input.recipientPrincipalId,
+      recipientClientId: input.recipientClientId,
+      kind: input.kind,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId,
+      reason: input.reason,
+      dedupeKey: input.dedupeKey,
+      severity: input.severity ?? 'medium',
+      reminderOrdinal: input.reminderOrdinal ?? 0,
+      dueAtMs: input.dueAtMs ?? null,
+      firstObservedAtMs: nowMs,
+      deliveredAtMs: null,
+      readAtMs: null,
+      handledAtMs: null,
+      updatedAtMs: nowMs,
+      payload: input.payload ?? {},
+    };
+    const subscription = this.database
+      .prepare(
+        `SELECT notifications_enabled FROM collaboration_subscriptions
+          WHERE group_id = ?`,
+      )
+      .get(input.groupId) as { notifications_enabled?: unknown } | undefined;
+    if (Number(subscription?.notifications_enabled) !== 1)
+      return { notification: candidate, enqueued: false };
     const result = this.database
       .prepare(
         `INSERT OR IGNORE INTO collaboration_notifications (
            notification_id, group_id, recipient_principal_id,
            recipient_client_id, kind, resource_type, resource_id, reason,
-           dedupe_key, reminder_ordinal, due_at_ms, first_observed_at_ms,
-           payload_json
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           dedupe_key, severity, reminder_ordinal, due_at_ms,
+           first_observed_at_ms, updated_at_ms, payload_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         notificationId,
@@ -2396,14 +2694,25 @@ export class CollaborationProjectSpaceStore {
         input.resourceId,
         input.reason,
         input.dedupeKey,
-        input.reminderOrdinal ?? 0,
-        input.dueAtMs ?? null,
+        candidate.severity,
+        candidate.reminderOrdinal,
+        candidate.dueAtMs,
+        nowMs,
         nowMs,
         JSON.stringify(input.payload ?? {}),
       );
     const row = this.database
-      .prepare('SELECT * FROM collaboration_notifications WHERE dedupe_key = ?')
-      .get(input.dedupeKey) as Record<string, unknown>;
+      .prepare(
+        `SELECT * FROM collaboration_notifications
+          WHERE group_id = ? AND recipient_principal_id = ?
+            AND recipient_client_id = ? AND dedupe_key = ?`,
+      )
+      .get(
+        input.groupId,
+        input.recipientPrincipalId,
+        input.recipientClientId,
+        input.dedupeKey,
+      ) as Record<string, unknown>;
     return {
       notification: this.notificationFromRow(row),
       enqueued: result.changes === 1,
@@ -2422,6 +2731,7 @@ export class CollaborationProjectSpaceStore {
             `SELECT * FROM collaboration_notifications
               WHERE recipient_principal_id = ? AND recipient_client_id = ?
                 AND group_id = ? AND delivered_at_ms IS NULL
+                AND handled_at_ms IS NULL
            ORDER BY first_observed_at_ms`,
           )
           .all(input.principalId, input.clientId, input.groupId)
@@ -2429,7 +2739,7 @@ export class CollaborationProjectSpaceStore {
           .prepare(
             `SELECT * FROM collaboration_notifications
               WHERE recipient_principal_id = ? AND recipient_client_id = ?
-                AND delivered_at_ms IS NULL
+                AND delivered_at_ms IS NULL AND handled_at_ms IS NULL
            ORDER BY first_observed_at_ms`,
           )
           .all(input.principalId, input.clientId);
@@ -2448,12 +2758,868 @@ export class CollaborationProjectSpaceStore {
     return (
       this.database
         .prepare(
-          `UPDATE collaboration_notifications SET delivered_at_ms = ?
+          `UPDATE collaboration_notifications
+              SET delivered_at_ms = ?, updated_at_ms = ?
             WHERE notification_id = ? AND recipient_principal_id = ?
               AND recipient_client_id = ? AND delivered_at_ms IS NULL`,
         )
-        .run(nowMs, notificationId, principalId, clientId).changes === 1
+        .run(nowMs, nowMs, notificationId, principalId, clientId).changes === 1
     );
+  }
+
+  listNotifications(input: {
+    readonly principalId: string;
+    readonly clientId: string;
+    readonly groupId: string;
+    readonly includeHandled?: boolean;
+    readonly severity?: CollaborationNotificationV3['severity'];
+    readonly resourceType?: string;
+    readonly limit?: number;
+  }): CollaborationNotificationV3[] {
+    this.assertOpen();
+    const conditions = [
+      'recipient_principal_id = ?',
+      'recipient_client_id = ?',
+      'group_id = ?',
+    ];
+    const parameters: Array<string | number> = [
+      input.principalId,
+      input.clientId,
+      input.groupId,
+    ];
+    if (!input.includeHandled) conditions.push('handled_at_ms IS NULL');
+    if (input.severity) {
+      conditions.push('severity = ?');
+      parameters.push(input.severity);
+    }
+    if (input.resourceType) {
+      conditions.push('resource_type = ?');
+      parameters.push(input.resourceType);
+    }
+    parameters.push(Math.min(500, Math.max(1, input.limit ?? 200)));
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_notifications
+            WHERE ${conditions.join(' AND ')}
+            ORDER BY handled_at_ms IS NOT NULL, read_at_ms IS NOT NULL,
+                     first_observed_at_ms DESC, notification_id
+            LIMIT ?`,
+        )
+        .all(...parameters) as Record<string, unknown>[]
+    ).map((row) => this.notificationFromRow(row));
+  }
+
+  markNotificationRead(
+    notificationId: string,
+    principalId: string,
+    clientId: string,
+    nowMs = Date.now(),
+  ): boolean {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `UPDATE collaboration_notifications
+              SET read_at_ms = COALESCE(read_at_ms, ?), updated_at_ms = ?
+            WHERE notification_id = ? AND recipient_principal_id = ?
+              AND recipient_client_id = ?`,
+        )
+        .run(nowMs, nowMs, notificationId, principalId, clientId).changes === 1
+    );
+  }
+
+  markNotificationHandled(
+    notificationId: string,
+    principalId: string,
+    clientId: string,
+    nowMs = Date.now(),
+  ): boolean {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `UPDATE collaboration_notifications
+              SET handled_at_ms = COALESCE(handled_at_ms, ?),
+                  read_at_ms = COALESCE(read_at_ms, ?), updated_at_ms = ?
+            WHERE notification_id = ? AND recipient_principal_id = ?
+              AND recipient_client_id = ?`,
+        )
+        .run(nowMs, nowMs, nowMs, notificationId, principalId, clientId)
+        .changes === 1
+    );
+  }
+
+  handleNotificationsForResource(input: {
+    readonly groupId: string;
+    readonly resourceType: string;
+    readonly resourceId: string;
+    readonly nowMs?: number;
+  }): number {
+    this.assertOpen();
+    const nowMs = input.nowMs ?? Date.now();
+    return this.database
+      .prepare(
+        `UPDATE collaboration_notifications
+            SET handled_at_ms = COALESCE(handled_at_ms, ?), updated_at_ms = ?
+          WHERE group_id = ? AND resource_type = ? AND resource_id = ?
+            AND handled_at_ms IS NULL`,
+      )
+      .run(nowMs, nowMs, input.groupId, input.resourceType, input.resourceId)
+      .changes;
+  }
+
+  handleNotificationsByKind(input: {
+    readonly groupId: string;
+    readonly resourceType: string;
+    readonly resourceId: string;
+    readonly kinds: readonly string[];
+    readonly nowMs?: number;
+  }): number {
+    this.assertOpen();
+    if (!input.kinds.length) return 0;
+    const nowMs = input.nowMs ?? Date.now();
+    const placeholders = input.kinds.map(() => '?').join(', ');
+    return this.database
+      .prepare(
+        `UPDATE collaboration_notifications
+            SET handled_at_ms = COALESCE(handled_at_ms, ?), updated_at_ms = ?
+          WHERE group_id = ? AND resource_type = ? AND resource_id = ?
+            AND kind IN (${placeholders}) AND handled_at_ms IS NULL`,
+      )
+      .run(
+        nowMs,
+        nowMs,
+        input.groupId,
+        input.resourceType,
+        input.resourceId,
+        ...input.kinds,
+      ).changes;
+  }
+
+  getProjectView(
+    groupId: string,
+    viewerKey: string,
+  ): {
+    readonly lastActivityEventId: string | null;
+    readonly viewedAtMs: number;
+  } | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT last_activity_event_id, viewed_at_ms
+           FROM collaboration_project_views
+          WHERE group_id = ? AND viewer_key = ?`,
+      )
+      .get(groupId, viewerKey) as Record<string, unknown> | undefined;
+    return row
+      ? {
+          lastActivityEventId:
+            row.last_activity_event_id == null
+              ? null
+              : String(row.last_activity_event_id),
+          viewedAtMs: Number(row.viewed_at_ms),
+        }
+      : null;
+  }
+
+  markProjectViewed(input: {
+    readonly groupId: string;
+    readonly viewerKey: string;
+    readonly lastActivityEventId?: string | null;
+    readonly nowMs?: number;
+  }): void {
+    this.assertOpen();
+    this.database
+      .prepare(
+        `INSERT INTO collaboration_project_views
+           (group_id, viewer_key, last_activity_event_id, viewed_at_ms)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(group_id, viewer_key) DO UPDATE SET
+           last_activity_event_id = excluded.last_activity_event_id,
+           viewed_at_ms = excluded.viewed_at_ms`,
+      )
+      .run(
+        input.groupId,
+        input.viewerKey,
+        input.lastActivityEventId ?? null,
+        input.nowMs ?? Date.now(),
+      );
+  }
+
+  createAnalysisRun(input: {
+    readonly run: Omit<
+      CollaborationAnalysisRunRecord,
+      | 'status'
+      | 'staleFromStatus'
+      | 'attempt'
+      | 'operationKey'
+      | 'executionRef'
+      | 'providerMetadata'
+      | 'validationErrors'
+      | 'error'
+      | 'createdAtMs'
+      | 'startedAtMs'
+      | 'finishedAtMs'
+      | 'updatedAtMs'
+    >;
+    readonly context: Omit<CollaborationAnalysisContextRecord, 'createdAtMs'>;
+    readonly nowMs?: number;
+  }): CollaborationAnalysisRunRecord {
+    this.assertOpen();
+    const nowMs = input.nowMs ?? Date.now();
+    if (input.run.analysisId !== input.context.analysisId)
+      throw new Error('Analysis Run and Context ids must match');
+    if (
+      input.run.contextHash !== input.context.contextHash ||
+      input.run.promptHash !== input.context.promptHash
+    )
+      throw new Error('Analysis Run hashes must match its frozen Context');
+    this.database.transaction(() => {
+      this.database
+        .prepare(
+          `INSERT INTO collaboration_analysis_runs (
+             analysis_id, group_id, principal_id, client_id,
+             subscription_mode, snapshot_head, scope_json, trigger_kind,
+             execution_channel, executor_id, executor_kind,
+             contract_version, capability_version, context_hash, prompt_hash,
+             challenge, status, attempt, validation_errors_json,
+             created_at_ms, updated_at_ms
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?,
+                     'prepared', 0, '[]', ?, ?)`,
+        )
+        .run(
+          input.run.analysisId,
+          input.run.groupId,
+          input.run.principalId,
+          input.run.clientId,
+          input.run.subscriptionMode,
+          input.run.snapshotHead,
+          JSON.stringify(input.run.scope),
+          input.run.executionChannel,
+          input.run.executorId,
+          input.run.executorKind,
+          input.run.contractVersion,
+          input.run.capabilityVersion,
+          input.run.contextHash,
+          input.run.promptHash,
+          input.run.challenge,
+          nowMs,
+          nowMs,
+        );
+      this.database
+        .prepare(
+          `INSERT INTO collaboration_analysis_contexts (
+             analysis_id, context_json, resource_catalog_json,
+             resource_index_json, export_scope_json, selected_file_ids_json,
+             prompt_markdown, context_hash, prompt_hash, created_at_ms
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          input.context.analysisId,
+          JSON.stringify(input.context.context),
+          JSON.stringify(input.context.resourceCatalog),
+          JSON.stringify(input.context.resourceIndex),
+          JSON.stringify(input.context.exportScope),
+          JSON.stringify(input.context.selectedFileIds),
+          input.context.promptMarkdown,
+          input.context.contextHash,
+          input.context.promptHash,
+          nowMs,
+        );
+    })();
+    return this.getAnalysisRun(input.run.analysisId)!;
+  }
+
+  getAnalysisRun(analysisId: string): CollaborationAnalysisRunRecord | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        'SELECT * FROM collaboration_analysis_runs WHERE analysis_id = ?',
+      )
+      .get(analysisId) as Record<string, unknown> | undefined;
+    return row ? this.analysisRunFromRow(row) : null;
+  }
+
+  listAnalysisRuns(
+    groupId: string,
+    limit = 100,
+  ): CollaborationAnalysisRunRecord[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_analysis_runs
+            WHERE group_id = ?
+            ORDER BY created_at_ms DESC, analysis_id LIMIT ?`,
+        )
+        .all(groupId, Math.min(500, Math.max(1, limit))) as Record<
+        string,
+        unknown
+      >[]
+    ).map((row) => this.analysisRunFromRow(row));
+  }
+
+  findPriorValidAnalysisRun(
+    analysisId: string,
+  ): CollaborationAnalysisRunRecord | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT prior.* FROM collaboration_analysis_runs prior
+          JOIN collaboration_analysis_runs current
+            ON current.analysis_id = ?
+          WHERE prior.group_id = current.group_id
+            AND prior.scope_json = current.scope_json
+            AND prior.rowid < current.rowid
+            AND prior.status IN (
+              'ready_for_review', 'partially_applied', 'completed', 'stale'
+            )
+            AND EXISTS (
+              SELECT 1 FROM collaboration_analysis_results result
+               WHERE result.analysis_id = prior.analysis_id
+                 AND result.normalized_json IS NOT NULL
+            )
+          ORDER BY prior.rowid DESC LIMIT 1`,
+      )
+      .get(analysisId) as Record<string, unknown> | undefined;
+    return row ? this.analysisRunFromRow(row) : null;
+  }
+
+  getAnalysisContext(
+    analysisId: string,
+  ): CollaborationAnalysisContextRecord | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        'SELECT * FROM collaboration_analysis_contexts WHERE analysis_id = ?',
+      )
+      .get(analysisId) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    return {
+      analysisId: String(row.analysis_id),
+      context: JSON.parse(
+        String(row.context_json),
+      ) as CollaborationAnalysisInput,
+      resourceCatalog: JSON.parse(String(row.resource_catalog_json)) as Record<
+        string,
+        unknown
+      >,
+      resourceIndex: JSON.parse(String(row.resource_index_json)) as string[],
+      exportScope: JSON.parse(String(row.export_scope_json)) as Record<
+        string,
+        unknown
+      >,
+      selectedFileIds: JSON.parse(
+        String(row.selected_file_ids_json),
+      ) as string[],
+      promptMarkdown: String(row.prompt_markdown),
+      contextHash: String(row.context_hash),
+      promptHash: String(row.prompt_hash),
+      createdAtMs: Number(row.created_at_ms),
+    };
+  }
+
+  transitionAnalysisRun(input: {
+    readonly analysisId: string;
+    readonly expectedStatus: CollaborationAnalysisRunStatus;
+    readonly nextStatus: CollaborationAnalysisRunStatus;
+    readonly attempt?: number;
+    readonly operationKey?: string | null;
+    readonly executionRef?: string | null;
+    readonly providerMetadata?: Record<string, unknown> | null;
+    readonly validationErrors?: readonly CollaborationAnalysisValidationError[];
+    readonly error?: string | null;
+    readonly nowMs?: number;
+  }): CollaborationAnalysisRunRecord {
+    this.assertOpen();
+    assertCollaborationAnalysisTransition(
+      input.expectedStatus,
+      input.nextStatus,
+    );
+    const nowMs = input.nowMs ?? Date.now();
+    const executionFinished = [
+      'ready_for_review',
+      'invalid',
+      'completed',
+      'cancelled',
+      'failed',
+      'stale',
+    ].includes(input.nextStatus);
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_analysis_runs
+            SET status = ?, attempt = COALESCE(?, attempt),
+                operation_key = COALESCE(?, operation_key),
+                execution_ref = CASE WHEN ? THEN ? ELSE execution_ref END,
+                provider_metadata_json = CASE
+                  WHEN ? THEN ? ELSE provider_metadata_json END,
+                validation_errors_json = COALESCE(?, validation_errors_json),
+                error = ?,
+                stale_from_status = CASE
+                  WHEN ? = 'stale' THEN status
+                  ELSE stale_from_status END,
+                started_at_ms = CASE
+                  WHEN ? = 'running' THEN ?
+                  ELSE started_at_ms END,
+                finished_at_ms = CASE
+                  WHEN ? = 'running' THEN NULL
+                  WHEN ? THEN ?
+                  ELSE finished_at_ms END,
+                updated_at_ms = ?
+          WHERE analysis_id = ? AND status = ?`,
+      )
+      .run(
+        input.nextStatus,
+        input.attempt ?? null,
+        input.operationKey ?? null,
+        input.executionRef !== undefined ? 1 : 0,
+        input.executionRef ?? null,
+        input.providerMetadata !== undefined ? 1 : 0,
+        input.providerMetadata === undefined
+          ? null
+          : JSON.stringify(input.providerMetadata),
+        input.validationErrors === undefined
+          ? null
+          : JSON.stringify(input.validationErrors),
+        input.error ?? null,
+        input.nextStatus,
+        input.nextStatus,
+        nowMs,
+        input.nextStatus,
+        executionFinished ? 1 : 0,
+        nowMs,
+        nowMs,
+        input.analysisId,
+        input.expectedStatus,
+      );
+    if (result.changes !== 1)
+      throw new Error(
+        `Analysis Run transition conflict: ${input.analysisId} expected ${input.expectedStatus}`,
+      );
+    return this.getAnalysisRun(input.analysisId)!;
+  }
+
+  recordAnalysisExecutionReceipt(input: {
+    readonly analysisId: string;
+    readonly attempt: number;
+    readonly operationKey: string;
+    readonly executionRef: string;
+    readonly providerMetadata: Record<string, unknown>;
+    readonly nowMs?: number;
+  }): CollaborationAnalysisRunRecord {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_analysis_runs
+            SET execution_ref = ?, provider_metadata_json = ?, updated_at_ms = ?
+          WHERE analysis_id = ?
+            AND (
+              status = 'running'
+              OR (status = 'stale' AND stale_from_status = 'running')
+            )
+            AND attempt = ?
+            AND operation_key = ?
+            AND (execution_ref IS NULL OR execution_ref = ?)`,
+      )
+      .run(
+        input.executionRef,
+        JSON.stringify(input.providerMetadata),
+        input.nowMs ?? Date.now(),
+        input.analysisId,
+        input.attempt,
+        input.operationKey,
+        input.executionRef,
+      );
+    if (result.changes !== 1)
+      throw new Error('Analysis execution receipt conflict');
+    return this.getAnalysisRun(input.analysisId)!;
+  }
+
+  markAnalysisRunsStale(groupId: string, currentHead: string): number {
+    this.assertOpen();
+    const nowMs = Date.now();
+    return this.database
+      .prepare(
+        `UPDATE collaboration_analysis_runs
+            SET stale_from_status = status,
+                status = 'stale',
+                finished_at_ms = COALESCE(finished_at_ms, ?),
+                updated_at_ms = ?
+          WHERE group_id = ? AND snapshot_head <> ?
+            AND status NOT IN ('cancelled', 'stale')`,
+      )
+      .run(nowMs, nowMs, groupId, currentHead).changes;
+  }
+
+  beginStaleExternalAnalysisAttempt(input: {
+    readonly analysisId: string;
+    readonly expectedAttempt: number;
+    readonly nowMs?: number;
+  }): CollaborationAnalysisRunRecord {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_analysis_runs
+            SET attempt = attempt + 1,
+                validation_errors_json = '[]', error = NULL,
+                updated_at_ms = ?
+          WHERE analysis_id = ? AND status = 'stale'
+            AND execution_channel = 'external_agent'
+            AND stale_from_status IN ('awaiting_external_result', 'invalid')
+            AND attempt = ?`,
+      )
+      .run(input.nowMs ?? Date.now(), input.analysisId, input.expectedAttempt);
+    if (result.changes !== 1)
+      throw new Error('Stale external Analysis submission conflict');
+    return this.getAnalysisRun(input.analysisId)!;
+  }
+
+  updateStaleAnalysisDiagnostics(input: {
+    readonly analysisId: string;
+    readonly attempt: number;
+    readonly providerMetadata?: Record<string, unknown> | null;
+    readonly validationErrors: readonly CollaborationAnalysisValidationError[];
+    readonly error?: string | null;
+    readonly nowMs?: number;
+  }): CollaborationAnalysisRunRecord {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_analysis_runs
+            SET provider_metadata_json = ?, validation_errors_json = ?,
+                error = ?, updated_at_ms = ?
+          WHERE analysis_id = ? AND status = 'stale' AND attempt = ?`,
+      )
+      .run(
+        input.providerMetadata ? JSON.stringify(input.providerMetadata) : null,
+        JSON.stringify(input.validationErrors),
+        input.error ?? null,
+        input.nowMs ?? Date.now(),
+        input.analysisId,
+        input.attempt,
+      );
+    if (result.changes !== 1)
+      throw new Error('Stale Analysis diagnostics conflict');
+    return this.getAnalysisRun(input.analysisId)!;
+  }
+
+  saveAnalysisResult(input: {
+    readonly analysisId: string;
+    readonly attempt: number;
+    readonly rawJson: string;
+    readonly rawHash: string;
+    readonly normalized?: CollaborationAnalysisResult | null;
+    readonly validationErrors?: readonly CollaborationAnalysisValidationError[];
+    readonly providerMetadata?: Record<string, unknown> | null;
+    readonly nowMs?: number;
+  }): CollaborationAnalysisResultRecord {
+    this.assertOpen();
+    const resultId = `analysis_result_${crypto.randomUUID()}`;
+    this.database
+      .prepare(
+        `INSERT INTO collaboration_analysis_results (
+           result_id, analysis_id, attempt, raw_json, raw_hash,
+           normalized_json, validation_errors_json, provider_metadata_json,
+           received_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        resultId,
+        input.analysisId,
+        input.attempt,
+        input.rawJson,
+        input.rawHash,
+        input.normalized ? JSON.stringify(input.normalized) : null,
+        JSON.stringify(input.validationErrors ?? []),
+        input.providerMetadata ? JSON.stringify(input.providerMetadata) : null,
+        input.nowMs ?? Date.now(),
+      );
+    return this.getLatestAnalysisResult(input.analysisId)!;
+  }
+
+  getLatestAnalysisResult(
+    analysisId: string,
+  ): CollaborationAnalysisResultRecord | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT * FROM collaboration_analysis_results
+          WHERE analysis_id = ? ORDER BY attempt DESC LIMIT 1`,
+      )
+      .get(analysisId) as Record<string, unknown> | undefined;
+    return row ? this.analysisResultFromRow(row) : null;
+  }
+
+  listAnalysisResults(analysisId: string): CollaborationAnalysisResultRecord[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_analysis_results
+            WHERE analysis_id = ?
+            ORDER BY attempt DESC, received_at_ms DESC, result_id DESC`,
+        )
+        .all(analysisId) as Record<string, unknown>[]
+    ).map((row) => this.analysisResultFromRow(row));
+  }
+
+  replaceAnalysisFindings(input: {
+    readonly analysisId: string;
+    readonly groupId: string;
+    readonly findings: ReadonlyArray<{
+      readonly finding: CollaborationAnalysisResult['findings'][number];
+      readonly dedupeKey: string;
+      readonly lifecycle: CollaborationAnalysisFindingRecord['lifecycle'];
+    }>;
+    readonly nowMs?: number;
+  }): void {
+    this.assertOpen();
+    const nowMs = input.nowMs ?? Date.now();
+    this.database.transaction(() => {
+      this.database
+        .prepare(
+          'DELETE FROM collaboration_analysis_findings WHERE analysis_id = ?',
+        )
+        .run(input.analysisId);
+      const statement = this.database.prepare(
+        `INSERT INTO collaboration_analysis_findings (
+           analysis_id, finding_id, group_id, dedupe_key, kind, category,
+           severity, confidence, lifecycle, finding_json,
+           created_at_ms, updated_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const entry of input.findings)
+        statement.run(
+          input.analysisId,
+          entry.finding.finding_id,
+          input.groupId,
+          entry.dedupeKey,
+          entry.finding.kind,
+          entry.finding.category,
+          entry.finding.severity,
+          entry.finding.confidence,
+          entry.lifecycle,
+          JSON.stringify(entry.finding),
+          nowMs,
+          nowMs,
+        );
+    })();
+  }
+
+  listAnalysisFindings(
+    analysisId: string,
+  ): CollaborationAnalysisFindingRecord[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_analysis_findings
+            WHERE analysis_id = ? ORDER BY
+              CASE severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4
+                WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END DESC,
+              finding_id`,
+        )
+        .all(analysisId) as Record<string, unknown>[]
+    ).map((row) => this.analysisFindingFromRow(row));
+  }
+
+  findPriorAnalysisFinding(
+    groupId: string,
+    dedupeKey: string,
+    excludingAnalysisId: string,
+  ): CollaborationAnalysisFindingRecord | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT finding.* FROM collaboration_analysis_findings finding
+          JOIN collaboration_analysis_runs prior
+            ON prior.analysis_id = finding.analysis_id
+          JOIN collaboration_analysis_runs current
+            ON current.analysis_id = ?
+          WHERE finding.group_id = ? AND finding.dedupe_key = ?
+            AND finding.analysis_id <> current.analysis_id
+            AND prior.scope_json = current.scope_json
+            AND prior.rowid < current.rowid
+            AND prior.status IN (
+              'ready_for_review', 'partially_applied', 'completed', 'stale'
+            )
+            AND EXISTS (
+              SELECT 1 FROM collaboration_analysis_results result
+               WHERE result.analysis_id = prior.analysis_id
+                 AND result.normalized_json IS NOT NULL
+            )
+          ORDER BY prior.created_at_ms DESC, prior.analysis_id DESC LIMIT 1`,
+      )
+      .get(excludingAnalysisId, groupId, dedupeKey) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? this.analysisFindingFromRow(row) : null;
+  }
+
+  decideAnalysisFinding(input: {
+    readonly analysisId: string;
+    readonly findingId: string;
+    readonly decision: CollaborationFindingDecision;
+    readonly reason?: string | null;
+    readonly nowMs?: number;
+  }): CollaborationAnalysisFindingRecord {
+    this.assertOpen();
+    const nowMs = input.nowMs ?? Date.now();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_analysis_findings
+            SET decision = ?, decision_reason = ?, decided_at_ms = ?,
+                lifecycle = CASE WHEN ? IN ('ignored', 'false_positive')
+                  THEN 'dismissed' ELSE lifecycle END,
+                updated_at_ms = ?
+          WHERE analysis_id = ? AND finding_id = ?`,
+      )
+      .run(
+        input.decision,
+        input.reason ?? null,
+        nowMs,
+        input.decision,
+        nowMs,
+        input.analysisId,
+        input.findingId,
+      );
+    if (result.changes !== 1) throw new Error('Analysis Finding not found');
+    return this.listAnalysisFindings(input.analysisId).find(
+      (entry) => entry.findingId === input.findingId,
+    )!;
+  }
+
+  saveAnalysisActionPreview(input: {
+    readonly applicationId: string;
+    readonly operationKey: string;
+    readonly analysisId: string;
+    readonly findingId: string;
+    readonly actionOrdinal: number | null;
+    readonly action: CollaborationProposedAction;
+    readonly preview: Record<string, unknown>;
+    readonly snapshotHead: string;
+    readonly confirmationTokenHash: string;
+    readonly nowMs?: number;
+  }): CollaborationAnalysisActionApplicationRecord {
+    this.assertOpen();
+    const nowMs = input.nowMs ?? Date.now();
+    this.database
+      .prepare(
+        `INSERT INTO collaboration_analysis_action_applications (
+           application_id, operation_key, analysis_id, finding_id,
+           action_ordinal, action_json, preview_json, state, snapshot_head,
+           confirmation_token_hash, created_at_ms, updated_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, 'previewed', ?, ?, ?, ?)
+         ON CONFLICT(operation_key) DO NOTHING`,
+      )
+      .run(
+        input.applicationId,
+        input.operationKey,
+        input.analysisId,
+        input.findingId,
+        input.actionOrdinal,
+        JSON.stringify(input.action),
+        JSON.stringify(input.preview),
+        input.snapshotHead,
+        input.confirmationTokenHash,
+        nowMs,
+        nowMs,
+      );
+    return this.getAnalysisActionApplicationByOperation(input.operationKey)!;
+  }
+
+  getAnalysisActionApplicationByOperation(
+    operationKey: string,
+  ): CollaborationAnalysisActionApplicationRecord | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT * FROM collaboration_analysis_action_applications
+          WHERE operation_key = ?`,
+      )
+      .get(operationKey) as Record<string, unknown> | undefined;
+    return row ? this.analysisActionApplicationFromRow(row) : null;
+  }
+
+  listAnalysisActionApplications(
+    analysisId: string,
+  ): CollaborationAnalysisActionApplicationRecord[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_analysis_action_applications
+            WHERE analysis_id = ?
+            ORDER BY finding_id, action_ordinal, application_id`,
+        )
+        .all(analysisId) as Record<string, unknown>[]
+    ).map((row) => this.analysisActionApplicationFromRow(row));
+  }
+
+  getAnalysisActionApplication(
+    applicationId: string,
+  ): CollaborationAnalysisActionApplicationRecord | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT * FROM collaboration_analysis_action_applications
+          WHERE application_id = ?`,
+      )
+      .get(applicationId) as Record<string, unknown> | undefined;
+    return row ? this.analysisActionApplicationFromRow(row) : null;
+  }
+
+  transitionAnalysisActionApplication(input: {
+    readonly applicationId: string;
+    readonly expectedState: CollaborationAnalysisActionApplicationRecord['state'];
+    readonly nextState: CollaborationAnalysisActionApplicationRecord['state'];
+    readonly resultingEventIds?: readonly string[];
+    readonly error?: string | null;
+    readonly nowMs?: number;
+  }): CollaborationAnalysisActionApplicationRecord {
+    this.assertOpen();
+    const allowed: Readonly<Record<string, readonly string[]>> = {
+      previewed: ['applying'],
+      applying: ['applied', 'failed'],
+      failed: ['applying'],
+      applied: [],
+    };
+    if (!allowed[input.expectedState]?.includes(input.nextState))
+      throw new Error(
+        `Illegal Analysis Action transition: ${input.expectedState} -> ${input.nextState}`,
+      );
+    const nowMs = input.nowMs ?? Date.now();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_analysis_action_applications
+            SET state = ?, resulting_event_ids_json = COALESCE(?, resulting_event_ids_json),
+                error = ?, confirmed_at_ms = CASE WHEN ? = 'applying'
+                  THEN COALESCE(confirmed_at_ms, ?) ELSE confirmed_at_ms END,
+                updated_at_ms = ?
+          WHERE application_id = ? AND state = ?`,
+      )
+      .run(
+        input.nextState,
+        input.resultingEventIds
+          ? JSON.stringify(input.resultingEventIds)
+          : null,
+        input.error ?? null,
+        input.nextState,
+        nowMs,
+        nowMs,
+        input.applicationId,
+        input.expectedState,
+      );
+    if (result.changes !== 1)
+      throw new Error('Analysis Action application transition conflict');
+    const row = this.database
+      .prepare(
+        `SELECT * FROM collaboration_analysis_action_applications
+          WHERE application_id = ?`,
+      )
+      .get(input.applicationId) as Record<string, unknown>;
+    return this.analysisActionApplicationFromRow(row);
   }
 
   startSyncAttempt(
@@ -2627,6 +3793,132 @@ export class CollaborationProjectSpaceStore {
     );
   }
 
+  private analysisRunFromRow(
+    row: Record<string, unknown>,
+  ): CollaborationAnalysisRunRecord {
+    return {
+      analysisId: String(row.analysis_id),
+      groupId: String(row.group_id),
+      principalId: row.principal_id == null ? null : String(row.principal_id),
+      clientId: row.client_id == null ? null : String(row.client_id),
+      subscriptionMode: String(row.subscription_mode) as 'observer' | 'member',
+      snapshotHead: String(row.snapshot_head),
+      scope: JSON.parse(String(row.scope_json)) as CollaborationAnalysisScope,
+      trigger: 'manual',
+      executionChannel: String(row.execution_channel) as
+        | 'managed_executor'
+        | 'external_agent',
+      executorId: row.executor_id == null ? null : String(row.executor_id),
+      executorKind:
+        row.executor_kind == null ? null : String(row.executor_kind),
+      contractVersion: Number(row.contract_version) as 1,
+      capabilityVersion: Number(row.capability_version) as 1,
+      contextHash: String(row.context_hash),
+      promptHash: String(row.prompt_hash),
+      challenge: String(row.challenge),
+      status: String(row.status) as CollaborationAnalysisRunStatus,
+      staleFromStatus:
+        row.stale_from_status == null
+          ? null
+          : (String(row.stale_from_status) as CollaborationAnalysisRunStatus),
+      attempt: Number(row.attempt),
+      operationKey:
+        row.operation_key == null ? null : String(row.operation_key),
+      executionRef:
+        row.execution_ref == null ? null : String(row.execution_ref),
+      providerMetadata: parseJson<Record<string, unknown>>(
+        row.provider_metadata_json,
+      ),
+      validationErrors:
+        parseJson<CollaborationAnalysisValidationError[]>(
+          row.validation_errors_json,
+        ) ?? [],
+      error: row.error == null ? null : String(row.error),
+      createdAtMs: Number(row.created_at_ms),
+      startedAtMs: row.started_at_ms == null ? null : Number(row.started_at_ms),
+      finishedAtMs:
+        row.finished_at_ms == null ? null : Number(row.finished_at_ms),
+      updatedAtMs: Number(row.updated_at_ms),
+    };
+  }
+
+  private analysisResultFromRow(
+    row: Record<string, unknown>,
+  ): CollaborationAnalysisResultRecord {
+    return {
+      resultId: String(row.result_id),
+      analysisId: String(row.analysis_id),
+      attempt: Number(row.attempt),
+      rawJson: String(row.raw_json),
+      rawHash: String(row.raw_hash),
+      normalized: parseJson<CollaborationAnalysisResult>(row.normalized_json),
+      validationErrors:
+        parseJson<CollaborationAnalysisValidationError[]>(
+          row.validation_errors_json,
+        ) ?? [],
+      providerMetadata: parseJson<Record<string, unknown>>(
+        row.provider_metadata_json,
+      ),
+      receivedAtMs: Number(row.received_at_ms),
+    };
+  }
+
+  private analysisFindingFromRow(
+    row: Record<string, unknown>,
+  ): CollaborationAnalysisFindingRecord {
+    return {
+      analysisId: String(row.analysis_id),
+      findingId: String(row.finding_id),
+      groupId: String(row.group_id),
+      dedupeKey: String(row.dedupe_key),
+      lifecycle: String(
+        row.lifecycle,
+      ) as CollaborationAnalysisFindingRecord['lifecycle'],
+      finding: JSON.parse(
+        String(row.finding_json),
+      ) as CollaborationAnalysisResult['findings'][number],
+      decision:
+        row.decision == null
+          ? null
+          : (String(row.decision) as CollaborationFindingDecision),
+      decisionReason:
+        row.decision_reason == null ? null : String(row.decision_reason),
+      decidedAtMs: row.decided_at_ms == null ? null : Number(row.decided_at_ms),
+      createdAtMs: Number(row.created_at_ms),
+      updatedAtMs: Number(row.updated_at_ms),
+    };
+  }
+
+  private analysisActionApplicationFromRow(
+    row: Record<string, unknown>,
+  ): CollaborationAnalysisActionApplicationRecord {
+    return {
+      applicationId: String(row.application_id),
+      operationKey: String(row.operation_key),
+      analysisId: String(row.analysis_id),
+      findingId: String(row.finding_id),
+      actionOrdinal:
+        row.action_ordinal == null ? null : Number(row.action_ordinal),
+      action: JSON.parse(
+        String(row.action_json),
+      ) as CollaborationProposedAction,
+      preview: JSON.parse(String(row.preview_json)) as Record<string, unknown>,
+      state: String(
+        row.state,
+      ) as CollaborationAnalysisActionApplicationRecord['state'],
+      snapshotHead: String(row.snapshot_head),
+      confirmationTokenHash: String(row.confirmation_token_hash),
+      confirmedAtMs:
+        row.confirmed_at_ms == null ? null : Number(row.confirmed_at_ms),
+      resultingEventIds: JSON.parse(
+        String(row.resulting_event_ids_json),
+      ) as string[],
+      error: row.error == null ? null : String(row.error),
+      createdAtMs: Number(row.created_at_ms),
+      updatedAtMs: Number(row.updated_at_ms),
+    };
+  }
+
   private notificationFromRow(
     row: Record<string, unknown>,
   ): CollaborationNotificationV3 {
@@ -2640,11 +3932,15 @@ export class CollaborationProjectSpaceStore {
       resourceId: String(row.resource_id),
       reason: String(row.reason),
       dedupeKey: String(row.dedupe_key),
+      severity: String(row.severity) as CollaborationNotificationV3['severity'],
       reminderOrdinal: Number(row.reminder_ordinal),
       dueAtMs: row.due_at_ms == null ? null : Number(row.due_at_ms),
       firstObservedAtMs: Number(row.first_observed_at_ms),
       deliveredAtMs:
         row.delivered_at_ms == null ? null : Number(row.delivered_at_ms),
+      readAtMs: row.read_at_ms == null ? null : Number(row.read_at_ms),
+      handledAtMs: row.handled_at_ms == null ? null : Number(row.handled_at_ms),
+      updatedAtMs: Number(row.updated_at_ms),
       payload: JSON.parse(String(row.payload_json)) as Record<string, unknown>,
     };
   }

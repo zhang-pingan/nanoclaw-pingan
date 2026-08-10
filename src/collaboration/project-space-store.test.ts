@@ -129,8 +129,152 @@ function genesis() {
   return { event, projection: reduceCollaborationEventV3(null, event) };
 }
 
+const ANALYSIS_HEAD = 'a'.repeat(40);
+const ANALYSIS_CONTEXT_HASH = `sha256:${'b'.repeat(64)}`;
+const ANALYSIS_PROMPT_HASH = `sha256:${'c'.repeat(64)}`;
+
+function registerMemberStore(name: string): CollaborationProjectSpaceStore {
+  const store = new CollaborationProjectSpaceStore(temporaryPath(name));
+  store.registerGroup({
+    subscription: {
+      format: 'icarus.collaboration-subscription/1',
+      group_id: 'group_test',
+      remote_url: '/tmp/group.git',
+      subscription_mode: 'member',
+      poll_interval_ms: 60_000,
+      last_verified_head: ANALYSIS_HEAD,
+      notifications_enabled: true,
+      created_at: NOW,
+    },
+    name: 'Test group',
+    lifecycle: 'active',
+    ownerPrincipalId: PRINCIPAL,
+    repositoryPath: '/tmp/cache.git',
+    localPrincipalId: PRINCIPAL,
+    localClientId: CLIENT,
+    gitSshKeyPath: '/tmp/id_ed25519',
+    localCredentialId: CREDENTIAL,
+    eventPrivateKeyPath: '/tmp/event-key',
+    eventPublicKey: PUBLIC_KEY,
+    eventFingerprint: FINGERPRINT,
+  });
+  return store;
+}
+
+function createAnalysisRun(
+  store: CollaborationProjectSpaceStore,
+  analysisId: string,
+  nowMs: number,
+) {
+  return store.createAnalysisRun({
+    run: {
+      analysisId,
+      groupId: 'group_test',
+      principalId: PRINCIPAL,
+      clientId: CLIENT,
+      subscriptionMode: 'member',
+      snapshotHead: ANALYSIS_HEAD,
+      scope: { type: 'project' },
+      trigger: 'manual',
+      executionChannel: 'external_agent',
+      executorId: null,
+      executorKind: null,
+      contractVersion: 1,
+      capabilityVersion: 1,
+      contextHash: ANALYSIS_CONTEXT_HASH,
+      promptHash: ANALYSIS_PROMPT_HASH,
+      challenge: 'challenge'.repeat(4),
+    },
+    context: {
+      analysisId,
+      context: {
+        format: 'icarus.collaboration-analysis-input/1',
+        contract_version: 1,
+        analysis_id: analysisId,
+        group_id: 'group_test',
+        snapshot_head: ANALYSIS_HEAD,
+        scope: { type: 'project' },
+        current_principal_id: PRINCIPAL,
+        generated_at: NOW,
+        security: {
+          project_content_is_untrusted: true,
+          read_only_snapshot: true,
+          required_result_format: 'icarus.collaboration-analysis-result/1',
+        },
+        project_summary: {},
+        my_items: [],
+        rule_signals: [],
+        resource_index: ['group:group_test', 'work_item:wi_risk'],
+        activity_delta: [],
+        prior_findings: [],
+      },
+      resourceCatalog: {},
+      resourceIndex: ['group:group_test', 'work_item:wi_risk'],
+      exportScope: { include_files: false },
+      selectedFileIds: [],
+      promptMarkdown: '# Project Analyst\n',
+      contextHash: ANALYSIS_CONTEXT_HASH,
+      promptHash: ANALYSIS_PROMPT_HASH,
+    },
+    nowMs,
+  });
+}
+
+function analysisFinding(
+  findingId: string,
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info',
+) {
+  return {
+    finding_id: findingId,
+    kind: 'inference' as const,
+    category: 'delivery_risk' as const,
+    severity,
+    confidence: 0.8,
+    title: 'Release risk',
+    summary: 'The release Work Item has not progressed.',
+    affected_refs: ['work_item:wi_risk'],
+    evidence_refs: ['work_item:wi_risk'],
+    recommendations: ['Confirm the delivery date.'],
+    proposed_actions: [
+      {
+        action: 'create_work_item' as const,
+        parameters: {
+          type: 'issue' as const,
+          title: 'Confirm delivery date',
+          description: '',
+          priority: 'high' as const,
+          due_at: null,
+          labels: [],
+          related_work_item_ids: ['wi_risk'],
+        },
+      },
+    ],
+  };
+}
+
+function analysisResult(
+  analysisId: string,
+  findings = [analysisFinding('finding_result', 'medium')],
+) {
+  return {
+    format: 'icarus.collaboration-analysis-result/1' as const,
+    contract_version: 1 as const,
+    analysis_id: analysisId,
+    snapshot_head: ANALYSIS_HEAD,
+    context_hash: ANALYSIS_CONTEXT_HASH,
+    prompt_hash: ANALYSIS_PROMPT_HASH,
+    challenge: 'challenge'.repeat(4),
+    summary: {
+      health: 'needs_attention' as const,
+      headline: 'Project needs attention',
+      details: 'One verified Finding needs review.',
+    },
+    findings,
+  };
+}
+
 describe('Collaboration project space v3 store', () => {
-  it('creates only the fresh current schema and rejects stale v4', () => {
+  it('creates only the fresh v9 schema and rejects stale v8', () => {
     const databasePath = temporaryPath('current.db');
     const store = new CollaborationProjectSpaceStore(databasePath);
     expect(
@@ -144,11 +288,40 @@ describe('Collaboration project space v3 store', () => {
           .get() as { value: string }
       ).value,
     ).toBe(COLLABORATION_PROJECT_SPACE_STORE_FORMAT);
+    expect(
+      (
+        store
+          .rawDatabaseForTests()
+          .prepare(
+            `SELECT name FROM sqlite_master
+              WHERE type = 'table' AND name LIKE 'collaboration_analysis_%'
+              ORDER BY name`,
+          )
+          .all() as Array<{ name: string }>
+      ).map((row) => row.name),
+    ).toEqual([
+      'collaboration_analysis_action_applications',
+      'collaboration_analysis_contexts',
+      'collaboration_analysis_findings',
+      'collaboration_analysis_results',
+      'collaboration_analysis_runs',
+    ]);
+    expect(
+      (
+        store
+          .rawDatabaseForTests()
+          .pragma('table_info(collaboration_notifications)') as Array<{
+          name: string;
+        }>
+      ).map((column) => column.name),
+    ).toEqual(
+      expect.arrayContaining(['severity', 'read_at_ms', 'handled_at_ms']),
+    );
     store.close();
 
     const stalePath = temporaryPath('stale.db');
     const stale = new Database(stalePath);
-    stale.pragma('user_version = 4');
+    stale.pragma('user_version = 8');
     stale.close();
     expect(() => new CollaborationProjectSpaceStore(stalePath)).toThrow(
       expect.objectContaining<Partial<CollaborationProjectSpaceStoreError>>({
@@ -189,6 +362,48 @@ describe('Collaboration project space v3 store', () => {
         .prepare('SELECT COUNT(*) AS count FROM collaboration_principals')
         .get(),
     ).toEqual({ count: 0 });
+    store.close();
+  });
+
+  it('does not persist local notifications when the subscription disables them', () => {
+    const store = new CollaborationProjectSpaceStore(
+      temporaryPath('notifications-disabled.db'),
+    );
+    store.registerGroup({
+      subscription: {
+        format: 'icarus.collaboration-subscription/1',
+        group_id: 'group_test',
+        remote_url: '/tmp/group.git',
+        subscription_mode: 'observer',
+        poll_interval_ms: 60_000,
+        last_verified_head: null,
+        notifications_enabled: false,
+        created_at: NOW,
+      },
+      name: 'Test group',
+      lifecycle: 'active',
+      ownerPrincipalId: PRINCIPAL,
+      repositoryPath: '/tmp/cache.git',
+    });
+    expect(
+      store.enqueueNotification({
+        groupId: 'group_test',
+        recipientPrincipalId: PRINCIPAL,
+        recipientClientId: CLIENT,
+        kind: 'protocol_sync_failure',
+        resourceType: 'protocol',
+        resourceId: 'group_test',
+        reason: 'verified_sync_failed',
+        dedupeKey: 'sync-disabled',
+      }),
+    ).toMatchObject({ enqueued: false });
+    expect(
+      store.listPendingNotifications({
+        groupId: 'group_test',
+        principalId: PRINCIPAL,
+        clientId: CLIENT,
+      }),
+    ).toEqual([]);
     store.close();
   });
 
@@ -859,6 +1074,403 @@ describe('Collaboration project space v3 store', () => {
       executionRef: 'provider:1',
       receipt: { accepted: true },
     });
+    store.close();
+  });
+
+  it('tracks notification read and handled state and reconciles resolved resources', () => {
+    const store = registerMemberStore('notification-lifecycle.db');
+    const assignment = store.enqueueNotification({
+      groupId: 'group_test',
+      recipientPrincipalId: PRINCIPAL,
+      recipientClientId: CLIENT,
+      kind: 'work_item_assignment',
+      resourceType: 'work_item',
+      resourceId: 'wi_assignment',
+      reason: 'assignment_confirmation_required',
+      dedupeKey: 'assignment:wi_assignment:1',
+      severity: 'high',
+      nowMs: 100,
+    }).notification;
+    const blocker = store.enqueueNotification({
+      groupId: 'group_test',
+      recipientPrincipalId: PRINCIPAL,
+      recipientClientId: CLIENT,
+      kind: 'work_item_blocked',
+      resourceType: 'work_item',
+      resourceId: 'wi_assignment',
+      reason: 'blocked',
+      dedupeKey: 'blocked:wi_assignment:1',
+      severity: 'critical',
+      nowMs: 101,
+    }).notification;
+    const mention = store.enqueueNotification({
+      groupId: 'group_test',
+      recipientPrincipalId: PRINCIPAL,
+      recipientClientId: CLIENT,
+      kind: 'discussion_mention',
+      resourceType: 'discussion',
+      resourceId: 'thread_review',
+      reason: 'mentioned',
+      dedupeKey: 'mention:thread_review:1',
+      severity: 'medium',
+      nowMs: 102,
+    }).notification;
+    expect(
+      store.markNotificationDelivered(
+        mention.notificationId,
+        PRINCIPAL,
+        CLIENT,
+        105,
+      ),
+    ).toBe(true);
+    expect(
+      store
+        .listPendingNotifications({
+          groupId: 'group_test',
+          principalId: PRINCIPAL,
+          clientId: CLIENT,
+        })
+        .map((entry) => entry.notificationId),
+    ).toEqual([assignment.notificationId, blocker.notificationId]);
+
+    expect(
+      store.markNotificationRead(
+        assignment.notificationId,
+        'principal_other',
+        CLIENT,
+        110,
+      ),
+    ).toBe(false);
+    expect(
+      store.markNotificationRead(
+        assignment.notificationId,
+        PRINCIPAL,
+        CLIENT,
+        110,
+      ),
+    ).toBe(true);
+    expect(
+      store.listNotifications({
+        groupId: 'group_test',
+        principalId: PRINCIPAL,
+        clientId: CLIENT,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        notificationId: mention.notificationId,
+        readAtMs: null,
+      }),
+      expect.objectContaining({
+        notificationId: blocker.notificationId,
+        readAtMs: null,
+      }),
+      expect.objectContaining({
+        notificationId: assignment.notificationId,
+        readAtMs: 110,
+      }),
+    ]);
+    expect(
+      store.handleNotificationsByKind({
+        groupId: 'group_test',
+        resourceType: 'work_item',
+        resourceId: 'wi_assignment',
+        kinds: ['work_item_assignment'],
+        nowMs: 120,
+      }),
+    ).toBe(1);
+    expect(
+      store.handleNotificationsForResource({
+        groupId: 'group_test',
+        resourceType: 'work_item',
+        resourceId: 'wi_assignment',
+        nowMs: 121,
+      }),
+    ).toBe(1);
+    expect(
+      store.markNotificationHandled(
+        mention.notificationId,
+        PRINCIPAL,
+        CLIENT,
+        122,
+      ),
+    ).toBe(true);
+    expect(
+      store.listPendingNotifications({
+        groupId: 'group_test',
+        principalId: PRINCIPAL,
+        clientId: CLIENT,
+      }),
+    ).toEqual([]);
+    expect(
+      store.listNotifications({
+        groupId: 'group_test',
+        principalId: PRINCIPAL,
+        clientId: CLIENT,
+        includeHandled: true,
+        severity: 'critical',
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        notificationId: blocker.notificationId,
+        handledAtMs: 121,
+      }),
+    ]);
+    store.close();
+  });
+
+  it('enforces Analysis Run transition CAS and rejects illegal transitions', () => {
+    const store = registerMemberStore('analysis-state.db');
+    expect(createAnalysisRun(store, 'analysis_state', 100)).toMatchObject({
+      status: 'prepared',
+      attempt: 0,
+      snapshotHead: ANALYSIS_HEAD,
+    });
+    expect(() =>
+      store.transitionAnalysisRun({
+        analysisId: 'analysis_state',
+        expectedStatus: 'prepared',
+        nextStatus: 'completed',
+      }),
+    ).toThrow(/Illegal Analysis Run transition/u);
+
+    expect(
+      store.transitionAnalysisRun({
+        analysisId: 'analysis_state',
+        expectedStatus: 'prepared',
+        nextStatus: 'awaiting_external_result',
+        attempt: 1,
+        nowMs: 110,
+      }),
+    ).toMatchObject({ status: 'awaiting_external_result', attempt: 1 });
+    expect(() =>
+      store.transitionAnalysisRun({
+        analysisId: 'analysis_state',
+        expectedStatus: 'prepared',
+        nextStatus: 'awaiting_external_result',
+      }),
+    ).toThrow(/transition conflict/u);
+    expect(
+      store.transitionAnalysisRun({
+        analysisId: 'analysis_state',
+        expectedStatus: 'awaiting_external_result',
+        nextStatus: 'validating',
+      }),
+    ).toMatchObject({ status: 'validating' });
+    expect(
+      store.transitionAnalysisRun({
+        analysisId: 'analysis_state',
+        expectedStatus: 'validating',
+        nextStatus: 'ready_for_review',
+      }),
+    ).toMatchObject({ status: 'ready_for_review' });
+    createAnalysisRun(store, 'analysis_running', 120);
+    store.transitionAnalysisRun({
+      analysisId: 'analysis_running',
+      expectedStatus: 'prepared',
+      nextStatus: 'running',
+      attempt: 1,
+      nowMs: 121,
+    });
+    createAnalysisRun(store, 'analysis_waiting', 130);
+    store.transitionAnalysisRun({
+      analysisId: 'analysis_waiting',
+      expectedStatus: 'prepared',
+      nextStatus: 'awaiting_external_result',
+      nowMs: 131,
+    });
+    expect(store.markAnalysisRunsStale('group_test', 'd'.repeat(40))).toBe(3);
+    expect(store.getAnalysisRun('analysis_state')).toMatchObject({
+      status: 'stale',
+      staleFromStatus: 'ready_for_review',
+    });
+    expect(store.getAnalysisRun('analysis_running')).toMatchObject({
+      status: 'stale',
+      staleFromStatus: 'running',
+    });
+    expect(store.getAnalysisRun('analysis_waiting')).toMatchObject({
+      status: 'stale',
+      staleFromStatus: 'awaiting_external_result',
+    });
+    store.close();
+  });
+
+  it('keeps every Analysis result submission as immutable attempt history', () => {
+    const store = registerMemberStore('analysis-result-history.db');
+    createAnalysisRun(store, 'analysis_history', 100);
+    for (const attempt of [1, 2])
+      store.saveAnalysisResult({
+        analysisId: 'analysis_history',
+        attempt,
+        rawJson: JSON.stringify({ attempt }),
+        rawHash: `sha256:${String(attempt).repeat(64)}`,
+        validationErrors: [
+          { code: 'invalid', path: '/', message: `attempt ${String(attempt)}` },
+        ],
+        nowMs: 100 + attempt,
+      });
+    expect(store.listAnalysisResults('analysis_history')).toMatchObject([
+      { attempt: 2, rawJson: '{"attempt":2}' },
+      { attempt: 1, rawJson: '{"attempt":1}' },
+    ]);
+    expect(() =>
+      store.saveAnalysisResult({
+        analysisId: 'analysis_history',
+        attempt: 1,
+        rawJson: '{"tampered":true}',
+        rawHash: `sha256:${'9'.repeat(64)}`,
+      }),
+    ).toThrow(/UNIQUE constraint failed/u);
+    store.close();
+  });
+
+  it('evolves Findings across runs and keeps action previews idempotent', () => {
+    const store = registerMemberStore('analysis-findings.db');
+    createAnalysisRun(store, 'analysis_first', 100);
+    const firstFinding = analysisFinding('finding_first', 'medium');
+    const secondFinding = analysisFinding('finding_second', 'high');
+    store.transitionAnalysisRun({
+      analysisId: 'analysis_first',
+      expectedStatus: 'prepared',
+      nextStatus: 'awaiting_external_result',
+      attempt: 1,
+      nowMs: 101,
+    });
+    store.transitionAnalysisRun({
+      analysisId: 'analysis_first',
+      expectedStatus: 'awaiting_external_result',
+      nextStatus: 'validating',
+      nowMs: 102,
+    });
+    store.saveAnalysisResult({
+      analysisId: 'analysis_first',
+      attempt: 1,
+      rawJson: '{}',
+      rawHash: `sha256:${'4'.repeat(64)}`,
+      normalized: analysisResult('analysis_first', [firstFinding]),
+      nowMs: 103,
+    });
+    store.transitionAnalysisRun({
+      analysisId: 'analysis_first',
+      expectedStatus: 'validating',
+      nextStatus: 'ready_for_review',
+      nowMs: 104,
+    });
+    store.replaceAnalysisFindings({
+      analysisId: 'analysis_first',
+      groupId: 'group_test',
+      findings: [
+        {
+          finding: firstFinding,
+          dedupeKey: 'delivery:wi_risk',
+          lifecycle: 'new',
+        },
+      ],
+      nowMs: 110,
+    });
+    createAnalysisRun(store, 'analysis_second', 200);
+
+    expect(
+      store.findPriorAnalysisFinding(
+        'group_test',
+        'delivery:wi_risk',
+        'analysis_second',
+      ),
+    ).toMatchObject({
+      analysisId: 'analysis_first',
+      lifecycle: 'new',
+      finding: { severity: 'medium' },
+    });
+    store.replaceAnalysisFindings({
+      analysisId: 'analysis_second',
+      groupId: 'group_test',
+      findings: [
+        {
+          finding: secondFinding,
+          dedupeKey: 'delivery:wi_risk',
+          lifecycle: 'worsened',
+        },
+      ],
+      nowMs: 210,
+    });
+    expect(
+      store.decideAnalysisFinding({
+        analysisId: 'analysis_second',
+        findingId: 'finding_second',
+        decision: 'false_positive',
+        reason: 'Accepted risk',
+        nowMs: 220,
+      }),
+    ).toMatchObject({
+      lifecycle: 'dismissed',
+      decision: 'false_positive',
+      decisionReason: 'Accepted risk',
+    });
+
+    const proposedAction = secondFinding.proposed_actions[0]!;
+    const firstPreview = store.saveAnalysisActionPreview({
+      applicationId: 'application_first',
+      operationKey: 'operation_stable',
+      analysisId: 'analysis_second',
+      findingId: 'finding_second',
+      actionOrdinal: null,
+      action: proposedAction,
+      preview: { title: 'Confirm delivery date' },
+      snapshotHead: ANALYSIS_HEAD,
+      confirmationTokenHash: `sha256:${'e'.repeat(64)}`,
+      nowMs: 230,
+    });
+    const duplicatePreview = store.saveAnalysisActionPreview({
+      applicationId: 'application_duplicate',
+      operationKey: 'operation_stable',
+      analysisId: 'analysis_second',
+      findingId: 'finding_second',
+      actionOrdinal: 0,
+      action: proposedAction,
+      preview: { title: 'Tampered duplicate' },
+      snapshotHead: ANALYSIS_HEAD,
+      confirmationTokenHash: `sha256:${'f'.repeat(64)}`,
+      nowMs: 240,
+    });
+    expect(duplicatePreview).toEqual(firstPreview);
+    const editedPreview = store.saveAnalysisActionPreview({
+      applicationId: 'application_edited',
+      operationKey: 'operation_edited',
+      analysisId: 'analysis_second',
+      findingId: 'finding_second',
+      actionOrdinal: null,
+      action: proposedAction,
+      preview: { title: 'Edited after explicit user review' },
+      snapshotHead: ANALYSIS_HEAD,
+      confirmationTokenHash: `sha256:${'1'.repeat(64)}`,
+      nowMs: 245,
+    });
+    expect(editedPreview.applicationId).toBe('application_edited');
+    expect(editedPreview.actionOrdinal).toBeNull();
+    expect(
+      store.listAnalysisActionApplications('analysis_second'),
+    ).toHaveLength(2);
+    expect(
+      store.transitionAnalysisActionApplication({
+        applicationId: firstPreview.applicationId,
+        expectedState: 'previewed',
+        nextState: 'applying',
+        nowMs: 250,
+      }),
+    ).toMatchObject({ state: 'applying', confirmedAtMs: 250 });
+    expect(() =>
+      store.transitionAnalysisActionApplication({
+        applicationId: firstPreview.applicationId,
+        expectedState: 'previewed',
+        nextState: 'applying',
+      }),
+    ).toThrow(/transition conflict/u);
+    expect(() =>
+      store.transitionAnalysisActionApplication({
+        applicationId: firstPreview.applicationId,
+        expectedState: 'applying',
+        nextState: 'previewed',
+      }),
+    ).toThrow(/Illegal Analysis Action transition/u);
     store.close();
   });
 });

@@ -4,6 +4,12 @@ import path from 'node:path';
 import { z } from 'zod';
 
 import { buildCollaborationAuditV3 } from './audit.js';
+import {
+  collaborationAnalysisScopeSchema,
+  collaborationFindingDecisionSchema,
+  collaborationProposedActionSchema,
+} from './analysis-contracts.js';
+import type { CollaborationAnalysisRunDetail } from './analysis-service.js';
 import type {
   CollaborationActionExecutionV3,
   CollaborationExecutorBindingV3,
@@ -59,6 +65,10 @@ function redactDiagnostic(input: string | null): string | null {
     .replace(
       /([?&](?:[^=&]*(?:token|secret|password|credential|authorization|api.?key)[^=&]*)=)[^&\s]+/giu,
       '$1redacted',
+    )
+    .replace(
+      /(^|[\s"'(])(?:\/(?!\/)[^\s,;:'")\]]+|[A-Za-z]:\\[^\s,;:'")\]]+)/gmu,
+      '$1[redacted-local-path]',
     );
 }
 
@@ -115,6 +125,51 @@ function publicExecution(execution: CollaborationActionExecutionV3) {
     receiptRecordedAtMs: execution.receiptRecordedAtMs,
     providerCompletedAtMs: execution.providerCompletedAtMs,
     updatedAtMs: execution.updatedAtMs,
+  };
+}
+
+function publicAnalysisDetail(detail: CollaborationAnalysisRunDetail) {
+  const {
+    challenge: _challenge,
+    executionRef: _executionRef,
+    operationKey: _operationKey,
+    providerMetadata: _providerMetadata,
+    ...run
+  } = detail.run;
+  const publicResult = (
+    result: NonNullable<CollaborationAnalysisRunDetail['result']>,
+  ) => ({
+    resultId: result.resultId,
+    analysisId: result.analysisId,
+    attempt: result.attempt,
+    rawHash: result.rawHash,
+    normalized: result.normalized,
+    validationErrors: result.validationErrors.map((error) => ({
+      ...error,
+      message: redactDiagnostic(error.message) ?? 'Validation failed',
+    })),
+    receivedAtMs: result.receivedAtMs,
+  });
+  const result = detail.result ? publicResult(detail.result) : null;
+  return {
+    ...detail,
+    run: {
+      ...run,
+      error: redactDiagnostic(run.error),
+      validationErrors: run.validationErrors.map((error) => ({
+        ...error,
+        message: redactDiagnostic(error.message) ?? 'Validation failed',
+      })),
+    },
+    result,
+    results: detail.results.map(publicResult),
+    applications: detail.applications.map(
+      ({
+        confirmationTokenHash: _confirmationTokenHash,
+        operationKey: _applicationOperationKey,
+        ...application
+      }) => ({ ...application, error: redactDiagnostic(application.error) }),
+    ),
   };
 }
 
@@ -227,12 +282,30 @@ async function multipartFile(req: http.IncomingMessage): Promise<{
   }
   const metadataPart = parts.find((part) => part.name === 'metadata');
   const filePart = parts.find((part) => part.name === 'file');
-  if (!metadataPart || !filePart)
-    throw new Error('Multipart upload requires metadata and file parts');
-  const metadata = strictParseJson(metadataPart.body.toString('utf8'));
+  if (!filePart) throw new Error('Multipart upload requires a file part');
+  const metadata = metadataPart
+    ? strictParseJson(metadataPart.body.toString('utf8'))
+    : {};
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
     throw new Error('Multipart metadata must be a JSON object');
   return { metadata: metadata as Record<string, unknown>, file: filePart.body };
+}
+
+async function externalResultBody(req: http.IncomingMessage): Promise<string> {
+  const contentType = req.headers['content-type'] ?? '';
+  const raw = contentType.startsWith('multipart/form-data')
+    ? (await multipartFile(req)).file.toString('utf8')
+    : contentType.startsWith('application/json')
+      ? (await requestBuffer(req)).toString('utf8')
+      : (() => {
+          throw new Error(
+            'External result requires application/json or a multipart JSON file',
+          );
+        })();
+  const parsed = strictParseJson(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+    throw new Error('External result must be exactly one JSON object');
+  return raw;
 }
 
 const fileMetadataInputSchema = z
@@ -829,6 +902,8 @@ export class CollaborationWebApi {
       return;
     }
 
+    if (await this.insightRoutes(req, res, url)) return;
+    if (await this.analysisRoutes(req, res, url)) return;
     if (await this.workspaceRoutes(req, res, url)) return;
     if (await this.workItemRoutes(req, res, url)) return;
     if (await this.discussionRoutes(req, res, url)) return;
@@ -842,6 +917,337 @@ export class CollaborationWebApi {
     if (!projection)
       throw new Error('Collaboration Group has no verified projection');
     return projection;
+  }
+
+  private async insightRoutes(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    url: URL,
+  ): Promise<boolean> {
+    const method = req.method ?? 'GET';
+    let found = match(
+      url.pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/insights$`, 'u'),
+    );
+    if (found && method === 'GET') {
+      send(
+        res,
+        200,
+        this.runtime.analysis.projectInsight(
+          found[1]!,
+          url.searchParams.get('mark_viewed') !== 'false',
+        ),
+      );
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/analysis-scope-options$`, 'u'),
+    );
+    if (found && method === 'GET') {
+      send(res, 200, this.runtime.analysis.scopeOptions(found[1]!));
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/my-items$`, 'u'),
+    );
+    if (found && method === 'GET') {
+      send(res, 200, this.runtime.analysis.myItems(found[1]!));
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/notifications$`, 'u'),
+    );
+    if (found && method === 'GET') {
+      const group = this.runtime.store.getGroup(found[1]!);
+      if (!group) throw new Error('Collaboration Group not found');
+      const severityValue = url.searchParams.get('severity');
+      const severity = severityValue
+        ? z
+            .enum(['critical', 'high', 'medium', 'low', 'info'])
+            .parse(severityValue)
+        : undefined;
+      send(res, 200, {
+        notifications:
+          group.localPrincipalId && group.localClientId
+            ? this.runtime.store.listNotifications({
+                groupId: group.groupId,
+                principalId: group.localPrincipalId,
+                clientId: group.localClientId,
+                includeHandled:
+                  url.searchParams.get('include_handled') === 'true',
+                severity,
+                resourceType:
+                  url.searchParams.get('resource_type') ?? undefined,
+              })
+            : [],
+      });
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/notifications/([^/]+)/(read|handled)$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const group = this.runtime.store.getGroup(found[1]!);
+      if (!group?.localPrincipalId || !group.localClientId)
+        throw new Error('Observer has no local notifications');
+      const changed =
+        found[3] === 'read'
+          ? this.runtime.store.markNotificationRead(
+              found[2]!,
+              group.localPrincipalId,
+              group.localClientId,
+            )
+          : this.runtime.store.markNotificationHandled(
+              found[2]!,
+              group.localPrincipalId,
+              group.localClientId,
+            );
+      send(res, 200, { changed });
+      return true;
+    }
+    return false;
+  }
+
+  private async analysisRoutes(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    url: URL,
+  ): Promise<boolean> {
+    const method = req.method ?? 'GET';
+    let found = match(
+      url.pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/analysis-executors$`, 'u'),
+    );
+    if (found && method === 'GET') {
+      if (!this.runtime.store.getGroup(found[1]!))
+        throw new Error('Collaboration Group not found');
+      send(res, 200, {
+        executors: this.runtime.analysis.listManagedExecutors(),
+      });
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/analysis-runs$`, 'u'),
+    );
+    if (found && method === 'GET') {
+      send(res, 200, {
+        runs: this.runtime.analysis
+          .list(found[1]!)
+          .map((detail) => publicAnalysisDetail(detail)),
+      });
+      return true;
+    }
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            scope: collaborationAnalysisScopeSchema,
+            executionChannel: z.enum(['managed_executor', 'external_agent']),
+            executorId: identifier.nullable().optional(),
+            selectedFileIds: z.array(identifier).max(1000).optional(),
+            includeSelectedFileContents: z.boolean().optional(),
+          })
+          .strict(),
+      );
+      send(
+        res,
+        201,
+        publicAnalysisDetail(
+          await this.runtime.analysis.createRun(found[1]!, body),
+        ),
+      );
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/analysis-runs/([^/]+)$`, 'u'),
+    );
+    if (found && method === 'GET') {
+      send(
+        res,
+        200,
+        publicAnalysisDetail(
+          this.runtime.analysis.detail(found[1]!, found[2]!),
+        ),
+      );
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/analysis-runs/([^/]+)/(start|cancel|retry|complete)$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const operation = found[3]!;
+      const detail =
+        operation === 'start'
+          ? await this.runtime.analysis.startManaged(found[1]!, found[2]!)
+          : operation === 'cancel'
+            ? await this.runtime.analysis.cancel(found[1]!, found[2]!)
+            : operation === 'retry'
+              ? await this.runtime.analysis.retry(found[1]!, found[2]!)
+              : this.runtime.analysis.completeReview(found[1]!, found[2]!);
+      send(res, 200, publicAnalysisDetail(detail));
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/analysis-runs/([^/]+)/external-package$`,
+        'u',
+      ),
+    );
+    if (found && method === 'GET') {
+      send(
+        res,
+        200,
+        await this.runtime.analysis.externalPackage(found[1]!, found[2]!),
+      );
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/analysis-runs/([^/]+)/external-prompt$`,
+        'u',
+      ),
+    );
+    if (found && method === 'GET') {
+      send(res, 200, {
+        prompt: this.runtime.analysis.externalPrompt(found[1]!, found[2]!),
+      });
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/analysis-runs/([^/]+)/external-result$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      send(
+        res,
+        200,
+        publicAnalysisDetail(
+          await this.runtime.analysis.submitExternalResult(
+            found[1]!,
+            found[2]!,
+            await externalResultBody(req),
+          ),
+        ),
+      );
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/analysis-runs/([^/]+)/findings/([^/]+)/decision$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            decision: collaborationFindingDecisionSchema,
+            reason: z.string().max(4000).nullable().optional(),
+          })
+          .strict(),
+      );
+      send(res, 200, {
+        finding: this.runtime.analysis.decideFinding({
+          groupId: found[1]!,
+          analysisId: found[2]!,
+          findingId: found[3]!,
+          ...body,
+        }),
+      });
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/analysis-runs/([^/]+)/actions/(preview|apply)$`,
+        'u',
+      ),
+    );
+    if (found && method === 'POST') {
+      if (found[3] === 'preview') {
+        const body = await jsonBody(
+          req,
+          z
+            .object({
+              actions: z
+                .array(
+                  z
+                    .object({
+                      requestId: identifier,
+                      findingId: identifier,
+                      actionOrdinal: z.number().int().nonnegative().optional(),
+                      action: collaborationProposedActionSchema,
+                    })
+                    .strict(),
+                )
+                .min(1)
+                .max(100),
+            })
+            .strict(),
+        );
+        send(res, 200, {
+          previews: this.runtime.analysis.previewActions({
+            groupId: found[1]!,
+            analysisId: found[2]!,
+            actions: body.actions,
+          }),
+        });
+      } else {
+        const body = await jsonBody(
+          req,
+          z
+            .object({
+              actions: z
+                .array(
+                  z
+                    .object({
+                      applicationId: identifier,
+                      confirmationToken: z.string().min(32).max(240),
+                      action: collaborationProposedActionSchema.optional(),
+                    })
+                    .strict(),
+                )
+                .min(1)
+                .max(100),
+            })
+            .strict(),
+        );
+        send(
+          res,
+          200,
+          publicAnalysisDetail(
+            await this.runtime.analysis.applyActions({
+              groupId: found[1]!,
+              analysisId: found[2]!,
+              actions: body.actions,
+            }),
+          ),
+        );
+      }
+      return true;
+    }
+    return false;
   }
 
   private async workspaceRoutes(

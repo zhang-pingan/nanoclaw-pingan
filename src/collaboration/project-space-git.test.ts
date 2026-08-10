@@ -615,6 +615,88 @@ process.exit(result.status === null ? 1 : result.status);
     }
   }, 30_000);
 
+  it('materializes a Discussion and its initial message in one signed commit', async () => {
+    const test = fixture();
+    const transport = new CollaborationProjectSpaceGitTransport();
+    const store = new CollaborationProjectSpaceStore(
+      path.join(test.root, 'collaboration.db'),
+    );
+    const service = new CollaborationProjectSpaceService(
+      store,
+      transport,
+      path.join(test.root, 'repositories'),
+      identityService(test.identity),
+      () => Date.parse(NOW),
+    );
+    try {
+      await service.createGroup({
+        remoteUrl: test.remote,
+        name: 'Signed project',
+        gitSshKeyPath: test.identity.privateKeyPath,
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'open',
+        observerAccess: 'allowed',
+        groupId: 'group_signed',
+      });
+      const created = await service.createDiscussionWithMessage({
+        groupId: 'group_signed',
+        threadId: 'thread_atomic',
+        messageId: 'message_initial',
+        title: 'Atomic review',
+        scope: { type: 'group' },
+        body: 'The initial review request.',
+      });
+
+      const records = store
+        .listEventRecords('group_signed')
+        .filter((record) => record.event.aggregate_id === 'thread_atomic');
+      expect(records).toHaveLength(1);
+      expect(records[0]?.event).toMatchObject({
+        aggregate_revision: 1,
+        event_type: 'discussion_created',
+        payload: {
+          discussion: { thread_id: 'thread_atomic' },
+          message: {
+            message_id: 'message_initial',
+            body: 'The initial review request.',
+          },
+        },
+      });
+      expect(
+        created.projection?.discussions.thread_atomic.messages.message_initial,
+      ).toMatchObject({ body: 'The initial review request.', revision: 1 });
+      expect(
+        JSON.parse(
+          (
+            await transport.readVerifiedFile({
+              repositoryPath: created.repositoryPath,
+              verifiedHead: created.lastVerifiedHead!,
+              repositoryFile: 'discussions/thread_atomic/thread.json',
+            })
+          ).toString('utf8'),
+        ),
+      ).toMatchObject({ thread_id: 'thread_atomic', revision: 1 });
+      expect(
+        JSON.parse(
+          (
+            await transport.readVerifiedFile({
+              repositoryPath: created.repositoryPath,
+              verifiedHead: created.lastVerifiedHead!,
+              repositoryFile:
+                'discussions/thread_atomic/messages/message_initial.json',
+            })
+          ).toString('utf8'),
+        ),
+      ).toMatchObject({
+        message_id: 'message_initial',
+        body: 'The initial review request.',
+      });
+    } finally {
+      store.close();
+    }
+  }, 30_000);
+
   it('materializes Workflow Definition lifecycle commits when files stay unchanged', async () => {
     const test = fixture();
     const store = new CollaborationProjectSpaceStore(

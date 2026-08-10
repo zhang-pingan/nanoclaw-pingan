@@ -517,6 +517,11 @@ var collaborationState = {
   selectedWorkItemId: '',
   selectedDiscussionId: '',
   selectedInstanceId: '',
+  selectedAnalysisId: '',
+  overviewOnlyMine: false,
+  overviewRiskOnly: false,
+  notificationSeverity: '',
+  notificationResourceType: '',
   workItemView: 'board',
   filePreview: null,
   loading: false,
@@ -800,6 +805,14 @@ async function handleCollaborationContentAction(button) {
     showToast(error instanceof Error ? error.message : String(error), 3200);
   } finally {
     button.disabled = false;
+  }
+}
+
+async function handleCollaborationContentChange(control) {
+  try {
+    await collaborationWorkspace.handleChange(control);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), 3200);
   }
 }
 
@@ -13322,6 +13335,11 @@ if (collaborationContent) {
     const button = event.target.closest('[data-collaboration-action]');
     if (!(button instanceof HTMLButtonElement)) return;
     handleCollaborationContentAction(button);
+  });
+  collaborationContent.addEventListener('change', (event) => {
+    const control = event.target.closest('[data-collaboration-change]');
+    if (!(control instanceof HTMLSelectElement)) return;
+    handleCollaborationContentChange(control);
   });
 }
 if (collaborationDialogForm) {

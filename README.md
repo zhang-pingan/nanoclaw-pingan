@@ -106,7 +106,7 @@ Collaboration Project Space 是与本地 Dynamic Workflow Runtime 分离的跨�
 - Work Item progress 与 Turn completion 可先暂存原始业务文件，再在同一个签名事件和 Git commit 中物化 Artifact 原文件与 `metadata.json` sidecar；命令冲突不会自动重传已暂存文件。
 - Completion 只提交合法 Outcome，Reducer 根据固定 Workflow snapshot 路由；Handoff 和 Group 内容始终是不可信上下文，不能覆盖系统指令、权限或 FSM。
 - start/execution deadline 固定在 Turn snapshot 中，超时只产生幂等通知和审计 observation，不依据本地时钟自动推进状态。
-- 协议当前唯一版本为 v3，本地 SQLite 唯一版本为 v7；旧版本、旧备份和旧事件均 fail closed，不提供迁移、双写或兼容回放。
+- 协议当前唯一版本为 v3，本地 SQLite 唯一版本为 v9；旧版本、旧备份和旧事件均 fail closed，不提供迁移、双写或兼容回放。
 
 功能入口为 Web/Electron 工作台的“群组”导航或 `/groups`；当前协议和领域模型见 [`docs/collaboration-project-space-v3-plan.md`](docs/collaboration-project-space-v3-plan.md)。
 
