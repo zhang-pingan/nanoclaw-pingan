@@ -238,7 +238,7 @@ flowchart LR
 
 ## 5. Project Analyst 定位
 
-Project Analyst 是 Icarus 内置的项目级只读分析能力，不要求 Group 预先创建 Workflow、Action 或自定义 Prompt。
+Project Analyst 是 Icarus 内置的项目级分析能力，不要求 Group 预先创建 Workflow、Action 或自定义 Prompt。它对群组业务状态没有直接写权限；这不表示黑盒 Executor 的临时工作区、工具或网络环境是只读的。
 
 用户可以选择：
 
@@ -414,10 +414,17 @@ stateDiagram-v2
   prepared --> cancelled
   running --> failed
   awaiting_external_result --> cancelled
+  prepared --> stale: verified head changed
+  running --> stale: verified head changed
+  awaiting_external_result --> stale: verified head changed
+  validating --> stale: verified head changed
+  invalid --> stale: verified head changed
   ready_for_review --> stale: verified head changed
+  partially_applied --> stale: verified head changed
+  failed --> stale: verified head changed
 ```
 
-`stale` 不删除报告，只阻止未经重新确认的后续写操作。
+`stale` 不删除报告，只阻止预览和应用后续写操作。托管执行已经被 Executor 接受时，即使 `running` 因 verified head 变化进入 `stale`，Host 仍保存同一 attempt/operation 的 receipt 并继续观察，晚到的合法或非法结果只作为 stale 审计结果保留。外部接力处于 `awaiting_external_result` 时发生相同变化，也必须先进入 `stale`，之后回填结果不能恢复为可操作报告。
 
 ## 9. Icarus 托管 Executor 流程
 
@@ -434,6 +441,8 @@ stateDiagram-v2
 11. 用户选择接受、忽略、暂缓或转换建议。
 
 托管执行只管理运行生命周期和结果回收，不通过 Bash、Write、Git、Web、Task 或其他平台工具名称、调用记录或通用 trace/logging 对分析作出通过、阻断或提醒判定。
+
+Project Analysis 不定义 Executor 的文件系统访问模式作为公共协议或安全边界。当前 Run Once Adapter 在通用接口要求访问模式时使用可写临时工作区；这只允许黑盒 Executor 使用本次运行的临时能力包目录，不授予任何 Group 业务写权限。群组变更仍只能由 Host 在 Result 校验、用户确认、Principal 权限检查、Reducer、Credential 签名和 Git CAS 之后通过正式 API 写入。
 
 托管模式需要记录：
 

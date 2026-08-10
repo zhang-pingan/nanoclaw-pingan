@@ -3213,7 +3213,12 @@ export class CollaborationProjectSpaceStore {
       .prepare(
         `UPDATE collaboration_analysis_runs
             SET execution_ref = ?, provider_metadata_json = ?, updated_at_ms = ?
-          WHERE analysis_id = ? AND status = 'running' AND attempt = ?
+          WHERE analysis_id = ?
+            AND (
+              status = 'running'
+              OR (status = 'stale' AND stale_from_status = 'running')
+            )
+            AND attempt = ?
             AND operation_key = ?
             AND (execution_ref IS NULL OR execution_ref = ?)`,
       )

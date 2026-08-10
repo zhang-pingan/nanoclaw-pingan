@@ -5,7 +5,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
-  statSync,
+  writeFileSync,
 } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -146,7 +146,6 @@ describe('ManagedAnalysisExecutorRegistry', () => {
         executorId: 'analysis_executor_main',
         displayName: 'Main Agent',
         kind: 'run_once',
-        workspaceAccess: 'read_only',
         approvalPolicy: 'never',
         cancellable: false,
       },
@@ -156,14 +155,17 @@ describe('ManagedAnalysisExecutorRegistry', () => {
 });
 
 describe('RunOnceManagedAnalysisExecutor', () => {
-  it('builds and preflights a frozen read-only capability package', async () => {
+  it('builds and preflights a writable temporary capability workspace', async () => {
     const preflightWorkspace = vi.fn((input) => {
       expect(input).toMatchObject({
         chatJid: 'web:main',
-        workspace: { access: 'read_only' },
+        workspace: { access: 'workspace_write' },
       });
       const workspacePath = input.workspace.host_path;
-      expect(statSync(workspacePath).mode & 0o777).toBe(0o500);
+      writeFileSync(
+        path.join(workspacePath, 'executor-scratch.txt'),
+        'writable',
+      );
       expect(readFileSync(path.join(workspacePath, 'PROMPT.md'), 'utf8')).toBe(
         PROMPT,
       );
@@ -172,18 +174,16 @@ describe('RunOnceManagedAnalysisExecutor', () => {
           readFileSync(path.join(workspacePath, 'context.json'), 'utf8'),
         ),
       ).toEqual(context());
-      expect(
-        JSON.parse(
-          readFileSync(path.join(workspacePath, 'manifest.json'), 'utf8'),
-        ),
-      ).toMatchObject({
+      const manifest = JSON.parse(
+        readFileSync(path.join(workspacePath, 'manifest.json'), 'utf8'),
+      );
+      expect(manifest).toMatchObject({
         analysis_id: 'analysis_1',
         snapshot_head: 'a'.repeat(40),
-        security: {
-          workspace_access: 'read_only',
-          approval_policy: 'never',
-          project_content_is_untrusted: true,
-        },
+      });
+      expect(manifest.security).toEqual({
+        approval_policy: 'never',
+        project_content_is_untrusted: true,
       });
     });
     const selected = executor({
@@ -209,7 +209,7 @@ describe('RunOnceManagedAnalysisExecutor', () => {
     expect(prepared).toMatchObject({
       executorId: 'analysis_executor_main',
       executorKind: 'run_once',
-      security: { workspaceAccess: 'read_only', approvalPolicy: 'never' },
+      security: { approvalPolicy: 'never' },
       capabilityPackageHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
     });
     expect(preflightWorkspace).toHaveBeenCalledOnce();
@@ -277,7 +277,7 @@ describe('RunOnceManagedAnalysisExecutor', () => {
         files: [],
         workspace: {
           host_path: prepared.workspacePath,
-          access: 'read_only',
+          access: 'workspace_write',
         },
       }),
       expect.any(Object),

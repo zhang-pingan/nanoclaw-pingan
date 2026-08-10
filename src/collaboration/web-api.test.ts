@@ -1305,7 +1305,13 @@ describe('Collaboration project-space v3 Web API', () => {
   it('routes managed and external Analysis Runs with explicit request shapes', async () => {
     const detail = analysisDetail();
     const listManagedExecutors = vi.fn(() => [
-      { id: 'executor_codex', label: 'Icarus managed Codex' },
+      {
+        executorId: 'executor_codex',
+        displayName: 'Icarus managed Codex',
+        kind: 'run_once',
+        approvalPolicy: 'never',
+        cancellable: false,
+      },
     ]);
     const list = vi.fn(() => [detail]);
     const getDetail = vi.fn(() => detail);
@@ -1328,12 +1334,20 @@ describe('Collaboration project-space v3 Web API', () => {
     );
     const submitExternalResult = vi.fn(async () => detail);
     const decideFinding = vi.fn(() => detail.findings[0]);
-    const previewActions = vi.fn(() => [
-      {
-        application: detail.applications[0],
-        confirmationToken: 'confirmation-token-that-is-long-enough',
+    const previewActions = vi.fn(
+      (input: { actions: Array<{ actionOrdinal?: number }> }) => {
+        if (input.actions.some((entry) => (entry.actionOrdinal ?? 0) > 0))
+          throw new Error(
+            'Finding finding_1 has no proposed Action at ordinal 1',
+          );
+        return [
+          {
+            application: detail.applications[0],
+            confirmationToken: 'confirmation-token-that-is-long-enough',
+          },
+        ];
       },
-    ]);
+    );
     const applyActions = vi.fn(async () => detail);
     const analysis = {
       listManagedExecutors,
@@ -1358,8 +1372,16 @@ describe('Collaboration project-space v3 Web API', () => {
         const prefix = `${baseUrl}/api/collaboration/groups/group_test`;
         const executors = await fetch(`${prefix}/analysis-executors`);
         expect(executors.status).toBe(200);
-        expect(await executors.json()).toMatchObject({
-          executors: [{ id: 'executor_codex' }],
+        expect(await executors.json()).toEqual({
+          executors: [
+            {
+              executorId: 'executor_codex',
+              displayName: 'Icarus managed Codex',
+              kind: 'run_once',
+              approvalPolicy: 'never',
+              cancellable: false,
+            },
+          ],
         });
         const options = await fetch(`${prefix}/analysis-scope-options`);
         expect(options.status).toBe(200);
@@ -1547,6 +1569,71 @@ describe('Collaboration project-space v3 Web API', () => {
               action,
             },
           ],
+        });
+
+        const editedAction = {
+          action: 'create_work_item' as const,
+          parameters: {
+            type: 'task' as const,
+            title: 'Use an edited action type',
+            description: '',
+            priority: 'normal' as const,
+            due_at: null,
+            labels: [],
+            related_work_item_ids: ['work_1'],
+          },
+        };
+        const edited = await fetch(
+          `${prefix}/analysis-runs/analysis_1/actions/preview`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              actions: [
+                {
+                  requestId: 'preview_edited_suggestion',
+                  findingId: 'finding_1',
+                  actionOrdinal: 0,
+                  action: editedAction,
+                },
+              ],
+            }),
+          },
+        );
+        expect(edited.status).toBe(200);
+        expect(previewActions).toHaveBeenLastCalledWith({
+          groupId: 'group_test',
+          analysisId: 'analysis_1',
+          actions: [
+            {
+              requestId: 'preview_edited_suggestion',
+              findingId: 'finding_1',
+              actionOrdinal: 0,
+              action: editedAction,
+            },
+          ],
+        });
+
+        const forgedOrdinal = await fetch(
+          `${prefix}/analysis-runs/analysis_1/actions/preview`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              actions: [
+                {
+                  requestId: 'preview_forged_ordinal',
+                  findingId: 'finding_1',
+                  actionOrdinal: 1,
+                  action: editedAction,
+                },
+              ],
+            }),
+          },
+        );
+        expect(forgedOrdinal.status).toBe(400);
+        expect(await forgedOrdinal.json()).toMatchObject({
+          error: 'Finding finding_1 has no proposed Action at ordinal 1',
         });
 
         const confirmationToken = 'x'.repeat(40);

@@ -73,6 +73,14 @@ function sha256(value: string): string {
   return `sha256:${crypto.createHash('sha256').update(value).digest('hex')}`;
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 class MemoryTransport implements CollaborationProjectSpaceTransport {
   readonly histories = new Map<string, ValidatedProjectSpaceHistory>();
   readonly files = new Map<string, Buffer>();
@@ -193,32 +201,40 @@ class TestManagedExecutor implements ManagedAnalysisExecutor {
     executorId: 'analysis_executor_test',
     displayName: 'Test Project Analyst',
     kind: 'run_once',
-    workspaceAccess: 'read_only',
     approvalPolicy: 'never',
     cancellable: false,
   } as const;
   readonly requests = new Map<string, ManagedAnalysisExecutionRequest>();
   readonly failedAttempts = new Set<number>();
+  readonly invalidResultAttempts = new Set<number>();
   readonly runningAttempts = new Set<number>();
+  readonly prepareStarted = new Set<number>();
+  readonly dispatchStarted = new Set<number>();
+  readonly prepareWaits = new Map<number, Promise<void>>();
+  readonly dispatchWaits = new Map<number, Promise<void>>();
 
   async prepare(
     request: ManagedAnalysisExecutionRequest,
   ): Promise<PreparedManagedAnalysisExecution> {
+    this.prepareStarted.add(request.attempt);
+    await this.prepareWaits.get(request.attempt);
     return {
       ...request,
       executorId: this.descriptor.executorId,
       executorKind: 'run_once',
       workspacePath: '/tmp/frozen-project-analysis',
       capabilityPackageHash: sha256('capability'),
-      security: { workspaceAccess: 'read_only', approvalPolicy: 'never' },
+      security: { approvalPolicy: 'never' },
     };
   }
 
   async dispatch(
     execution: PreparedManagedAnalysisExecution,
   ): Promise<ManagedAnalysisDispatchReceipt> {
+    this.dispatchStarted.add(execution.attempt);
     const executionRef = `managed:${String(execution.attempt)}`;
     this.requests.set(executionRef, execution);
+    await this.dispatchWaits.get(execution.attempt);
     return {
       executionRef,
       providerMetadata: { provider: 'test', model: 'test-model' },
@@ -264,15 +280,17 @@ class TestManagedExecutor implements ManagedAnalysisExecutor {
       state: 'result_ready',
       executionRef,
       providerMetadata: { provider: 'test', model: 'test-model' },
-      rawResult: JSON.stringify(
-        analysisResultFromBindings({
-          analysisId: request.analysisId,
-          snapshotHead: request.snapshotHead,
-          contextHash: request.contextHash,
-          promptHash: request.promptHash,
-          challenge: request.challenge,
-        }),
-      ),
+      rawResult: this.invalidResultAttempts.has(request.attempt)
+        ? '{}'
+        : JSON.stringify(
+            analysisResultFromBindings({
+              analysisId: request.analysisId,
+              snapshotHead: request.snapshotHead,
+              contextHash: request.contextHash,
+              promptHash: request.promptHash,
+              challenge: request.challenge,
+            }),
+          ),
       error: null,
     };
   }
@@ -719,6 +737,28 @@ describe('CollaborationAnalysisService result boundary', () => {
       ),
     });
     expect(reviewed.allowedActionTypes).toContain('create_work_item');
+    for (const [findingId, actionOrdinal] of [
+      ['finding_delivery', 0],
+      ['finding_switch_action_type', 1],
+    ] as const)
+      expect(() =>
+        harness.analysis.previewActions({
+          groupId: GROUP_ID,
+          analysisId: run.run.analysisId,
+          actions: [
+            {
+              requestId: `forged_ordinal_${String(actionOrdinal)}`,
+              findingId,
+              actionOrdinal,
+              action: finding().proposed_actions[0]!,
+            },
+          ],
+        }),
+      ).toThrow(
+        expect.objectContaining<Partial<CollaborationAnalysisServiceError>>({
+          code: 'analysis_action_conflict',
+        }),
+      );
     const previews = harness.analysis.previewActions({
       groupId: GROUP_ID,
       analysisId: run.run.analysisId,
@@ -797,6 +837,160 @@ describe('CollaborationAnalysisService result boundary', () => {
         'Track the switched Finding action',
       ]),
     );
+  });
+
+  it('records and observes an accepted receipt after HEAD changes during prepare', async () => {
+    const harness = await memberHarness();
+    const prepare = deferred<void>();
+    harness.executor.prepareWaits.set(1, prepare.promise);
+    const created = await harness.analysis.createRun({
+      groupId: GROUP_ID,
+      scope: { type: 'project' },
+      executionChannel: 'managed_executor',
+      executorId: harness.executor.descriptor.executorId,
+    });
+
+    const starting = harness.analysis.startRun(
+      GROUP_ID,
+      created.run.analysisId,
+    );
+    await vi.waitFor(() =>
+      expect(harness.executor.prepareStarted).toContain(1),
+    );
+    await harness.groups.createWorkItem({
+      groupId: GROUP_ID,
+      workItemId: 'wi_prepare_receipt_drift',
+      type: 'task',
+      title: 'Move HEAD while managed prepare is pending',
+    });
+    expect(
+      harness.analysis.getRun(GROUP_ID, created.run.analysisId).run,
+    ).toMatchObject({
+      status: 'stale',
+      staleFromStatus: 'running',
+      executionRef: null,
+    });
+
+    prepare.resolve(undefined);
+    await starting;
+    await vi.waitFor(() =>
+      expect(
+        harness.analysis.getRun(GROUP_ID, created.run.analysisId).results,
+      ).toHaveLength(1),
+    );
+    const stale = harness.analysis.getRun(GROUP_ID, created.run.analysisId);
+    expect(stale).toMatchObject({
+      run: {
+        status: 'stale',
+        staleFromStatus: 'running',
+        attempt: 1,
+        operationKey: `analysis:${created.run.analysisId}:attempt:1`,
+        executionRef: 'managed:1',
+        providerMetadata: { provider: 'test', model: 'test-model' },
+      },
+      result: {
+        attempt: 1,
+        normalized: { analysis_id: created.run.analysisId },
+      },
+    });
+    expect(harness.executor.requests.has('managed:1')).toBe(true);
+    expect(() =>
+      harness.analysis.previewActions({
+        groupId: GROUP_ID,
+        analysisId: created.run.analysisId,
+        actions: [],
+      }),
+    ).toThrow(
+      expect.objectContaining<Partial<CollaborationAnalysisServiceError>>({
+        code: 'analysis_snapshot_stale',
+      }),
+    );
+    await expect(
+      harness.analysis.applyActions({
+        groupId: GROUP_ID,
+        analysisId: created.run.analysisId,
+        actions: [],
+      }),
+    ).rejects.toMatchObject({ code: 'analysis_snapshot_stale' });
+  });
+
+  it('records and observes an accepted invalid result after HEAD changes during dispatch', async () => {
+    const harness = await memberHarness();
+    const dispatch = deferred<void>();
+    harness.executor.dispatchWaits.set(1, dispatch.promise);
+    harness.executor.invalidResultAttempts.add(1);
+    const created = await harness.analysis.createRun({
+      groupId: GROUP_ID,
+      scope: { type: 'project' },
+      executionChannel: 'managed_executor',
+      executorId: harness.executor.descriptor.executorId,
+    });
+
+    const starting = harness.analysis.startRun(
+      GROUP_ID,
+      created.run.analysisId,
+    );
+    await vi.waitFor(() =>
+      expect(harness.executor.dispatchStarted).toContain(1),
+    );
+    await harness.groups.createWorkItem({
+      groupId: GROUP_ID,
+      workItemId: 'wi_dispatch_receipt_drift',
+      type: 'task',
+      title: 'Move HEAD while managed dispatch is pending',
+    });
+    expect(
+      harness.analysis.getRun(GROUP_ID, created.run.analysisId).run,
+    ).toMatchObject({
+      status: 'stale',
+      staleFromStatus: 'running',
+      executionRef: null,
+    });
+
+    dispatch.resolve(undefined);
+    await starting;
+    await vi.waitFor(() =>
+      expect(
+        harness.analysis.getRun(GROUP_ID, created.run.analysisId).results,
+      ).toHaveLength(1),
+    );
+    const stale = harness.analysis.getRun(GROUP_ID, created.run.analysisId);
+    expect(stale).toMatchObject({
+      run: {
+        status: 'stale',
+        staleFromStatus: 'running',
+        attempt: 1,
+        executionRef: 'managed:1',
+        providerMetadata: { provider: 'test', model: 'test-model' },
+        error: 'Analysis result failed Host validation',
+      },
+      result: {
+        attempt: 1,
+        normalized: null,
+        validationErrors: expect.arrayContaining([
+          expect.objectContaining({ code: 'schema_invalid' }),
+        ]),
+      },
+    });
+    expect(harness.executor.requests.has('managed:1')).toBe(true);
+    expect(() =>
+      harness.analysis.previewActions({
+        groupId: GROUP_ID,
+        analysisId: created.run.analysisId,
+        actions: [],
+      }),
+    ).toThrow(
+      expect.objectContaining<Partial<CollaborationAnalysisServiceError>>({
+        code: 'analysis_snapshot_stale',
+      }),
+    );
+    await expect(
+      harness.analysis.applyActions({
+        groupId: GROUP_ID,
+        analysisId: created.run.analysisId,
+        actions: [],
+      }),
+    ).rejects.toMatchObject({ code: 'analysis_snapshot_stale' });
   });
 
   it('keeps late external and managed results as stale audit attempts after HEAD drift', async () => {

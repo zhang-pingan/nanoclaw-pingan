@@ -1355,6 +1355,17 @@ export class CollaborationAnalysisService {
     return input.actions.map((entry) => {
       const finding = findings.get(entry.findingId);
       if (!finding) throw new Error(`Finding not found: ${entry.findingId}`);
+      if (entry.actionOrdinal !== undefined) {
+        const validOrdinal =
+          Number.isSafeInteger(entry.actionOrdinal) &&
+          entry.actionOrdinal >= 0 &&
+          entry.actionOrdinal < finding.finding.proposed_actions.length;
+        if (!validOrdinal)
+          throw new CollaborationAnalysisServiceError(
+            'analysis_action_conflict',
+            `Finding ${entry.findingId} has no proposed Action at ordinal ${String(entry.actionOrdinal)}`,
+          );
+      }
       const action = collaborationProposedActionSchema.parse(entry.action);
       const context = this.requireContext(input.analysisId);
       const actionErrors = findingActionErrors({
