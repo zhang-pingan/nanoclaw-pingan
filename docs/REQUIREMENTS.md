@@ -186,8 +186,8 @@ A personal Claude assistant accessible through its installed channels, with mini
 
 ### Skills
 - `/setup` - Install dependencies, configure built-in channels and scheduler, and start services
-- `/customize` - General-purpose skill for adding capabilities (new channels like Telegram, new integrations, behavior changes)
-- `/update` - Pull upstream changes, merge with customizations, apply current-version setup, and require explicit reinitialization for stale development stores
+- `/debug` - Diagnose container execution, authentication, mounts, sessions, MCP, and IPC issues
+- `/manage-workflows` - Add, modify, or disable workflow type definitions
 
 ### Deployment
 - Runs from a local Git checkout on Mac via launchd

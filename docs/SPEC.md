@@ -293,14 +293,9 @@ icarus/
 │
 ├── .claude/
 │   └── skills/
-│       ├── setup/SKILL.md              # /setup - First-time installation
-│       ├── customize/SKILL.md          # /customize - Add capabilities
 │       ├── debug/SKILL.md              # /debug - Container debugging
-│       ├── add-gmail/SKILL.md          # /add-gmail - Gmail integration
-│       ├── add-voice-transcription/    # /add-voice-transcription - Whisper
-│       ├── x-integration/SKILL.md      # /x-integration - X/Twitter
-│       ├── convert-to-apple-container/  # /convert-to-apple-container - Apple Container runtime
-│       └── add-parallel/SKILL.md       # /add-parallel - Parallel agents
+│       ├── manage-workflows/SKILL.md   # /manage-workflows - Workflow type configuration
+│       └── setup/SKILL.md              # /setup - First-time installation
 │
 ├── agents/
 │   ├── CLAUDE.md                  # Global memory (all Agents read this)
