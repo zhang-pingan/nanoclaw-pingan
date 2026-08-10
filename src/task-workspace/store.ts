@@ -976,6 +976,10 @@ export class TaskWorkspaceStore {
     sessionId: string,
     runtimeAttention: TaskAttentionState | undefined,
     nowMs: number,
+    sessionActivity?: {
+      readonly touch?: boolean;
+      readonly coordinatorAgentSessionId?: string;
+    },
   ): TaskSessionV1 {
     const current = this.database
       .prepare(
@@ -999,7 +1003,9 @@ export class TaskWorkspaceStore {
     );
     if (
       current.attention_state === nextAttention &&
-      current.runtime_attention_state === nextRuntime
+      current.runtime_attention_state === nextRuntime &&
+      sessionActivity?.touch !== true &&
+      sessionActivity?.coordinatorAgentSessionId === undefined
     ) {
       return this.getSession(sessionId);
     }
@@ -1007,12 +1013,16 @@ export class TaskWorkspaceStore {
       .prepare(
         `UPDATE task_workspace_sessions
             SET attention_state = ?, runtime_attention_state = ?,
+                coordinator_agent_session_id =
+                  CASE WHEN ? = 1 THEN ? ELSE coordinator_agent_session_id END,
                 updated_at_ms = ?, row_version = row_version + 1
           WHERE session_id = ? AND row_version = ?`,
       )
       .run(
         nextAttention,
         nextRuntime,
+        sessionActivity?.coordinatorAgentSessionId === undefined ? 0 : 1,
+        sessionActivity?.coordinatorAgentSessionId ?? null,
         nowMs,
         sessionId,
         current.row_version,
@@ -1547,16 +1557,11 @@ export class TaskWorkspaceStore {
           .run(turnId, input.sessionId, messageId, nowMs);
         turn = this.getCoordinatorTurn(turnId);
       }
-      this.database
-        .prepare(
-          `UPDATE task_workspace_sessions SET updated_at_ms = ?,
-            row_version = row_version + 1 WHERE session_id = ?`,
-        )
-        .run(nowMs, input.sessionId);
       this.recomputeAttentionStateInTransaction(
         input.sessionId,
         undefined,
         nowMs,
+        { touch: true },
       );
       return { message, timeline, turn };
     });
@@ -1795,20 +1800,16 @@ export class TaskWorkspaceStore {
           nowMs,
           input.turnId,
         );
-      if (input.agentSessionId) {
-        this.database
-          .prepare(
-            `UPDATE task_workspace_sessions
-                SET coordinator_agent_session_id = ?, updated_at_ms = ?,
-                    row_version = row_version + 1
-              WHERE session_id = ?`,
-          )
-          .run(input.agentSessionId, nowMs, turn.session_id);
-      }
       this.recomputeAttentionStateInTransaction(
         turn.session_id,
         undefined,
         nowMs,
+        input.agentSessionId
+          ? {
+              touch: true,
+              coordinatorAgentSessionId: input.agentSessionId,
+            }
+          : undefined,
       );
       return this.getCoordinatorTurn(input.turnId);
     });
@@ -2051,6 +2052,7 @@ export class TaskWorkspaceStore {
         input.sessionId,
         undefined,
         nowMs,
+        { touch: true },
       );
       this.database
         .prepare(
@@ -2288,6 +2290,7 @@ export class TaskWorkspaceStore {
           current.session_id,
           undefined,
           nowMs,
+          { touch: true },
         );
         this.insertTimeline({
           sessionId: current.session_id,
@@ -2393,6 +2396,7 @@ export class TaskWorkspaceStore {
         launch.session_id,
         undefined,
         nowMs,
+        { touch: true },
       );
       this.insertTimeline({
         sessionId: launch.session_id,
@@ -2526,6 +2530,7 @@ export class TaskWorkspaceStore {
         launch.session_id,
         undefined,
         nowMs,
+        { touch: true },
       );
       this.insertTimeline({
         sessionId: launch.session_id,

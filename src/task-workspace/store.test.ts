@@ -399,6 +399,12 @@ describe('TaskWorkspaceStore', () => {
       idempotencyKey: 'run:atomic',
       nowMs: 2,
     });
+    const afterCreate = store.getSession(session.session_id);
+    expect(afterCreate).toMatchObject({
+      attention_state: 'none',
+      updated_at_ms: 2,
+      row_version: 2,
+    });
     const replay = store.createRunLaunchIntent({
       sessionId: session.session_id,
       messageText: 'Run exactly once',
@@ -415,6 +421,7 @@ describe('TaskWorkspaceStore', () => {
     expect(replay.created).toBe(false);
     expect(replay.launch.launch_intent_id).toBe(first.launch.launch_intent_id);
     expect(replay.message.message_id).toBe(first.message.message_id);
+    expect(store.getSession(session.session_id)).toEqual(afterCreate);
     expect(store.listMessages(session.session_id)).toHaveLength(1);
     expect(() =>
       store.createRunLaunchIntent({
@@ -432,6 +439,55 @@ describe('TaskWorkspaceStore', () => {
       }),
     ).toThrow(/different Session, selection, input, or attachment manifest/);
     expect(store.listMessages(session.session_id)).toHaveLength(1);
+  });
+
+  it('touches Session recency once for Published Run creation and linking', () => {
+    const store = openStore();
+    let session = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Published Run recency',
+      nowMs: 1,
+    });
+    session = store.setRunSelection({
+      sessionId: session.session_id,
+      principalRef: session.owner_principal_ref,
+      selection: {
+        kind: 'published_recipe',
+        recipe_ref: { id: 'recipe:test', version: '1.0.0' },
+        recipe_hash: sha('4'),
+        recipe_kind: 'core',
+      },
+      expectedRowVersion: session.row_version,
+      nowMs: 2,
+    });
+    const run = store.createRunLaunchIntent({
+      sessionId: session.session_id,
+      messageText: 'Run the published Recipe',
+      mode: 'published_recipe',
+      selectedRecipeRef: { id: 'recipe:test', version: '1.0.0' },
+      selectedRecipeHash: sha('4'),
+      effectiveInput: { text: 'Run the published Recipe', attachments: [] },
+      attachmentManifestHash: sha('5'),
+      idempotencyKey: 'run:published-recency',
+      nowMs: 3,
+    });
+    expect(store.getSession(session.session_id)).toMatchObject({
+      attention_state: 'none',
+      updated_at_ms: 3,
+      row_version: session.row_version + 1,
+    });
+
+    store.updateLaunchStatus({
+      launchIntentId: run.launch.launch_intent_id,
+      expectedRowVersion: run.launch.row_version,
+      status: 'linked',
+      nowMs: 4,
+    });
+    expect(store.getSession(session.session_id)).toMatchObject({
+      attention_state: 'none',
+      updated_at_ms: 4,
+      row_version: session.row_version + 2,
+    });
   });
 
   it('rejects a Published Run that does not match the Session exact Recipe', () => {
@@ -500,6 +556,7 @@ describe('TaskWorkspaceStore', () => {
     });
     expect(store.getSession(session.session_id).attention_state).toBe('failed');
 
+    const beforeRetry = store.getSession(session.session_id);
     store.createRunLaunchIntent({
       sessionId: session.session_id,
       messageText: 'Second attempt',
@@ -509,7 +566,11 @@ describe('TaskWorkspaceStore', () => {
       idempotencyKey: 'run:second-attempt',
       nowMs: 5,
     });
-    expect(store.getSession(session.session_id).attention_state).toBe('none');
+    expect(store.getSession(session.session_id)).toMatchObject({
+      attention_state: 'none',
+      updated_at_ms: 5,
+      row_version: beforeRetry.row_version + 1,
+    });
   });
 
   it('only confirms the current revision belonging to the LaunchIntent Draft', () => {
@@ -543,10 +604,13 @@ describe('TaskWorkspaceStore', () => {
         nowMs: marker === 'a' ? 3 : 4,
       });
     const oldRevision = revision('a');
+    const afterFirstRevision = store.getSession(session.session_id);
     const currentRevision = revision('b');
-    expect(store.getSession(session.session_id).attention_state).toBe(
-      'waiting_user',
-    );
+    expect(store.getSession(session.session_id)).toMatchObject({
+      attention_state: 'waiting_user',
+      updated_at_ms: 4,
+      row_version: afterFirstRevision.row_version + 1,
+    });
     const awaiting = store.getLaunchIntent(run.launch.launch_intent_id);
     expect(() =>
       store.confirmCurrentTemporaryRevision({
@@ -567,7 +631,11 @@ describe('TaskWorkspaceStore', () => {
       confirmed_draft_revision_id: currentRevision.revision_id,
     });
     expect(confirmed.revision).toEqual(currentRevision);
-    expect(store.getSession(session.session_id).attention_state).toBe('none');
+    expect(store.getSession(session.session_id)).toMatchObject({
+      attention_state: 'none',
+      updated_at_ms: 6,
+      row_version: afterFirstRevision.row_version + 2,
+    });
   });
 
   it('serializes persisted Coordinator turns and allows Agent session recovery', () => {
