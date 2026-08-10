@@ -293,9 +293,9 @@ icarus/
 │
 ├── .claude/
 │   └── skills/
-│       ├── debug/SKILL.md              # /debug - Container debugging
-│       ├── manage-workflows/SKILL.md   # /manage-workflows - Workflow type configuration
-│       └── setup/SKILL.md              # /setup - First-time installation
+│       ├── debug/SKILL.md              # /debug - Host, Agent, and Runtime diagnosis
+│       ├── manage-workflows/SKILL.md   # /manage-workflows - Current workflow lifecycles
+│       └── setup/SKILL.md              # /setup - Checkout installation and repair
 │
 ├── agents/
 │   ├── CLAUDE.md                  # Global memory (all Agents read this)

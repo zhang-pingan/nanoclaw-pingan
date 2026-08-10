@@ -1,273 +1,159 @@
 ---
 name: manage-workflows
-description: Add, edit, or disable workflow types in workflows.json. Use when user wants to create a new workflow type (e.g., hotfix, release), modify an existing workflow's states/transitions/templates, or disable a workflow type. Triggers on "add workflow", "new workflow", "edit workflow", "modify workflow", "workflow type".
+description: Create, revise, publish, activate, retire, or diagnose Icarus workflows using the current Task Workspace Personal Workflow lifecycle, Dynamic Workflow Runtime resources, or Collaboration Project Space v3 definitions. Use when a user asks to add or change a workflow, make a completed run reusable, publish or activate a workflow release, retire a collaboration workflow definition, or modify workflow compiler/runtime behavior.
 ---
 
-# Manage Workflow Types
+# Manage Icarus Workflows
 
-Interactive skill for managing workflow type definitions in `container/skills/workflows.json`.
+Manage the versioned workflow surface that owns the user's request. Workflow definitions are not a generic mutable configuration map.
 
-## Workflow
+## Safety and Scope
 
-### Step 1: Read current state
+- Work only from the current checkout. Do not fetch, merge, compare, or configure another Git repository as part of workflow management.
+- Inspect the active API, schema, tests, and persisted lifecycle before changing anything.
+- Do not edit SQLite rows, compiled plans, hashes, active release pointers, or published immutable resources by hand.
+- Do not load or copy `local/migration-candidates/dev-test-fix-test/` into production code. It is an inert archive and explicitly not executable.
+- Treat publish, activate, retire, reset, and commands affecting running workflows as explicit state changes. Show the target and ask for confirmation when the user's request did not already authorize that exact action.
+- Preserve running workflow instances. Never mutate a definition in place to change their meaning.
 
-Read `container/skills/workflows.json` and `container/skills/skills.json` to understand:
-- What workflow types exist
-- What roles/skills are available
-- Which Agent folders map to which roles
+## Choose the Workflow Surface
 
-### Step 2: Ask what the user wants
+Identify the surface before planning edits:
 
-Use AskUserQuestion:
-- **New type**: What is this workflow for? What roles are involved? What's the state flow?
-- **Edit existing**: Which type? What to change (states, templates, cards, roles)?
-- **Disable/delete**: Which type? Warn about running workflows.
+| User intent | Surface | Authority |
+| --- | --- | --- |
+| Turn a successful Task Workspace run into a reusable personal flow | Personal Workflow | `src/task-workspace/service.ts`, `src/task-workspace/web-api.ts`, `src/workflow-runtime/gateway/workspace.ts` |
+| Change graph semantics, capabilities, recipes, compiler behavior, waits, effects, cards, or runtime execution | Dynamic Workflow Runtime | `src/workflow-runtime/` contracts, compiler, authoring, gateway, runtime, and store |
+| Define a shared multi-user project process in a Git-backed group | Collaboration Project Space Workflow | `src/collaboration/project-space-service.ts`, `src/collaboration/web-api.ts`, v3 contracts |
+| Enable Agent skills such as `devops` or `macos` | Container skill assignment | `container/skills/skills.json`; this is not a workflow definition |
+| Run something on a cron, interval, or once schedule | Scheduler | Scheduled tasks; this is not a workflow definition |
 
-### Step 3: Build the config
+If the request is ambiguous, explain the distinction and ask one focused question. Do not silently map Collaboration definitions to Dynamic Workflow Runtime resources or vice versa.
 
-Construct or modify the workflow type definition following the schema below, then write it to `container/skills/workflows.json`.
+## Personal Workflow Lifecycle
 
-### Step 4: Validate
+Use Personal Workflows when the user wants to reuse a workflow that already ran through Task Workspace.
 
-After writing, run `npm run build` to verify compilation (the engine validates config on load).
+### Preconditions
 
-Remind the user to restart the service for changes to take effect:
+- The source workflow/run must be linked to the requesting Task Session.
+- The Runtime gateway must be available.
+- A Personal Workflow is extracted from the exact source run; arbitrary import/export is not implemented.
+
+### Lifecycle
+
+Follow the current sequence:
+
+1. Create a draft from the Task Session, workflow ID, and run ID.
+2. Revise the sanitized `source_json` when needed.
+3. Validate the exact revision.
+4. Dry-run the exact revision.
+5. Review it with explicit approval, display name, and optional description.
+6. Publish an immutable release with a stable idempotency key.
+7. Activate the exact release with the expected active-pointer row version and a stable idempotency key.
+
+The Host exposes these routes:
+
+```text
+POST /api/task-workspace/sessions/:sessionId/personal-workflow-drafts
+GET  /api/personal-workflows/drafts/:draftId
+POST /api/personal-workflows/drafts/:draftId/revise
+POST /api/personal-workflows/drafts/:draftId/validate
+POST /api/personal-workflows/drafts/:draftId/dry-run
+POST /api/personal-workflows/drafts/:draftId/review
+POST /api/personal-workflows/drafts/:draftId/publish
+POST /api/personal-workflows/releases/:releaseId/activate
+```
+
+Prefer the Web workbench over direct API calls for user-managed flows. When automating through the API, use the exact request keys from `src/task-workspace/web-api.ts` and carry forward each returned `row_version`.
+
+Published releases are immutable. To change a published Personal Workflow, create and review a new draft/release; do not modify the existing release. The current API does not implement import, export, deletion, or a deactivate-without-replacement operation. Do not invent one or edit the store directly.
+
+### Validation
+
+For Personal Workflow service or API changes, run:
+
 ```bash
-# macOS
-launchctl kickstart -k gui/$(id -u)/com.icarus
-# Linux
-systemctl --user restart icarus.service
+./scripts/runtime-toolchain.sh exec -- npx vitest run \
+  src/task-workspace/personal-workflow-service.test.ts \
+  src/task-workspace/web-api.test.ts \
+  src/workflow-runtime/gateway/workspace.test.ts
 ```
 
-## Config Schema
+## Dynamic Workflow Runtime Changes
 
-Each key in `workflows.json` is a workflow type. Full structure:
+Use this path for code-level changes to built-in workflow behavior or authoring infrastructure.
 
-```json
-{
-  "type_name": {
-    "name": "Human-readable name",
-    "roles": {
-      "role_name": { "skill_to_role_key": "skill-name-in-skills-json" }
-    },
-    "entry_points": {
-      "entry_name": {
-        "state": "initial_state_name",
-        "requires_deliverable": false
-      }
-    },
-    "states": {
-      "state_name": { "type": "delegation | confirmation | terminal | system", "..." : "..." }
-    },
-    "status_labels": {
-      "state_name": "emoji + label"
-    },
-    "cards": {
-      "card_key": { "header_template": "...", "body_template": "...", "actions": ["approve", "pause", "cancel"] }
-    }
-  }
-}
+### Read the current authority
+
+Start with the smallest relevant files:
+
+- source graph schema: `src/workflow-runtime/contracts/schemas/graph-scope-source-schema.json`;
+- Workflow Definition and Recipe schemas: `src/workflow-runtime/contracts/schemas/workflow-definition-schema.json` and `workflow-recipe-schema.json`;
+- card/input presentation: `src/workflow-runtime/contracts/schemas/card-presentation-schema.json`;
+- compiler: `src/workflow-runtime/compiler/`;
+- staged publication and activation: `src/workflow-runtime/authoring/`;
+- Task Workspace boundary: `src/workflow-runtime/gateway/workspace.ts`;
+- execution and recovery: `src/workflow-runtime/runtime/`, `src/workflow-execution/`;
+- current schema/store: `src/workflow-runtime/store/`.
+
+Read `docs/internal-experimental-scope.md` before changing a serialized contract or persisted schema. The project is latest-only: replace superseded active formats and tests rather than adding compatibility readers, dual writes, or migration chains for unused development history.
+
+### Model the change
+
+Define the exact current-version resources needed by the flow:
+
+- Recipe and input contract;
+- Workflow Definition and graph scope;
+- versioned capability and executor references;
+- typed input/output schemas and artifacts;
+- control/data edges, routing, completion, and bounded limits;
+- durable waits/signals for human input;
+- effects, outbox policy, idempotency, cancellation, and compensation;
+- card presentation as a rebuildable projection, not runtime authority;
+- policy claims and risk ceiling.
+
+Use exact versioned refs. Never use aliases such as `latest`, `main`, `head`, wildcard versions, or mutable identity.
+
+If the workflow ships as an optional Feature, place it under `features/<feature-id>/` with a validated `feature.json` and declare only the resources and permissions it actually needs. `container/skills/skills.json` controls core Agent skill synchronization; it does not publish workflow resources.
+
+### Implement and validate
+
+Keep source, schema, compiler expectations, runtime behavior, UI/API, and tests in the same change. Run the narrow tests first, then the relevant contract gates:
+
+```bash
+./scripts/runtime-toolchain.sh exec -- npm run typecheck
+./scripts/runtime-toolchain.sh exec -- npm run schema:check
+./scripts/runtime-toolchain.sh exec -- npm run golden:check
+./scripts/runtime-toolchain.sh exec -- npm run golden:replay
+./scripts/runtime-toolchain.sh exec -- npm run test:g2
 ```
 
-### State types
+When publication or activation changes, also run `npm run test:g3.7`, `npm run test:g3.9`, and the focused authoring tests. Run `npm run contracts:check` before handoff for cross-contract changes. Use `npm run golden:update` only when the requested semantic change intentionally changes the Golden corpus, and review that diff.
 
-**delegation** — Delegate work to a role's Agent. Must define `on_complete` with `success` and `failure` branches.
-```json
-{
-  "type": "delegation",
-  "role": "dev",
-  "skill": "dev-requirement",
-  "plan_mode": true,
-  "task_template": "Please do X for {{name}} on {{service}}",
-  "on_complete": {
-    "success": {
-      "target": "next_state",
-      "role": "ops",
-      "skill": "ops-staging-deploy",
-      "task_template": "Deploy {{service}} branch {{branch}}",
-      "read_deliverable": true,
-      "read_deliverable_role": "dev",
-      "increment_round": false,
-      "notify": "[Progress] {{name}} ({{id}}) done!",
-      "card": "card_key_or_omit"
-    },
-    "failure": {
-      "target": "failed_state",
-      "notify": "[Failed] {{name}} ({{id}}) failed"
-    }
-  }
-}
+Restart the Host through `./local/shell/restart.sh --mode current` only when executable code or startup-loaded resources changed.
+
+## Collaboration Project Space Workflows
+
+Use this surface only for Git-backed multi-user project collaboration.
+
+Follow the v3 lifecycle exposed by `src/collaboration/project-space-service.ts`:
+
+1. Propose the next sequential version of a Workflow Definition.
+2. Publish the exact proposed definition and layout.
+3. Start instances from the immutable published snapshot.
+4. Retire a definition with the expected group revision and a reason when it should no longer be selected for new instances.
+
+Definition and layout are separate: moving nodes changes layout, not machine semantics. Running instances keep their selected definition snapshot. Retiring a definition must not rewrite existing instances.
+
+Prefer the Project Space UI/API. Preserve Git event signing, permissions, expected-revision concurrency, and reducer validation. Never bypass the service by writing collaboration Git control files directly.
+
+For Collaboration workflow changes, run:
+
+```bash
+./scripts/runtime-toolchain.sh exec -- npm run test:collaboration
 ```
 
-**confirmation** — Wait for user to approve/cancel/pause via Feishu card button.
-```json
-{
-  "type": "confirmation",
-  "card": "card_key",
-  "on_approve": {
-    "target": "next_state",
-    "role": "ops",
-    "skill": "ops-staging-deploy",
-    "task_template": "...",
-    "notify": "..."
-  }
-}
-```
+## Completion Report
 
-**terminal** — End state, no transitions. Every type MUST have `"cancelled": { "type": "terminal" }` and `"paused": { "type": "system" }`.
-```json
-{ "type": "terminal" }
-```
-
-**system** — Engine-reserved. Only used for `paused`.
-```json
-{ "type": "system" }
-```
-
-### Template variables
-
-Available in `task_template`, `notify`, card `header_template` and `body_template`:
-
-| Variable | Description |
-|----------|-------------|
-| `{{name}}` | Workflow name |
-| `{{service}}` | Service name |
-| `{{branch}}` | Git branch |
-| `{{id}}` | Workflow ID |
-| `{{round}}` | Current fix round number |
-| `{{deliverable}}` | Deliverable filename |
-| `{{deliverable_content}}` | Full deliverable file content |
-| `{{delegation_result}}` | Raw delegation result text |
-| `{{result_summary}}` | Parsed summary from JSON result |
-| `{{role_folder:ROLE}}` | Agent folder for ROLE (e.g. `{{role_folder:dev}}`) |
-
-### Transition fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `target` | string | **Required.** Target state name. |
-| `role` | string | Role to delegate to. If set, must also set `skill` and `task_template`. |
-| `skill` | string | Skill name for the delegation. |
-| `task_template` | string | Task content template with `{{var}}` placeholders. |
-| `plan_mode` | boolean | Write plan_mode marker for the target agent. |
-| `read_deliverable` | boolean | Read latest deliverable doc before delegating. |
-| `read_deliverable_role` | string | Which role's folder to read from (default: `"dev"`). |
-| `increment_round` | boolean | Increment workflow round counter. |
-| `notify` | string | Notification template sent to main Agent. |
-| `card` | string | Card key to send after transition. |
-
-### Card config
-
-```json
-{
-  "card_key": {
-    "header_template": "Title with {{name}}",
-    "header_color": "blue",
-    "body_template": "**Field**: {{value}}\n**Other**: {{other}}",
-    "actions": ["approve", "pause", "cancel"]
-  }
-}
-```
-
-Available actions: `approve`, `pause`, `cancel`, `resume`.
-
-### Roles and skills.json
-
-Each role's `skill_to_role_key` must match a skill assigned to an Agent folder in `skills.json`:
-
-```json
-// skills.json
-{
-  "feishu_dev": ["dev-requirement", "dev-bugfix"],
-  "feishu_ops": ["ops-staging-deploy"],
-}
-```
-
-If a role's skill isn't found in any Agent, that workflow type is disabled (but other types still work).
-
-## Rules
-
-- Every workflow type MUST include `"cancelled": { "type": "terminal" }` and `"paused": { "type": "system" }` states.
-- All `target` values in transitions must reference existing state names.
-- All `role` values must reference keys in the type's `roles` map.
-- All `card` values must reference keys in the type's `cards` map.
-- The engine validates these at startup and logs errors if references are broken.
-
-## Example: Adding a hotfix workflow
-
-User: "Add a hotfix workflow — just fix and deploy, no test cycle"
-
-1. Read `skills.json` to confirm `dev` and `ops` roles are available
-2. Add to `workflows.json`:
-
-```json
-{
-  "hotfix": {
-    "name": "热修复流程",
-    "roles": {
-      "dev": { "skill_to_role_key": "dev-bugfix" },
-      "ops": { "skill_to_role_key": "ops-staging-deploy" }
-    },
-    "entry_points": {
-      "fix": { "state": "fixing" }
-    },
-    "states": {
-      "fixing": {
-        "type": "delegation",
-        "role": "dev",
-        "skill": "dev-bugfix",
-        "task_template": "紧急修复：{{name}}\n服务：{{service}}",
-        "on_complete": {
-          "success": {
-            "target": "deploying",
-            "role": "ops",
-            "skill": "ops-staging-deploy",
-            "task_template": "部署修复到预发：\n服务：{{service}}\n分支：{{branch}}",
-            "read_deliverable": true,
-            "read_deliverable_role": "dev",
-            "notify": "[热修复] {{name}} ({{id}}) 修复完成，开始部署"
-          },
-          "failure": {
-            "target": "fix_failed",
-            "notify": "[热修复] {{name}} ({{id}}) 修复失败"
-          }
-        }
-      },
-      "deploying": {
-        "type": "delegation",
-        "role": "ops",
-        "skill": "ops-staging-deploy",
-        "on_complete": {
-          "success": {
-            "target": "done",
-            "notify": "[热修复] {{name}} ({{id}}) 部署完成 ✅"
-          },
-          "failure": {
-            "target": "deploy_failed",
-            "notify": "[热修复] {{name}} ({{id}}) 部署失败 ❌\n{{result_summary}}"
-          }
-        }
-      },
-      "done": { "type": "terminal" },
-      "fix_failed": { "type": "terminal" },
-      "deploy_failed": { "type": "terminal" },
-      "cancelled": { "type": "terminal" },
-      "paused": { "type": "system" }
-    },
-    "status_labels": {
-      "fixing": "🔧 修复中",
-      "deploying": "🚀 部署中",
-      "done": "✅ 完成",
-      "fix_failed": "❌ 修复失败",
-      "deploy_failed": "❌ 部署失败",
-      "cancelled": "🚫 已取消",
-      "paused": "⏸ 已中断"
-    },
-    "cards": {}
-  }
-}
-```
-
-3. `npm run build`
-4. Restart service
-5. Agent creates via: `create_workflow(name="xxx", service="yyy", start_from="fix", workflow_type="hotfix")`
+State which workflow surface was changed, the exact definition/draft/release and version, whether any publish/activate/retire action occurred, how running instances are protected, validation commands and results, and any unsupported lifecycle operation that remains.

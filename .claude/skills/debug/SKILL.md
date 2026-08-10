@@ -1,349 +1,150 @@
 ---
 name: debug
-description: Debug container agent issues. Use when things aren't working, container fails, authentication problems, or to understand how the container system works. Covers logs, environment variables, mounts, and common issues.
+description: Diagnose and repair the current Icarus checkout, including Host Core startup, Docker agent execution, credential proxying, channels, per-Agent sessions, IPC, mounts, Feature resources, Task Workspace, and Dynamic Workflow Runtime. Use when Icarus fails to start, a channel or desktop client is unhealthy, an Agent query fails or hangs, a container exits, a session loses continuity, or a workflow is blocked.
 ---
 
-# Container Debugging
+# Debug Icarus
 
-This guide covers debugging the containerized agent execution system.
+Diagnose the current checkout from evidence. Do not fetch, merge, reset, or configure Git remotes as part of debugging.
 
-## Architecture Overview
+## Safety
 
-```
-Host (macOS)                          Container (Linux VM)
-─────────────────────────────────────────────────────────────
-src/container-runner.ts               container/agent-runner/
-    │                                      │
-    │ spawns container                      │ runs Claude Agent SDK
-    │ with volume mounts                   │ with MCP servers
-    │                                      │
-    ├── data/env/env ──────────────> /workspace/env-dir/env
-    ├── agents/{folder} ───────────> /workspace/agent
-    ├── data/ipc/{folder} ────────> /workspace/ipc
-    ├── data/sessions/{folder}/.claude/ ──> /home/node/.claude/ (isolated per-Agent)
-    └── (main only) project root ──> /workspace/project
-```
+- Start with read-only checks and preserve the failing logs, Trace, query ID, run ID, container name, and timestamps.
+- Never print values from `.env`, credentials, tokens, private keys, or request authorization headers. Report only whether required keys are configured.
+- Do not delete `store/`, `data/`, Agent sessions, Workflow Runtime state, Docker caches, or logs during diagnosis.
+- Use `local/shell/workflow-state.sh` for Workflow Runtime backup, reset, or restore. Never remove its DB/WAL/SHM files manually.
+- Ask before installing software, restarting a live service, resetting a session, rebuilding an image used by active work, or changing persisted state.
 
-**Important:** The container runs as user `node` with `HOME=/home/node`. Session files must be mounted to `/home/node/.claude/` (not `/root/.claude/`) for session resumption to work.
+## Current Execution Model
 
-## Log Locations
+Use these facts when interpreting failures:
 
-| Log | Location | Content |
-|-----|----------|---------|
-| **Main app logs** | `logs/icarus.log` | Host-side channels, routing, container spawning |
-| **Main app errors** | `logs/icarus.error.log` | Host-side errors |
-| **Container run logs** | `agents/{folder}/logs/container-*.log` | Per-run: input, mounts, stderr, stdout |
-| **Claude sessions** | `~/.claude/projects/` | Claude Code session history |
+- `local/shell/launch-host.sh --mode current` starts the checkout through the configured Node 26 toolchain.
+- The Host owns channels, HTTP APIs, SQLite state, scheduling, Workflow Runtime, the Agent queue, IPC, and credential proxies.
+- `src/container-runtime.ts` selects Docker. Containers run `container/agent-runner` as user `node`.
+- Real model credentials remain on the Host. Containers receive placeholder authentication and call the Host credential proxy; project `.env` is shadowed in container mounts.
+- Per-Agent Claude state lives at `data/sessions/<agent-folder>/.claude/` and mounts at `/home/node/.claude`.
+- Per-Agent IPC lives at `data/ipc/<agent-folder>/` and mounts at `/workspace/ipc`.
+- Core and enabled Feature skills are synchronized into the Agent session before container startup.
 
-## Enabling Debug Logging
+Read `docs/startup-flow.md`, `docs/SECURITY.md`, and `docs/host-core-lifecycle.md` only when the corresponding layer is involved.
 
-Set `LOG_LEVEL=debug` for verbose output:
+## Diagnostic Workflow
 
-```bash
-# For development
-LOG_LEVEL=debug npm run dev
+### 1. Bound the failure
 
-# For launchd service (macOS), add to plist EnvironmentVariables:
-<key>LOG_LEVEL</key>
-<string>debug</string>
-# For systemd service (Linux), add to unit [Service] section:
-# Environment=LOG_LEVEL=debug
-```
+Record:
 
-Debug level shows:
-- Full mount configurations
-- Container command arguments
-- Real-time container stderr
+- affected surface: Host, Web, Assistant, Feishu, WeCom, container Agent, Task Workspace, Collaboration, or Dynamic Workflow Runtime;
+- first failing time and whether the failure is reproducible;
+- affected Agent JID/folder, query ID, run ID, workflow ID, and container name when available;
+- whether the failure started after a source, `.env`, Feature, Agent registration, Docker, or persisted-schema change.
 
-## Common Issues
+Check `git status --short` before changing files. Preserve unrelated worktree changes.
 
-### 1. "Claude Code process exited with code 1"
+### 2. Run the common preflight
 
-**Check the container log file** in `agents/{folder}/logs/container-*.log`
-
-Common causes:
-
-#### Missing Authentication
-```
-Invalid API key · Please run /login
-```
-**Fix:** Ensure `.env` file exists with either OAuth token or API key:
-```bash
-cat .env  # Should show one of:
-# CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...  (subscription)
-# ANTHROPIC_API_KEY=sk-ant-api03-...        (pay-per-use)
-```
-
-#### Root User Restriction
-```
---dangerously-skip-permissions cannot be used with root/sudo privileges
-```
-**Fix:** Container must run as non-root user. Check Dockerfile has `USER node`.
-
-### 2. Environment Variables Not Passing
-
-**Runtime note:** Environment variables passed via `-e` may be lost when using `-i` (interactive/piped stdin).
-
-**Workaround:** The system extracts only authentication variables (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`) from `.env` and mounts them for sourcing inside the container. Other env vars are not exposed.
-
-To verify env vars are reaching the container:
-```bash
-echo '{}' | docker run -i \
-  -v $(pwd)/data/env:/workspace/env-dir:ro \
-  --entrypoint /bin/bash icarus-agent:latest \
-  -c 'export $(cat /workspace/env-dir/env | xargs); echo "OAuth: ${#CLAUDE_CODE_OAUTH_TOKEN} chars, API: ${#ANTHROPIC_API_KEY} chars"'
-```
-
-### 3. Mount Issues
-
-**Container mount notes:**
-- Docker supports both `-v` and `--mount` syntax
-- Use `:ro` suffix for readonly mounts:
-  ```bash
-  # Readonly
-  -v /path:/container/path:ro
-
-  # Read-write
-  -v /path:/container/path
-  ```
-
-To check what's mounted inside a container:
-```bash
-docker run --rm --entrypoint /bin/bash icarus-agent:latest -c 'ls -la /workspace/'
-```
-
-Expected structure:
-```
-/workspace/
-├── env-dir/env           # Environment file (CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY)
-├── agent/                # Current Agent folder (cwd)
-├── project/              # Project root (main channel only)
-├── global/               # Global CLAUDE.md (non-main only)
-├── ipc/                  # Inter-process communication
-│   ├── messages/         # Outgoing messages for the bound chat
-│   ├── tasks/            # Scheduled task commands
-│   ├── current_tasks.json    # Read-only: scheduled tasks visible to this Agent
-│   └── available_agents.json # Read-only: executable Agents (main only)
-└── extra/                # Additional custom mounts
-```
-
-### 4. Permission Issues
-
-The container runs as user `node` (uid 1000). Check ownership:
-```bash
-docker run --rm --entrypoint /bin/bash icarus-agent:latest -c '
-  whoami
-  ls -la /workspace/
-  ls -la /app/
-'
-```
-
-All of `/workspace/` and `/app/` should be owned by `node`.
-
-### 5. Session Not Resuming / "Claude Code process exited with code 1"
-
-If sessions aren't being resumed (new session ID every time), or Claude Code exits with code 1 when resuming:
-
-**Root cause:** The SDK looks for sessions at `$HOME/.claude/projects/`. Inside the container, `HOME=/home/node`, so it looks at `/home/node/.claude/projects/`.
-
-**Check the mount path:**
-```bash
-# In container-runner.ts, verify mount is to /home/node/.claude/, NOT /root/.claude/
-grep -A3 "Claude sessions" src/container-runner.ts
-```
-
-**Verify sessions are accessible:**
-```bash
-docker run --rm --entrypoint /bin/bash \
-  -v ~/.claude:/home/node/.claude \
-  icarus-agent:latest -c '
-echo "HOME=$HOME"
-ls -la $HOME/.claude/projects/ 2>&1 | head -5
-'
-```
-
-**Fix:** Ensure `container-runner.ts` mounts to `/home/node/.claude/`:
-```typescript
-mounts.push({
-  hostPath: claudeDir,
-  containerPath: '/home/node/.claude',  // NOT /root/.claude
-  readonly: false
-});
-```
-
-### 6. MCP Server Failures
-
-If an MCP server fails to start, the agent may exit. Check the container logs for MCP initialization errors.
-
-## Manual Container Testing
-
-### Test the full agent flow:
-```bash
-# Set up env file
-mkdir -p data/env agents/test
-cp .env data/env/env
-
-# Run test query
-echo '{"prompt":"What is 2+2?","agentFolder":"test","chatJid":"web:test","isMain":false}' | \
-  docker run -i \
-  -v $(pwd)/data/env:/workspace/env-dir:ro \
-  -v $(pwd)/agents/test:/workspace/agent \
-  -v $(pwd)/data/ipc:/workspace/ipc \
-  icarus-agent:latest
-```
-
-### Test Claude Code directly:
-```bash
-docker run --rm --entrypoint /bin/bash \
-  -v $(pwd)/data/env:/workspace/env-dir:ro \
-  icarus-agent:latest -c '
-  export $(cat /workspace/env-dir/env | xargs)
-  claude -p "Say hello" --dangerously-skip-permissions --allowedTools ""
-'
-```
-
-### Interactive shell in container:
-```bash
-docker run --rm -it --entrypoint /bin/bash icarus-agent:latest
-```
-
-## SDK Options Reference
-
-The agent-runner uses these Claude Agent SDK options:
-
-```typescript
-query({
-  prompt: input.prompt,
-  options: {
-    cwd: '/workspace/agent',
-    allowedTools: ['Bash', 'Read', 'Write', ...],
-    permissionMode: 'bypassPermissions',
-    allowDangerouslySkipPermissions: true,  // Required with bypassPermissions
-    settingSources: ['project'],
-    mcpServers: { ... }
-  }
-})
-```
-
-**Important:** `allowDangerouslySkipPermissions: true` is required when using `permissionMode: 'bypassPermissions'`. Without it, Claude Code exits with code 1.
-
-## Rebuilding After Changes
+Run from the repository root:
 
 ```bash
-# Rebuild main app
-npm run build
+./scripts/runtime-toolchain.sh verify
+docker info
+docker image inspect icarus-agent:latest
+./local/shell/workflow-state.sh inspect --mode current
+./scripts/runtime-toolchain.sh exec -- npx tsx setup/index.ts --step verify
+```
 
-# Rebuild container (use --no-cache for clean rebuild)
+The final two commands may exit non-zero to report an unhealthy or incompatible state. Read their structured output instead of treating the exit code alone as the diagnosis.
+
+### 3. Inspect the relevant evidence
+
+Use the narrowest relevant source:
+
+| Layer | Evidence |
+| --- | --- |
+| Host/service | `logs/icarus.log`, `logs/icarus.error.log` |
+| Setup/toolchain | `logs/setup.log`, `scripts/runtime-toolchain.sh verify` |
+| macOS launchd | `launchctl print gui/$(id -u)/com.icarus` |
+| Linux systemd | `systemctl --user status icarus.service` or system-level status when running as root |
+| Agent query | Web Trace view; `agent_queries`, `agent_query_steps`, and `agent_query_events` in `store/messages.db` |
+| Container run | newest `agents/<folder>/logs/container-*.log` |
+| Docker | `docker ps -a --filter name=icarus-`, `docker inspect <exact-name>` |
+| IPC | `data/ipc/<folder>/messages/`, `tasks/`, `input/`, and `errors/` |
+| Electron workbench | `local/shell/electron/.runtime/electron.log` |
+| Desktop assistant | `local/shell/assistant/.runtime/assistant.log` |
+| Workflow state | Runtime Center/Task Workspace plus `data/workflow-runtime/workflow-runtime.db` through supported code or tests |
+
+Prefer the structured failure fields `failure_type`, `failure_subtype`, `failure_origin`, and `failure_retryable` over guessing from the final message.
+
+### 4. Follow the failing layer
+
+#### Host does not start
+
+1. Verify the Node toolchain and native `better-sqlite3` smoke.
+2. Inspect Workflow state compatibility. If it reports `RESET_REQUIRED`, stop Icarus and use the guarded reset command only after showing the exact paths and backup location.
+3. Check the Host logs for port conflicts, invalid Feature manifests, invalid configuration, database errors, or Docker startup failure.
+4. Run `npm run typecheck` and the focused failing tests through the configured toolchain.
+
+#### Authentication or model requests fail
+
+1. Confirm that `.env` contains one supported Host credential key without displaying its value: `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`.
+2. If OpenAI compatibility is enabled, also confirm its required base URL, model, API key, protocol, and timeout settings.
+3. Check Host proxy logs and query Trace events. Do not test by mounting `.env` or passing the real credential into a container.
+4. Distinguish provider HTTP errors, invalid model output, proxy reachability, and container authentication bootstrap failures.
+
+#### Container Agent fails or hangs
+
+1. Inspect the exact container log and Trace before restarting anything.
+2. Check Docker health, image existence, exit code, timeout, and whether streaming output was produced.
+3. Treat exit 137 as an external stop, runtime cleanup, or memory-pressure signal; confirm with Docker inspection rather than assuming OOM.
+4. For mount errors, inspect `~/.config/icarus/mount-allowlist.json` and Host rejection logs. Additional mounts must remain under an allowed root and outside blocked credential paths.
+5. For MCP or Feature resource errors, inspect the synchronized session directories under `data/sessions/<folder>/` and the enabled Feature configuration.
+
+#### Session continuity fails
+
+1. Correlate consecutive queries for the same Agent folder in Trace and logs.
+2. Verify `data/sessions/<folder>/.claude/` exists and is mounted at `/home/node/.claude`.
+3. Check for explicit isolated-session or one-shot execution before calling the behavior a bug.
+4. Use the product session reset path only when the user requests a reset. Do not delete session directories or edit the session table manually.
+
+#### IPC or outbound delivery fails
+
+1. Inspect the affected Agent namespace, not a global `data/ipc/messages` directory.
+2. Validate the JSON shape, source Agent identity, target JID ownership, and allowed container file prefix.
+3. Check `data/ipc/errors/` and Host authorization logs.
+4. Preserve failed IPC files until the cause is understood.
+
+#### Workflow execution is blocked
+
+1. Determine whether the request belongs to Task Workspace Personal Workflows, Dynamic Workflow Runtime, or Collaboration Project Space; they have different stores and lifecycles.
+2. Inspect Runtime Center events, pending waits/interactions, execution adapter status, and operational blockers.
+3. Run `npm run schema:check` and the focused Workflow Runtime test for the failing domain.
+4. Use `local/shell/workflow-state.sh backup|reset|restore` only for explicit state maintenance. Do not edit Runtime rows directly.
+
+### 5. Repair and verify
+
+Make the smallest fix at the layer that owns the failure. Then:
+
+```bash
+./scripts/runtime-toolchain.sh exec -- npm run typecheck
+./scripts/runtime-toolchain.sh exec -- npm run build
+```
+
+Run focused tests before broad suites. If Host or container code changed, rebuild and restart through the maintained platform path.
+
+On macOS:
+
+```bash
+./local/shell/restart.sh --mode current
+```
+
+On Linux, rebuild the image and restart the installed service:
+
+```bash
 ./container/build.sh
-
-# Or force full rebuild
-docker builder prune -af
-./container/build.sh
+systemctl --user restart icarus.service
 ```
 
-## Checking Container Image
+Use system-level `systemctl` instead when Icarus was installed as root, or the generated `start-icarus.sh` on a no-systemd setup.
 
-```bash
-# List images
-docker images
-
-# Check what's in the image
-docker run --rm --entrypoint /bin/bash icarus-agent:latest -c '
-  echo "=== Node version ==="
-  node --version
-
-  echo "=== Claude Code version ==="
-  claude --version
-
-  echo "=== Installed packages ==="
-  ls /app/node_modules/
-'
-```
-
-## Session Persistence
-
-Claude sessions are stored per-Agent in `data/sessions/{agent}/.claude/` for security isolation. Each Agent has its own session directory, preventing cross-Agent access to conversation history.
-
-**Critical:** The mount path must match the container user's HOME directory:
-- Container user: `node`
-- Container HOME: `/home/node`
-- Mount target: `/home/node/.claude/` (NOT `/root/.claude/`)
-
-To clear sessions:
-
-```bash
-# Clear all sessions for all agents
-rm -rf data/sessions/
-
-# Clear sessions for a specific Agent
-rm -rf data/sessions/{agentFolder}/.claude/
-
-# Also clear the session ID from Icarus's tracking (stored in SQLite)
-sqlite3 store/messages.db "DELETE FROM sessions WHERE agent_folder = '{agentFolder}'"
-```
-
-To verify session resumption is working, check the logs for the same session ID across messages:
-```bash
-grep "Session initialized" logs/icarus.log | tail -5
-# Should show the SAME session ID for consecutive messages in the same Agent
-```
-
-## IPC Debugging
-
-The container communicates back to the host via files in `/workspace/ipc/`:
-
-```bash
-# Check pending messages
-ls -la data/ipc/messages/
-
-# Check pending task operations
-ls -la data/ipc/tasks/
-
-# Read a specific IPC file
-cat data/ipc/messages/*.json
-
-# Check available agents (main channel only)
-cat data/ipc/main/available_agents.json
-
-# Check current tasks snapshot
-cat data/ipc/{agentFolder}/current_tasks.json
-```
-
-**IPC file types:**
-- `messages/*.json` - Agent writes: outgoing messages for its bound chat
-- `tasks/*.json` - Agent writes: task operations (schedule, pause, resume, cancel)
-- `current_tasks.json` - Host writes: read-only snapshot of scheduled tasks
-- `available_agents.json` - Host writes: read-only list of executable Agents (main only)
-
-## Quick Diagnostic Script
-
-Run this to check common issues:
-
-```bash
-echo "=== Checking Container Setup ==="
-
-echo -e "\n1. Authentication configured?"
-[ -f .env ] && (grep -q "CLAUDE_CODE_OAUTH_TOKEN=sk-" .env || grep -q "ANTHROPIC_API_KEY=sk-" .env) && echo "OK" || echo "MISSING - add CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY to .env"
-
-echo -e "\n2. Env file copied for container?"
-[ -f data/env/env ] && echo "OK" || echo "MISSING - will be created on first run"
-
-echo -e "\n3. Container runtime running?"
-docker info &>/dev/null && echo "OK" || echo "NOT RUNNING - start Docker Desktop (macOS) or sudo systemctl start docker (Linux)"
-
-echo -e "\n4. Container image exists?"
-echo '{}' | docker run -i --entrypoint /bin/echo icarus-agent:latest "OK" 2>/dev/null || echo "MISSING - run ./container/build.sh"
-
-echo -e "\n5. Session mount path correct?"
-grep -q "/home/node/.claude" src/container-runner.ts 2>/dev/null && echo "OK" || echo "WRONG - should mount to /home/node/.claude/, not /root/.claude/"
-
-echo -e "\n6. Agents directory?"
-ls -la agents/ 2>/dev/null || echo "MISSING - run setup"
-
-echo -e "\n7. Recent container logs?"
-ls -t agents/*/logs/container-*.log 2>/dev/null | head -3 || echo "No container logs yet"
-
-echo -e "\n8. Session continuity working?"
-SESSIONS=$(grep "Session initialized" logs/icarus.log 2>/dev/null | tail -5 | awk '{print $NF}' | sort -u | wc -l)
-[ "$SESSIONS" -le 2 ] && echo "OK (recent sessions reusing IDs)" || echo "CHECK - multiple different session IDs, may indicate resumption issues"
-```
+Reproduce the original request and confirm the Host health check, query Trace, container exit, and user-visible result. Report the root cause, evidence, files changed, commands run, and any remaining risk.

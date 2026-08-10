@@ -176,18 +176,18 @@ A personal Claude assistant accessible through its installed channels, with mini
 
 ---
 
-## Setup & Customization
+## Setup & Operations
 
 ### Philosophy
 - Minimal configuration files
-- Setup and customization done via Claude Code
+- Setup, diagnosis, and workflow lifecycle operations use project-local Claude Code skills
 - Users clone the repo and run Claude Code to configure
 - Each user gets a custom setup matching their exact needs
 
 ### Skills
 - `/setup` - Install dependencies, configure built-in channels and scheduler, and start services
-- `/debug` - Diagnose container execution, authentication, mounts, sessions, MCP, and IPC issues
-- `/manage-workflows` - Add, modify, or disable workflow type definitions
+- `/debug` - Diagnose Host, channel, container, credential, session, IPC, and Workflow Runtime failures
+- `/manage-workflows` - Manage Personal, Dynamic Runtime, and Collaboration workflow lifecycles
 
 ### Deployment
 - Runs from a local Git checkout on Mac via launchd
