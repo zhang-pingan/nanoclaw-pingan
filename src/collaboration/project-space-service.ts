@@ -71,6 +71,11 @@ import {
   type WorkItemStatus,
 } from './protocol/v3-schema.js';
 import type { CollaborationStagedArtifactV3 } from './project-space-store.js';
+import {
+  DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID,
+  collaborationPermissionTemplate,
+  collaborationPermissionsForTemplate,
+} from './permissions.js';
 
 export interface ValidatedProjectSpaceHistory {
   readonly head: string;
@@ -140,6 +145,7 @@ export interface CreateProjectSpaceGroupInput {
   readonly clientDisplayName: string;
   readonly membershipPolicy: 'open' | 'approval' | 'invite_only';
   readonly observerAccess: 'allowed' | 'members_only';
+  readonly defaultPermissionTemplateId?: string;
   readonly groupId?: string;
   readonly pollIntervalMs?: number;
 }
@@ -247,6 +253,13 @@ export class CollaborationProjectSpaceService {
   async createGroup(
     input: CreateProjectSpaceGroupInput,
   ): Promise<CollaborationProjectSpaceGroupRecord> {
+    if (
+      input.defaultPermissionTemplateId &&
+      !collaborationPermissionTemplate(input.defaultPermissionTemplateId)
+    )
+      throw new Error(
+        `Unknown permission template: ${input.defaultPermissionTemplateId}`,
+      );
     const identity = await this.identities.createPrincipalIdentity();
     const recoveryIdentity = await this.identities.createCredentialIdentity({
       principalId: identity.principalId,
@@ -296,6 +309,9 @@ export class CollaborationProjectSpaceService {
         lifecycle: 'active' as const,
         membership_policy: { join: input.membershipPolicy },
         visibility_policy: { observer_access: input.observerAccess },
+        default_permission_template_id:
+          input.defaultPermissionTemplateId ??
+          DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID,
         created_at: occurredAt,
         archived_at: null,
       },
@@ -433,7 +449,7 @@ export class CollaborationProjectSpaceService {
       status: 'active' as const,
       registered_at_event: eventId,
     };
-    const history = await this.appendWithIdentity({
+    let history = await this.appendWithIdentity({
       history: inspected,
       remoteUrl: input.remoteUrl,
       repositoryPath,
@@ -461,6 +477,33 @@ export class CollaborationProjectSpaceService {
       },
       eventId,
     });
+    if (open) {
+      const permissionEventId = newId('evt');
+      const grants = collaborationPermissionsForTemplate(
+        inspected.projection.group.default_permission_template_id ??
+          DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID,
+      );
+      history = await this.appendWithIdentity({
+        history,
+        remoteUrl: input.remoteUrl,
+        repositoryPath,
+        gitSshKeyPath,
+        identity,
+        aggregateType: 'membership',
+        aggregateId: identity.principalId,
+        eventType: 'permission_granted',
+        eventId: permissionEventId,
+        payload: {
+          grant: {
+            format: 'icarus.collaboration-permission-grant/1',
+            principal_id: identity.principalId,
+            grants: [...grants],
+            revision: 1,
+            updated_at_event: permissionEventId,
+          },
+        },
+      });
+    }
     this.registerOrUpgradeMember({
       history,
       remoteUrl: input.remoteUrl,
@@ -522,12 +565,21 @@ export class CollaborationProjectSpaceService {
     groupId: string,
     principalId: string,
     expectedRevision: number,
+    permissions?: {
+      readonly templateId?: string;
+      readonly grants?: readonly CollaborationPermission[];
+    },
   ): Promise<CollaborationProjectSpaceGroupRecord> {
+    if (
+      permissions?.templateId &&
+      !collaborationPermissionTemplate(permissions.templateId)
+    )
+      throw new Error(`Unknown permission template: ${permissions.templateId}`);
     const history = await this.sync(groupId);
     const requested = history.projection.members[principalId];
     if (!requested || requested.status !== 'requested')
       throw new Error('Membership request is not pending');
-    return this.appendLocal(groupId, {
+    await this.appendLocal(groupId, {
       aggregateType: 'membership',
       aggregateId: principalId,
       expectedRevision,
@@ -540,6 +592,18 @@ export class CollaborationProjectSpaceService {
         },
       },
       replaceEventId: true,
+    });
+    const templateId =
+      permissions?.templateId ??
+      history.projection.group.default_permission_template_id ??
+      DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID;
+    const grants =
+      permissions?.grants ?? collaborationPermissionsForTemplate(templateId);
+    return this.updatePermissions({
+      groupId,
+      principalId,
+      grants,
+      expectedRevision: expectedRevision + 1,
     });
   }
 
@@ -582,6 +646,43 @@ export class CollaborationProjectSpaceService {
         grant.grants.length > 0 ? 'permission_granted' : 'permission_revoked',
       payload: { grant },
       eventId,
+    });
+  }
+
+  async updateGroupSettings(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly name?: string;
+    readonly membershipPolicy?: 'open' | 'approval' | 'invite_only';
+    readonly observerAccess?: 'allowed' | 'members_only';
+    readonly defaultPermissionTemplateId?: string;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    if (
+      input.defaultPermissionTemplateId &&
+      !collaborationPermissionTemplate(input.defaultPermissionTemplateId)
+    )
+      throw new Error(
+        `Unknown permission template: ${input.defaultPermissionTemplateId}`,
+      );
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'group',
+      aggregateId: input.groupId,
+      expectedRevision: input.expectedRevision,
+      eventType: 'group_settings_updated',
+      payload: {
+        ...(input.name ? { name: input.name } : {}),
+        ...(input.membershipPolicy
+          ? { membership_policy: { join: input.membershipPolicy } }
+          : {}),
+        ...(input.observerAccess
+          ? { visibility_policy: { observer_access: input.observerAccess } }
+          : {}),
+        ...(input.defaultPermissionTemplateId
+          ? {
+              default_permission_template_id: input.defaultPermissionTemplateId,
+            }
+          : {}),
+      },
     });
   }
 
@@ -1924,6 +2025,29 @@ export class CollaborationProjectSpaceService {
       throw new Error('Published Workflow Definition does not exist');
     const participantBindings = { ...(input.participantBindings ?? {}) };
     const resolvedAssignments = { ...(input.stateAssignments ?? {}) };
+    const participantSlots = new Set(
+      Object.values(selected.machine.states).flatMap((state) =>
+        state.assignee?.type === 'participant_slot'
+          ? [state.assignee.slot]
+          : [],
+      ),
+    );
+    for (const slotId of Object.keys(participantBindings))
+      if (!participantSlots.has(slotId))
+        throw new Error(`Unknown Workflow participant slot: ${slotId}`);
+    for (const stateId of Object.keys(resolvedAssignments)) {
+      const state = selected.machine.states[stateId];
+      if (!state || state.terminal)
+        throw new Error(`Unknown executable Workflow State: ${stateId}`);
+    }
+    for (const principalId of [
+      ...Object.values(participantBindings),
+      ...Object.values(resolvedAssignments),
+    ])
+      if (history.projection.members[principalId]?.status !== 'active')
+        throw new Error(
+          `Workflow participant is not an active member: ${principalId}`,
+        );
     for (const [stateId, state] of Object.entries(selected.machine.states)) {
       if (state.terminal || resolvedAssignments[stateId]) continue;
       if (state.assignee?.type === 'principal')

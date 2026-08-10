@@ -6,6 +6,12 @@ import {
   COLLABORATION_CONTROL_BRANCH,
   CollaborationProtocolError,
 } from './version.js';
+import {
+  COLLABORATION_PERMISSIONS,
+  DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID,
+  collaborationPermissionTemplate,
+  type CollaborationPermission,
+} from '../permissions.js';
 
 export const V3_COLLABORATION_PROTOCOL_VERSION = 3 as const;
 
@@ -109,6 +115,12 @@ export const groupDefinitionV3Schema = z
     lifecycle: z.enum(['active', 'archived']),
     membership_policy: membershipPolicySchema,
     visibility_policy: visibilityPolicySchema,
+    default_permission_template_id: z
+      .string()
+      .refine((value) => collaborationPermissionTemplate(value) !== null, {
+        message: 'unknown permission template id',
+      })
+      .default(DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID),
     created_at: collaborationIsoTimeSchema,
     archived_at: collaborationIsoTimeSchema.nullable().default(null),
     extensions: extensionsSchema,
@@ -299,27 +311,8 @@ export const executorDescriptorSchema = z
   .strict();
 export type ExecutorDescriptor = z.infer<typeof executorDescriptorSchema>;
 
-export const collaborationPermissionSchema = z.enum([
-  'group:admin',
-  'group:archive',
-  'member:approve',
-  'permission:grant',
-  'workspace:write_shared',
-  'workspace:publish_owned',
-  'work_item:create',
-  'work_item:manage_owned',
-  'work_item:manage_all',
-  'discussion:create',
-  'discussion:post',
-  'discussion:moderate',
-  'workflow_definition:propose',
-  'workflow_definition:publish',
-  'workflow_instance:start_allowed',
-  'workflow_instance:manage_all',
-]);
-export type CollaborationPermission = z.infer<
-  typeof collaborationPermissionSchema
->;
+export const collaborationPermissionSchema = z.enum(COLLABORATION_PERMISSIONS);
+export type { CollaborationPermission };
 
 export const permissionGrantSchema = z
   .object({

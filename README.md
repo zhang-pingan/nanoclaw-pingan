@@ -94,6 +94,8 @@ Web 工作台由 `src/channels/web.ts` 启动本地 HTTP/WebSocket 服务，默�
 
 Collaboration Project Space 是与本地 Dynamic Workflow Runtime 分离的跨机器协作模式。Group 创建后立即可用，不要求预先创建 Workflow。共享事实只存在于 Git 控制分支上的 Icarus Credential 签名事件和物化文件；SQLite 保存本机订阅、Credential 私钥引用、Executor Binding、durable receipt、staged upload、通知投递、Provider observation、诊断和可重建缓存。
 
+Active Member 只表示成员身份有效。业务写入还取决于直接权限、Owner 内置能力、资源 owner/contributor、Work Item 指派和 Workflow 当前负责人；服务端将同一授权 evaluator 的 group/resource `allowedActions` 返回给 UI，并在命令提交时再次校验。固定权限模板用于生成可审计的 permission grant/revoke 事件，群组默认模板只影响未来成员。Workflow 实例通过成员选择与终态映射向导生成底层 `participant_bindings` JSON，业务用户无需手写协议数据。
+
 - Principal 是 Group 内的稳定成员与权限主体，使用系统生成的 `principal_<uuid>`，不从 SSH key 或 Credential fingerprint 派生。每个 Icarus 安装持久化一个 `client_<uuid>`，同一 Principal 可通过批准的身份恢复绑定多个 Client。
 - 每个 Client 的 Icarus event-signing Credential 由 Host 自动生成；共享 Git 只保存 `credential_id`、Principal/Client 绑定、公钥、系统校验的 fingerprint、purpose、status 和生命周期事件，私钥仅保存在本机安全目录。Credential 可以轮换或单独撤销而不改变 Principal。
 - Git Remote 账号/SSH 只控制 clone、fetch、push。Git SSH Key 路径是可选本地 transport 设置，优先使用显式值或 `SSH_KEY_PATH`，否则使用 `~/.ssh/id_rsa`，并支持后续修改或清除；它不参与 Principal 或 event Credential 的生成。

@@ -61,6 +61,17 @@ import {
   type WorkItemProgress,
 } from './v3-schema.js';
 import { CollaborationProtocolError } from './version.js';
+import {
+  canContributeToCollaborationWorkItemV3,
+  canLaunchCollaborationWorkflowV3,
+  canManageCollaborationWorkflowInstanceV3,
+  canManageCollaborationWorkItemV3,
+  hasCollaborationPermissionV3 as evaluateCollaborationPermissionV3,
+} from '../authorization.js';
+import {
+  DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID,
+  collaborationPermissionsForTemplate,
+} from '../permissions.js';
 
 const sha256 = collaborationSha256Schema;
 const id = collaborationIdentifierSchema;
@@ -157,6 +168,8 @@ const groupSettingsPayloadSchema = z
       groupDefinitionV3Schema.shape.membership_policy.optional(),
     visibility_policy:
       groupDefinitionV3Schema.shape.visibility_policy.optional(),
+    default_permission_template_id:
+      groupDefinitionV3Schema.shape.default_permission_template_id.optional(),
   })
   .strict();
 const progressPayloadSchema = z
@@ -458,6 +471,10 @@ function conflict(message: string): never {
   throw new CollaborationProtocolError('EVENT_CONFLICT', message);
 }
 
+function unauthorized(message: string): never {
+  throw new CollaborationProtocolError('EVENT_UNAUTHORIZED', message);
+}
+
 function projectionKey(
   type: CollaborationAggregateType,
   idValue: string,
@@ -691,15 +708,7 @@ export function hasCollaborationPermissionV3(
   principalId: string,
   permission: PermissionGrant['grants'][number],
 ): boolean {
-  return (
-    principalId === projection.group.owner_principal_id ||
-    projection.permissionGrants[principalId]?.grants.includes(permission) ===
-      true ||
-    (permission !== 'group:admin' &&
-      projection.permissionGrants[principalId]?.grants.includes(
-        'group:admin',
-      ) === true)
-  );
+  return evaluateCollaborationPermissionV3(projection, principalId, permission);
 }
 
 export function parseCollaborationEventPayloadV3(
@@ -754,7 +763,7 @@ function assertMemberAndClient(
   event: CollaborationEventV3,
 ): void {
   if (!activeCollaborationMemberV3(projection, event.actor.principal_id))
-    conflict('Event actor is not an active Group member');
+    unauthorized('Event actor is not an active Group member');
   const credential =
     projection.credentials[event.actor.principal_id]?.[
       event.actor.credential_id
@@ -765,7 +774,7 @@ function assertMemberAndClient(
     credential.principal_id !== event.actor.principal_id ||
     credential.client_id !== event.actor.client_id
   )
-    conflict(
+    unauthorized(
       'Event actor Credential is not active for its Principal and Client',
     );
   if (
@@ -775,11 +784,11 @@ function assertMemberAndClient(
   )
     return;
   if (credential.purpose !== 'event_signing')
-    conflict('This operation requires an event-signing Credential');
+    unauthorized('This operation requires an event-signing Credential');
   const client =
     projection.clients[event.actor.principal_id]?.[event.actor.client_id];
   if (!client || client.status !== 'active')
-    conflict('Event actor Client is not active');
+    unauthorized('Event actor Client is not active');
   if (
     event.actor.executor_id &&
     !projection.executors[event.actor.principal_id]?.[event.actor.executor_id]
@@ -801,14 +810,7 @@ function canManageWorkItem(
   principalId: string,
   item: WorkItem,
 ): boolean {
-  return (
-    item.owner_principal_id === principalId ||
-    hasCollaborationPermissionV3(
-      projection,
-      principalId,
-      'work_item:manage_all',
-    )
-  );
+  return canManageCollaborationWorkItemV3(projection, principalId, item);
 }
 
 function canContributeToWorkItem(
@@ -816,10 +818,7 @@ function canContributeToWorkItem(
   principalId: string,
   item: WorkItem,
 ): boolean {
-  return (
-    canManageWorkItem(projection, principalId, item) ||
-    item.contributors.includes(principalId)
-  );
+  return canContributeToCollaborationWorkItemV3(projection, principalId, item);
 }
 
 function assertWorkItemRelations(
@@ -926,29 +925,12 @@ function canLaunchWorkflow(
   instance: WorkflowInstance,
   definition: WorkflowDefinition,
 ): boolean {
-  if (
-    hasCollaborationPermissionV3(
-      projection,
-      principalId,
-      'workflow_instance:start_allowed',
-    ) ||
-    definition.launch_policy.principals.includes(principalId)
-  )
-    return true;
-  if (
-    definition.launch_policy.group_admin &&
-    hasCollaborationPermissionV3(projection, principalId, 'group:admin')
-  )
-    return true;
-  if (
-    definition.launch_policy.work_item_owner &&
-    instance.scope.type === 'work_item'
-  )
-    return (
-      projection.workItems[instance.scope.work_item_id]?.owner_principal_id ===
-      principalId
-    );
-  return false;
+  return canLaunchCollaborationWorkflowV3(
+    projection,
+    principalId,
+    instance,
+    definition,
+  );
 }
 
 function canManageWorkflowInstance(
@@ -956,14 +938,10 @@ function canManageWorkflowInstance(
   principalId: string,
   instance: WorkflowInstance,
 ): boolean {
-  return (
-    instance.created_by_principal_id === principalId ||
-    hasCollaborationPermissionV3(
-      projection,
-      principalId,
-      'workflow_instance:manage_all',
-    ) ||
-    instance.resolved_assignments[instance.business_state] === principalId
+  return canManageCollaborationWorkflowInstanceV3(
+    projection,
+    principalId,
+    instance,
   );
 }
 
@@ -1147,7 +1125,7 @@ export function reduceCollaborationEventV3(
           'group:admin',
         )
       )
-        conflict('Only Owner/Admin may update Group settings');
+        unauthorized('Only Owner/Admin may update Group settings');
       const parsed = groupSettingsPayloadSchema.parse(payload);
       next.group = groupDefinitionV3Schema.parse({
         ...next.group,
@@ -1157,6 +1135,12 @@ export function reduceCollaborationEventV3(
           : {}),
         ...(parsed.visibility_policy
           ? { visibility_policy: parsed.visibility_policy }
+          : {}),
+        ...(parsed.default_permission_template_id
+          ? {
+              default_permission_template_id:
+                parsed.default_permission_template_id,
+            }
           : {}),
       });
       break;
@@ -1170,7 +1154,7 @@ export function reduceCollaborationEventV3(
           'group:archive',
         )
       )
-        conflict('Actor cannot change Group lifecycle');
+        unauthorized('Actor cannot change Group lifecycle');
       const archive = event.event_type === 'group_archived';
       if ((next.group.lifecycle === 'archived') === archive)
         conflict('Group lifecycle transition is redundant');
@@ -1195,7 +1179,7 @@ export function reduceCollaborationEventV3(
           'member:approve',
         )
       )
-        conflict('Actor is not authorized to issue Invites');
+        unauthorized('Actor is not authorized to issue Invites');
       if (
         invite.issued_by_principal_id !== event.actor.principal_id ||
         invite.issued_at !== event.occurred_at ||
@@ -1219,7 +1203,7 @@ export function reduceCollaborationEventV3(
           'member:approve',
         )
       )
-        conflict('Actor is not authorized to revoke Invites');
+        unauthorized('Actor is not authorized to revoke Invites');
       const invite = next.invites[event.aggregate_id];
       if (!invite) conflict('Invite does not exist');
       if (invite.status !== 'active')
@@ -1300,7 +1284,7 @@ export function reduceCollaborationEventV3(
           'member:approve',
         )
       )
-        conflict('Actor cannot reject membership requests');
+        unauthorized('Actor cannot reject membership requests');
       const member = next.members[principalId];
       if (!member || member.status !== 'requested')
         conflict('Membership request is not pending');
@@ -1323,7 +1307,7 @@ export function reduceCollaborationEventV3(
         'member:approve',
       );
       if (!selfOpen && !approved)
-        conflict('Membership policy requires an authorized approval');
+        unauthorized('Membership policy requires an authorized approval');
       if (
         member.status !== 'active' ||
         member.joined_at_event !== event.event_id
@@ -1370,7 +1354,7 @@ export function reduceCollaborationEventV3(
           'group:admin',
         )
       )
-        conflict('Actor cannot change Membership status');
+        unauthorized('Actor cannot change Membership status');
       if (principalId === next.group.owner_principal_id)
         conflict('The Group Owner Membership cannot be disabled');
       const member = next.members[principalId];
@@ -1517,7 +1501,7 @@ export function reduceCollaborationEventV3(
           event.actor.credential_id !==
             request.requested_credential.credential_id
         )
-          conflict('Only the requesting Client may cancel recovery');
+          unauthorized('Only the requesting Client may cancel recovery');
       } else if (event.event_type === 'recovery_expired') {
         if (!expired) conflict('Recovery request has not expired');
         const expiryAuthority =
@@ -1616,7 +1600,9 @@ export function reduceCollaborationEventV3(
     case 'executor_registered': {
       const { executor } = executorPayloadSchema.parse(payload);
       if (executor.principal_id !== event.actor.principal_id)
-        conflict('A Principal may only register its own Executor descriptor');
+        unauthorized(
+          'A Principal may only register its own Executor descriptor',
+        );
       (next.executors[executor.principal_id] ??= {})[executor.executor_id] =
         executor;
       break;
@@ -1631,20 +1617,42 @@ export function reduceCollaborationEventV3(
     }
     case 'permission_granted':
     case 'permission_revoked': {
+      const { grant } = grantPayloadSchema.parse(payload);
+      const defaultPermissions = collaborationPermissionsForTemplate(
+        next.group.default_permission_template_id ??
+          DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID,
+      );
+      const initialDefaultSelfGrant =
+        event.event_type === 'permission_granted' &&
+        next.group.membership_policy.join === 'open' &&
+        event.aggregate_type === 'membership' &&
+        event.aggregate_id === event.actor.principal_id &&
+        event.aggregate_revision === 2 &&
+        grant.principal_id === event.actor.principal_id &&
+        !next.permissionGrants[grant.principal_id] &&
+        grant.revision === 1 &&
+        current.aggregateHeads[`membership:${event.actor.principal_id}`]
+          ?.eventId ===
+          next.members[event.actor.principal_id]?.joined_at_event &&
+        current.activity.at(-1)?.eventId ===
+          next.members[event.actor.principal_id]?.joined_at_event &&
+        [...grant.grants].sort().join('\0') ===
+          [...defaultPermissions].sort().join('\0');
       if (
+        !initialDefaultSelfGrant &&
         !hasCollaborationPermissionV3(
           next,
           event.actor.principal_id,
           'permission:grant',
         )
       )
-        conflict('Actor cannot change direct permission grants');
-      const { grant } = grantPayloadSchema.parse(payload);
+        unauthorized('Actor cannot change direct permission grants');
       if (grant.principal_id === next.group.owner_principal_id)
         conflict(
           'Owner authority is intrinsic and cannot be rewritten as grants',
         );
       if (
+        !initialDefaultSelfGrant &&
         grant.principal_id === event.actor.principal_id &&
         grant.grants.some((value) =>
           ['group:admin', 'permission:grant'].includes(value),
@@ -1665,6 +1673,14 @@ export function reduceCollaborationEventV3(
         conflict(
           'Progress update must be published in the actor Principal space',
         );
+      if (
+        !hasCollaborationPermissionV3(
+          next,
+          event.actor.principal_id,
+          'workspace:publish_owned',
+        )
+      )
+        unauthorized('Actor cannot publish to the owned Workspace');
       next.progressUpdates[update.update_id] = update;
       break;
     }
@@ -1685,12 +1701,21 @@ export function reduceCollaborationEventV3(
           'workspace:write_shared',
         )
       )
-        conflict('Actor cannot write the shared Workspace');
+        unauthorized('Actor cannot write the shared Workspace');
       if (
         event.event_type === 'principal_file_published' &&
         event.aggregate_id !== event.actor.principal_id
       )
         conflict('Principal file must use the actor Workspace Aggregate');
+      if (
+        event.event_type === 'principal_file_published' &&
+        !hasCollaborationPermissionV3(
+          next,
+          event.actor.principal_id,
+          'workspace:publish_owned',
+        )
+      )
+        unauthorized('Actor cannot publish to the owned Workspace');
       if (
         event.event_type.startsWith('shared_') &&
         event.aggregate_id !== 'shared'
@@ -1717,6 +1742,14 @@ export function reduceCollaborationEventV3(
     case 'action_published':
     case 'action_revised': {
       const { action } = actionPayloadSchema.parse(payload);
+      if (
+        !hasCollaborationPermissionV3(
+          next,
+          event.actor.principal_id,
+          'workspace:publish_owned',
+        )
+      )
+        unauthorized('Actor cannot publish to the owned Workspace');
       if (
         event.aggregate_type !== 'workspace' ||
         event.aggregate_id !== action.owner_principal_id ||
@@ -1761,7 +1794,7 @@ export function reduceCollaborationEventV3(
             'work_item:create',
           )
         )
-          conflict('Actor cannot create this Work Item');
+          unauthorized('Actor cannot create this Work Item');
         if (event.actor.executor_id && item.status !== 'proposed')
           conflict('Agent-created Work Items default to proposed');
         if (
@@ -1773,7 +1806,7 @@ export function reduceCollaborationEventV3(
         const previous = next.workItems[item.work_item_id];
         if (!previous) conflict('Work Item does not exist');
         if (!canManageWorkItem(next, event.actor.principal_id, previous))
-          conflict('Actor cannot update this Work Item');
+          unauthorized('Actor cannot update this Work Item');
         if (
           item.creator_principal_id !== previous.creator_principal_id ||
           item.created_at !== previous.created_at ||
@@ -1808,7 +1841,7 @@ export function reduceCollaborationEventV3(
       const item = next.workItems[event.aggregate_id];
       if (!item) conflict('Work Item does not exist');
       if (!canManageWorkItem(next, event.actor.principal_id, item))
-        conflict('Actor cannot reassign this Work Item');
+        unauthorized('Actor cannot reassign this Work Item');
       const parsed = workItemAssignmentPayloadSchema.parse(payload);
       assertActivePrincipals(next, [parsed.owner_principal_id]);
       item.owner_principal_id = parsed.owner_principal_id;
@@ -1822,7 +1855,7 @@ export function reduceCollaborationEventV3(
     case 'work_item_assignment_declined': {
       const item = next.workItems[event.aggregate_id];
       if (!item || item.owner_principal_id !== event.actor.principal_id)
-        conflict('Only the current Work Item owner may answer assignment');
+        unauthorized('Only the current Work Item owner may answer assignment');
       item.assignment_status =
         event.event_type === 'work_item_assignment_acknowledged'
           ? 'accepted'
@@ -1835,7 +1868,7 @@ export function reduceCollaborationEventV3(
       const item = next.workItems[event.aggregate_id];
       if (!item) conflict('Work Item does not exist');
       if (!canManageWorkItem(next, event.actor.principal_id, item))
-        conflict('Actor cannot change this Work Item status');
+        unauthorized('Actor cannot change this Work Item status');
       const { status, closed_at: closedAt } =
         workItemStatusPayloadSchema.parse(payload);
       if (!WORK_ITEM_TRANSITIONS[item.status]?.includes(status))
@@ -1866,7 +1899,7 @@ export function reduceCollaborationEventV3(
         update.actor_client_id !== event.actor.client_id ||
         !canContributeToWorkItem(next, event.actor.principal_id, item)
       )
-        conflict('Actor cannot post progress to this Work Item');
+        unauthorized('Actor cannot post progress to this Work Item');
       for (const artifact of artifacts) {
         const artifactRef = `artifacts/work-items/${event.aggregate_id}/${artifact.artifact_id}/metadata.json`;
         if (
@@ -1890,7 +1923,7 @@ export function reduceCollaborationEventV3(
       const item = next.workItems[event.aggregate_id];
       if (!item) conflict('Work Item does not exist');
       if (!canManageWorkItem(next, event.actor.principal_id, item))
-        conflict('Actor cannot change this Work Item relations');
+        unauthorized('Actor cannot change this Work Item relations');
       const relations = workItemRelationPayloadSchema.parse(payload);
       assertWorkItemRelations(next, item.work_item_id, relations);
       item.parent_id = relations.parent_id;
@@ -1904,7 +1937,7 @@ export function reduceCollaborationEventV3(
       const item = next.workItems[event.aggregate_id];
       if (!item) conflict('Work Item does not exist');
       if (!canManageWorkItem(next, event.actor.principal_id, item))
-        conflict('Actor cannot archive this Work Item');
+        unauthorized('Actor cannot archive this Work Item');
       item.archived = true;
       item.revision = event.aggregate_revision;
       item.updated_at = event.occurred_at;
@@ -1926,7 +1959,7 @@ export function reduceCollaborationEventV3(
           'discussion:create',
         )
       )
-        conflict('Actor cannot create this Discussion');
+        unauthorized('Actor cannot create this Discussion');
       if (
         (discussion.scope.type === 'work_item' &&
           !next.workItems[discussion.scope.ref]) ||
@@ -1943,7 +1976,7 @@ export function reduceCollaborationEventV3(
             'discussion:post',
           )
         )
-          conflict('Actor cannot post to Discussions');
+          unauthorized('Actor cannot post to Discussions');
         if (
           message.thread_id !== discussion.thread_id ||
           message.author_principal_id !== event.actor.principal_id ||
@@ -1974,7 +2007,7 @@ export function reduceCollaborationEventV3(
           'discussion:post',
         )
       )
-        conflict('Actor cannot post to Discussions');
+        unauthorized('Actor cannot post to Discussions');
       if (thread.discussion.status !== 'open')
         conflict('Resolved Discussions do not accept messages');
       if (
@@ -1994,7 +2027,7 @@ export function reduceCollaborationEventV3(
         event.event_type === 'message_revised' &&
         previous?.author_principal_id !== event.actor.principal_id
       )
-        conflict('Only the message author may revise it');
+        unauthorized('Only the message author may revise it');
       assertActivePrincipals(next, message.mentions);
       thread.messages[message.message_id] = message;
       thread.discussion.revision = event.aggregate_revision;
@@ -2013,7 +2046,7 @@ export function reduceCollaborationEventV3(
           'discussion:moderate',
         )
       )
-        conflict('Only the author or a moderator may tombstone a message');
+        unauthorized('Only the author or a moderator may tombstone a message');
       message.tombstoned = true;
       message.body = '';
       message.revision += 1;
@@ -2033,7 +2066,7 @@ export function reduceCollaborationEventV3(
           'discussion:moderate',
         )
       )
-        conflict('Actor cannot resolve or reopen this Discussion');
+        unauthorized('Actor cannot resolve or reopen this Discussion');
       thread.discussion.status =
         event.event_type === 'discussion_resolved' ? 'resolved' : 'open';
       thread.discussion.resolved_at =
@@ -2076,7 +2109,7 @@ export function reduceCollaborationEventV3(
           'workflow_definition:propose',
         )
       )
-        conflict('Actor cannot propose Workflow Definitions');
+        unauthorized('Actor cannot propose Workflow Definitions');
       if (
         expectedStatus === 'published' &&
         !hasCollaborationPermissionV3(
@@ -2085,7 +2118,7 @@ export function reduceCollaborationEventV3(
           'workflow_definition:publish',
         )
       )
-        conflict('Actor cannot publish Workflow Definitions');
+        unauthorized('Actor cannot publish Workflow Definitions');
       const key = workflowDefinitionVersionKey(
         definition.definition_id,
         definition.version,
@@ -2133,7 +2166,7 @@ export function reduceCollaborationEventV3(
           'workflow_definition:publish',
         )
       )
-        conflict('Actor cannot retire Workflow Definitions');
+        unauthorized('Actor cannot retire Workflow Definitions');
       definition.definition.status = 'retired';
       definition.definition.revision = event.aggregate_revision;
       definition.definition.updated_at = event.occurred_at;
@@ -2156,7 +2189,7 @@ export function reduceCollaborationEventV3(
           'workflow_definition:publish',
         )
       )
-        conflict('Actor cannot update this Workflow layout');
+        unauthorized('Actor cannot update this Workflow layout');
       if (parsed.layout_hash !== collaborationCanonicalHashV3(parsed.layout))
         conflict('Workflow layout hash does not match');
       definition.layout = parsed.layout;
@@ -2232,7 +2265,7 @@ export function reduceCollaborationEventV3(
           definition.definition,
         )
       )
-        conflict('Actor cannot create an Instance from this Definition');
+        unauthorized('Actor cannot create an Instance from this Definition');
       if (instance.scope.type === 'work_item') {
         const item = next.workItems[instance.scope.work_item_id]!;
         const activePrimary = item.primary_workflow_instance_id
@@ -2263,7 +2296,7 @@ export function reduceCollaborationEventV3(
             )
           : !canManageWorkflowInstance(next, event.actor.principal_id, instance)
       )
-        conflict('Actor cannot change Workflow Instance lifecycle');
+        unauthorized('Actor cannot change Workflow Instance lifecycle');
       const transitions: Record<string, readonly string[]> = {
         workflow_instance_started: ['ready'],
         workflow_instance_paused: ['running', 'pausing'],
@@ -2308,7 +2341,7 @@ export function reduceCollaborationEventV3(
       if (!instance || !activeCollaborationMemberV3(next, parsed.principal_id))
         conflict('Workflow Instance or assignee does not exist');
       if (!canManageWorkflowInstance(next, event.actor.principal_id, instance))
-        conflict('Actor cannot reassign this Workflow Instance');
+        unauthorized('Actor cannot reassign this Workflow Instance');
       const definition = activeDefinition(next, instance);
       const definitionState = definition.machine.states[parsed.state_id];
       if (!definitionState || definitionState.terminal)
@@ -2346,7 +2379,9 @@ export function reduceCollaborationEventV3(
         instance.resolved_assignments[execution.state_id] !==
           event.actor.principal_id
       )
-        conflict('Only the resolved Principal may configure State Execution');
+        unauthorized(
+          'Only the resolved Principal may configure State Execution',
+        );
       const definition = activeDefinition(next, instance);
       const definitionState = definition.machine.states[execution.state_id];
       if (!definitionState || definitionState.terminal)
@@ -2404,7 +2439,9 @@ export function reduceCollaborationEventV3(
         !instance ||
         instance.resolved_assignments[stateId] !== event.actor.principal_id
       )
-        conflict('Only the resolved Principal may withdraw State Execution');
+        unauthorized(
+          'Only the resolved Principal may withdraw State Execution',
+        );
       delete next.stateExecutions[instance.instance_id]?.[stateId];
       instance.revision = event.aggregate_revision;
       instance.updated_at = event.occurred_at;
@@ -2425,7 +2462,7 @@ export function reduceCollaborationEventV3(
       )
         conflict('Turn does not match the active Workflow Instance State');
       if (!canCreateWorkflowTurnV3(next, event.actor.principal_id, instance))
-        conflict('Actor cannot create a Turn for this Workflow Instance');
+        unauthorized('Actor cannot create a Turn for this Workflow Instance');
       const execution =
         next.stateExecutions[instance.instance_id]?.[instance.business_state];
       if (!execution && turn.execution_mode !== 'manual')
@@ -2816,14 +2853,14 @@ export function reduceCollaborationEventV3(
       );
       if (!turn.fencing_token) {
         if (parsed.fencing_token !== null || !authority)
-          conflict('Only Instance authority may cancel an unclaimed Turn');
+          unauthorized('Only Instance authority may cancel an unclaimed Turn');
       } else if (
         parsed.fencing_token !== turn.fencing_token ||
         (!authority &&
           (turn.claimant_principal_id !== event.actor.principal_id ||
             turn.claimant_client_id !== event.actor.client_id))
       )
-        conflict('Only claimant or Instance authority may cancel a Turn');
+        unauthorized('Only claimant or Instance authority may cancel a Turn');
       turn.state = 'cancelled';
       turn.completed_at = event.occurred_at;
       turn.recovery_reason = parsed.reason;
@@ -2872,7 +2909,7 @@ export function reduceCollaborationEventV3(
       )
         conflict('Turn recovery attempt is invalid');
       if (!canManageWorkflowInstance(next, event.actor.principal_id, instance))
-        conflict('Actor cannot recover this Workflow Instance');
+        unauthorized('Actor cannot recover this Workflow Instance');
       if (
         parsed.deadline_snapshot_hash !==
         collaborationDeadlineSnapshotHashV3({

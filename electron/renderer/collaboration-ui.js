@@ -29,6 +29,13 @@ export function collaborationLocalCredential(group) {
 
 export function collaborationCanDecideRecovery(group, request) {
   if (!group || !request || request.status !== 'pending') return false;
+  if (group.allowedActions)
+    return collaborationActionAllowed(
+      group,
+      'approve',
+      'recovery_request',
+      request.request_id,
+    );
   if (
     request.type === 'owner_recovery' &&
     group.localPrincipalId === group.ownerPrincipalId &&
@@ -54,7 +61,83 @@ export function collaborationCanMutate(group) {
   );
 }
 
+export function collaborationActionAccess(
+  group,
+  action,
+  resourceType = 'group',
+  resourceId = '',
+) {
+  const allowed = group?.allowedActions;
+  let decision = null;
+  if (resourceType === 'group') decision = allowed?.group?.[action];
+  else if (resourceType === 'work_item')
+    decision = allowed?.workItems?.[resourceId]?.[action];
+  else if (resourceType === 'discussion')
+    decision = allowed?.discussions?.[resourceId]?.[action];
+  else if (resourceType === 'workflow_definition')
+    decision = allowed?.workflowDefinitions?.[resourceId]?.[action];
+  else if (resourceType === 'workflow_instance')
+    decision = allowed?.workflowInstances?.[resourceId]?.[action];
+  else if (resourceType === 'client')
+    decision = allowed?.clients?.[resourceId]?.[action];
+  else if (resourceType === 'credential')
+    decision = allowed?.credentials?.[resourceId]?.[action];
+  else if (resourceType === 'recovery_request')
+    decision = allowed?.recoveryRequests?.[resourceId]?.[action];
+  if (decision && typeof decision.allowed === 'boolean') return decision;
+  if (allowed)
+    return {
+      allowed: false,
+      code: 'ACTION_NOT_PROJECTED',
+      reason: '当前视图未提供此操作能力',
+    };
+  return {
+    allowed: collaborationCanMutate(group),
+    code: collaborationCanMutate(group) ? 'LEGACY_ALLOWED' : 'READ_ONLY',
+    reason: collaborationCanMutate(group) ? null : '当前身份不能执行此操作',
+  };
+}
+
+export function collaborationWorkflowLaunchAccess(
+  group,
+  definitionKey,
+  scopeType = 'group',
+  workItemId = '',
+) {
+  if (!group?.allowedActions)
+    return collaborationActionAccess(group, 'createWorkflowInstance');
+  if (scopeType === 'work_item' && !workItemId)
+    return {
+      allowed: false,
+      code: 'RESOURCE_REQUIRED',
+      reason: '请选择要关联的工作项',
+    };
+  const definition = group.allowedActions.workflowDefinitions?.[definitionKey];
+  const decision =
+    scopeType === 'work_item'
+      ? definition?.createWorkItemInstances?.[workItemId]
+      : definition?.createGroupInstance;
+  if (decision && typeof decision.allowed === 'boolean') return decision;
+  return {
+    allowed: false,
+    code: 'ACTION_NOT_PROJECTED',
+    reason: '当前 Definition 与范围未提供启动能力',
+  };
+}
+
+export function collaborationActionAllowed(
+  group,
+  action,
+  resourceType = 'group',
+  resourceId = '',
+) {
+  return collaborationActionAccess(group, action, resourceType, resourceId)
+    .allowed;
+}
+
 export function collaborationCanApproveMembers(group) {
+  if (group?.allowedActions)
+    return collaborationActionAllowed(group, 'approveMembers');
   if (!collaborationCanMutate(group)) return false;
   if (group.localPrincipalId === group.ownerPrincipalId) return true;
   const grants =
@@ -63,6 +146,13 @@ export function collaborationCanApproveMembers(group) {
 }
 
 export function collaborationCanAnswerWorkItemAssignment(group, item) {
+  if (group?.allowedActions)
+    return collaborationActionAllowed(
+      group,
+      'answerAssignment',
+      'work_item',
+      item?.work_item_id,
+    );
   return Boolean(
     collaborationCanMutate(group) &&
     item?.assignment_status === 'pending' &&
@@ -382,6 +472,13 @@ export function collaborationCanCreateTurn(group, instance, definition) {
     return false;
   const state = definition?.machine?.states?.[instance.business_state];
   if (!state || state.terminal) return false;
+  if (group?.allowedActions)
+    return collaborationActionAllowed(
+      group,
+      'createTurn',
+      'workflow_instance',
+      instance.instance_id,
+    );
   const principalId = group?.localPrincipalId;
   const grants =
     group?.projection?.permissionGrants?.[principalId]?.grants || [];
@@ -461,6 +558,13 @@ export function collaborationCanRecoverTurn(group, instance, turn) {
     instance.active_turn_id !== turn.turn_id
   )
     return false;
+  if (group?.allowedActions)
+    return collaborationActionAllowed(
+      group,
+      'manage',
+      'workflow_instance',
+      instance.instance_id,
+    );
   const principalId = group.localPrincipalId;
   const grants =
     group.projection?.permissionGrants?.[principalId]?.grants || [];

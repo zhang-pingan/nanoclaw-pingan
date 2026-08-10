@@ -38,6 +38,8 @@ v3 将 Group 提升为长期存在的协作项目空间：
 14. 每个 Client 自动生成独立的 Icarus event-signing Credential。公钥和系统校验的 fingerprint 进入共享投影，私钥只留在本机安全目录；轮换或撤销 Credential 不改变 Principal。
 15. Git Remote 账号/SSH 仅控制 clone、fetch、push；Icarus Group Permission 由 Host API、签名验证和 Reducer 决定。拥有 Git push 权限不等于拥有业务写权限。
 16. 新设备先以 Observer 同步，然后通过 Git Remote 提交严格受限的身份恢复请求。旧 Client、Owner 或 offline Group recovery Credential 批准后，才原子绑定新 Client/Credential 并升级为 Member。
+17. Active Member 只表示成员身份有效，不自动获得业务写权限。Host 根据有效 Member/Client/Credential、直接权限、资源 owner/contributor、Work Item 指派和 Workflow 当前负责人投影 `allowedActions`；Reducer 在每次提交时使用同一授权语义重新校验。
+18. 固定权限模板只负责生成直接权限集合，权限事件仍是可签名、可回放的事实来源。模板 ID/version 是稳定机器合同，Renderer 不接受或生成未知 permission/template ID。
 
 核心关系：
 
@@ -65,6 +67,18 @@ Workflow Instance State
   -> optional Principal-owned Action
   -> optional local Executor Binding
 ```
+
+### 权限与 allowed actions
+
+授权关系按以下顺序解释：
+
+1. `Member.status=active`、active Client 和 active event-signing Credential 是业务写入的身份前置条件，不是业务权限本身。
+2. Owner 拥有内置管理能力；其他成员的 `permission_granted` / `permission_revoked` 事件形成直接权限事实，`group:admin` 扩展为内置管理能力。
+3. 固定模板 `member.v1`、`contributor.v1`、`project_manager.v1`、`workflow_manager.v1`、`group_manager.v1` 只生成一组已知 permission；投影通过集合精确匹配解释“来源模板”或“自定义差异”，不把模板当作第二套授权事实。
+4. Group 概览 action 与资源 action 分开投影。例如 `createWorkItem` 需要 `work_item:create`，而 `workItems[id].manage` 由该 Work Item owner 或 `work_item:manage_all` 决定；当前 Workflow assignee 只获得对应实例的管理/执行入口。
+5. Web API 返回当前本机 Principal 的 `allowedActions`，Renderer 据此隐藏不适用入口。同步后权限可能变化，因此 command/API/Reducer 仍在提交时重新校验，并以稳定错误码拒绝过期操作。
+
+群组保存 `default_permission_template_id`。开放加入在 `member_registered` 后提交独立的 `permission_granted` 事件；审批或邀请加入由审批人选择模板或自定义集合后执行相同授权事件。修改默认模板只影响以后加入或批准的成员，不改写既有 permission history。
 
 ## 0. 实施结果
 
@@ -220,12 +234,12 @@ Group 不再要求：
 
 v2 的 `agent_id` 同时接近“本机 Icarus 安装”和“执行 Agent”两个语义。v3 明确拆分：
 
-| 概念      | 含义                                         | 是否进入共享 Git                                  |
-| --------- | -------------------------------------------- | ------------------------------------------------- |
-| Principal | Group 内稳定成员和权限主体                   | 是                                                |
-| Client    | 持久 `client_<uuid>` 标识的 Icarus 安装实例 | 公开描述进入，私有配置不进入                      |
-| Credential | Client 的 Icarus event-signing 验证材料      | ID、绑定、公钥、fingerprint、purpose/status 进入 |
-| Executor  | Codex、Workflow、Run-once 等可选执行工具     | 仅可选公开 descriptor 进入，Binding/凭据留本地    |
+| 概念       | 含义                                        | 是否进入共享 Git                                 |
+| ---------- | ------------------------------------------- | ------------------------------------------------ |
+| Principal  | Group 内稳定成员和权限主体                  | 是                                               |
+| Client     | 持久 `client_<uuid>` 标识的 Icarus 安装实例 | 公开描述进入，私有配置不进入                     |
+| Credential | Client 的 Icarus event-signing 验证材料     | ID、绑定、公钥、fingerprint、purpose/status 进入 |
+| Executor   | Codex、Workflow、Run-once 等可选执行工具    | 仅可选公开 descriptor 进入，Binding/凭据留本地   |
 
 一个 Principal 可以：
 
@@ -1064,6 +1078,10 @@ Work Item 级 Instance 服务一个明确任务；Group 级 Instance 用于持�
 
 Instance 创建时固定 Definition hash、slot mapping 和每个 State 的 resolved Principal。Definition 后续发布新版本不改变已运行 Instance。
 
+业务 UI 不直接编辑 `participant_bindings` JSON。实例创建向导先选择已发布 Definition 和 Group/Work Item scope，再从 Machine 自动提取 participant slots，并用可搜索的 Active Principal 选择器生成底层 JSON 合同。向导展示每个 slot 负责的 State、最终 `State -> Principal` 解析、缺失/失效绑定和启动规则；同一 Principal 可以绑定多个 slot。Work Item 级实例还必须逐一选择所有 terminal State 的 `work_item_status_mapping`。
+
+自动建议只使用可可靠判断的 Work Item owner/contributor 和当前 Principal；无法可靠判断时保持待选择。draft 或绑定失效的实例通过“补齐参与者 / 重新分配”入口调用现有 `workflow_state_assignee_changed` 能力，服务端重新校验 Active Principal、实例管理权限和并发 revision。
+
 ### 11.3 Work Item 状态映射
 
 绑定 Work Item 时必须固定 Workflow terminal 到 Work Item status 的映射：
@@ -1448,26 +1466,26 @@ artifacts/{turn}/                         -> artifacts/workflows/{instance}/{tur
 
 ## 15. 路径授权
 
-| 路径                                  | 合法写入者                          | 约束                               |
-| ------------------------------------- | ----------------------------------- | ---------------------------------- |
-| `group.json`                          | Owner/Admin                         | Group event 物化                   |
-| `invites/{invite}.json`               | member approval authority           | 目标 Principal、有效期、一次性状态 |
+| 路径                                  | 合法写入者                          | 约束                                 |
+| ------------------------------------- | ----------------------------------- | ------------------------------------ |
+| `group.json`                          | Owner/Admin                         | Group event 物化                     |
+| `invites/{invite}.json`               | member approval authority           | 目标 Principal、有效期、一次性状态   |
 | `members/{principal}/member.json`     | 受限加入请求、Admin 状态管理        | 系统生成 Principal 与 Aggregate 一致 |
-| `members/{principal}/clients/`        | 受限加入/恢复、对应 Principal       | Client、Credential 与 Actor 一致   |
-| `members/{principal}/credentials/`    | 受限加入/恢复、对应 Principal       | 公钥 fingerprint、purpose、状态校验 |
-| `members/{principal}/executors/`      | 对应 Principal                      | 只允许公开 descriptor              |
-| `recovery-requests/{request}.json`    | 请求方、同 Principal 或 Owner       | request hash、CAS、单次终结         |
-| `permissions/{principal}.json`        | permission grant authority          | 禁止自我提权                       |
-| `workspace/principals/{principal}/`   | 对应 Principal                      | actor path ownership               |
-| `workspace/shared/`                   | `workspace:write_shared`            | revision、hash、size               |
-| `work-items/{id}/`                    | Item creator/owner/Admin            | 字段级授权和 item revision         |
-| `discussions/{id}/messages/{message}` | 消息作者追加                        | 修改使用 revision event            |
-| `workflow-definitions/{id}`           | Designer/Publisher                  | publish grant、definition revision |
-| `workflow-instances/{id}`             | Instance authority/current assignee | 生命周期、assignment、fence        |
-| `execution/{state}.json`              | resolved assignee Principal         | state/principal 必须匹配           |
-| Work Item Artifact                    | 授权 Item contributor               | metadata/hash/path 校验            |
-| Turn Artifact                         | 当前 claimant Client                | instance/turn/attempt/fence 校验   |
-| `projections/`                        | Runtime                             | 必须与合法事件归约一致             |
+| `members/{principal}/clients/`        | 受限加入/恢复、对应 Principal       | Client、Credential 与 Actor 一致     |
+| `members/{principal}/credentials/`    | 受限加入/恢复、对应 Principal       | 公钥 fingerprint、purpose、状态校验  |
+| `members/{principal}/executors/`      | 对应 Principal                      | 只允许公开 descriptor                |
+| `recovery-requests/{request}.json`    | 请求方、同 Principal 或 Owner       | request hash、CAS、单次终结          |
+| `permissions/{principal}.json`        | permission grant authority          | 禁止自我提权                         |
+| `workspace/principals/{principal}/`   | 对应 Principal                      | actor path ownership                 |
+| `workspace/shared/`                   | `workspace:write_shared`            | revision、hash、size                 |
+| `work-items/{id}/`                    | Item creator/owner/Admin            | 字段级授权和 item revision           |
+| `discussions/{id}/messages/{message}` | 消息作者追加                        | 修改使用 revision event              |
+| `workflow-definitions/{id}`           | Designer/Publisher                  | publish grant、definition revision   |
+| `workflow-instances/{id}`             | Instance authority/current assignee | 生命周期、assignment、fence          |
+| `execution/{state}.json`              | resolved assignee Principal         | state/principal 必须匹配             |
+| Work Item Artifact                    | 授权 Item contributor               | metadata/hash/path 校验              |
+| Turn Artifact                         | 当前 claimant Client                | instance/turn/attempt/fence 校验     |
+| `projections/`                        | Runtime                             | 必须与合法事件归约一致               |
 
 Git signer 是成员不代表可以修改任意成员空间、Work Item 或 Workflow 路径。Validator 必须按 event type、actor、Aggregate 和具体路径逐项校验。
 

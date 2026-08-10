@@ -20154,6 +20154,213 @@ textarea.workflow-wizard-input {
   line-height: 1.45;
 }
 
+.collaboration-template-match,
+.collaboration-template-custom {
+  display: inline-flex;
+  margin-right: 6px;
+  color: #176b4d;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.collaboration-template-custom {
+  color: #8a5a12;
+}
+
+.collaboration-permission-editor,
+.collaboration-workflow-wizard {
+  display: grid;
+  gap: 18px;
+}
+
+.collaboration-template-summary {
+  display: grid;
+  gap: 6px;
+}
+
+.collaboration-template-summary details {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--minimal-line, #dfe2e7);
+}
+
+.collaboration-template-summary summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.collaboration-template-summary p {
+  margin: 6px 0;
+  color: var(--minimal-text-soft, #575f6a);
+  font-size: 11px;
+}
+
+.collaboration-permission-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--minimal-line, #dfe2e7);
+  border-radius: 6px;
+}
+
+.collaboration-permission-grid label {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px;
+}
+
+.collaboration-permission-grid span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.collaboration-permission-grid strong,
+.collaboration-permission-grid small {
+  overflow-wrap: anywhere;
+}
+
+.collaboration-permission-grid small {
+  color: var(--minimal-text-soft, #575f6a);
+}
+
+.collaboration-permission-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-height: 28px;
+  padding: 9px 10px;
+  border-left: 3px solid #397f68;
+  background: #f4faf7;
+  font-size: 11px;
+}
+
+.collaboration-permission-preview small {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+
+.collaboration-workflow-wizard > section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--minimal-line, #dfe2e7);
+}
+
+.collaboration-workflow-wizard > section:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.collaboration-workflow-wizard > section > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.collaboration-workflow-wizard > section > header > span {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  flex: 0 0 26px;
+  place-items: center;
+  border-radius: 50%;
+  background: #26343d;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.collaboration-workflow-wizard > section > header > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.collaboration-workflow-wizard header strong,
+.collaboration-workflow-wizard header small {
+  overflow-wrap: anywhere;
+}
+
+.collaboration-workflow-wizard header small {
+  color: var(--minimal-text-soft, #575f6a);
+}
+
+.collaboration-slot-list,
+.collaboration-terminal-map,
+.collaboration-resolution-preview {
+  display: grid;
+  gap: 9px;
+}
+
+.collaboration-slot-field {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(240px, 1.2fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--minimal-line, #dfe2e7);
+}
+
+.collaboration-slot-field > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.collaboration-slot-field small,
+.collaboration-slot-field em {
+  overflow-wrap: anywhere;
+  color: var(--minimal-text-soft, #575f6a);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.collaboration-slot-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+}
+
+.collaboration-resolution-preview > div,
+.collaboration-rule-summary {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  background: #f7f8f9;
+  font-size: 11px;
+}
+
+.collaboration-resolution-preview span,
+.collaboration-rule-summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.collaboration-resolution-preview .danger {
+  border-left: 3px solid #b42318;
+}
+
+.collaboration-resolution-preview .ok {
+  border-left: 3px solid #397f68;
+}
+
+.collaboration-rule-summary .ok {
+  color: #176b4d;
+}
+
+.collaboration-rule-summary .danger {
+  color: #b42318;
+}
+
 @media (max-width: 1180px) {
   .collaboration-sidebar {
     width: 258px;
@@ -20280,7 +20487,12 @@ textarea.workflow-wizard-input {
 
   .collaboration-metrics,
   .collaboration-two-column,
-  .collaboration-form-grid {
+  .collaboration-form-grid,
+  .collaboration-permission-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .collaboration-slot-field {
     grid-template-columns: 1fr;
   }
 

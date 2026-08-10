@@ -17,6 +17,16 @@ const LANE_NODE_STRIDE = 112;
 export function collaborationWorkflowEditable(group, definition) {
   if (!group || group.subscriptionMode !== 'member') return false;
   if (definition?.definition?.status === 'retired') return false;
+  if (group?.allowedActions) {
+    if (!definition)
+      return Boolean(
+        group.allowedActions.group?.proposeWorkflowDefinition?.allowed,
+      );
+    const key = `${definition?.definition?.definition_id}@${definition?.definition?.version}`;
+    return Boolean(
+      group.allowedActions.workflowDefinitions?.[key]?.editDefinition?.allowed,
+    );
+  }
   const principalId = group.localPrincipalId;
   if (!principalId) return false;
   if (principalId === group.ownerPrincipalId) return true;
@@ -34,6 +44,12 @@ export function collaborationWorkflowPublishable(group, definition) {
     definition?.definition?.status !== 'proposed'
   )
     return false;
+  if (group?.allowedActions) {
+    const key = `${definition?.definition?.definition_id}@${definition?.definition?.version}`;
+    return Boolean(
+      group.allowedActions.workflowDefinitions?.[key]?.publish?.allowed,
+    );
+  }
   if (group.localPrincipalId === group.ownerPrincipalId) return true;
   const grants =
     group.projection?.permissionGrants?.[group.localPrincipalId]?.grants || [];

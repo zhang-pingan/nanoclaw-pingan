@@ -30,8 +30,11 @@ import {
 
 const NOW = '2026-08-06T12:00:00.000Z';
 const ALICE = 'principal_00000000-0000-4000-8000-000000000001';
+const BOB = 'principal_00000000-0000-4000-8000-000000000002';
 const CLIENT = 'client_alice_mac';
+const BOB_CLIENT = 'client_bob_mac';
 const CREDENTIAL = 'credential_alice_mac';
+const BOB_CREDENTIAL = 'credential_bob_mac';
 const RECOVERY_CREDENTIAL = 'credential_alice_recovery';
 const KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice';
 const FINGERPRINT = collaborationCredentialFingerprintV3(KEY);
@@ -92,6 +95,7 @@ function genesis(): CollaborationEventV3 {
         lifecycle: 'active',
         membership_policy: { join: 'open' },
         visibility_policy: { observer_access: 'allowed' },
+        default_permission_template_id: 'member.v1',
         created_at: NOW,
         archived_at: null,
       },
@@ -177,6 +181,126 @@ function workItem(revision = 1) {
 }
 
 describe('Collaboration project space v3 contract', () => {
+  it('allows only the immediate audited default grant after open registration', () => {
+    const initial = reduceCollaborationEventV3(null, genesis());
+    const registered = reduceCollaborationEventV3(
+      initial,
+      event({
+        projection: initial,
+        aggregateType: 'membership',
+        aggregateId: BOB,
+        eventType: 'member_registered',
+        id: 'evt_bob_registered',
+        actor: {
+          principalId: BOB,
+          clientId: BOB_CLIENT,
+          credentialId: BOB_CREDENTIAL,
+        },
+        payload: {
+          member: {
+            format: 'icarus.collaboration-member/3',
+            principal_id: BOB,
+            display_name: 'Bob',
+            status: 'active',
+            joined_at_event: 'evt_bob_registered',
+          },
+          client: {
+            format: 'icarus.collaboration-client/1',
+            principal_id: BOB,
+            client_id: BOB_CLIENT,
+            display_name: 'Bob MacBook',
+            capabilities: [],
+            status: 'active',
+            registered_at_event: 'evt_bob_registered',
+          },
+          credential: {
+            format: 'icarus.collaboration-credential/1',
+            credential_id: BOB_CREDENTIAL,
+            principal_id: BOB,
+            client_id: BOB_CLIENT,
+            public_key: KEY,
+            fingerprint: FINGERPRINT,
+            purpose: 'event_signing',
+            status: 'active',
+            created_at_event: 'evt_bob_registered',
+            revoked_at_event: null,
+          },
+        },
+      }),
+    );
+    const memberPermissions = [
+      'workspace:publish_owned',
+      'work_item:create',
+      'work_item:manage_owned',
+      'discussion:create',
+      'discussion:post',
+    ];
+    const immediateGrant = event({
+      projection: registered,
+      aggregateType: 'membership',
+      aggregateId: BOB,
+      eventType: 'permission_granted',
+      id: 'evt_bob_default_permissions',
+      actor: {
+        principalId: BOB,
+        clientId: BOB_CLIENT,
+        credentialId: BOB_CREDENTIAL,
+      },
+      payload: {
+        grant: {
+          format: 'icarus.collaboration-permission-grant/1',
+          principal_id: BOB,
+          grants: memberPermissions,
+          revision: 1,
+          updated_at_event: 'evt_bob_default_permissions',
+        },
+      },
+    });
+    expect(
+      reduceCollaborationEventV3(registered, immediateGrant).permissionGrants[
+        BOB
+      ]?.grants,
+    ).toEqual(memberPermissions);
+
+    const settingsChanged = reduceCollaborationEventV3(
+      registered,
+      event({
+        projection: registered,
+        aggregateType: 'group',
+        aggregateId: 'group_payment',
+        eventType: 'group_settings_updated',
+        id: 'evt_default_changed',
+        payload: { default_permission_template_id: 'contributor.v1' },
+      }),
+    );
+    expect(() =>
+      reduceCollaborationEventV3(
+        settingsChanged,
+        event({
+          projection: settingsChanged,
+          aggregateType: 'membership',
+          aggregateId: BOB,
+          eventType: 'permission_granted',
+          id: 'evt_bob_delayed_permissions',
+          actor: {
+            principalId: BOB,
+            clientId: BOB_CLIENT,
+            credentialId: BOB_CREDENTIAL,
+          },
+          payload: {
+            grant: {
+              format: 'icarus.collaboration-permission-grant/1',
+              principal_id: BOB,
+              grants: [...memberPermissions, 'workspace:write_shared'],
+              revision: 1,
+              updated_at_event: 'evt_bob_delayed_permissions',
+            },
+          },
+        }),
+      ),
+    ).toThrow(/cannot change direct permission grants/u);
+  });
+
   it('uses strict JSON and RFC 8785 canonical hashes', () => {
     expect(canonicalJsonStringify({ z: 1, a: { y: true, x: 'v' } })).toBe(
       '{"a":{"x":"v","y":true},"z":1}',

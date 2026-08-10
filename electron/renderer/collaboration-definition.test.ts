@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCollaborationCreateRequest,
   buildCollaborationJoinRequest,
+  buildCollaborationWorkflowInstanceRequest,
   buildCollaborationWorkflowRequest,
+  collaborationWorkflowBindingSuggestions,
+  collaborationWorkflowParticipantSlots,
   collaborationDraftFromDefinition,
   createStateDraft,
   defaultCollaborationWorkflowDraft,
@@ -72,6 +75,20 @@ describe('Collaboration project-space request builders', () => {
         clientDisplayName: 'Alice laptop',
       }),
     ).not.toHaveProperty('gitSshKeyPath');
+  });
+
+  it('submits a stable permission template id instead of raw default grants', () => {
+    expect(
+      buildCollaborationCreateRequest({
+        remoteUrl: '/tmp/project.git',
+        name: 'Project',
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'open',
+        observerAccess: 'allowed',
+        defaultPermissionTemplateId: 'contributor.v1',
+      }),
+    ).toMatchObject({ defaultPermissionTemplateId: 'contributor.v1' });
   });
 
   it('reuses the observed Group SSH key when the join field is blank', () => {
@@ -213,5 +230,120 @@ describe('Collaboration project-space request builders', () => {
       assigneeType: 'participant_slot',
       assigneeId: 'reviewer',
     });
+  });
+
+  it('derives participant slots and builds the structured instance contract', () => {
+    const workflow = buildCollaborationWorkflowRequest({
+      expectedRevision: 0,
+      draft: completeDraft(),
+    });
+    const definition = {
+      definition: {
+        definition_id: workflow.definitionId,
+        version: workflow.version,
+        name: workflow.name,
+        description: workflow.description,
+        status: 'published',
+      },
+      machine: workflow.machine,
+      layout: workflow.layout,
+    };
+    expect(
+      collaborationWorkflowParticipantSlots(definition).map((slot) => ({
+        id: slot.id,
+        states: slot.states.map((state) => state.id),
+      })),
+    ).toEqual([
+      { id: 'builder', states: ['build'] },
+      { id: 'reviewer', states: ['review'] },
+    ]);
+
+    const alice = 'principal_00000000-0000-4000-8000-000000000001';
+    const bob = 'principal_00000000-0000-4000-8000-000000000002';
+    const activeMembers = [
+      { principal_id: alice, display_name: 'Alice', status: 'active' },
+      { principal_id: bob, display_name: 'Bob', status: 'active' },
+    ];
+    expect(
+      buildCollaborationWorkflowInstanceRequest({
+        definition,
+        scopeType: 'work_item',
+        workItemId: 'work_1',
+        participantBindings: { builder: alice, reviewer: bob },
+        workItemStatusMapping: { shipped: 'done' },
+        activeMembers,
+      }),
+    ).toEqual({
+      definitionId: 'delivery',
+      definitionVersion: 1,
+      scope: { type: 'work_item', work_item_id: 'work_1' },
+      participantBindings: { builder: alice, reviewer: bob },
+      workItemStatusMapping: { shipped: 'done' },
+    });
+  });
+
+  it('rejects missing/invalid bindings and terminal mappings before submit', () => {
+    const workflow = buildCollaborationWorkflowRequest({
+      expectedRevision: 0,
+      draft: completeDraft(),
+    });
+    const definition = {
+      definition: {
+        definition_id: workflow.definitionId,
+        version: workflow.version,
+        status: 'published',
+      },
+      machine: workflow.machine,
+    };
+    const alice = 'principal_00000000-0000-4000-8000-000000000001';
+    const activeMembers = [{ principal_id: alice }];
+    expect(() =>
+      buildCollaborationWorkflowInstanceRequest({
+        definition,
+        scopeType: 'group',
+        participantBindings: { builder: alice },
+        activeMembers,
+      }),
+    ).toThrow(/审核者/);
+    expect(() =>
+      buildCollaborationWorkflowInstanceRequest({
+        definition,
+        scopeType: 'work_item',
+        workItemId: 'work_1',
+        participantBindings: { builder: alice, reviewer: alice },
+        activeMembers,
+        workItemStatusMapping: {},
+      }),
+    ).toThrow(/终止状态/);
+  });
+
+  it('only auto-suggests a reliable work-item owner binding', () => {
+    const workflow = buildCollaborationWorkflowRequest({
+      expectedRevision: 0,
+      draft: completeDraft(),
+    });
+    const alice = 'principal_00000000-0000-4000-8000-000000000001';
+    expect(
+      collaborationWorkflowBindingSuggestions({
+        definition: { machine: workflow.machine },
+        activeMembers: [{ principal_id: alice }],
+        currentPrincipalId: alice,
+        workItem: { owner_principal_id: alice, contributors: [] },
+      }),
+    ).toEqual({});
+
+    const single = structuredClone(workflow.machine);
+    delete single.states.review;
+    single.states.build.transitions = [
+      { outcome: 'done', label: 'Done', target_state: 'shipped' },
+    ];
+    expect(
+      collaborationWorkflowBindingSuggestions({
+        definition: { machine: single },
+        activeMembers: [{ principal_id: alice }],
+        currentPrincipalId: alice,
+        workItem: { owner_principal_id: alice, contributors: [] },
+      }),
+    ).toEqual({ builder: alice });
   });
 });

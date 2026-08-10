@@ -17,6 +17,13 @@ import type {
 import type { CollaborationRuntime } from './runtime.js';
 import { strictParseJson } from './protocol/canonical-json.js';
 import { collaborationRecoveryVerificationCodeV3 } from './protocol/v3-reducer.js';
+import { projectCollaborationAllowedActionsV3 } from './authorization.js';
+import { CollaborationProtocolError } from './protocol/version.js';
+import {
+  COLLABORATION_PERMISSION_CATALOG,
+  COLLABORATION_PERMISSION_TEMPLATES,
+  collaborationPermissionTemplate,
+} from './permissions.js';
 import {
   collaborationPermissionSchema,
   machineDefinitionV3Schema,
@@ -177,6 +184,18 @@ function publicGroup(
   group: ReturnType<CollaborationRuntime['store']['getGroup']>,
 ) {
   if (!group) return null;
+  const allowedActions = group.projection?.group
+    ? projectCollaborationAllowedActionsV3({
+        projection: group.projection,
+        subscriptionMode: group.subscriptionMode,
+        principalId: group.localPrincipalId,
+        clientId: group.localClientId,
+        credentialId: group.localCredentialId,
+        recoveryCredentialAvailable: Boolean(
+          group.recoveryCredentialId && group.recoveryPrivateKeyPath,
+        ),
+      })
+    : null;
   return {
     groupId: group.groupId,
     name: group.name,
@@ -209,6 +228,7 @@ function publicGroup(
       ),
     },
     projection: group.projection,
+    allowedActions,
   };
 }
 
@@ -338,6 +358,16 @@ export class CollaborationWebApi {
       await this.route(req, res, url);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const code =
+        error instanceof CollaborationProtocolError
+          ? error.code
+          : error instanceof z.ZodError
+            ? 'INVALID_REQUEST'
+            : /permission|not authorized|cannot|only owner|only the/iu.test(
+                  message,
+                )
+              ? 'AUTHORIZATION_DENIED'
+              : 'COMMAND_REJECTED';
       send(
         res,
         !this.runtime.status().available
@@ -345,7 +375,7 @@ export class CollaborationWebApi {
           : /revision conflict|stale/iu.test(message)
             ? 409
             : 400,
-        { error: message, collaboration: this.publicRuntimeStatus() },
+        { error: message, code, collaboration: this.publicRuntimeStatus() },
       );
     }
     return true;
@@ -456,6 +486,12 @@ export class CollaborationWebApi {
             clientDisplayName: z.string().min(1).max(160),
             membershipPolicy: z.enum(['open', 'approval', 'invite_only']),
             observerAccess: z.enum(['allowed', 'members_only']),
+            defaultPermissionTemplateId: z
+              .string()
+              .refine(
+                (value) => collaborationPermissionTemplate(value) !== null,
+              )
+              .optional(),
             groupId: identifier.optional(),
             pollIntervalMs: z.number().int().positive().optional(),
           })
@@ -463,6 +499,14 @@ export class CollaborationWebApi {
       );
       send(res, 201, {
         group: publicGroup(await this.runtime.groups.createGroup(body)),
+      });
+      return;
+    }
+
+    if (pathname === `${API_PREFIX}/permission-catalog` && method === 'GET') {
+      send(res, 200, {
+        templates: COLLABORATION_PERMISSION_TEMPLATES,
+        permissions: COLLABORATION_PERMISSION_CATALOG,
       });
       return;
     }
@@ -596,6 +640,40 @@ export class CollaborationWebApi {
     }
     found = match(
       pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/settings$`, 'u'),
+    );
+    if (found && method === 'PATCH') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            name: z.string().min(1).max(240).optional(),
+            membershipPolicy: z
+              .enum(['open', 'approval', 'invite_only'])
+              .optional(),
+            observerAccess: z.enum(['allowed', 'members_only']).optional(),
+            defaultPermissionTemplateId: z
+              .string()
+              .refine(
+                (value) => collaborationPermissionTemplate(value) !== null,
+              )
+              .optional(),
+          })
+          .strict(),
+      );
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.updateGroupSettings({
+            groupId: found[1]!,
+            ...body,
+          }),
+        ),
+      });
+      return;
+    }
+    found = match(
+      pathname,
       new RegExp(`^${API_PREFIX}/groups/([^/]+)/invites$`, 'u'),
     );
     if (found && method === 'GET') {
@@ -653,7 +731,19 @@ export class CollaborationWebApi {
     if (found && method === 'POST') {
       const body = await jsonBody(
         req,
-        z.object({ expectedRevision, reason: z.string().optional() }).strict(),
+        z
+          .object({
+            expectedRevision,
+            reason: z.string().optional(),
+            templateId: z
+              .string()
+              .refine(
+                (value) => collaborationPermissionTemplate(value) !== null,
+              )
+              .optional(),
+            grants: z.array(collaborationPermissionSchema).max(50).optional(),
+          })
+          .strict(),
       );
       const group =
         found[3] === 'approve'
@@ -661,6 +751,14 @@ export class CollaborationWebApi {
               found[1]!,
               found[2]!,
               body.expectedRevision,
+              ...(body.templateId || body.grants
+                ? [
+                    {
+                      templateId: body.templateId,
+                      grants: body.grants,
+                    },
+                  ]
+                : []),
             )
           : await this.runtime.groups.rejectMembership(
               found[1]!,
@@ -886,6 +984,12 @@ export class CollaborationWebApi {
           .object({
             expectedRevision,
             grants: z.array(collaborationPermissionSchema).max(50),
+            templateId: z
+              .string()
+              .refine(
+                (value) => collaborationPermissionTemplate(value) !== null,
+              )
+              .optional(),
           })
           .strict(),
       );

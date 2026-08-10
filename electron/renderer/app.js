@@ -13288,6 +13288,22 @@ if (collaborationCreateBtn) {
 if (collaborationJoinBtn) {
   collaborationJoinBtn.addEventListener('click', openJoinCollaborationDialog);
 }
+if (collaborationList) {
+  collaborationList.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-collaboration-group-id]');
+    if (!(button instanceof HTMLButtonElement)) return;
+    button.disabled = true;
+    try {
+      await selectCollaborationGroup(
+        button.getAttribute('data-collaboration-group-id'),
+      );
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), 3200);
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
 if (collaborationRefreshBtn) {
   collaborationRefreshBtn.addEventListener('click', () => {
     loadCollaborationGroups({ preserveSelection: true });

@@ -107,6 +107,130 @@ export function buildCollaborationCreateRequest(input) {
       : 'approval',
     observerAccess:
       input.observerAccess === 'members_only' ? 'members_only' : 'allowed',
+    ...(String(input.defaultPermissionTemplateId || '').trim()
+      ? {
+          defaultPermissionTemplateId: identifier(
+            input.defaultPermissionTemplateId,
+            '默认权限模板',
+          ),
+        }
+      : {}),
+  };
+}
+
+export const COLLABORATION_WORK_ITEM_STATUSES = Object.freeze([
+  'proposed',
+  'open',
+  'in_progress',
+  'blocked',
+  'done',
+  'cancelled',
+]);
+
+export function collaborationWorkflowParticipantSlots(definition) {
+  const slots = new Map();
+  for (const [stateId, state] of Object.entries(
+    definition?.machine?.states || {},
+  )) {
+    if (state.terminal || state.assignee?.type !== 'participant_slot') continue;
+    const slot = slots.get(state.assignee.slot) || {
+      id: state.assignee.slot,
+      label: collaborationLabel(state.assignee.slot, state.assignee.slot),
+      descriptions: [],
+      states: [],
+    };
+    slot.states.push({
+      id: stateId,
+      label: collaborationLabel(state.label || stateId, stateId),
+    });
+    if (String(state.description || '').trim())
+      slot.descriptions.push(String(state.description).trim());
+    slots.set(slot.id, slot);
+  }
+  return [...slots.values()].map((slot) => ({
+    ...slot,
+    description: [...new Set(slot.descriptions)].join('；'),
+  }));
+}
+
+export function collaborationWorkflowBindingSuggestions(input) {
+  const slots = collaborationWorkflowParticipantSlots(input.definition);
+  const activeIds = new Set(
+    (input.activeMembers || []).map((entry) => entry.principal_id),
+  );
+  const item = input.workItem || null;
+  const current = activeIds.has(input.currentPrincipalId)
+    ? input.currentPrincipalId
+    : '';
+  const owner = activeIds.has(item?.owner_principal_id)
+    ? item.owner_principal_id
+    : '';
+  const currentContributes = Boolean(
+    current &&
+    (owner === current || (item?.contributors || []).includes(current)),
+  );
+  return Object.fromEntries(
+    slots.flatMap((slot) => {
+      const semanticOwner = /owner|lead|manager|负责人|群主/iu.test(
+        `${slot.id} ${slot.label}`,
+      );
+      const suggestion =
+        owner && (slots.length === 1 || semanticOwner)
+          ? owner
+          : current && currentContributes && slots.length === 1
+            ? current
+            : '';
+      return suggestion ? [[slot.id, suggestion]] : [];
+    }),
+  );
+}
+
+export function buildCollaborationWorkflowInstanceRequest(input) {
+  const definition = input.definition;
+  if (!definition?.definition || !definition?.machine)
+    throw new Error('请选择已发布的 Workflow Definition');
+  if (definition.definition.status !== 'published')
+    throw new Error('只能创建已发布 Definition 的实例');
+  const scopeType = input.scopeType === 'work_item' ? 'work_item' : 'group';
+  const workItemId = String(input.workItemId || '').trim();
+  if (scopeType === 'work_item' && !workItemId)
+    throw new Error('Work Item 级实例必须选择工作项');
+  const activeIds = new Set(
+    (input.activeMembers || []).map((entry) => entry.principal_id),
+  );
+  const slots = collaborationWorkflowParticipantSlots(definition);
+  const participantBindings = {};
+  for (const slot of slots) {
+    const principalId = String(
+      input.participantBindings?.[slot.id] || '',
+    ).trim();
+    if (!principalId) throw new Error(`请选择参与者：${slot.label}`);
+    if (!activeIds.has(principalId))
+      throw new Error(`参与者已退出或失效：${slot.label}`);
+    participantBindings[slot.id] = principalId;
+  }
+  const terminalStates = Object.entries(definition.machine.states).filter(
+    ([, state]) => state.terminal,
+  );
+  const workItemStatusMapping = {};
+  if (scopeType === 'work_item')
+    for (const [stateId, state] of terminalStates) {
+      const value = String(input.workItemStatusMapping?.[stateId] || '').trim();
+      if (!COLLABORATION_WORK_ITEM_STATUSES.includes(value))
+        throw new Error(
+          `请选择终止状态“${collaborationLabel(state.label || stateId)}”对应的工作项状态`,
+        );
+      workItemStatusMapping[stateId] = value;
+    }
+  return {
+    definitionId: definition.definition.definition_id,
+    definitionVersion: Number(definition.definition.version),
+    scope:
+      scopeType === 'work_item'
+        ? { type: 'work_item', work_item_id: workItemId }
+        : { type: 'group' },
+    participantBindings,
+    workItemStatusMapping,
   };
 }
 

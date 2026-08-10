@@ -1817,4 +1817,40 @@ describe('Collaboration project-space v3 Web API', () => {
       },
     );
   });
+
+  it('rejects unknown permission and template ids before command dispatch', async () => {
+    const updatePermissions = vi.fn(async () => group());
+    const updateGroupSettings = vi.fn(async () => group());
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({ groups: { updatePermissions, updateGroupSettings } }),
+      ),
+      async (baseUrl) => {
+        const prefix = `${baseUrl}/api/collaboration/groups/group_test`;
+        const permission = await fetch(`${prefix}/permissions/principal_test`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 1,
+            grants: ['permission:invented'],
+          }),
+        });
+        const template = await fetch(`${prefix}/settings`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 1,
+            defaultPermissionTemplateId: 'invented.v1',
+          }),
+        });
+        expect(permission.status).toBe(400);
+        expect(template.status).toBe(400);
+        expect(await permission.json()).toMatchObject({
+          code: 'INVALID_REQUEST',
+        });
+        expect(updatePermissions).not.toHaveBeenCalled();
+        expect(updateGroupSettings).not.toHaveBeenCalled();
+      },
+    );
+  });
 });

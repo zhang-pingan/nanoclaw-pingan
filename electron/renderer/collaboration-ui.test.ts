@@ -51,9 +51,12 @@ import {
   collaborationFindingActionTypes,
   collaborationTurnCompletionDraft,
   collaborationAnalysisRunAccess,
+  collaborationActionAccess,
+  collaborationActionAllowed,
   parseCollaborationExternalResult,
   collaborationVerifiedFileTree,
   collaborationWorkItemColumns,
+  collaborationWorkflowLaunchAccess,
 } from './collaboration-ui.js';
 
 describe('Collaboration project-space v3 UI helpers', () => {
@@ -135,6 +138,79 @@ describe('Collaboration project-space v3 UI helpers', () => {
         },
       }),
     ).toBe('requested');
+  });
+
+  it('fails closed when an API capability is missing and keeps legacy fallback isolated', () => {
+    const projected = {
+      subscriptionMode: 'member',
+      lifecycle: 'active',
+      localPrincipalId: 'principal_alice',
+      localClientId: 'client_a',
+      projection: {
+        members: { principal_alice: { status: 'active' } },
+      },
+      allowedActions: { group: {} },
+    };
+    expect(collaborationActionAccess(projected, 'unprojected')).toMatchObject({
+      allowed: false,
+      code: 'ACTION_NOT_PROJECTED',
+    });
+    expect(collaborationActionAllowed(projected, 'unprojected')).toBe(false);
+    expect(
+      collaborationActionAllowed(
+        { ...projected, allowedActions: undefined },
+        'legacyAction',
+      ),
+    ).toBe(true);
+  });
+
+  it('uses Definition and Work Item launch decisions in the instance wizard', () => {
+    const group = {
+      allowedActions: {
+        group: {
+          createWorkflowInstance: { allowed: true, reason: null },
+        },
+        workflowDefinitions: {
+          'delivery@1': {
+            createGroupInstance: {
+              allowed: false,
+              code: 'WORKFLOW_LAUNCH_POLICY_DENIED',
+              reason: '群组范围未授权',
+            },
+            createWorkItemInstances: {
+              work_owned: { allowed: true, code: 'ALLOWED', reason: null },
+              work_other: {
+                allowed: false,
+                code: 'WORKFLOW_LAUNCH_POLICY_DENIED',
+                reason: '不是工作项负责人',
+              },
+            },
+          },
+        },
+      },
+    };
+    expect(
+      collaborationWorkflowLaunchAccess(group, 'delivery@1', 'group'),
+    ).toMatchObject({ allowed: false, reason: '群组范围未授权' });
+    expect(
+      collaborationWorkflowLaunchAccess(
+        group,
+        'delivery@1',
+        'work_item',
+        'work_owned',
+      ).allowed,
+    ).toBe(true);
+    expect(
+      collaborationWorkflowLaunchAccess(
+        group,
+        'delivery@1',
+        'work_item',
+        'work_other',
+      ),
+    ).toMatchObject({ allowed: false, reason: '不是工作项负责人' });
+    expect(
+      collaborationWorkflowLaunchAccess(group, 'delivery@1', 'work_item', ''),
+    ).toMatchObject({ allowed: false, code: 'RESOURCE_REQUIRED' });
   });
 
   it('uses human Principal and Artifact labels for operational views', () => {

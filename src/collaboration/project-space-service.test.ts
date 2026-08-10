@@ -453,6 +453,79 @@ describe('Collaboration project space v3 Group and identity service', () => {
     bob.store.close();
   });
 
+  it('applies the selected default template through an audited permission event without rewriting existing members', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/template-project.git',
+      name: 'Template project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'approval',
+      observerAccess: 'allowed',
+      defaultPermissionTemplateId: 'member.v1',
+      groupId: 'group_templates',
+    });
+    await owner.service.updateGroupSettings({
+      groupId: 'group_templates',
+      expectedRevision: 1,
+      defaultPermissionTemplateId: 'contributor.v1',
+    });
+    const bob = service(tempDirectory(), transport, BOB);
+    await bob.service.joinGroup({
+      remoteUrl: '/tmp/template-project.git',
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    const approved = await owner.service.approveMembership(
+      'group_templates',
+      BOB.principalId,
+      1,
+    );
+    expect(
+      approved.projection?.permissionGrants[BOB.principalId]?.grants,
+    ).toEqual([
+      'workspace:publish_owned',
+      'workspace:write_shared',
+      'work_item:create',
+      'work_item:manage_owned',
+      'discussion:create',
+      'discussion:post',
+    ]);
+    const permissionEvents = transport.histories
+      .get('/tmp/template-project.git')!
+      .eventRecords.filter(
+        (record) => record.event.aggregate_id === BOB.principalId,
+      )
+      .map((record) => record.event.event_type);
+    expect(permissionEvents).toEqual([
+      'membership_requested',
+      'member_registered',
+      'permission_granted',
+    ]);
+
+    await owner.service.updateGroupSettings({
+      groupId: 'group_templates',
+      expectedRevision: 2,
+      defaultPermissionTemplateId: 'project_manager.v1',
+    });
+    const unchanged = await owner.service.sync('group_templates');
+    expect(
+      unchanged.projection.permissionGrants[BOB.principalId]?.grants,
+    ).toEqual(approved.projection?.permissionGrants[BOB.principalId]?.grants);
+    await expect(
+      owner.service.updateGroupSettings({
+        groupId: 'group_templates',
+        expectedRevision: 3,
+        defaultPermissionTemplateId: 'unknown.v1',
+      }),
+    ).rejects.toThrow(/Unknown permission template/u);
+    owner.store.close();
+    bob.store.close();
+  });
+
   it('creates an immediately active Group without Roles, Claims, or Workflow', async () => {
     const transport = new MemoryTransport();
     const local = service(tempDirectory(), transport, ALICE);
@@ -568,6 +641,20 @@ describe('Collaboration project space v3 Group and identity service', () => {
       clientDisplayName: 'Bob MacBook',
     });
     expect(joined.gitSshKeyPath).toBe('/tmp/observed-custom-key');
+    expect(
+      joined.projection?.permissionGrants[BOB.principalId]?.grants,
+    ).toEqual([
+      'workspace:publish_owned',
+      'work_item:create',
+      'work_item:manage_owned',
+      'discussion:create',
+      'discussion:post',
+    ]);
+    expect(
+      transport.histories
+        .get('/tmp/reuse-observer-key.git')!
+        .eventRecords.map((record) => record.event.event_type),
+    ).toContain('permission_granted');
     expect(bob.store.getGroup('group_reuse_observer_key')?.gitSshKeyPath).toBe(
       '/tmp/observed-custom-key',
     );
@@ -1409,6 +1496,16 @@ describe('Collaboration project space v3 Group and identity service', () => {
       itemInstance.projection?.workItems.wi_delivery
         .primary_workflow_instance_id,
     ).toBe('wfi_item');
+    await expect(
+      owner.service.createWorkflowInstance({
+        groupId: 'group_project',
+        definitionId: 'delivery',
+        definitionVersion: 1,
+        instanceId: 'wfi_unknown_slot',
+        scope: { type: 'group' },
+        participantBindings: { unknown_slot: ALICE.principalId },
+      }),
+    ).rejects.toThrow(/Unknown Workflow participant slot/u);
     await expect(
       owner.service.createWorkflowInstance({
         groupId: 'group_project',
