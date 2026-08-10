@@ -18,7 +18,10 @@ import {
   type CollaborationProjectSpaceTransport,
   type ValidatedProjectSpaceHistory,
 } from './project-space-service.js';
-import { CollaborationProjectSpaceStore } from './project-space-store.js';
+import {
+  CollaborationProjectSpaceStore,
+  type CollaborationProjectSpaceGroupRecord,
+} from './project-space-store.js';
 import { CollaborationScheduler } from './scheduler.js';
 import type { CollaborationRuntime } from './runtime.js';
 import { CollaborationWebApi } from './web-api.js';
@@ -117,6 +120,7 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
   readonly histories = new Map<string, ValidatedProjectSpaceHistory>();
   readonly files = new Map<string, Buffer>();
   appendCount = 0;
+  reinitializeCount = 0;
   rejectReinitialize = false;
   failRefreshAfterReinitialize = false;
 
@@ -152,6 +156,7 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
     genesisEvent: ValidatedProjectSpaceHistory['eventRecords'][number]['event'];
     genesisProjection: ValidatedProjectSpaceHistory['projection'];
   }): Promise<ValidatedProjectSpaceHistory> {
+    this.reinitializeCount += 1;
     if (this.rejectReinitialize)
       throw new Error('simulated Git server force-push rejection');
     const head = `${this.histories.size + 10}`.padStart(40, '0');
@@ -297,6 +302,43 @@ function service(
       now,
     ),
   };
+}
+
+function registerOwnerSnapshot(
+  target: ReturnType<typeof service>,
+  group: CollaborationProjectSpaceGroupRecord,
+  history: ValidatedProjectSpaceHistory,
+  identity: CollaborationEventSigningIdentity,
+): void {
+  target.store.registerGroup({
+    subscription: {
+      format: 'icarus.collaboration-subscription/1',
+      group_id: group.groupId,
+      remote_url: group.remoteUrl,
+      subscription_mode: 'member',
+      poll_interval_ms: group.pollIntervalMs,
+      last_verified_head: history.head,
+      notifications_enabled: true,
+      created_at: '2026-08-06T12:00:00.000Z',
+    },
+    name: group.name,
+    lifecycle: group.lifecycle,
+    ownerPrincipalId: group.ownerPrincipalId,
+    repositoryPath: group.repositoryPath,
+    gitSshKeyPath: group.gitSshKeyPath,
+    localPrincipalId: identity.principalId,
+    localClientId: identity.clientId,
+    localCredentialId: identity.credentialId,
+    eventPrivateKeyPath: identity.privateKeyPath,
+    eventPublicKey: identity.publicKey,
+    eventFingerprint: identity.fingerprint,
+  });
+  target.store.saveVerifiedProjection({
+    groupId: group.groupId,
+    verifiedHead: history.head,
+    projection: history.projection,
+    eventRecords: history.eventRecords,
+  });
 }
 
 async function withServiceApi(
@@ -677,6 +719,67 @@ describe('Collaboration project space v3 Group and identity service', () => {
     observer.store.close();
   });
 
+  it('syncs authorization and rejects an Owner device revoked by remote recovery without force push', async () => {
+    const transport = new MemoryTransport();
+    const staleOwner = service(tempDirectory(), transport, ALICE);
+    const old = await staleOwner.service.createGroup({
+      remoteUrl: '/tmp/initialize-stale-owner.git',
+      name: 'Stale Owner authorization',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_stale_owner',
+    });
+    const original = await transport.inspect({ remoteUrl: old.remoteUrl });
+    const approvingOwner = service(tempDirectory(), transport, ALICE);
+    registerOwnerSnapshot(approvingOwner, old, original, ALICE);
+    const recoveredIdentity = {
+      ...ALICE,
+      clientId: 'client_alice_recovered',
+      credentialId: 'credential_alice_recovered',
+    };
+    const recovering = service(tempDirectory(), transport, recoveredIdentity);
+    await recovering.service.observeGroup({ remoteUrl: old.remoteUrl });
+    const request = await recovering.service.requestIdentityRecovery({
+      groupId: old.groupId,
+      targetPrincipalId: ALICE.principalId,
+      type: 'owner_recovery',
+      clientDisplayName: 'Alice recovered device',
+      reason: 'The previous Owner device must no longer write',
+    });
+    const pending = await approvingOwner.service.sync(old.groupId);
+    const revision =
+      pending.projection.aggregateHeads[`recovery:${request.requestId}`]!
+        .revision;
+    await approvingOwner.service.decideRecovery({
+      groupId: old.groupId,
+      requestId: request.requestId,
+      expectedRevision: revision,
+      decision: 'approve',
+      reason: 'Verified recovered Owner identity',
+    });
+    expect(
+      transport.histories.get(old.remoteUrl)?.projection.credentials[
+        ALICE.principalId
+      ]?.[ALICE.credentialId],
+    ).toMatchObject({ status: 'revoked' });
+
+    const forcePushesBefore = transport.reinitializeCount;
+    await expect(
+      staleOwner.service.initializeGroup(old.groupId),
+    ).rejects.toThrow(/Only the current Group Owner/u);
+    expect(transport.reinitializeCount).toBe(forcePushesBefore);
+    expect(
+      staleOwner.store.getGroup(old.groupId)?.projection?.credentials[
+        ALICE.principalId
+      ]?.[ALICE.credentialId],
+    ).toMatchObject({ status: 'revoked' });
+    staleOwner.store.close();
+    approvingOwner.store.close();
+    recovering.store.close();
+  });
+
   it('keeps the old local Group on force-push rejection and recovers a pushed rewrite', async () => {
     const transport = new MemoryTransport();
     const owner = service(tempDirectory(), transport, ALICE);
@@ -738,13 +841,21 @@ describe('Collaboration project space v3 Group and identity service', () => {
     });
 
     transport.failRefreshAfterReinitialize = true;
-    await expect(
+    const [firstResult, secondResult] = await Promise.allSettled([
       firstOwner.service.initializeGroup(old.groupId),
-    ).rejects.toThrow(/local replacement is pending/u);
+      secondOwner.service.initializeGroup(old.groupId),
+    ]);
+    if (firstResult.status !== 'rejected')
+      throw new Error('The first initialization unexpectedly completed');
+    expect(firstResult.reason).toBeInstanceOf(Error);
+    expect((firstResult.reason as Error).message).toMatch(
+      /local replacement is pending/u,
+    );
+    if (secondResult.status !== 'fulfilled') throw secondResult.reason;
     const [pending] = firstOwner.store.listGroupInitializations();
     expect(pending?.phase).toBe('pushed');
 
-    const winner = await secondOwner.service.initializeGroup(old.groupId);
+    const winner = secondResult.value;
     expect(winner.groupId).not.toBe(old.groupId);
     expect(winner.groupId).not.toBe(pending?.newGroupId);
 
@@ -762,6 +873,53 @@ describe('Collaboration project space v3 Group and identity service', () => {
     expect(firstOwner.store.getGroup(old.groupId)).toBeNull();
     expect(firstOwner.store.getGroup(pending!.newGroupId)).toBeNull();
     expect(firstOwner.store.listGroupInitializations()).toEqual([]);
+    firstOwner.store.close();
+    secondOwner.store.close();
+  });
+
+  it('does not subscribe the losing initializer to a members-only winner', async () => {
+    const transport = new MemoryTransport();
+    const firstOwner = service(tempDirectory(), transport, ALICE);
+    const old = await firstOwner.service.createGroup({
+      remoteUrl: '/tmp/initialize-concurrent-private.git',
+      name: 'Concurrent private initialization',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'approval',
+      observerAccess: 'members_only',
+      groupId: 'group_initialize_concurrent_private',
+    });
+    const original = await transport.inspect({ remoteUrl: old.remoteUrl });
+    const secondOwner = service(tempDirectory(), transport, ALICE);
+    registerOwnerSnapshot(secondOwner, old, original, ALICE);
+
+    transport.failRefreshAfterReinitialize = true;
+    const [firstResult, secondResult] = await Promise.allSettled([
+      firstOwner.service.initializeGroup(old.groupId),
+      secondOwner.service.initializeGroup(old.groupId),
+    ]);
+    if (firstResult.status !== 'rejected')
+      throw new Error('The first initialization unexpectedly completed');
+    if (secondResult.status !== 'fulfilled') throw secondResult.reason;
+    const [pending] = firstOwner.store.listGroupInitializations();
+    const winner = secondResult.value;
+    expect(winner.projection?.group.visibility_policy.observer_access).toBe(
+      'members_only',
+    );
+
+    const recovered =
+      await firstOwner.service.recoverInterruptedInitializations();
+    expect(recovered).toEqual([]);
+    expect(firstOwner.store.getGroup(old.groupId)).toBeNull();
+    expect(firstOwner.store.getGroup(pending!.newGroupId)).toBeNull();
+    expect(firstOwner.store.getGroup(winner.groupId)).toBeNull();
+    expect(firstOwner.store.listGroups()).toEqual([]);
+    expect(firstOwner.store.listGroupInitializations()).toEqual([]);
+    expect(firstOwner.service.getCachedHistory(old.groupId)).toBeNull();
+    expect(firstOwner.service.getCachedHistory(winner.groupId)).toBeNull();
+    await expect(firstOwner.service.sync(winner.groupId)).rejects.toThrow(
+      /Group not found/u,
+    );
     firstOwner.store.close();
     secondOwner.store.close();
   });

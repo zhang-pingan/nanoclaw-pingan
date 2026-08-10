@@ -1504,7 +1504,7 @@ export class CollaborationProjectSpaceStore {
     readonly identity: CollaborationEventSigningIdentity | null;
     readonly recoveryIdentity: CollaborationEventSigningIdentity | null;
     readonly nowMs?: number;
-  }): CollaborationProjectSpaceGroupRecord {
+  }): CollaborationProjectSpaceGroupRecord | null {
     this.assertOpen();
     const operation = this.getGroupInitialization(input.operationId);
     if (!operation)
@@ -1516,6 +1516,10 @@ export class CollaborationProjectSpaceStore {
       groupId === operation.newGroupId &&
       input.identity?.principalId ===
         input.history.projection.group.owner_principal_id;
+    const maySubscribe =
+      useIdentity ||
+      input.history.projection.group.visibility_policy.observer_access ===
+        'allowed';
     if (useIdentity !== Boolean(input.recoveryIdentity))
       throw new Error(
         'Initialization Owner identity and recovery identity disagree',
@@ -1532,7 +1536,7 @@ export class CollaborationProjectSpaceStore {
           .prepare('DELETE FROM collaboration_subscriptions WHERE group_id = ?')
           .run(operation.oldGroupId);
       }
-      if (!this.getGroup(groupId)) {
+      if (maySubscribe && !this.getGroup(groupId)) {
         this.registerGroup({
           subscription: {
             format: 'icarus.collaboration-subscription/1',
@@ -1581,7 +1585,7 @@ export class CollaborationProjectSpaceStore {
         )
         .run(input.history.head, nowMs, input.operationId);
     })();
-    return this.getGroup(groupId)!;
+    return maySubscribe ? this.getGroup(groupId)! : null;
   }
 
   deleteGroupInitialization(operationId: string): boolean {
@@ -4398,7 +4402,7 @@ export class CollaborationProjectSpaceStore {
       .all(groupId) as Array<Record<string, unknown>>;
   }
 
-  deleteExclusiveBackupsForGroup(groupId: string): number {
+  purgeManagedBackupsForGroup(groupId: string): number {
     this.assertOpen();
     const backupRoot = path.join(
       path.dirname(this.databasePath),
@@ -4411,7 +4415,7 @@ export class CollaborationProjectSpaceStore {
     const candidates = readdirSync(backupRoot, { withFileTypes: true }).filter(
       (entry) => entry.isDirectory() && !entry.isSymbolicLink(),
     );
-    let deleted = 0;
+    let processed = 0;
     for (const entry of candidates) {
       const directory = path.join(backupRoot, entry.name);
       const manifestPath = path.join(directory, 'manifest.json');
@@ -4444,20 +4448,28 @@ export class CollaborationProjectSpaceStore {
         readonly: true,
         fileMustExist: true,
       });
+      let groupIds: string[];
       try {
-        const rows = snapshot
-          .prepare('SELECT group_id FROM collaboration_subscriptions')
-          .all() as Array<{ group_id: string }>;
-        if (rows.length !== 1 || rows[0]?.group_id !== groupId) continue;
+        groupIds = (
+          snapshot
+            .prepare('SELECT group_id FROM collaboration_subscriptions')
+            .all() as Array<{ group_id: string }>
+        ).map((row) => row.group_id);
       } catch {
         continue;
       } finally {
         snapshot.close();
       }
-      rmSync(directory, { recursive: true, force: true });
-      deleted += 1;
+      if (!groupIds.includes(groupId)) continue;
+      if (groupIds.length === 1) {
+        rmSync(directory, { recursive: true, force: true });
+        processed += 1;
+        continue;
+      }
+      sanitizeManagedBackupForGroup(directory, manifest, groupId);
+      processed += 1;
     }
-    return deleted;
+    return processed;
   }
 
   rawDatabaseForTests(): Database.Database {
@@ -4593,6 +4605,217 @@ function artifactBackupRelativePath(row: BackupArtifactRow): string {
 function artifactPath(root: string, relativePath: string): string {
   const parsed = backupRelativePathSchema.parse(relativePath);
   return path.join(root, ...parsed.split('/'));
+}
+
+function verifiedStagedBackupFiles(
+  database: Database.Database,
+  backupDirectory: string,
+  manifest: CollaborationProjectSpaceBackupManifest,
+): Map<
+  string,
+  CollaborationProjectSpaceBackupManifest['staged_artifacts']['files'][number]
+> {
+  const rows = backupArtifactRows(database).filter(
+    (row) => row.state === 'staged',
+  );
+  const files = new Map(
+    manifest.staged_artifacts.files.map((file) => [file.artifact_id, file]),
+  );
+  if (rows.length !== files.size)
+    throw new Error(
+      'Collaboration backup staged Artifact inventory does not match the database',
+    );
+  const artifactRoot = path.join(
+    backupDirectory,
+    manifest.staged_artifacts.directory_basename,
+  );
+  if (existsSync(artifactRoot)) {
+    const details = lstatSync(artifactRoot);
+    if (!details.isDirectory() || details.isSymbolicLink())
+      throw new Error('Collaboration backup Artifact root is unsafe');
+  }
+  for (const row of rows) {
+    const relativePath = artifactBackupRelativePath(row);
+    const file = files.get(row.artifact_id);
+    if (
+      !file ||
+      file.relative_path !== relativePath ||
+      file.size !== row.size ||
+      file.sha256 !== backupSha256Schema.parse(row.sha256)
+    )
+      throw new Error(
+        `Collaboration backup staged Artifact metadata mismatch: ${row.artifact_id}`,
+      );
+    const source = artifactPath(artifactRoot, relativePath);
+    const details = requireRegularFile(
+      source,
+      `Backup Artifact ${row.artifact_id}`,
+    );
+    if (details.size !== file.size || fileSha256(source) !== file.sha256)
+      throw new Error(
+        `Collaboration backup Artifact integrity verification failed: ${row.artifact_id}`,
+      );
+  }
+  return files;
+}
+
+function sanitizeManagedBackupForGroup(
+  backupDirectory: string,
+  manifest: CollaborationProjectSpaceBackupManifest,
+  groupId: string,
+): void {
+  const backupRoot = path.dirname(backupDirectory);
+  const stagingDirectory = path.join(
+    backupRoot,
+    `.collaboration-backup-sanitize-${crypto.randomUUID()}`,
+  );
+  const displacedDirectory = path.join(
+    backupRoot,
+    `.collaboration-backup-displaced-${crypto.randomUUID()}`,
+  );
+  const sourceDatabase = path.join(backupDirectory, manifest.database_basename);
+  mkdirSync(stagingDirectory, { mode: 0o700 });
+  try {
+    const source = new Database(sourceDatabase, {
+      readonly: true,
+      fileMustExist: true,
+    });
+    let sourceFiles: ReturnType<typeof verifiedStagedBackupFiles>;
+    try {
+      sourceFiles = verifiedStagedBackupFiles(
+        source,
+        backupDirectory,
+        manifest,
+      );
+    } finally {
+      source.close();
+    }
+
+    const sanitizedDatabase = path.join(
+      stagingDirectory,
+      manifest.database_basename,
+    );
+    copyFileSync(sourceDatabase, sanitizedDatabase);
+    const sanitized = new Database(sanitizedDatabase);
+    let remainingRows: BackupArtifactRow[];
+    try {
+      sanitized.pragma('foreign_keys = ON');
+      sanitized.pragma('secure_delete = ON');
+      sanitized.transaction(() => {
+        sanitized
+          .prepare(
+            'DELETE FROM collaboration_action_executions WHERE group_id = ?',
+          )
+          .run(groupId);
+        sanitized
+          .prepare(
+            `DELETE FROM collaboration_group_initializations
+              WHERE old_group_id = ? OR new_group_id = ?`,
+          )
+          .run(groupId, groupId);
+        const removed = sanitized
+          .prepare('DELETE FROM collaboration_subscriptions WHERE group_id = ?')
+          .run(groupId);
+        if (removed.changes !== 1)
+          throw new Error(
+            `Collaboration backup no longer contains Group ${groupId}`,
+          );
+      })();
+      sanitized.exec('VACUUM');
+      const groupTables = (
+        sanitized
+          .prepare(
+            `SELECT DISTINCT m.name
+               FROM sqlite_master m, pragma_table_info(m.name) p
+              WHERE m.type = 'table' AND p.name = 'group_id'`,
+          )
+          .all() as Array<{ name: string }>
+      ).map((row) => row.name);
+      for (const table of groupTables) {
+        const identifier = `"${table.replaceAll('"', '""')}"`;
+        const remaining = sanitized
+          .prepare(
+            `SELECT count(*) AS count FROM ${identifier} WHERE group_id = ?`,
+          )
+          .get(groupId) as { count: number };
+        if (remaining.count !== 0)
+          throw new Error(
+            `Collaboration backup sanitization retained ${table} rows for ${groupId}`,
+          );
+      }
+      remainingRows = backupArtifactRows(sanitized);
+    } finally {
+      sanitized.close();
+    }
+
+    const sourceArtifactRoot = path.join(
+      backupDirectory,
+      manifest.staged_artifacts.directory_basename,
+    );
+    const sanitizedArtifactRoot = path.join(
+      stagingDirectory,
+      manifest.staged_artifacts.directory_basename,
+    );
+    const files: CollaborationProjectSpaceBackupManifest['staged_artifacts']['files'] =
+      [];
+    for (const row of remainingRows) {
+      if (row.state !== 'staged') continue;
+      const file = sourceFiles.get(row.artifact_id);
+      if (!file)
+        throw new Error(
+          `Collaboration backup sanitization lost Artifact ${row.artifact_id}`,
+        );
+      const source = artifactPath(sourceArtifactRoot, file.relative_path);
+      const destination = artifactPath(
+        sanitizedArtifactRoot,
+        file.relative_path,
+      );
+      mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
+      copyFileSync(source, destination);
+      if (
+        statSync(destination).size !== file.size ||
+        fileSha256(destination) !== file.sha256
+      )
+        throw new Error(
+          `Collaboration backup sanitization failed Artifact verification: ${row.artifact_id}`,
+        );
+      files.push(file);
+    }
+
+    const sanitizedManifest =
+      collaborationProjectSpaceBackupManifestSchema.parse({
+        ...manifest,
+        file: {
+          size: statSync(sanitizedDatabase).size,
+          sha256: fileSha256(sanitizedDatabase),
+        },
+        staged_artifacts: {
+          ...manifest.staged_artifacts,
+          files,
+        },
+      });
+    writeFileSync(
+      path.join(stagingDirectory, 'manifest.json'),
+      prettyCollaborationJson(sanitizedManifest),
+      { mode: 0o600 },
+    );
+
+    renameSync(backupDirectory, displacedDirectory);
+    let installed = false;
+    try {
+      renameSync(stagingDirectory, backupDirectory);
+      installed = true;
+      rmSync(displacedDirectory, { recursive: true, force: true });
+    } catch (error) {
+      if (!installed && !existsSync(backupDirectory))
+        renameSync(displacedDirectory, backupDirectory);
+      throw error;
+    }
+  } catch (error) {
+    if (existsSync(stagingDirectory))
+      rmSync(stagingDirectory, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 export function createCollaborationProjectSpaceBackup(input: {

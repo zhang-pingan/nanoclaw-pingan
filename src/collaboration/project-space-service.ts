@@ -413,6 +413,7 @@ export class CollaborationProjectSpaceService {
       throw new Error('Only an active Group may be initialized');
 
     return this.withRepositoryOperation(current.repositoryPath, async () => {
+      await this.syncUnlocked(groupId);
       const group = this.store.getGroup(groupId);
       const latest = group?.projection;
       if (
@@ -492,12 +493,22 @@ export class CollaborationProjectSpaceService {
           history.head,
           this.now(),
         );
-        return await this.finishGroupInitialization(operation, history);
+        const initialized = await this.finishGroupInitialization(
+          operation,
+          history,
+        );
+        if (!initialized)
+          throw new Error(
+            'Another Owner initialized this members-only Group; explicitly join or recover an identity to access it',
+          );
+        return initialized;
       } catch (error) {
         if (!pushed) {
           await this.discardPreparedInitialization(operation);
           throw error;
         }
+        if (!this.store.getGroupInitialization(operation.operationId))
+          throw error;
         throw new Error(
           `The remote Group was initialized, but local replacement is pending and will retry on restart: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -527,9 +538,12 @@ export class CollaborationProjectSpaceService {
           throw new Error(
             `Initialization ${operation.operationId} was pushed but the remote still exposes the old Group`,
           );
-        recovered.push(
-          await this.finishGroupInitialization(operation, history, true),
+        const group = await this.finishGroupInitialization(
+          operation,
+          history,
+          true,
         );
+        if (group) recovered.push(group);
       });
     }
     return recovered;
@@ -3044,7 +3058,7 @@ export class CollaborationProjectSpaceService {
     operation: CollaborationGroupInitializationOperation,
     pushedHistory: ValidatedProjectSpaceHistory,
     cacheAlreadyRefreshed = false,
-  ): Promise<CollaborationProjectSpaceGroupRecord> {
+  ): Promise<CollaborationProjectSpaceGroupRecord | null> {
     const history = cacheAlreadyRefreshed
       ? pushedHistory
       : await this.transport.refreshAfterReinitialize({
@@ -3057,6 +3071,9 @@ export class CollaborationProjectSpaceService {
         'The remote still exposes the old Group after initialization',
       );
     const localWon = history.projection.groupId === operation.newGroupId;
+    const maySubscribe =
+      localWon ||
+      history.projection.group.visibility_policy.observer_access === 'allowed';
     const group = this.store.replaceGroupAfterInitialization({
       operationId: operation.operationId,
       history,
@@ -3065,8 +3082,8 @@ export class CollaborationProjectSpaceService {
       nowMs: this.now(),
     });
     this.histories.delete(operation.oldGroupId);
-    this.histories.set(group.groupId, history);
-    await this.cleanupFinishedInitialization(operation, localWon);
+    if (group) this.histories.set(group.groupId, history);
+    await this.cleanupFinishedInitialization(operation, localWon, maySubscribe);
     return group;
   }
 
@@ -3086,6 +3103,7 @@ export class CollaborationProjectSpaceService {
   private async cleanupFinishedInitialization(
     operation: CollaborationGroupInitializationOperation,
     localWon: boolean,
+    keepRepository: boolean,
   ): Promise<void> {
     const stagingRoot = path.resolve(
       path.dirname(this.store.databasePath),
@@ -3099,7 +3117,7 @@ export class CollaborationProjectSpaceService {
         );
       await rm(target, { recursive: true, force: true });
     }
-    this.store.deleteExclusiveBackupsForGroup(operation.oldGroupId);
+    this.store.purgeManagedBackupsForGroup(operation.oldGroupId);
     await this.deleteUnreferencedCredentialIdentities(
       [
         ...operation.cleanup.credentialIds,
@@ -3112,6 +3130,19 @@ export class CollaborationProjectSpaceService {
       ],
       operation.operationId,
     );
+    if (!keepRepository) {
+      const expectedRepository = path.resolve(
+        collaborationProjectSpaceRepositoryPath(
+          this.repositoryRoot,
+          operation.remoteUrl,
+        ),
+      );
+      if (path.resolve(operation.repositoryPath) !== expectedRepository)
+        throw new Error(
+          `Initialization refused unsafe repository cleanup path: ${operation.repositoryPath}`,
+        );
+      await rm(expectedRepository, { recursive: true, force: true });
+    }
     this.store.deleteGroupInitialization(operation.operationId);
   }
 

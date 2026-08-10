@@ -1,4 +1,10 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -43,12 +49,12 @@ function temporaryPath(name: string): string {
   return path.join(directory, name);
 }
 
-function genesis() {
+function genesis(groupId = 'group_test') {
   const payload = {
     group: {
       format: 'icarus.collaboration-group/3' as const,
       protocol_version: 3 as const,
-      group_id: 'group_test',
+      group_id: groupId,
       name: 'Test group',
       creator: {
         principal_id: PRINCIPAL,
@@ -110,10 +116,10 @@ function genesis() {
     },
   };
   const event = buildCollaborationEventV3({
-    groupId: 'group_test',
+    groupId,
     eventId: 'evt_genesis',
     aggregateType: 'group',
-    aggregateId: 'group_test',
+    aggregateId: groupId,
     aggregateRevision: 1,
     previousEventHash: null,
     eventType: 'group_initialized',
@@ -978,8 +984,8 @@ describe('Collaboration project space v3 store', () => {
     store.close();
   });
 
-  it('deletes only default backups that exclusively contain the old Group', () => {
-    const databasePath = temporaryPath('exclusive-backups.db');
+  it('deletes exclusive backups and sanitizes shared backups before restore', () => {
+    const databasePath = temporaryPath('managed-backups.db');
     const backupRoot = path.join(
       path.dirname(databasePath),
       'collaboration-backups',
@@ -988,6 +994,37 @@ describe('Collaboration project space v3 store', () => {
     const shared = path.join(backupRoot, 'shared');
     let store = new CollaborationProjectSpaceStore(databasePath);
     registerTestGroup(store, 'group_old');
+    const oldGenesis = genesis('group_old');
+    store.saveVerifiedProjection({
+      groupId: 'group_old',
+      verifiedHead: '1'.repeat(40),
+      projection: oldGenesis.projection,
+      eventRecords: [
+        {
+          event: oldGenesis.event,
+          commitHash: '1'.repeat(40),
+          commitOrder: 1,
+        },
+      ],
+    });
+    store.addLocalAuditEvidence({
+      groupId: 'group_old',
+      evidenceType: 'old-audit',
+      resourceType: 'group',
+      resourceId: 'group_old',
+      evidence: { old: true },
+    });
+    const oldArtifact = store.stageArtifact({
+      artifactId: 'artifact_old_backup',
+      groupId: 'group_old',
+      scopeType: 'work_item',
+      scopeId: 'work_old',
+      principalId: PRINCIPAL,
+      clientId: CLIENT,
+      originalName: 'old.txt',
+      mediaType: 'text/plain',
+      contents: Buffer.from('old backup bytes'),
+    });
     store.close();
     createCollaborationProjectSpaceBackup({
       databasePath,
@@ -996,6 +1033,37 @@ describe('Collaboration project space v3 store', () => {
 
     store = new CollaborationProjectSpaceStore(databasePath);
     registerTestGroup(store, 'group_shared');
+    const sharedGenesis = genesis('group_shared');
+    store.saveVerifiedProjection({
+      groupId: 'group_shared',
+      verifiedHead: '2'.repeat(40),
+      projection: sharedGenesis.projection,
+      eventRecords: [
+        {
+          event: sharedGenesis.event,
+          commitHash: '2'.repeat(40),
+          commitOrder: 1,
+        },
+      ],
+    });
+    store.addLocalAuditEvidence({
+      groupId: 'group_shared',
+      evidenceType: 'shared-audit',
+      resourceType: 'group',
+      resourceId: 'group_shared',
+      evidence: { retained: true },
+    });
+    const sharedArtifact = store.stageArtifact({
+      artifactId: 'artifact_shared_backup',
+      groupId: 'group_shared',
+      scopeType: 'work_item',
+      scopeId: 'work_shared',
+      principalId: PRINCIPAL,
+      clientId: CLIENT,
+      originalName: 'shared.txt',
+      mediaType: 'text/plain',
+      contents: Buffer.from('shared backup bytes'),
+    });
     store.close();
     createCollaborationProjectSpaceBackup({
       databasePath,
@@ -1003,10 +1071,32 @@ describe('Collaboration project space v3 store', () => {
     });
 
     store = new CollaborationProjectSpaceStore(databasePath);
-    expect(store.deleteExclusiveBackupsForGroup('group_old')).toBe(1);
+    expect(store.purgeManagedBackupsForGroup('group_old')).toBe(2);
     expect(existsSync(exclusive)).toBe(false);
     expect(existsSync(shared)).toBe(true);
     store.close();
+
+    const sanitizedDatabase = path.join(shared, path.basename(databasePath));
+    expect(
+      readFileSync(sanitizedDatabase).includes(Buffer.from('group_old')),
+    ).toBe(false);
+    const restoredPath = temporaryPath('managed-backups.db');
+    restoreCollaborationProjectSpaceBackup({
+      databasePath: restoredPath,
+      backupDirectory: shared,
+    });
+    const restored = new CollaborationProjectSpaceStore(restoredPath);
+    expect(restored.getGroup('group_old')).toBeNull();
+    expect(restored.listEventRecords('group_old')).toEqual([]);
+    expect(restored.listLocalAuditEvidence('group_old')).toEqual([]);
+    expect(restored.getStagedArtifact(oldArtifact.artifactId)).toBeNull();
+    expect(restored.getGroup('group_shared')).not.toBeNull();
+    expect(restored.listEventRecords('group_shared')).toHaveLength(1);
+    expect(restored.listLocalAuditEvidence('group_shared')).toHaveLength(1);
+    expect(
+      restored.readStagedArtifact(sharedArtifact.artifactId).contents,
+    ).toEqual(Buffer.from('shared backup bytes'));
+    restored.close();
   });
 
   it('persists the first fenced action claim and records one durable receipt', () => {
