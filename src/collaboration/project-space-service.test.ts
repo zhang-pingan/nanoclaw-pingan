@@ -15,6 +15,7 @@ import type { CollaborationEventSigningIdentity } from './project-space-identity
 import { CollaborationProjectSpaceIdentityService } from './project-space-identity.js';
 import {
   CollaborationProjectSpaceService,
+  type CollaborationLocalGroupCleanup,
   type CollaborationProjectSpaceTransport,
   type ValidatedProjectSpaceHistory,
 } from './project-space-service.js';
@@ -25,6 +26,7 @@ import { CollaborationWebApi } from './web-api.js';
 import {
   buildCollaborationEventV3,
   collaborationCanonicalHashV3,
+  collaborationDeadlineSnapshotHashV3,
   reduceCollaborationEventV3,
 } from './protocol/v3-reducer.js';
 import { collaborationCredentialFingerprintV3 } from './protocol/v3-schema.js';
@@ -117,6 +119,7 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
   readonly histories = new Map<string, ValidatedProjectSpaceHistory>();
   readonly files = new Map<string, Buffer>();
   appendCount = 0;
+  failNextAppend: Error | null = null;
 
   async inspect(input: {
     remoteUrl: string;
@@ -157,6 +160,11 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
           }[];
         };
   }): Promise<ValidatedProjectSpaceHistory> {
+    if (this.failNextAppend) {
+      const error = this.failNextAppend;
+      this.failNextAppend = null;
+      throw error;
+    }
     const current = await this.inspect({ remoteUrl: input.remoteUrl });
     const built = input.buildEvent(current);
     const nextEvent = 'event' in built ? built.event : built;
@@ -219,21 +227,46 @@ function service(
   transport: MemoryTransport,
   identity: CollaborationEventSigningIdentity,
   now: () => number = () => Date.parse('2026-08-06T12:00:00.000Z'),
+  options?: {
+    cleanupLocalPaths?: CollaborationLocalGroupCleanup;
+    createCredentialIdentity?: (input: {
+      principalId: string;
+      purpose?: 'event_signing' | 'group_recovery';
+      clientId?: string;
+    }) => Promise<CollaborationEventSigningIdentity>;
+    loadCredentialIdentity?: (
+      credentialId: string,
+    ) => Promise<CollaborationEventSigningIdentity>;
+  },
 ) {
   const store = new CollaborationProjectSpaceStore(path.join(root, 'store.db'));
   const identities = {
     createPrincipalIdentity: async () => identity,
-    createCredentialIdentity: async (input: { purpose?: string }) => ({
-      ...identity,
-      credentialId:
-        input.purpose === 'group_recovery'
-          ? `${identity.credentialId}_recovery`
-          : identity.credentialId,
-      purpose:
-        input.purpose === 'group_recovery'
-          ? ('group_recovery' as const)
-          : ('event_signing' as const),
-    }),
+    createCredentialIdentity:
+      options?.createCredentialIdentity ??
+      (async (input: { purpose?: string }) => ({
+        ...identity,
+        credentialId:
+          input.purpose === 'group_recovery'
+            ? `${identity.credentialId}_recovery`
+            : identity.credentialId,
+        purpose:
+          input.purpose === 'group_recovery'
+            ? ('group_recovery' as const)
+            : ('event_signing' as const),
+      })),
+    loadCredentialIdentity:
+      options?.loadCredentialIdentity ??
+      (async (credentialId: string) => {
+        if (credentialId === identity.credentialId) return identity;
+        if (credentialId === `${identity.credentialId}_recovery`)
+          return {
+            ...identity,
+            credentialId,
+            purpose: 'group_recovery' as const,
+          };
+        throw new Error(`Credential not found: ${credentialId}`);
+      }),
     resolveGitSshKeyPath: (value?: string) => value || '/tmp/git-transport',
     resolveGitSshKeyCandidates: (value?: string) => [
       value || '/tmp/git-transport',
@@ -247,6 +280,7 @@ function service(
       path.join(root, 'repos'),
       identities,
       now,
+      options?.cleanupLocalPaths,
     ),
   };
 }
@@ -478,6 +512,566 @@ describe('Collaboration project space v3 Group and identity service', () => {
       /roleClaims|owner_role/u,
     );
     local.store.close();
+  });
+
+  it('keeps local state on remote dissolution failure and hides it before cleanup retry', async () => {
+    const transport = new MemoryTransport();
+    const cleanup = vi
+      .fn<CollaborationLocalGroupCleanup>()
+      .mockRejectedValueOnce(new Error('repository cache is busy'))
+      .mockResolvedValue(undefined);
+    const local = service(tempDirectory(), transport, ALICE, undefined, {
+      cleanupLocalPaths: cleanup,
+    });
+    await local.service.createGroup({
+      remoteUrl: '/tmp/lifecycle.git',
+      name: 'Lifecycle project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_lifecycle',
+    });
+    await expect(
+      local.service.leaveGroup('group_lifecycle', 'Owner cannot leave', 0),
+    ).rejects.toThrow(/Owner cannot leave/u);
+
+    transport.failNextAppend = new Error('remote push rejected');
+    await expect(
+      local.service.dissolveGroup('group_lifecycle', 'Project complete', 1),
+    ).rejects.toThrow(/remote push rejected/u);
+    expect(local.store.getGroup('group_lifecycle')).not.toBeNull();
+    expect(local.store.getLocalGroupBinding('group_lifecycle')).toMatchObject({
+      bindingState: 'attached',
+    });
+    expect(
+      transport.histories.get('/tmp/lifecycle.git')?.projection.group.lifecycle,
+    ).toBe('active');
+    expect(cleanup).not.toHaveBeenCalled();
+
+    const dissolved = await local.service.dissolveGroup(
+      'group_lifecycle',
+      'Project complete',
+      1,
+    );
+    expect(dissolved).toMatchObject({
+      groupId: 'group_lifecycle',
+      removed: true,
+      cleanupPending: true,
+      cleanupError: 'repository cache is busy',
+    });
+    expect(local.store.getGroup('group_lifecycle')).toBeNull();
+    expect(local.store.listGroups()).toEqual([]);
+    expect(local.store.getLocalGroupBinding('group_lifecycle')).toMatchObject({
+      principalId: ALICE.principalId,
+      credentialId: ALICE.credentialId,
+      bindingState: 'cleanup_pending',
+      detachReason: 'group_dissolved',
+      terminalHead: transport.histories.get('/tmp/lifecycle.git')?.head,
+    });
+    expect(
+      transport.histories.get('/tmp/lifecycle.git')?.projection.group.lifecycle,
+    ).toBe('dissolved');
+
+    await expect(
+      local.service.retryLocalCleanup('group_lifecycle'),
+    ).resolves.toMatchObject({
+      cleanupPending: false,
+    });
+    expect(local.store.getLocalGroupBinding('group_lifecycle')).toMatchObject({
+      bindingState: 'retained',
+      cleanupPaths: [],
+      cleanupError: null,
+    });
+    expect(cleanup).toHaveBeenCalledTimes(2);
+    local.store.close();
+  });
+
+  it('persists a remote terminal projection when the detach transaction must retry', async () => {
+    const transport = new MemoryTransport();
+    const local = service(tempDirectory(), transport, ALICE);
+    await local.service.createGroup({
+      remoteUrl: '/tmp/detach-retry.git',
+      name: 'Detach retry project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_detach_retry',
+    });
+    const detach = vi.spyOn(local.store, 'detachLocalGroup');
+    detach.mockImplementationOnce(() => {
+      throw new Error('database detach transaction is busy');
+    });
+
+    await expect(
+      local.service.dissolveGroup(
+        'group_detach_retry',
+        'Terminal remote event',
+        1,
+      ),
+    ).resolves.toMatchObject({
+      removed: false,
+      cleanupPending: true,
+      cleanupError: 'database detach transaction is busy',
+    });
+    expect(local.store.getGroup('group_detach_retry')).toMatchObject({
+      lifecycle: 'dissolved',
+    });
+    expect(
+      local.store.getGroup('group_detach_retry')?.projection?.group.lifecycle,
+    ).toBe('dissolved');
+    expect(
+      local.store.getLocalGroupBinding('group_detach_retry'),
+    ).toMatchObject({
+      bindingState: 'attached',
+    });
+
+    await expect(local.service.retryPendingLocalCleanups()).resolves.toEqual([
+      expect.objectContaining({
+        groupId: 'group_detach_retry',
+        removed: true,
+        cleanupPending: false,
+      }),
+    ]);
+    expect(local.store.getGroup('group_detach_retry')).toBeNull();
+    expect(
+      local.store.getLocalGroupBinding('group_detach_retry'),
+    ).toMatchObject({
+      bindingState: 'retained',
+      detachReason: 'group_dissolved',
+    });
+    expect(transport.appendCount).toBe(1);
+    local.store.close();
+  });
+
+  it('removes an Observer locally without appending a business event', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/local-remove.git',
+      name: 'Local remove project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_local_remove',
+    });
+    const observerCleanup = vi.fn<CollaborationLocalGroupCleanup>();
+    const observer = service(tempDirectory(), transport, BOB, undefined, {
+      cleanupLocalPaths: observerCleanup,
+    });
+    await observer.service.observeGroup({
+      remoteUrl: '/tmp/local-remove.git',
+      gitSshKeyPath: BOB.privateKeyPath,
+    });
+    const appendCount = transport.appendCount;
+    const remoteHead = transport.histories.get('/tmp/local-remove.git')?.head;
+
+    await expect(
+      observer.service.removeLocalGroup('group_local_remove'),
+    ).resolves.toMatchObject({ removed: true, cleanupPending: false });
+    expect(transport.appendCount).toBe(appendCount);
+    expect(transport.histories.get('/tmp/local-remove.git')?.head).toBe(
+      remoteHead,
+    );
+    expect(
+      transport.histories.get('/tmp/local-remove.git')?.projection.group
+        .lifecycle,
+    ).toBe('active');
+    expect(observer.store.getGroup('group_local_remove')).toBeNull();
+    expect(
+      observer.store.getLocalGroupBinding('group_local_remove'),
+    ).toMatchObject({
+      principalId: null,
+      credentialId: null,
+      bindingState: 'retained',
+      detachReason: 'local_remove',
+    });
+    expect(observerCleanup).toHaveBeenCalledTimes(1);
+
+    const ownerHead = transport.histories.get('/tmp/local-remove.git')?.head;
+    await owner.service.removeLocalGroup('group_local_remove');
+    const restoredOwner = await owner.service.observeGroup({
+      remoteUrl: '/tmp/local-remove.git',
+      gitSshKeyPath: ALICE.privateKeyPath,
+    });
+    expect(restoredOwner).toMatchObject({
+      subscriptionMode: 'member',
+      localPrincipalId: ALICE.principalId,
+      localCredentialId: ALICE.credentialId,
+      recoveryCredentialId: `${ALICE.credentialId}_recovery`,
+    });
+    expect(transport.histories.get('/tmp/local-remove.git')?.head).toBe(
+      ownerHead,
+    );
+    expect(transport.appendCount).toBe(appendCount);
+    owner.store.close();
+    observer.store.close();
+  });
+
+  it('rejoins through a migrated locator with the retained Principal and current policy', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/rejoin-original.git',
+      name: 'Rejoin project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'approval',
+      observerAccess: 'allowed',
+      groupId: 'group_rejoin',
+    });
+    const rejoinedIdentity: CollaborationEventSigningIdentity = {
+      ...BOB,
+      clientId: 'client_bob_rejoined',
+      credentialId: 'credential_bob_rejoined',
+      privateKeyPath: '/tmp/bob-rejoined',
+    };
+    const bob = service(tempDirectory(), transport, BOB, undefined, {
+      createCredentialIdentity: async () => rejoinedIdentity,
+    });
+    await bob.service.joinGroup({
+      remoteUrl: '/tmp/rejoin-original.git',
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    await owner.service.approveMembership('group_rejoin', BOB.principalId, 1);
+    await bob.service.sync('group_rejoin');
+    await expect(
+      bob.service.dissolveGroup('group_rejoin', 'Not the Owner', 1),
+    ).rejects.toThrow(/Only the Group Owner/u);
+    await bob.service.leaveGroup('group_rejoin', 'Leaving for now', 2);
+    expect(bob.store.getLocalGroupBinding('group_rejoin')).toMatchObject({
+      principalId: BOB.principalId,
+      credentialId: BOB.credentialId,
+      bindingState: 'retained',
+      detachReason: 'member_left',
+    });
+
+    const migratedHistory = transport.histories.get(
+      '/tmp/rejoin-original.git',
+    )!;
+    transport.histories.set('/tmp/rejoin-migrated.git', migratedHistory);
+    const requested = await bob.service.joinGroup({
+      remoteUrl: '/tmp/rejoin-migrated.git',
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob Rejoined Device',
+    });
+    expect(requested).toMatchObject({
+      groupId: 'group_rejoin',
+      remoteUrl: '/tmp/rejoin-migrated.git',
+      subscriptionMode: 'observer',
+      localPrincipalId: BOB.principalId,
+      localCredentialId: rejoinedIdentity.credentialId,
+    });
+    expect(requested.projection?.members[BOB.principalId]).toMatchObject({
+      principal_id: BOB.principalId,
+      status: 'requested',
+    });
+    expect(
+      requested.projection?.credentials[BOB.principalId]?.[BOB.credentialId]
+        ?.status,
+    ).toBe('revoked');
+    expect(
+      requested.projection?.credentials[BOB.principalId]?.[
+        rejoinedIdentity.credentialId
+      ]?.status,
+    ).toBe('active');
+    expect(Object.keys(requested.projection?.members ?? {})).toHaveLength(2);
+    expect(bob.store.getLocalGroupBinding('group_rejoin')).toMatchObject({
+      remoteUrl: '/tmp/rejoin-migrated.git',
+      principalId: BOB.principalId,
+      credentialId: rejoinedIdentity.credentialId,
+      bindingState: 'attached',
+    });
+    owner.store.close();
+    bob.store.close();
+  });
+
+  it('marks a leaving member Workflow Turn for recovery and notifies the Owner', async () => {
+    const transport = new MemoryTransport();
+    let nowMs = Date.parse('2026-08-06T12:00:00.000Z');
+    const advancingNow = () => nowMs++;
+    const owner = service(tempDirectory(), transport, ALICE, advancingNow);
+    const bob = service(tempDirectory(), transport, BOB, advancingNow);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/member-left-workflow.git',
+      name: 'Workflow recovery project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_member_left_workflow',
+    });
+    await bob.service.joinGroup({
+      remoteUrl: '/tmp/member-left-workflow.git',
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    await owner.service.sync('group_member_left_workflow');
+    await owner.service.proposeWorkflowDefinition({
+      groupId: 'group_member_left_workflow',
+      definitionId: 'delivery',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Delivery',
+      machine: DELIVERY_MACHINE,
+      layout: DELIVERY_LAYOUT,
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId: 'group_member_left_workflow',
+      definitionId: 'delivery',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkflowInstance({
+      groupId: 'group_member_left_workflow',
+      definitionId: 'delivery',
+      definitionVersion: 1,
+      instanceId: 'instance_member_left',
+      scope: { type: 'group' },
+      participantBindings: { implementer: BOB.principalId },
+    });
+    await owner.service.startWorkflowInstance({
+      groupId: 'group_member_left_workflow',
+      instanceId: 'instance_member_left',
+      expectedRevision: 1,
+    });
+    await owner.service.createTurn({
+      groupId: 'group_member_left_workflow',
+      instanceId: 'instance_member_left',
+      expectedRevision: 2,
+      turnId: 'turn_member_left',
+    });
+
+    await bob.service.leaveGroup(
+      'group_member_left_workflow',
+      'Leaving during assigned work',
+      1,
+    );
+    const synced = await owner.service.sync('group_member_left_workflow');
+    expect(synced.projection.turns.turn_member_left).toMatchObject({
+      state: 'recovery_required',
+      recovery_reason: `member_left:${BOB.principalId}`,
+    });
+    expect(
+      synced.projection.workflowInstances.instance_member_left?.lifecycle,
+    ).toBe('recovery_required');
+    expect(
+      owner.store.listPendingNotifications({
+        principalId: ALICE.principalId,
+        clientId: ALICE.clientId,
+        groupId: 'group_member_left_workflow',
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        kind: 'member_left_workflow_recovery',
+        resourceType: 'turn',
+        resourceId: 'turn_member_left',
+        severity: 'critical',
+      }),
+    ]);
+    await withServiceApi(owner, async (baseUrl) => {
+      const prefix = `${baseUrl}/api/collaboration/groups/group_member_left_workflow`;
+      const notifications = await fetch(`${prefix}/notifications`);
+      expect(notifications.status).toBe(200);
+      expect(await notifications.json()).toMatchObject({
+        notifications: [
+          {
+            kind: 'member_left_workflow_recovery',
+            resourceType: 'turn',
+            resourceId: 'turn_member_left',
+          },
+        ],
+      });
+      const recovered = await fetch(
+        `${prefix}/workflow-instances/instance_member_left/turns/turn_member_left/recover`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 3,
+            previousAttempt: 1,
+            assigneePrincipalId: ALICE.principalId,
+            reason: 'Owner reassigned work after Bob left',
+          }),
+        },
+      );
+      expect(recovered.status).toBe(200);
+      const started = await fetch(
+        `${prefix}/workflow-instances/instance_member_left/turns/turn_member_left/start`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ expectedRevision: 4, executorId: null }),
+        },
+      );
+      expect(started.status).toBe(200);
+    });
+    expect(
+      owner.store.getGroup('group_member_left_workflow')?.projection?.turns
+        .turn_member_left,
+    ).toMatchObject({
+      state: 'running',
+      attempt: 2,
+      assignee_principal_id: ALICE.principalId,
+      claimant_principal_id: ALICE.principalId,
+    });
+    expect(
+      owner.store.getGroup('group_member_left_workflow')?.projection
+        ?.workflowInstances.instance_member_left,
+    ).toMatchObject({
+      lifecycle: 'running',
+      resolved_assignments: { implementation: ALICE.principalId },
+    });
+    owner.store.close();
+    bob.store.close();
+  });
+
+  it('binds a batched member-left notification to event-time affected Turns', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const bob = service(tempDirectory(), transport, BOB);
+    const groupId = 'group_member_left_batch';
+    const remoteUrl = '/tmp/member-left-batch.git';
+    await owner.service.createGroup({
+      remoteUrl,
+      name: 'Batched workflow recovery',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId,
+    });
+    await bob.service.joinGroup({
+      remoteUrl,
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    await owner.service.sync(groupId);
+    await owner.service.proposeWorkflowDefinition({
+      groupId,
+      definitionId: 'delivery',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Delivery',
+      machine: DELIVERY_MACHINE,
+      layout: DELIVERY_LAYOUT,
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId,
+      definitionId: 'delivery',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkflowInstance({
+      groupId,
+      definitionId: 'delivery',
+      definitionVersion: 1,
+      instanceId: 'instance_batch',
+      scope: { type: 'group' },
+      participantBindings: { implementer: BOB.principalId },
+    });
+    await owner.service.startWorkflowInstance({
+      groupId,
+      instanceId: 'instance_batch',
+      expectedRevision: 1,
+    });
+    await owner.service.createTurn({
+      groupId,
+      instanceId: 'instance_batch',
+      expectedRevision: 2,
+      turnId: 'turn_batch',
+    });
+
+    await bob.service.leaveGroup(groupId, 'Leaving before batched sync', 1);
+    await transport.append({
+      remoteUrl,
+      buildEvent: (current) => {
+        const head =
+          current.projection.aggregateHeads[
+            'workflow_instance:instance_batch'
+          ]!;
+        return buildCollaborationEventV3({
+          groupId,
+          eventId: 'evt_batch_recovered',
+          aggregateType: 'workflow_instance',
+          aggregateId: 'instance_batch',
+          aggregateRevision: head.revision + 1,
+          previousEventHash: head.eventHash,
+          eventType: 'turn_recovered',
+          actor: {
+            principal_id: ALICE.principalId,
+            client_id: ALICE.clientId,
+            credential_id: ALICE.credentialId,
+            executor_id: null,
+          },
+          occurredAt: '2026-08-06T12:01:00.000Z',
+          payload: {
+            turn_id: 'turn_batch',
+            assignee_principal_id: ALICE.principalId,
+            previous_attempt: 1,
+            next_attempt: 2,
+            reason: 'Recovered before Owner batch sync',
+            start_deadline_at: '2026-08-06T12:02:00.000Z',
+            deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+              turnId: 'turn_batch',
+              attempt: 2,
+              timeoutPolicy:
+                current.projection.turns.turn_batch!.timeout_policy_snapshot,
+              startDeadlineAt: '2026-08-06T12:02:00.000Z',
+              startedAt: null,
+              executionDeadlineAt: null,
+            }),
+          },
+        });
+      },
+    });
+
+    const synced = await owner.service.sync(groupId);
+    expect(synced.projection.turns.turn_batch).toMatchObject({
+      state: 'pending',
+      assignee_principal_id: ALICE.principalId,
+      recovery_reason: null,
+    });
+    const notifications = owner.store.listPendingNotifications({
+      principalId: ALICE.principalId,
+      clientId: ALICE.clientId,
+      groupId,
+    });
+    expect(notifications).toEqual([
+      expect.objectContaining({
+        kind: 'member_left_workflow_recovery',
+        resourceType: 'turn',
+        resourceId: 'turn_batch',
+        severity: 'critical',
+        payload: {
+          principal_id: BOB.principalId,
+          turn_id: 'turn_batch',
+        },
+      }),
+    ]);
+    await owner.service.sync(groupId);
+    expect(
+      owner.store.listPendingNotifications({
+        principalId: ALICE.principalId,
+        clientId: ALICE.clientId,
+        groupId,
+      }),
+    ).toHaveLength(1);
+    owner.store.close();
+    bob.store.close();
   });
 
   it('serializes background sync with a command for the same repository', async () => {

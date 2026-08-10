@@ -43,9 +43,9 @@ import type {
 } from './analysis-contracts.js';
 import { assertCollaborationAnalysisTransition } from './analysis-contracts.js';
 
-export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 9;
+export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 10;
 export const COLLABORATION_PROJECT_SPACE_STORE_FORMAT =
-  'icarus.collaboration-local-store/9';
+  'icarus.collaboration-local-store/10';
 
 export function deterministicCollaborationPollDelay(
   groupId: string,
@@ -80,10 +80,25 @@ export class CollaborationProjectSpaceStoreError extends Error {
   }
 }
 
-const SCHEMA_V9 = `
+const SCHEMA_V10 = `
 CREATE TABLE collaboration_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+CREATE TABLE collaboration_local_group_bindings (
+  group_id TEXT PRIMARY KEY,
+  remote_url TEXT NOT NULL,
+  principal_id TEXT,
+  credential_id TEXT,
+  recovery_credential_id TEXT,
+  binding_state TEXT NOT NULL CHECK (binding_state IN ('attached', 'retained', 'cleanup_pending')),
+  detach_reason TEXT CHECK (detach_reason IN ('local_remove', 'member_left', 'group_dissolved')),
+  terminal_head TEXT,
+  cleanup_paths_json TEXT,
+  cleanup_error TEXT,
+  updated_at_ms INTEGER NOT NULL,
+  CHECK ((principal_id IS NULL) = (credential_id IS NULL)),
+  CHECK ((binding_state = 'cleanup_pending') = (cleanup_paths_json IS NOT NULL))
 );
 CREATE TABLE collaboration_subscriptions (
   group_id TEXT PRIMARY KEY,
@@ -333,7 +348,7 @@ CREATE TABLE collaboration_executor_bindings (
 );
 CREATE TABLE collaboration_action_executions (
   execution_id TEXT PRIMARY KEY,
-  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE RESTRICT,
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
   instance_id TEXT NOT NULL,
   turn_id TEXT NOT NULL,
   epoch INTEGER NOT NULL,
@@ -582,6 +597,15 @@ CREATE INDEX collaboration_analysis_finding_dedupe_idx
 
 const REQUIRED_TABLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   collaboration_meta: ['key', 'value'],
+  collaboration_local_group_bindings: [
+    'group_id',
+    'remote_url',
+    'principal_id',
+    'credential_id',
+    'binding_state',
+    'detach_reason',
+    'cleanup_paths_json',
+  ],
   collaboration_subscriptions: [
     'group_id',
     'remote_url',
@@ -751,7 +775,7 @@ function initialize(database: Database.Database): void {
     );
   if (version === 0)
     database.transaction(() => {
-      database.exec(SCHEMA_V9);
+      database.exec(SCHEMA_V10);
       database
         .prepare('INSERT INTO collaboration_meta (key, value) VALUES (?, ?)')
         .run('format', COLLABORATION_PROJECT_SPACE_STORE_FORMAT);
@@ -819,6 +843,30 @@ export interface CollaborationProjectSpaceGroupRecord {
   readonly lastSyncAtMs: number | null;
   readonly lastError: string | null;
   readonly backoffAttempt: number;
+}
+
+export interface CollaborationLocalGroupBinding {
+  readonly groupId: string;
+  readonly remoteUrl: string;
+  readonly principalId: string | null;
+  readonly credentialId: string | null;
+  readonly recoveryCredentialId: string | null;
+  readonly bindingState: 'attached' | 'retained' | 'cleanup_pending';
+  readonly detachReason:
+    | 'local_remove'
+    | 'member_left'
+    | 'group_dissolved'
+    | null;
+  readonly terminalHead: string | null;
+  readonly cleanupPaths: readonly string[];
+  readonly cleanupError: string | null;
+  readonly updatedAtMs: number;
+}
+
+export interface CollaborationLocalDetachPlan {
+  readonly detached: boolean;
+  readonly binding: CollaborationLocalGroupBinding | null;
+  readonly cleanupPaths: readonly string[];
 }
 
 export interface CollaborationProjectSpaceEventRecord {
@@ -1095,6 +1143,44 @@ function groupFromRow(
   };
 }
 
+function localGroupBindingFromRow(
+  row: Record<string, unknown>,
+): CollaborationLocalGroupBinding {
+  const cleanupPaths = parseJson<unknown>(row.cleanup_paths_json);
+  if (
+    cleanupPaths !== null &&
+    (!Array.isArray(cleanupPaths) ||
+      cleanupPaths.some((value) => typeof value !== 'string'))
+  )
+    throw new CollaborationProjectSpaceStoreError(
+      'SCHEMA_STRUCTURE_INVALID',
+      `Local cleanup paths are invalid for ${String(row.group_id)}`,
+    );
+  return {
+    groupId: String(row.group_id),
+    remoteUrl: String(row.remote_url),
+    principalId: row.principal_id == null ? null : String(row.principal_id),
+    credentialId: row.credential_id == null ? null : String(row.credential_id),
+    recoveryCredentialId:
+      row.recovery_credential_id == null
+        ? null
+        : String(row.recovery_credential_id),
+    bindingState: String(
+      row.binding_state,
+    ) as CollaborationLocalGroupBinding['bindingState'],
+    detachReason:
+      row.detach_reason == null
+        ? null
+        : (String(
+            row.detach_reason,
+          ) as CollaborationLocalGroupBinding['detachReason']),
+    terminalHead: row.terminal_head == null ? null : String(row.terminal_head),
+    cleanupPaths: (cleanupPaths ?? []) as string[],
+    cleanupError: row.cleanup_error == null ? null : String(row.cleanup_error),
+    updatedAtMs: Number(row.updated_at_ms),
+  };
+}
+
 export class CollaborationProjectSpaceStore {
   private readonly database: Database.Database;
   private closed = false;
@@ -1214,6 +1300,33 @@ export class CollaborationProjectSpaceStore {
           nowMs,
           nowMs,
         );
+      this.database
+        .prepare(
+          `INSERT INTO collaboration_local_group_bindings (
+             group_id, remote_url, principal_id, credential_id,
+             recovery_credential_id, binding_state, detach_reason,
+             terminal_head, cleanup_paths_json, cleanup_error, updated_at_ms
+           ) VALUES (?, ?, ?, ?, ?, 'attached', NULL, NULL, NULL, NULL, ?)
+           ON CONFLICT(group_id) DO UPDATE SET
+             remote_url = excluded.remote_url,
+             principal_id = COALESCE(excluded.principal_id, principal_id),
+             credential_id = COALESCE(excluded.credential_id, credential_id),
+             recovery_credential_id = COALESCE(
+               excluded.recovery_credential_id,
+               recovery_credential_id
+             ),
+             binding_state = 'attached', detach_reason = NULL,
+             terminal_head = NULL, cleanup_paths_json = NULL,
+             cleanup_error = NULL, updated_at_ms = excluded.updated_at_ms`,
+        )
+        .run(
+          subscription.group_id,
+          subscription.remote_url,
+          input.localPrincipalId ?? null,
+          input.localCredentialId ?? null,
+          input.recoveryCredentialId ?? null,
+          nowMs,
+        );
     })();
   }
 
@@ -1267,6 +1380,23 @@ export class CollaborationProjectSpaceStore {
           Date.now(),
           input.groupId,
         );
+      this.database
+        .prepare(
+          `UPDATE collaboration_local_group_bindings
+              SET principal_id = ?, credential_id = ?,
+                  recovery_credential_id = COALESCE(?, recovery_credential_id),
+                  binding_state = 'attached', detach_reason = NULL,
+                  terminal_head = NULL, cleanup_paths_json = NULL,
+                  cleanup_error = NULL, updated_at_ms = ?
+            WHERE group_id = ?`,
+        )
+        .run(
+          input.localPrincipalId,
+          input.localCredentialId,
+          input.recoveryCredentialId ?? null,
+          Date.now(),
+          input.groupId,
+        );
     })();
   }
 
@@ -1282,13 +1412,179 @@ export class CollaborationProjectSpaceStore {
       throw new Error(`Collaboration Group not found: ${groupId}`);
   }
 
-  deleteSubscription(groupId: string): boolean {
+  updateGroupLocator(input: {
+    readonly groupId: string;
+    readonly remoteUrl: string;
+    readonly repositoryPath: string;
+    readonly gitSshKeyPath: string;
+    readonly nowMs?: number;
+  }): void {
     this.assertOpen();
-    return (
+    const nowMs = input.nowMs ?? Date.now();
+    this.database.transaction(() => {
+      const subscription = this.database
+        .prepare(
+          `UPDATE collaboration_subscriptions SET remote_url = ?
+            WHERE group_id = ?`,
+        )
+        .run(input.remoteUrl, input.groupId);
+      if (subscription.changes !== 1)
+        throw new Error(`Collaboration Group not found: ${input.groupId}`);
       this.database
+        .prepare(
+          `UPDATE collaboration_groups
+              SET repository_path = ?, git_ssh_key_path = ?, updated_at_ms = ?
+            WHERE group_id = ?`,
+        )
+        .run(input.repositoryPath, input.gitSshKeyPath, nowMs, input.groupId);
+      this.database
+        .prepare(
+          `UPDATE collaboration_local_group_bindings
+              SET remote_url = ?, updated_at_ms = ? WHERE group_id = ?`,
+        )
+        .run(input.remoteUrl, nowMs, input.groupId);
+    })();
+  }
+
+  getLocalGroupBinding(groupId: string): CollaborationLocalGroupBinding | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT * FROM collaboration_local_group_bindings WHERE group_id = ?`,
+      )
+      .get(groupId) as Record<string, unknown> | undefined;
+    return row ? localGroupBindingFromRow(row) : null;
+  }
+
+  listLocalGroupBindings(input?: {
+    readonly bindingState?: CollaborationLocalGroupBinding['bindingState'];
+  }): CollaborationLocalGroupBinding[] {
+    this.assertOpen();
+    const rows = input?.bindingState
+      ? this.database
+          .prepare(
+            `SELECT * FROM collaboration_local_group_bindings
+              WHERE binding_state = ? ORDER BY updated_at_ms, group_id`,
+          )
+          .all(input.bindingState)
+      : this.database
+          .prepare(
+            `SELECT * FROM collaboration_local_group_bindings
+              ORDER BY updated_at_ms, group_id`,
+          )
+          .all();
+    return (rows as Record<string, unknown>[]).map(localGroupBindingFromRow);
+  }
+
+  detachLocalGroup(input: {
+    readonly groupId: string;
+    readonly reason: NonNullable<
+      CollaborationLocalGroupBinding['detachReason']
+    >;
+    readonly terminalHead?: string | null;
+    readonly nowMs?: number;
+  }): CollaborationLocalDetachPlan {
+    this.assertOpen();
+    const group = this.getGroup(input.groupId);
+    if (!group)
+      return {
+        detached: false,
+        binding: this.getLocalGroupBinding(input.groupId),
+        cleanupPaths:
+          this.getLocalGroupBinding(input.groupId)?.cleanupPaths ?? [],
+      };
+    const cleanupPaths = [
+      ...new Set([
+        group.repositoryPath,
+        ...this.listStagedArtifacts({ groupId: input.groupId }).map(
+          (artifact) => path.dirname(artifact.stagedPath),
+        ),
+      ]),
+    ];
+    const nowMs = input.nowMs ?? Date.now();
+    this.database.transaction(() => {
+      this.database
+        .prepare(
+          `INSERT INTO collaboration_local_group_bindings (
+             group_id, remote_url, principal_id, credential_id,
+             recovery_credential_id, binding_state, detach_reason,
+             terminal_head, cleanup_paths_json, cleanup_error, updated_at_ms
+           ) VALUES (?, ?, ?, ?, ?, 'cleanup_pending', ?, ?, ?, NULL, ?)
+           ON CONFLICT(group_id) DO UPDATE SET
+             remote_url = excluded.remote_url,
+             principal_id = COALESCE(excluded.principal_id, principal_id),
+             credential_id = COALESCE(excluded.credential_id, credential_id),
+             recovery_credential_id = COALESCE(
+               excluded.recovery_credential_id,
+               recovery_credential_id
+             ),
+             binding_state = 'cleanup_pending',
+             detach_reason = excluded.detach_reason,
+             terminal_head = excluded.terminal_head,
+             cleanup_paths_json = excluded.cleanup_paths_json,
+             cleanup_error = NULL,
+             updated_at_ms = excluded.updated_at_ms`,
+        )
+        .run(
+          input.groupId,
+          group.remoteUrl,
+          group.localPrincipalId,
+          group.localCredentialId,
+          group.recoveryCredentialId,
+          input.reason,
+          input.terminalHead ?? group.lastVerifiedHead,
+          JSON.stringify(cleanupPaths),
+          nowMs,
+        );
+      const deleted = this.database
         .prepare('DELETE FROM collaboration_subscriptions WHERE group_id = ?')
-        .run(groupId).changes === 1
-    );
+        .run(input.groupId);
+      if (deleted.changes !== 1)
+        throw new Error(`Collaboration Group detach raced: ${input.groupId}`);
+    })();
+    return {
+      detached: true,
+      binding: this.getLocalGroupBinding(input.groupId),
+      cleanupPaths,
+    };
+  }
+
+  completeLocalGroupCleanup(groupId: string, nowMs = Date.now()): void {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_local_group_bindings
+            SET binding_state = 'retained', cleanup_paths_json = NULL,
+                cleanup_error = NULL, updated_at_ms = ?
+          WHERE group_id = ? AND binding_state = 'cleanup_pending'`,
+      )
+      .run(nowMs, groupId);
+    if (result.changes !== 1)
+      throw new Error(`Local Group cleanup is not pending: ${groupId}`);
+  }
+
+  failLocalGroupCleanup(
+    groupId: string,
+    error: string,
+    nowMs = Date.now(),
+  ): void {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_local_group_bindings
+            SET cleanup_error = ?, updated_at_ms = ?
+          WHERE group_id = ? AND binding_state = 'cleanup_pending'`,
+      )
+      .run(error, nowMs, groupId);
+    if (result.changes !== 1)
+      throw new Error(`Local Group cleanup is not pending: ${groupId}`);
+  }
+
+  deleteSubscription(groupId: string): boolean {
+    return this.detachLocalGroup({
+      groupId,
+      reason: 'local_remove',
+    }).detached;
   }
 
   listGroups(): CollaborationProjectSpaceGroupRecord[] {

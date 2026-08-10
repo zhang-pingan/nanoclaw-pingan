@@ -468,6 +468,116 @@ describe('Collaboration project-space v3 Web API', () => {
     );
   });
 
+  it('routes lifecycle removals only with an exact Group confirmation', async () => {
+    const dissolveGroup = vi.fn(async () => ({
+      groupId: 'group_test',
+      removed: true,
+      cleanupPending: false,
+      cleanupError: null,
+    }));
+    const leaveGroup = vi.fn(async () => ({
+      groupId: 'group_test',
+      removed: true,
+      cleanupPending: true,
+      cleanupError: 'filesystem busy',
+    }));
+    const removeLocalGroup = vi.fn(async () => ({
+      groupId: 'group_test',
+      removed: true,
+      cleanupPending: false,
+      cleanupError: null,
+    }));
+    const retryLocalCleanup = vi.fn(async () => ({
+      groupId: 'group_test',
+      removed: false,
+      cleanupPending: false,
+      cleanupError: null,
+    }));
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({
+          groups: {
+            dissolveGroup,
+            leaveGroup,
+            removeLocalGroup,
+            retryLocalCleanup,
+          },
+        }),
+      ),
+      async (baseUrl) => {
+        const headers = { 'content-type': 'application/json' };
+        const requests = [
+          {
+            path: '/groups/group_test/dissolve',
+            method: 'POST',
+            body: {
+              expectedRevision: 3,
+              reason: 'Project complete',
+              confirmation: 'group_test',
+            },
+          },
+          {
+            path: '/groups/group_test/leave',
+            method: 'POST',
+            body: {
+              expectedRevision: 4,
+              reason: 'Leaving',
+              confirmation: 'group_test',
+            },
+          },
+          {
+            path: '/subscriptions/group_test',
+            method: 'DELETE',
+            body: { confirmation: 'group_test' },
+          },
+          {
+            path: '/local-bindings/group_test/cleanup/retry',
+            method: 'POST',
+            body: { confirmation: 'group_test' },
+          },
+        ] as const;
+        for (const request of requests) {
+          const mismatch = await fetch(
+            `${baseUrl}/api/collaboration${request.path}`,
+            {
+              method: request.method,
+              headers,
+              body: JSON.stringify({
+                ...request.body,
+                confirmation: 'group_other',
+              }),
+            },
+          );
+          expect(mismatch.status, request.path).toBe(400);
+        }
+        expect(dissolveGroup).not.toHaveBeenCalled();
+        expect(leaveGroup).not.toHaveBeenCalled();
+        expect(removeLocalGroup).not.toHaveBeenCalled();
+        expect(retryLocalCleanup).not.toHaveBeenCalled();
+
+        for (const request of requests) {
+          const response = await fetch(
+            `${baseUrl}/api/collaboration${request.path}`,
+            {
+              method: request.method,
+              headers,
+              body: JSON.stringify(request.body),
+            },
+          );
+          expect(response.status, request.path).toBe(200);
+        }
+        expect(dissolveGroup).toHaveBeenCalledWith(
+          'group_test',
+          'Project complete',
+          3,
+        );
+        expect(leaveGroup).toHaveBeenCalledWith('group_test', 'Leaving', 4);
+        expect(removeLocalGroup).toHaveBeenCalledWith('group_test');
+        expect(retryLocalCleanup).toHaveBeenCalledWith('group_test');
+      },
+    );
+  });
+
   it('routes unbound Invite issuance, revocation, and join references', async () => {
     const joinGroup = vi.fn(async () => group());
     const issueInvite = vi.fn(async () => group());
@@ -750,6 +860,7 @@ describe('Collaboration project-space v3 Web API', () => {
     const rejectMembership = vi.fn(async () => group());
     const createTurn = vi.fn(async () => group());
     const startTurn = vi.fn(async () => group());
+    const recoverTurn = vi.fn(async () => group());
     await withApiServer(
       new CollaborationWebApi(
         runtime({
@@ -758,6 +869,7 @@ describe('Collaboration project-space v3 Web API', () => {
             rejectMembership,
             createTurn,
             startTurn,
+            recoverTurn,
           },
         }),
       ),
@@ -829,6 +941,28 @@ describe('Collaboration project-space v3 Web API', () => {
           turnId: 'turn_1',
           expectedRevision: 4,
           executorId: 'executor_codex',
+        });
+        expect(
+          (
+            await post(
+              '/groups/group_test/workflow-instances/instance_1/turns/turn_1/recover',
+              {
+                expectedRevision: 5,
+                previousAttempt: 1,
+                assigneePrincipalId: 'principal_alice',
+                reason: 'Reassign after member exit',
+              },
+            )
+          ).status,
+        ).toBe(200);
+        expect(recoverTurn).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          instanceId: 'instance_1',
+          turnId: 'turn_1',
+          expectedRevision: 5,
+          previousAttempt: 1,
+          assigneePrincipalId: 'principal_alice',
+          reason: 'Reassign after member exit',
         });
       },
     );

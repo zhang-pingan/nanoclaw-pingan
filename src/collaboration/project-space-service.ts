@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -7,6 +8,7 @@ import {
 } from './project-space-identity.js';
 import {
   CollaborationProjectSpaceStore,
+  type CollaborationLocalGroupBinding,
   type CollaborationProjectSpaceEventRecord,
   type CollaborationProjectSpaceGroupRecord,
 } from './project-space-store.js';
@@ -18,6 +20,7 @@ import {
   collaborationDeadlineSnapshotHashV3,
   collaborationFencingTokenV3,
   collaborationIdempotencyKeyV3,
+  collaborationMemberLeftAffectedTurnIdsV3,
   collaborationRecoveryRequestHashV3,
   collaborationRecoveryVerificationCodeV3,
   collaborationTurnCompletionHashV3,
@@ -158,6 +161,17 @@ export interface ProjectSpaceStagedArtifactResult {
   readonly artifactRef: string;
 }
 
+export interface CollaborationLocalGroupRemovalResult {
+  readonly groupId: string;
+  readonly removed: boolean;
+  readonly cleanupPending: boolean;
+  readonly cleanupError: string | null;
+}
+
+export type CollaborationLocalGroupCleanup = (
+  paths: readonly string[],
+) => Promise<void>;
+
 export const MAX_PROJECT_SPACE_FILE_BYTES = 10 * 1024 * 1024;
 
 function newId(prefix: string): string {
@@ -219,9 +233,38 @@ export function collaborationProjectSpaceRepositoryPath(
   return path.join(repositoryRoot, `${digest}.git`);
 }
 
+function pathIsInside(root: string, candidate: string): boolean {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return (
+    relative !== '' &&
+    !relative.startsWith(`..${path.sep}`) &&
+    relative !== '..'
+  );
+}
+
+async function removeCollaborationLocalPaths(
+  repositoryRoot: string,
+  databasePath: string,
+  paths: readonly string[],
+): Promise<void> {
+  const allowedRoots = [
+    path.resolve(repositoryRoot),
+    path.resolve(path.dirname(databasePath), 'collaboration-staged-artifacts'),
+  ];
+  for (const cleanupPath of paths) {
+    const resolved = path.resolve(cleanupPath);
+    if (!allowedRoots.some((root) => pathIsInside(root, resolved)))
+      throw new Error(
+        `Refusing unsafe Collaboration cleanup path: ${resolved}`,
+      );
+    await rm(resolved, { recursive: true, force: true });
+  }
+}
+
 export class CollaborationProjectSpaceService {
   private readonly histories = new Map<string, ValidatedProjectSpaceHistory>();
   private readonly repositoryOperations = new Map<string, Promise<void>>();
+  private readonly cleanupLocalPaths: CollaborationLocalGroupCleanup;
 
   constructor(
     readonly store: CollaborationProjectSpaceStore,
@@ -229,7 +272,17 @@ export class CollaborationProjectSpaceService {
     private readonly repositoryRoot: string,
     private readonly identities: CollaborationProjectSpaceIdentityService,
     private readonly now: () => number = Date.now,
-  ) {}
+    cleanupLocalPaths?: CollaborationLocalGroupCleanup,
+  ) {
+    this.cleanupLocalPaths =
+      cleanupLocalPaths ??
+      ((paths) =>
+        removeCollaborationLocalPaths(
+          this.repositoryRoot,
+          this.store.databasePath,
+          paths,
+        ));
+  }
 
   async inspectRemote(remoteUrl: string): Promise<ProjectSpaceInspectResult> {
     const repositoryPath = collaborationProjectSpaceRepositoryPath(
@@ -298,6 +351,7 @@ export class CollaborationProjectSpaceService {
         visibility_policy: { observer_access: input.observerAccess },
         created_at: occurredAt,
         archived_at: null,
+        dissolved_at: null,
       },
       member,
       client,
@@ -366,7 +420,19 @@ export class CollaborationProjectSpaceService {
       repositoryPath,
       gitSshKeyPaths,
     });
+    if (history.projection.group.lifecycle === 'dissolved')
+      throw new Error('Dissolved Groups cannot be observed or restored');
+    await this.requireCompletedCleanup(history.projection.groupId);
+    const binding = this.store.getLocalGroupBinding(history.projection.groupId);
+    const identity = binding
+      ? await this.restoreBoundIdentity(binding, history, ['active'])
+      : null;
+    const recoveryIdentity =
+      binding && identity
+        ? await this.restoreBoundRecoveryIdentity(binding, history)
+        : null;
     if (
+      !identity &&
       history.projection.group.visibility_policy.observer_access !== 'allowed'
     )
       throw new Error(
@@ -376,7 +442,9 @@ export class CollaborationProjectSpaceService {
       history,
       remoteUrl: input.remoteUrl,
       repositoryPath,
-      mode: 'observer',
+      mode: identity ? 'member' : 'observer',
+      identity: identity ?? undefined,
+      recoveryIdentity: recoveryIdentity ?? undefined,
       gitSshKeyPath: history.transportGitSshKeyPath ?? gitSshKeyPaths[0]!,
       pollIntervalMs: input.pollIntervalMs,
       notificationsEnabled: input.notificationsEnabled,
@@ -391,22 +459,65 @@ export class CollaborationProjectSpaceService {
       this.repositoryRoot,
       input.remoteUrl,
     );
-    const existingSubscription = this.store
+    const existingByLocator = this.store
       .listGroups()
       .find((group) => group.remoteUrl === input.remoteUrl);
     const gitSshKeyPaths = this.identities.resolveGitSshKeyCandidates(
-      input.gitSshKeyPath ?? existingSubscription?.gitSshKeyPath,
+      input.gitSshKeyPath ?? existingByLocator?.gitSshKeyPath,
     );
-    const [identity, inspected] = await Promise.all([
-      this.identities.createPrincipalIdentity(),
-      this.transport.inspect({
-        remoteUrl: input.remoteUrl,
-        repositoryPath,
-        gitSshKeyPaths,
-      }),
-    ]);
+    const inspected = await this.transport.inspect({
+      remoteUrl: input.remoteUrl,
+      repositoryPath,
+      gitSshKeyPaths,
+    });
+    if (inspected.projection.group.lifecycle === 'dissolved')
+      throw new Error('Dissolved Groups cannot accept membership');
+    if (inspected.projection.group.lifecycle !== 'active')
+      throw new Error('Archived Groups must be reopened before joining');
+    await this.requireCompletedCleanup(inspected.projection.groupId);
+    const binding = this.store.getLocalGroupBinding(
+      inspected.projection.groupId,
+    );
+    const restored = binding
+      ? await this.restoreBoundIdentity(binding, inspected, [
+          'active',
+          'requested',
+        ])
+      : null;
     const gitSshKeyPath =
       inspected.transportGitSshKeyPath ?? gitSshKeyPaths[0]!;
+    if (restored) {
+      const recoveryIdentity = binding
+        ? await this.restoreBoundRecoveryIdentity(binding, inspected)
+        : null;
+      const pending =
+        inspected.projection.members[restored.principalId]?.status ===
+        'requested';
+      this.registerOrUpgradeMember({
+        history: inspected,
+        remoteUrl: input.remoteUrl,
+        repositoryPath,
+        gitSshKeyPath,
+        identity: restored,
+        recoveryIdentity: recoveryIdentity ?? undefined,
+        pollIntervalMs: input.pollIntervalMs,
+        pending,
+      });
+      return this.store.getGroup(inspected.projection.groupId)!;
+    }
+    const retainedMember = binding?.principalId
+      ? inspected.projection.members[binding.principalId]
+      : null;
+    if (retainedMember && !['left', 'rejected'].includes(retainedMember.status))
+      throw new Error(
+        `Retained Principal cannot rejoin while Membership is ${retainedMember.status}`,
+      );
+    const identity = binding?.principalId
+      ? await this.identities.createCredentialIdentity({
+          principalId: binding.principalId,
+          purpose: 'event_signing',
+        })
+      : await this.identities.createPrincipalIdentity();
     const joinPolicy = inspected.projection.group.membership_policy.join;
     const open = joinPolicy === 'open';
     if (joinPolicy === 'invite_only') {
@@ -1073,6 +1184,123 @@ export class CollaborationProjectSpaceService {
       eventType: 'group_reopened',
       payload: { reason },
     });
+  }
+
+  async dissolveGroup(
+    groupId: string,
+    reason: string,
+    expectedRevision: number,
+  ): Promise<CollaborationLocalGroupRemovalResult> {
+    return this.appendTerminalLocal(groupId, {
+      expectedRevision,
+      eventType: 'group_dissolved',
+      reason,
+      detachReason: 'group_dissolved',
+      validate: (projection, principalId) => {
+        if (projection.group.owner_principal_id !== principalId)
+          throw new Error('Only the Group Owner may dissolve the Group');
+        if (!['active', 'archived'].includes(projection.group.lifecycle))
+          throw new Error('Only an active or archived Group can be dissolved');
+      },
+    });
+  }
+
+  async leaveGroup(
+    groupId: string,
+    reason: string,
+    expectedRevision: number,
+  ): Promise<CollaborationLocalGroupRemovalResult> {
+    return this.appendTerminalLocal(groupId, {
+      expectedRevision,
+      eventType: 'member_left',
+      reason,
+      detachReason: 'member_left',
+      validate: (projection, principalId) => {
+        if (projection.group.owner_principal_id === principalId)
+          throw new Error('The Group Owner cannot leave the Group');
+        if (projection.members[principalId]?.status !== 'active')
+          throw new Error('Only an active Group member may leave');
+      },
+    });
+  }
+
+  async removeLocalGroup(
+    groupId: string,
+  ): Promise<CollaborationLocalGroupRemovalResult> {
+    if (!this.store.getGroup(groupId))
+      throw new Error(`Collaboration Group not found: ${groupId}`);
+    return this.detachAndCleanup(groupId, 'local_remove', null);
+  }
+
+  async retryLocalCleanup(
+    groupId: string,
+  ): Promise<CollaborationLocalGroupRemovalResult> {
+    const binding = this.store.getLocalGroupBinding(groupId);
+    if (!binding) throw new Error(`Local Group binding not found: ${groupId}`);
+    if (binding.bindingState === 'attached') {
+      const group = this.store.getGroup(groupId);
+      const detachReason =
+        group?.projection?.group.lifecycle === 'dissolved'
+          ? 'group_dissolved'
+          : group?.localPrincipalId &&
+              group.projection?.members[group.localPrincipalId]?.status ===
+                'left'
+            ? 'member_left'
+            : null;
+      if (detachReason)
+        return this.detachAndCleanup(
+          groupId,
+          detachReason,
+          group?.lastVerifiedHead ?? binding.terminalHead,
+        );
+    }
+    if (binding.bindingState !== 'cleanup_pending')
+      return {
+        groupId,
+        removed: false,
+        cleanupPending: false,
+        cleanupError: null,
+      };
+    try {
+      await this.cleanupLocalPaths(binding.cleanupPaths);
+      this.store.completeLocalGroupCleanup(groupId, this.now());
+      return {
+        groupId,
+        removed: false,
+        cleanupPending: false,
+        cleanupError: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.store.failLocalGroupCleanup(groupId, message, this.now());
+      return {
+        groupId,
+        removed: false,
+        cleanupPending: true,
+        cleanupError: message,
+      };
+    }
+  }
+
+  async retryPendingLocalCleanups(): Promise<
+    CollaborationLocalGroupRemovalResult[]
+  > {
+    const results: CollaborationLocalGroupRemovalResult[] = [];
+    const groupIds = new Set(
+      this.store
+        .listLocalGroupBindings({ bindingState: 'cleanup_pending' })
+        .map((binding) => binding.groupId),
+    );
+    for (const group of this.store.listGroups())
+      if (
+        group.projection?.group.lifecycle === 'dissolved' ||
+        (group.localPrincipalId &&
+          group.projection?.members[group.localPrincipalId]?.status === 'left')
+      )
+        groupIds.add(group.groupId);
+    for (const groupId of groupIds)
+      results.push(await this.retryLocalCleanup(groupId));
+    return results;
   }
 
   async postProgress(input: {
@@ -2303,6 +2531,7 @@ export class CollaborationProjectSpaceService {
         }),
       },
       eventId,
+      occurredAt: startedAt,
       executorId: input.executorId ?? null,
     });
   }
@@ -2557,6 +2786,7 @@ export class CollaborationProjectSpaceService {
     readonly turnId: string;
     readonly expectedRevision: number;
     readonly previousAttempt: number;
+    readonly assigneePrincipalId: string;
     readonly reason: string;
   }): Promise<CollaborationProjectSpaceGroupRecord> {
     const history = await this.sync(input.groupId);
@@ -2575,6 +2805,7 @@ export class CollaborationProjectSpaceService {
       eventType: 'turn_recovered',
       payload: {
         turn_id: input.turnId,
+        assignee_principal_id: input.assigneePrincipalId,
         previous_attempt: input.previousAttempt,
         next_attempt: nextAttempt,
         reason: input.reason,
@@ -2782,6 +3013,17 @@ export class CollaborationProjectSpaceService {
         headAfter: history.head,
         nowMs: this.now(),
       });
+      const refreshed = this.store.getGroup(groupId);
+      const detachReason =
+        history.projection.group.lifecycle === 'dissolved'
+          ? 'group_dissolved'
+          : refreshed?.localPrincipalId &&
+              history.projection.members[refreshed.localPrincipalId]?.status ===
+                'left'
+            ? 'member_left'
+            : null;
+      if (detachReason)
+        await this.detachAndCleanup(groupId, detachReason, history.head);
       return history;
     } catch (error) {
       this.store.finishSyncAttempt({
@@ -2848,6 +3090,80 @@ export class CollaborationProjectSpaceService {
     };
   }
 
+  private async requireCompletedCleanup(groupId: string): Promise<void> {
+    const binding = this.store.getLocalGroupBinding(groupId);
+    if (binding?.bindingState !== 'cleanup_pending') return;
+    const result = await this.retryLocalCleanup(groupId);
+    if (result.cleanupPending)
+      throw new Error(
+        `Local Group cleanup must complete before reattaching: ${result.cleanupError ?? 'unknown cleanup failure'}`,
+      );
+  }
+
+  private async restoreBoundIdentity(
+    binding: CollaborationLocalGroupBinding,
+    history: ValidatedProjectSpaceHistory,
+    allowedStatuses: readonly MemberDefinitionV3['status'][],
+  ): Promise<CollaborationEventSigningIdentity | null> {
+    if (!binding.principalId || !binding.credentialId) return null;
+    const member = history.projection.members[binding.principalId];
+    const credential =
+      history.projection.credentials[binding.principalId]?.[
+        binding.credentialId
+      ];
+    if (
+      !member ||
+      !allowedStatuses.includes(member.status) ||
+      !credential ||
+      credential.status !== 'active'
+    )
+      return null;
+    const identity = await this.identities.loadCredentialIdentity(
+      binding.credentialId,
+    );
+    if (
+      identity.principalId !== binding.principalId ||
+      identity.clientId !== credential.client_id ||
+      identity.purpose !== 'event_signing' ||
+      history.projection.clients[binding.principalId]?.[identity.clientId]
+        ?.status !== 'active'
+    )
+      throw new Error(
+        'Retained Collaboration identity does not match the Group',
+      );
+    return identity;
+  }
+
+  private async restoreBoundRecoveryIdentity(
+    binding: CollaborationLocalGroupBinding,
+    history: ValidatedProjectSpaceHistory,
+  ): Promise<CollaborationEventSigningIdentity | null> {
+    if (!binding.principalId || !binding.recoveryCredentialId) return null;
+    const credential =
+      history.projection.credentials[binding.principalId]?.[
+        binding.recoveryCredentialId
+      ];
+    if (
+      !credential ||
+      credential.status !== 'active' ||
+      credential.purpose !== 'group_recovery'
+    )
+      return null;
+    const identity = await this.identities.loadCredentialIdentity(
+      binding.recoveryCredentialId,
+    );
+    if (
+      identity.credentialId !== binding.recoveryCredentialId ||
+      identity.principalId !== binding.principalId ||
+      identity.clientId !== credential.client_id ||
+      identity.purpose !== 'group_recovery'
+    )
+      throw new Error(
+        'Retained Collaboration recovery identity does not match the Group',
+      );
+    return identity;
+  }
+
   private registerLocalGroup(input: {
     readonly history: ValidatedProjectSpaceHistory;
     readonly remoteUrl: string;
@@ -2859,6 +3175,31 @@ export class CollaborationProjectSpaceService {
     readonly pollIntervalMs?: number;
     readonly notificationsEnabled?: boolean;
   }): void {
+    const existing = this.store.getGroup(input.history.projection.groupId);
+    if (existing) {
+      this.store.updateGroupLocator({
+        groupId: input.history.projection.groupId,
+        remoteUrl: input.remoteUrl,
+        repositoryPath: input.repositoryPath,
+        gitSshKeyPath: input.gitSshKeyPath,
+        nowMs: this.now(),
+      });
+      if (input.identity)
+        this.store.updateLocalIdentity({
+          groupId: input.history.projection.groupId,
+          subscriptionMode: input.mode,
+          localPrincipalId: input.identity.principalId,
+          localClientId: input.identity.clientId,
+          localCredentialId: input.identity.credentialId,
+          eventPrivateKeyPath: input.identity.privateKeyPath,
+          eventPublicKey: input.identity.publicKey,
+          eventFingerprint: input.identity.fingerprint,
+          recoveryCredentialId: input.recoveryIdentity?.credentialId,
+          recoveryPrivateKeyPath: input.recoveryIdentity?.privateKeyPath,
+        });
+      this.saveHistory(input.history.projection.groupId, input.history);
+      return;
+    }
     const pollIntervalMs = input.pollIntervalMs ?? 60_000;
     const subscription: ObserverSubscription = {
       format: 'icarus.collaboration-subscription/1',
@@ -2896,6 +3237,7 @@ export class CollaborationProjectSpaceService {
     readonly repositoryPath: string;
     readonly gitSshKeyPath: string;
     readonly identity: CollaborationEventSigningIdentity;
+    readonly recoveryIdentity?: CollaborationEventSigningIdentity;
     readonly pollIntervalMs?: number;
     readonly pending?: boolean;
   }): void {
@@ -2911,11 +3253,16 @@ export class CollaborationProjectSpaceService {
         eventPrivateKeyPath: input.identity.privateKeyPath,
         eventPublicKey: input.identity.publicKey,
         eventFingerprint: input.identity.fingerprint,
+        recoveryCredentialId: input.recoveryIdentity?.credentialId,
+        recoveryPrivateKeyPath: input.recoveryIdentity?.privateKeyPath,
       });
-      this.store.updateGitSshKeyPath(
-        input.history.projection.groupId,
-        input.gitSshKeyPath,
-      );
+      this.store.updateGroupLocator({
+        groupId: input.history.projection.groupId,
+        remoteUrl: input.remoteUrl,
+        repositoryPath: input.repositoryPath,
+        gitSshKeyPath: input.gitSshKeyPath,
+        nowMs: this.now(),
+      });
       this.saveHistory(input.history.projection.groupId, input.history);
       return;
     }
@@ -2935,6 +3282,7 @@ export class CollaborationProjectSpaceService {
       readonly payload: Record<string, unknown>;
       readonly replaceEventId?: boolean;
       readonly eventId?: string;
+      readonly occurredAt?: string;
       readonly executorId?: string | null;
       readonly materializedFiles?: readonly {
         readonly path: string;
@@ -2990,6 +3338,115 @@ export class CollaborationProjectSpaceService {
     });
   }
 
+  private async appendTerminalLocal(
+    groupId: string,
+    input: {
+      readonly expectedRevision: number;
+      readonly eventType: 'group_dissolved' | 'member_left';
+      readonly reason: string;
+      readonly detachReason: 'group_dissolved' | 'member_left';
+      readonly validate: (
+        projection: CollaborationProjectionV3,
+        principalId: string,
+      ) => void;
+    },
+  ): Promise<CollaborationLocalGroupRemovalResult> {
+    const group = this.store.getGroup(groupId);
+    if (!group) throw new Error(`Collaboration Group not found: ${groupId}`);
+    return this.withRepositoryOperation(group.repositoryPath, async () => {
+      const currentGroup = this.requireLocalMember(groupId);
+      if (
+        !currentGroup.localCredentialId ||
+        !currentGroup.eventPrivateKeyPath ||
+        !currentGroup.eventPublicKey ||
+        !currentGroup.eventFingerprint
+      )
+        throw new Error('Local Collaboration signing identity is incomplete');
+      const history = await this.syncUnlocked(groupId);
+      input.validate(history.projection, currentGroup.localPrincipalId!);
+      const aggregateId =
+        input.eventType === 'group_dissolved'
+          ? groupId
+          : currentGroup.localPrincipalId!;
+      const head =
+        history.projection.aggregateHeads[
+          `${input.eventType === 'group_dissolved' ? 'group' : 'membership'}:${aggregateId}`
+        ];
+      if ((head?.revision ?? 0) !== input.expectedRevision)
+        throw new Error(
+          `Aggregate revision conflict: expected ${String(input.expectedRevision)}, current ${String(head?.revision ?? 0)}`,
+        );
+      const identity: CollaborationEventSigningIdentity = {
+        principalId: currentGroup.localPrincipalId!,
+        clientId: currentGroup.localClientId!,
+        credentialId: currentGroup.localCredentialId,
+        privateKeyPath: currentGroup.eventPrivateKeyPath,
+        publicKey: currentGroup.eventPublicKey,
+        fingerprint: currentGroup.eventFingerprint,
+        purpose: 'event_signing',
+      };
+      const updated = await this.appendWithIdentity({
+        history,
+        remoteUrl: currentGroup.remoteUrl,
+        repositoryPath: currentGroup.repositoryPath,
+        gitSshKeyPath: currentGroup.gitSshKeyPath,
+        identity,
+        aggregateType:
+          input.eventType === 'group_dissolved' ? 'group' : 'membership',
+        aggregateId,
+        eventType: input.eventType,
+        payload:
+          input.eventType === 'member_left'
+            ? {
+                reason: input.reason,
+                affected_turn_ids: collaborationMemberLeftAffectedTurnIdsV3(
+                  history.projection,
+                  currentGroup.localPrincipalId!,
+                ),
+              }
+            : { reason: input.reason },
+      });
+      this.saveHistory(groupId, updated);
+      try {
+        return await this.detachAndCleanup(
+          groupId,
+          input.detachReason,
+          updated.head,
+        );
+      } catch (error) {
+        return {
+          groupId,
+          removed: false,
+          cleanupPending: true,
+          cleanupError: error instanceof Error ? error.message : String(error),
+        };
+      }
+    });
+  }
+
+  private async detachAndCleanup(
+    groupId: string,
+    reason: 'local_remove' | 'member_left' | 'group_dissolved',
+    terminalHead: string | null,
+  ): Promise<CollaborationLocalGroupRemovalResult> {
+    const plan = this.store.detachLocalGroup({
+      groupId,
+      reason,
+      terminalHead,
+      nowMs: this.now(),
+    });
+    this.histories.delete(groupId);
+    if (plan.binding?.bindingState !== 'cleanup_pending')
+      return {
+        groupId,
+        removed: plan.detached,
+        cleanupPending: false,
+        cleanupError: null,
+      };
+    const cleanup = await this.retryLocalCleanup(groupId);
+    return { ...cleanup, removed: plan.detached };
+  }
+
   private async withRepositoryOperation<T>(
     repositoryPath: string,
     operation: () => Promise<T>,
@@ -3023,6 +3480,7 @@ export class CollaborationProjectSpaceService {
     readonly payload: Record<string, unknown>;
     readonly replaceEventId?: boolean;
     readonly eventId?: string;
+    readonly occurredAt?: string;
     readonly executorId?: string | null;
     readonly materializedFiles?: readonly {
       readonly path: string;
@@ -3041,7 +3499,8 @@ export class CollaborationProjectSpaceService {
             `${input.aggregateType}:${input.aggregateId}`
           ];
         const eventId = input.eventId ?? newId('evt');
-        const occurredAt = new Date(this.now()).toISOString();
+        const occurredAt =
+          input.occurredAt ?? new Date(this.now()).toISOString();
         const payload = input.replaceEventId
           ? (JSON.parse(
               JSON.stringify(input.payload)
@@ -3139,6 +3598,29 @@ export class CollaborationProjectSpaceService {
     for (const record of history.eventRecords) {
       if (knownEventIds.has(record.event.event_id)) continue;
       if (
+        record.event.event_type === 'member_left' &&
+        group.localPrincipalId === history.projection.group.owner_principal_id
+      )
+        for (const turnId of record.event.payload
+          .affected_turn_ids as string[]) {
+          this.store.enqueueNotification({
+            groupId,
+            recipientPrincipalId: group.localPrincipalId,
+            recipientClientId: group.localClientId,
+            kind: 'member_left_workflow_recovery',
+            resourceType: 'turn',
+            resourceId: turnId,
+            reason: 'member_left',
+            dedupeKey: `member-left-recovery:${record.event.event_id}:${turnId}:${group.localClientId}`,
+            severity: 'critical',
+            payload: {
+              principal_id: record.event.actor.principal_id,
+              turn_id: turnId,
+            },
+            nowMs: this.now(),
+          });
+        }
+      if (
         ['identity_recovery_requested', 'owner_recovery_requested'].includes(
           record.event.event_type,
         )
@@ -3147,7 +3629,7 @@ export class CollaborationProjectSpaceService {
           record.event.payload.request,
         );
         if (!parsed.success) continue;
-        const recipient =
+        const recipient: string =
           parsed.data.type === 'identity_recovery'
             ? parsed.data.target_principal_id
             : history.projection.group.owner_principal_id;

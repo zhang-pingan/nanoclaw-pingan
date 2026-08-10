@@ -391,6 +391,7 @@ function automaticMaterialization(
     case 'group_settings_updated':
     case 'group_archived':
     case 'group_reopened':
+    case 'group_dissolved':
       files.set('group.json', prettyCollaborationJson(projection.group));
       if (event.event_type !== 'group_initialized') break;
       for (const [principalId, member] of Object.entries(projection.members)) {
@@ -435,7 +436,8 @@ function automaticMaterialization(
     case 'member_registered':
     case 'member_suspended':
     case 'member_reactivated':
-    case 'member_removed': {
+    case 'member_removed':
+    case 'member_left': {
       const member = projection.members[event.aggregate_id];
       if (member)
         files.set(
@@ -479,6 +481,62 @@ function automaticMaterialization(
               prettyCollaborationJson(invite),
             );
           }
+        }
+      }
+      if (event.event_type === 'member_left') {
+        for (const client of Object.values(
+          projection.clients[event.aggregate_id] ?? {},
+        ))
+          files.set(
+            `members/${event.aggregate_id}/clients/${client.client_id}.json`,
+            prettyCollaborationJson(client),
+          );
+        for (const credential of Object.values(
+          projection.credentials[event.aggregate_id] ?? {},
+        ))
+          files.set(
+            `members/${event.aggregate_id}/credentials/${credential.credential_id}.json`,
+            prettyCollaborationJson(credential),
+          );
+        for (const executor of Object.values(
+          projection.executors[event.aggregate_id] ?? {},
+        ))
+          files.set(
+            `members/${event.aggregate_id}/executors/${executor.executor_id}.json`,
+            prettyCollaborationJson(executor),
+          );
+        for (const turn of Object.values(projection.turns)) {
+          if (
+            turn.state !== 'recovery_required' ||
+            turn.recovery_reason !== `member_left:${event.actor.principal_id}`
+          )
+            continue;
+          const instance =
+            projection.workflowInstances[turn.workflow_instance_id];
+          files.set(
+            `workflows/instances/${turn.workflow_instance_id}/turns/${turn.turn_id}.json`,
+            prettyCollaborationJson(turn),
+          );
+          files.set(
+            `workflows/instances/${turn.workflow_instance_id}/instance.json`,
+            prettyCollaborationJson(instance),
+          );
+          files.set(
+            `projections/workflow-instances/${turn.workflow_instance_id}.json`,
+            prettyCollaborationJson({
+              format: 'icarus.collaboration-workflow-instance-projection/1',
+              instance: instance ?? null,
+              execution:
+                projection.stateExecutions[turn.workflow_instance_id] ?? {},
+              turns: Object.fromEntries(
+                Object.entries(projection.turns).filter(
+                  ([, candidate]) =>
+                    candidate.workflow_instance_id ===
+                    turn.workflow_instance_id,
+                ),
+              ),
+            }),
+          );
         }
       }
       break;
@@ -575,7 +633,11 @@ function automaticMaterialization(
     case 'executor_revoked':
       files.set(
         `members/${event.aggregate_id}/executors/${String(event.payload.executor_id)}.json`,
-        null,
+        prettyCollaborationJson(
+          projection.executors[event.aggregate_id]?.[
+            String(event.payload.executor_id)
+          ],
+        ),
       );
       break;
     case 'permission_granted':

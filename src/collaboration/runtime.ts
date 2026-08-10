@@ -132,6 +132,22 @@ export class CollaborationRuntime {
       this.analysisExecutorsValue = analysisExecutors;
       this.schedulerValue = scheduler;
       this.errorValue = null;
+      void groups
+        .retryPendingLocalCleanups()
+        .then((results) => {
+          for (const result of results)
+            if (result.cleanupPending)
+              this.options.logger.warn(
+                { groupId: result.groupId, error: result.cleanupError },
+                'Collaboration local Group cleanup remains pending',
+              );
+        })
+        .catch((error) =>
+          this.options.logger.warn(
+            { error: error instanceof Error ? error.message : String(error) },
+            'Collaboration local Group cleanup retry failed',
+          ),
+        );
       scheduler.start();
       this.options.logger.info(
         {

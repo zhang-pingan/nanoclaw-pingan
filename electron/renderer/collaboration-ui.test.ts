@@ -16,6 +16,9 @@ import {
   collaborationAuditEventTimeline,
   collaborationCanApproveMembers,
   collaborationCanAnswerWorkItemAssignment,
+  collaborationCanDissolve,
+  collaborationCanLeave,
+  collaborationCanRemoveLocal,
   collaborationCanRecoverTurn,
   collaborationCanDecideRecovery,
   collaborationCanCreateTurn,
@@ -45,12 +48,14 @@ import {
   buildCollaborationAnalysisRunRequest,
   buildCollaborationExternalResultRequest,
   buildCollaborationFindingDecisionRequest,
+  buildCollaborationLifecycleRequest,
   buildCollaborationActionPreviewRequest,
   buildCollaborationActionApplyRequest,
   collaborationFindingActionDraft,
   collaborationFindingActionTypes,
   collaborationTurnCompletionDraft,
   collaborationAnalysisRunAccess,
+  collaborationActiveMemberOptions,
   parseCollaborationExternalResult,
   collaborationVerifiedFileTree,
   collaborationWorkItemColumns,
@@ -127,6 +132,17 @@ describe('Collaboration project-space v3 UI helpers', () => {
       }),
     ).toBe(false);
     expect(
+      collaborationCanMutate({
+        subscriptionMode: 'member',
+        lifecycle: 'dissolved',
+        localPrincipalId: 'principal_alice',
+        localClientId: 'client_a',
+        projection: {
+          members: { principal_alice: { status: 'active' } },
+        },
+      }),
+    ).toBe(false);
+    expect(
       collaborationLocalMembershipStatus({
         subscriptionMode: 'member',
         localPrincipalId: 'principal_alice',
@@ -135,6 +151,97 @@ describe('Collaboration project-space v3 UI helpers', () => {
         },
       }),
     ).toBe('requested');
+  });
+
+  it('separates Group dissolution, member exit, and local removal access', () => {
+    const owner = {
+      groupId: 'group_test',
+      subscriptionMode: 'member',
+      lifecycle: 'archived',
+      ownerPrincipalId: 'principal_owner',
+      localPrincipalId: 'principal_owner',
+      localClientId: 'client_owner',
+      projection: {
+        members: { principal_owner: { status: 'active' } },
+      },
+    };
+    expect(collaborationCanDissolve(owner)).toBe(true);
+    expect(collaborationCanLeave(owner)).toBe(false);
+    expect(collaborationCanRemoveLocal(owner)).toBe(true);
+
+    const member = {
+      ...owner,
+      localPrincipalId: 'principal_member',
+      projection: {
+        members: { principal_member: { status: 'active' } },
+      },
+    };
+    expect(collaborationCanDissolve(member)).toBe(false);
+    expect(collaborationCanLeave(member)).toBe(true);
+    expect(
+      collaborationCanLeave({ ...member, subscriptionMode: 'observer' }),
+    ).toBe(false);
+  });
+
+  it('builds distinct confirmed lifecycle requests with Aggregate revisions', () => {
+    const group = {
+      groupId: 'group:release/one',
+      localPrincipalId: 'principal_member',
+      projection: {
+        aggregateHeads: {
+          'group:group:release/one': { revision: 5 },
+          'membership:principal_member': { revision: 3 },
+        },
+      },
+    };
+    expect(
+      buildCollaborationLifecycleRequest({
+        operation: 'dissolve',
+        group,
+        confirmation: 'group:release/one',
+      }),
+    ).toEqual({
+      endpoint: '/groups/group%3Arelease%2Fone/dissolve',
+      method: 'POST',
+      body: {
+        confirmation: 'group:release/one',
+        expectedRevision: 5,
+        reason: '群主确认解散群组',
+      },
+    });
+    expect(
+      buildCollaborationLifecycleRequest({
+        operation: 'leave',
+        group,
+        confirmation: 'group:release/one',
+      }),
+    ).toEqual({
+      endpoint: '/groups/group%3Arelease%2Fone/leave',
+      method: 'POST',
+      body: {
+        confirmation: 'group:release/one',
+        expectedRevision: 3,
+        reason: '成员确认退出群组',
+      },
+    });
+    expect(
+      buildCollaborationLifecycleRequest({
+        operation: 'remove-local',
+        group,
+        confirmation: 'group:release/one',
+      }),
+    ).toEqual({
+      endpoint: '/subscriptions/group%3Arelease%2Fone',
+      method: 'DELETE',
+      body: { confirmation: 'group:release/one' },
+    });
+    expect(() =>
+      buildCollaborationLifecycleRequest({
+        operation: 'dissolve',
+        group,
+        confirmation: 'group_other',
+      }),
+    ).toThrow(/群组 ID 不匹配/u);
   });
 
   it('uses human Principal and Artifact labels for operational views', () => {
@@ -754,20 +861,57 @@ describe('Collaboration project-space v3 UI helpers', () => {
       buildCollaborationRecoverTurnRequest({
         expectedRevision: 7,
         previousAttempt: 2,
+        assigneePrincipalId: 'principal_alice',
         reason: 'Executor process was replaced',
       }),
     ).toEqual({
       expectedRevision: 7,
       previousAttempt: 2,
+      assigneePrincipalId: 'principal_alice',
       reason: 'Executor process was replaced',
     });
     expect(() =>
       buildCollaborationRecoverTurnRequest({
         expectedRevision: 7,
         previousAttempt: 2,
+        assigneePrincipalId: 'principal_alice',
         reason: ' ',
       }),
     ).toThrow(/恢复原因不能为空/u);
+    expect(() =>
+      buildCollaborationRecoverTurnRequest({
+        expectedRevision: 7,
+        previousAttempt: 2,
+        assigneePrincipalId: ' ',
+        reason: 'Reassign after member exit',
+      }),
+    ).toThrow(/选择新的负责人/u);
+    expect(
+      collaborationActiveMemberOptions({
+        projection: {
+          members: {
+            principal_bob: {
+              principal_id: 'principal_bob',
+              display_name: 'Bob',
+              status: 'left',
+            },
+            principal_carol: {
+              principal_id: 'principal_carol',
+              display_name: 'Carol',
+              status: 'active',
+            },
+            principal_alice: {
+              principal_id: 'principal_alice',
+              display_name: 'Alice',
+              status: 'active',
+            },
+          },
+        },
+      }),
+    ).toEqual([
+      ['principal_alice', 'Alice · principal_alice'],
+      ['principal_carol', 'Carol · principal_carol'],
+    ]);
     expect(
       collaborationWorkflowInstanceCommand({ lifecycle: 'running' }),
     ).toEqual({ command: 'pause', label: '暂停' });
@@ -820,6 +964,14 @@ describe('Collaboration project-space v3 UI helpers', () => {
       groupId: 'group_1',
       localPrincipalId: 'principal_alice',
       localClientId: 'client_alice',
+      projection: {
+        executors: {
+          principal_alice: {
+            executor_codex: { status: 'active' },
+            executor_revoked: { status: 'revoked' },
+          },
+        },
+      },
     };
     const turn = {
       workflow_instance_id: 'instance_1',
@@ -850,6 +1002,28 @@ describe('Collaboration project-space v3 UI helpers', () => {
         actionHash: 'sha256:action',
         promptHash: 'sha256:prompt',
         executorId: 'executor_wrong_client',
+        enabled: true,
+      },
+      {
+        groupId: 'group_1',
+        instanceId: 'instance_1',
+        stateId: 'build',
+        principalId: 'principal_alice',
+        clientId: 'client_alice',
+        actionHash: 'sha256:action',
+        promptHash: 'sha256:prompt',
+        executorId: 'executor_revoked',
+        enabled: true,
+      },
+      {
+        groupId: 'group_1',
+        instanceId: 'instance_1',
+        stateId: 'build',
+        principalId: 'principal_alice',
+        clientId: 'client_alice',
+        actionHash: 'sha256:action',
+        promptHash: 'sha256:prompt',
+        executorId: 'executor_unknown',
         enabled: true,
       },
     ];
