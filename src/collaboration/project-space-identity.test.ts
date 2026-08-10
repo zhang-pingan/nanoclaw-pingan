@@ -75,6 +75,20 @@ describe('Collaboration project-space identity', () => {
     expect(service.resolveGitSshKeyPath('~/explicit-git-key')).toBe(
       path.join(os.homedir(), 'explicit-git-key'),
     );
+    expect(service.resolveGitSshKeyCandidates()).toEqual([
+      path.join(os.homedir(), 'default-git-key'),
+      path.join(os.homedir(), '.ssh', 'id_rsa'),
+    ]);
+    expect(service.resolveGitSshKeyCandidates('~/explicit-git-key')).toEqual([
+      path.join(os.homedir(), 'explicit-git-key'),
+    ]);
+    const systemDefault = new CollaborationProjectSpaceIdentityService(
+      path.join(root, 'system-default-store'),
+      '~/.ssh/id_rsa',
+    );
+    expect(systemDefault.resolveGitSshKeyCandidates()).toEqual([
+      path.join(os.homedir(), '.ssh', 'id_rsa'),
+    ]);
   });
 
   it('exports and imports only an explicit offline Group recovery Credential', async () => {

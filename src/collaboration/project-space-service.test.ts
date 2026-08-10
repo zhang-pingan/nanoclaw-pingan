@@ -235,6 +235,9 @@ function service(
           : ('event_signing' as const),
     }),
     resolveGitSshKeyPath: (value?: string) => value || '/tmp/git-transport',
+    resolveGitSshKeyCandidates: (value?: string) => [
+      value || '/tmp/git-transport',
+    ],
   } as unknown as CollaborationProjectSpaceIdentityService;
   return {
     store,

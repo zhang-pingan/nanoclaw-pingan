@@ -123,6 +123,9 @@ function identityService(
     }),
     resolveGitSshKeyPath: (configured?: string) =>
       configured || identity.privateKeyPath,
+    resolveGitSshKeyCandidates: (configured?: string) => [
+      configured || identity.privateKeyPath,
+    ],
   } as unknown as CollaborationProjectSpaceIdentityService;
 }
 
@@ -214,6 +217,120 @@ function genesis(identity: CollaborationEventSigningIdentity) {
 }
 
 describe('Collaboration project space v3 Git protocol', () => {
+  it('falls back from the configured default SSH key and persists the working key', async () => {
+    const test = fixture();
+    const primaryKey = path.join(test.root, 'configured-default-key');
+    const fallbackKey = test.identity.privateKeyPath;
+    const logPath = path.join(test.root, 'git-fallback.jsonl');
+    const wrapperPath = path.join(test.root, 'git-fallback.cjs');
+    const realGit = run(test.root, ['which', 'git']);
+    writeFileSync(
+      wrapperPath,
+      `#!/usr/bin/env node
+const { appendFileSync } = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const args = process.argv.slice(2);
+const ssh = process.env.GIT_SSH_COMMAND || '';
+appendFileSync(${JSON.stringify(logPath)}, JSON.stringify({ args, ssh }) + '\\n');
+if (args[0] === 'ls-remote' && ssh.includes(${JSON.stringify(primaryKey)})) {
+  process.stderr.write('git@example.test: Permission denied (publickey).\\n');
+  process.exit(128);
+}
+const result = spawnSync(${JSON.stringify(realGit)}, args, {
+  env: process.env,
+  stdio: 'inherit',
+});
+if (result.error) throw result.error;
+process.exit(result.status === null ? 1 : result.status);
+`,
+      { mode: 0o700 },
+    );
+    chmodSync(wrapperPath, 0o700);
+    const store = new CollaborationProjectSpaceStore(
+      path.join(test.root, 'fallback.db'),
+    );
+    const baseIdentities = identityService(test.identity);
+    const identities = {
+      createPrincipalIdentity: () => baseIdentities.createPrincipalIdentity(),
+      createCredentialIdentity: (
+        input: Parameters<typeof baseIdentities.createCredentialIdentity>[0],
+      ) => baseIdentities.createCredentialIdentity(input),
+      resolveGitSshKeyPath: () => primaryKey,
+      resolveGitSshKeyCandidates: () => [primaryKey, fallbackKey],
+    } as unknown as CollaborationProjectSpaceIdentityService;
+    const service = new CollaborationProjectSpaceService(
+      store,
+      new CollaborationProjectSpaceGitTransport(wrapperPath),
+      path.join(test.root, 'fallback-repositories'),
+      identities,
+      () => Date.parse(NOW),
+    );
+    try {
+      const created = await service.createGroup({
+        remoteUrl: test.remote,
+        name: 'Fallback project',
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'open',
+        observerAccess: 'allowed',
+        groupId: 'group_fallback',
+      });
+      expect(created.gitSshKeyPath).toBe(fallbackKey);
+      const attempts = readFileSync(logPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { args: string[]; ssh: string })
+        .filter((entry) => entry.args[0] === 'ls-remote');
+      expect(attempts).toHaveLength(2);
+      expect(attempts[0]!.ssh).toContain(primaryKey);
+      expect(attempts[1]!.ssh).toContain(fallbackKey);
+    } finally {
+      store.close();
+    }
+  });
+
+  it('does not try another SSH identity for non-authentication failures', async () => {
+    const test = fixture();
+    const primaryKey = path.join(test.root, 'configured-default-key');
+    const fallbackKey = test.identity.privateKeyPath;
+    const logPath = path.join(test.root, 'git-no-fallback.jsonl');
+    const wrapperPath = path.join(test.root, 'git-no-fallback.cjs');
+    writeFileSync(
+      wrapperPath,
+      `#!/usr/bin/env node
+const { appendFileSync } = require('node:fs');
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(logPath)}, JSON.stringify({
+  args,
+  ssh: process.env.GIT_SSH_COMMAND || '',
+}) + '\\n');
+process.stderr.write('fatal: repository does not exist\\n');
+process.exit(128);
+`,
+      { mode: 0o700 },
+    );
+    chmodSync(wrapperPath, 0o700);
+    const transport = new CollaborationProjectSpaceGitTransport(wrapperPath);
+    const initial = genesis(test.identity);
+
+    await expect(
+      transport.create({
+        remoteUrl: test.remote,
+        repositoryPath: test.cache,
+        gitSshKeyPaths: [primaryKey, fallbackKey],
+        identity: test.identity,
+        genesisEvent: initial.event,
+        genesisProjection: initial.projection,
+      }),
+    ).rejects.toThrow(/repository does not exist/u);
+    const attempts = readFileSync(logPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { ssh: string });
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]!.ssh).toContain(primaryKey);
+  });
+
   it('materializes and replays unbound Invite issuance and consumption', async () => {
     const test = fixture();
     const bobKey = path.join(test.root, 'bob-signing-key');

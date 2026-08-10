@@ -183,6 +183,9 @@ function groupService(root: string, transport: MemoryTransport) {
           : ('event_signing' as const),
     }),
     resolveGitSshKeyPath: (value?: string) => value ?? '/tmp/git-analysis-key',
+    resolveGitSshKeyCandidates: (value?: string) => [
+      value ?? '/tmp/git-analysis-key',
+    ],
   } as unknown as CollaborationProjectSpaceIdentityService;
   return {
     store,

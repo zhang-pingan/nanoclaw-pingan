@@ -76,6 +76,7 @@ export interface ValidatedProjectSpaceHistory {
   readonly head: string;
   readonly projection: CollaborationProjectionV3;
   readonly eventRecords: readonly CollaborationProjectSpaceEventRecord[];
+  readonly transportGitSshKeyPath?: string;
 }
 
 export interface CollaborationProjectSpaceTransport {
@@ -84,11 +85,13 @@ export interface CollaborationProjectSpaceTransport {
     readonly repositoryPath: string;
     readonly previousHead?: string | null;
     readonly gitSshKeyPath?: string;
+    readonly gitSshKeyPaths?: readonly string[];
   }): Promise<ValidatedProjectSpaceHistory>;
   create(input: {
     readonly remoteUrl: string;
     readonly repositoryPath: string;
     readonly gitSshKeyPath?: string;
+    readonly gitSshKeyPaths?: readonly string[];
     readonly identity: CollaborationEventSigningIdentity;
     readonly genesisEvent: CollaborationEventV3;
     readonly genesisProjection: CollaborationProjectionV3;
@@ -98,6 +101,7 @@ export interface CollaborationProjectSpaceTransport {
     readonly repositoryPath: string;
     readonly previousHead: string | null;
     readonly gitSshKeyPath?: string;
+    readonly gitSshKeyPaths?: readonly string[];
     readonly identity: CollaborationEventSigningIdentity;
     readonly buildEvent: (history: ValidatedProjectSpaceHistory) =>
       | CollaborationEventV3
@@ -235,7 +239,7 @@ export class CollaborationProjectSpaceService {
     const history = await this.transport.inspect({
       remoteUrl,
       repositoryPath,
-      gitSshKeyPath: this.identities.resolveGitSshKeyPath(),
+      gitSshKeyPaths: this.identities.resolveGitSshKeyCandidates(),
     });
     return this.inspectResult(history, repositoryPath);
   }
@@ -249,7 +253,7 @@ export class CollaborationProjectSpaceService {
       clientId: identity.clientId,
       purpose: 'group_recovery',
     });
-    const gitSshKeyPath = this.identities.resolveGitSshKeyPath(
+    const gitSshKeyPaths = this.identities.resolveGitSshKeyCandidates(
       input.gitSshKeyPath,
     );
     const groupId = input.groupId ?? newId('group');
@@ -326,7 +330,7 @@ export class CollaborationProjectSpaceService {
     const history = await this.transport.create({
       remoteUrl: input.remoteUrl,
       repositoryPath,
-      gitSshKeyPath,
+      gitSshKeyPaths,
       identity,
       genesisEvent: event,
       genesisProjection: projection,
@@ -338,7 +342,7 @@ export class CollaborationProjectSpaceService {
       mode: 'member',
       identity,
       recoveryIdentity,
-      gitSshKeyPath,
+      gitSshKeyPath: history.transportGitSshKeyPath ?? gitSshKeyPaths[0]!,
       pollIntervalMs: input.pollIntervalMs,
     });
     return this.store.getGroup(groupId)!;
@@ -354,10 +358,13 @@ export class CollaborationProjectSpaceService {
       this.repositoryRoot,
       input.remoteUrl,
     );
+    const gitSshKeyPaths = this.identities.resolveGitSshKeyCandidates(
+      input.gitSshKeyPath,
+    );
     const history = await this.transport.inspect({
       remoteUrl: input.remoteUrl,
       repositoryPath,
-      gitSshKeyPath: this.identities.resolveGitSshKeyPath(input.gitSshKeyPath),
+      gitSshKeyPaths,
     });
     if (
       history.projection.group.visibility_policy.observer_access !== 'allowed'
@@ -370,7 +377,7 @@ export class CollaborationProjectSpaceService {
       remoteUrl: input.remoteUrl,
       repositoryPath,
       mode: 'observer',
-      gitSshKeyPath: this.identities.resolveGitSshKeyPath(input.gitSshKeyPath),
+      gitSshKeyPath: history.transportGitSshKeyPath ?? gitSshKeyPaths[0]!,
       pollIntervalMs: input.pollIntervalMs,
       notificationsEnabled: input.notificationsEnabled,
     });
@@ -387,7 +394,7 @@ export class CollaborationProjectSpaceService {
     const existingSubscription = this.store
       .listGroups()
       .find((group) => group.remoteUrl === input.remoteUrl);
-    const gitSshKeyPath = this.identities.resolveGitSshKeyPath(
+    const gitSshKeyPaths = this.identities.resolveGitSshKeyCandidates(
       input.gitSshKeyPath ?? existingSubscription?.gitSshKeyPath,
     );
     const [identity, inspected] = await Promise.all([
@@ -395,9 +402,11 @@ export class CollaborationProjectSpaceService {
       this.transport.inspect({
         remoteUrl: input.remoteUrl,
         repositoryPath,
-        gitSshKeyPath,
+        gitSshKeyPaths,
       }),
     ]);
+    const gitSshKeyPath =
+      inspected.transportGitSshKeyPath ?? gitSshKeyPaths[0]!;
     const joinPolicy = inspected.projection.group.membership_policy.join;
     const open = joinPolicy === 'open';
     if (joinPolicy === 'invite_only') {

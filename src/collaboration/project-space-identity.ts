@@ -151,11 +151,20 @@ export class CollaborationProjectSpaceIdentityService {
   }
 
   resolveGitSshKeyPath(configured?: string | null): string {
-    return expandLocalPath(
-      configured?.trim() ||
-        process.env.SSH_KEY_PATH?.trim() ||
-        this.defaultGitSshKeyPath,
-    );
+    return this.resolveGitSshKeyCandidates(configured)[0]!;
+  }
+
+  resolveGitSshKeyCandidates(configured?: string | null): readonly string[] {
+    const explicit = configured?.trim();
+    if (explicit) return [expandLocalPath(explicit)];
+    return [
+      ...new Set([
+        expandLocalPath(
+          process.env.SSH_KEY_PATH?.trim() || this.defaultGitSshKeyPath,
+        ),
+        path.join(os.homedir(), '.ssh', 'id_rsa'),
+      ]),
+    ];
   }
 
   async createPrincipalIdentity(): Promise<CollaborationEventSigningIdentity> {

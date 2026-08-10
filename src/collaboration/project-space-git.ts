@@ -54,6 +54,10 @@ interface CommandResult {
   readonly exitCode: number;
 }
 
+interface GitSshCommandResult extends CommandResult {
+  readonly gitSshKeyPath: string;
+}
+
 export interface CollaborationProjectSpaceMaterializedFile {
   readonly path: string;
   readonly contents: string | Buffer | null;
@@ -103,6 +107,48 @@ async function execute(
       `Git protocol operation failed: ${binary} ${args.join(' ')}: ${value.stderr ?? value.message}`,
     );
   }
+}
+
+function normalizedGitSshKeyCandidates(input: {
+  readonly gitSshKeyPath?: string;
+  readonly gitSshKeyPaths?: readonly string[];
+}): readonly string[] {
+  const configured = input.gitSshKeyPaths?.length
+    ? input.gitSshKeyPaths
+    : [input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa')];
+  return [...new Set(configured.map((value) => path.resolve(value)))];
+}
+
+function isPublicKeyAuthenticationFailure(result: CommandResult): boolean {
+  return /Permission denied \(publickey|no supported authentication methods available/iu.test(
+    `${result.stderr}\n${result.stdout}`,
+  );
+}
+
+async function executeWithGitSshCandidates(
+  cwd: string,
+  binary: string,
+  args: readonly string[],
+  candidates: readonly string[],
+): Promise<GitSshCommandResult> {
+  if (!candidates.length) throw new Error('Git SSH key candidates are empty');
+  for (const [index, gitSshKeyPath] of candidates.entries()) {
+    const result = await execute(cwd, binary, args, true, gitSshKeyPath);
+    if (result.exitCode === 0) return { ...result, gitSshKeyPath };
+    const hasFallback = index + 1 < candidates.length;
+    if (!hasFallback || !isPublicKeyAuthenticationFailure(result)) {
+      const attempted = candidates.slice(0, index + 1);
+      return {
+        ...result,
+        stderr:
+          attempted.length > 1
+            ? `${result.stderr.trim()}\nSSH keys tried: ${attempted.join(', ')}`
+            : result.stderr,
+        gitSshKeyPath,
+      };
+    }
+  }
+  throw new Error('Git SSH key fallback exhausted unexpectedly');
 }
 
 async function git(
@@ -1404,13 +1450,15 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     readonly repositoryPath: string;
     readonly previousHead?: string | null;
     readonly gitSshKeyPath?: string;
+    readonly gitSshKeyPaths?: readonly string[];
   }): Promise<ValidatedProjectSpaceHistory> {
-    await this.ensureBareCache(
+    const candidates = normalizedGitSshKeyCandidates(input);
+    const clonedWith = await this.ensureBareCache(
       input.remoteUrl,
       input.repositoryPath,
-      input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
+      candidates,
     );
-    const fetch = await execute(
+    const fetch = await executeWithGitSshCandidates(
       input.repositoryPath,
       this.gitBinary,
       [
@@ -1419,8 +1467,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         'origin',
         `+${COLLABORATION_CONTROL_BRANCH}:${CONTROL_REMOTE_REF}`,
       ],
-      true,
-      input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
+      clonedWith ? [clonedWith] : candidates,
     );
     if (fetch.exitCode !== 0)
       throw new Error(`Collaboration fetch failed: ${fetch.stderr.trim()}`);
@@ -1430,27 +1477,32 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         CONTROL_REMOTE_REF,
       ])
     ).stdout.trim();
-    return validateCollaborationProjectSpaceHistory({
+    const history = await validateCollaborationProjectSpaceHistory({
       repositoryPath: input.repositoryPath,
       head,
       previousHead: input.previousHead,
     });
+    return {
+      ...history,
+      transportGitSshKeyPath: fetch.gitSshKeyPath,
+    };
   }
 
   async create(input: {
     readonly remoteUrl: string;
     readonly repositoryPath: string;
     readonly gitSshKeyPath?: string;
+    readonly gitSshKeyPaths?: readonly string[];
     readonly identity: CollaborationEventSigningIdentity;
     readonly genesisEvent: CollaborationEventV3;
     readonly genesisProjection: CollaborationProjectionV3;
   }): Promise<ValidatedProjectSpaceHistory> {
-    const remoteHead = await execute(
+    const candidates = normalizedGitSshKeyCandidates(input);
+    const remoteHead = await executeWithGitSshCandidates(
       process.cwd(),
       this.gitBinary,
       ['ls-remote', '--heads', input.remoteUrl, COLLABORATION_CONTROL_BRANCH],
-      true,
-      input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
+      candidates,
     );
     if (remoteHead.exitCode !== 0)
       throw new Error(
@@ -1486,7 +1538,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         this.gitBinary,
         ['push', 'origin', `HEAD:${COLLABORATION_CONTROL_BRANCH}`],
         true,
-        input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
+        remoteHead.gitSshKeyPath,
       );
       if (push.exitCode !== 0)
         throw new CollaborationProjectSpaceGitConflictError(
@@ -1495,17 +1547,14 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     } finally {
       rmSync(checkoutPath, { recursive: true, force: true });
     }
-    await this.cloneBare(
-      input.remoteUrl,
-      input.repositoryPath,
-      input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
-    );
+    await this.cloneBare(input.remoteUrl, input.repositoryPath, [
+      remoteHead.gitSshKeyPath,
+    ]);
     return this.inspect({
       remoteUrl: input.remoteUrl,
       repositoryPath: input.repositoryPath,
       previousHead: null,
-      gitSshKeyPath:
-        input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa'),
+      gitSshKeyPaths: [remoteHead.gitSshKeyPath],
     });
   }
 
@@ -1514,6 +1563,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     readonly repositoryPath: string;
     readonly previousHead: string | null;
     readonly gitSshKeyPath?: string;
+    readonly gitSshKeyPaths?: readonly string[];
     readonly identity: CollaborationEventSigningIdentity;
     readonly buildEvent: (history: ValidatedProjectSpaceHistory) =>
       | CollaborationEventV3
@@ -1522,9 +1572,12 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
           readonly materializedFiles: readonly CollaborationProjectSpaceMaterializedFile[];
         };
   }): Promise<ValidatedProjectSpaceHistory> {
-    const gitSshKeyPath =
-      input.gitSshKeyPath ?? path.join(os.homedir(), '.ssh', 'id_rsa');
-    const history = await this.inspect({ ...input, gitSshKeyPath });
+    const candidates = normalizedGitSshKeyCandidates(input);
+    const history = await this.inspect({
+      ...input,
+      gitSshKeyPaths: candidates,
+    });
+    const gitSshKeyPath = history.transportGitSshKeyPath ?? candidates[0]!;
     const built = input.buildEvent(history);
     const event = 'event' in built ? built.event : built;
     const extra = 'event' in built ? built.materializedFiles : [];
@@ -1655,30 +1708,29 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
   private async cloneBare(
     remoteUrl: string,
     repositoryPath: string,
-    gitSshKeyPath: string,
-  ): Promise<void> {
+    gitSshKeyPaths: readonly string[],
+  ): Promise<string> {
     if (existsSync(repositoryPath))
       throw new Error(`Collaboration cache already exists: ${repositoryPath}`);
     mkdirSync(path.dirname(repositoryPath), { recursive: true });
-    const result = await execute(
+    const result = await executeWithGitSshCandidates(
       path.dirname(repositoryPath),
       this.gitBinary,
       ['clone', '-q', '--bare', remoteUrl, repositoryPath],
-      true,
-      gitSshKeyPath,
+      gitSshKeyPaths,
     );
     if (result.exitCode !== 0)
       throw new Error(`Collaboration clone failed: ${result.stderr.trim()}`);
+    return result.gitSshKeyPath;
   }
 
   private async ensureBareCache(
     remoteUrl: string,
     repositoryPath: string,
-    gitSshKeyPath: string,
-  ): Promise<void> {
+    gitSshKeyPaths: readonly string[],
+  ): Promise<string | null> {
     if (!existsSync(repositoryPath)) {
-      await this.cloneBare(remoteUrl, repositoryPath, gitSshKeyPath);
-      return;
+      return this.cloneBare(remoteUrl, repositoryPath, gitSshKeyPaths);
     }
     const bare = await execute(
       repositoryPath,
@@ -1697,6 +1749,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     ).stdout.trim();
     if (configured !== remoteUrl)
       throw new Error('Collaboration cache remote URL does not match binding');
+    return null;
   }
 }
 
