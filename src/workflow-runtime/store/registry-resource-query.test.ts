@@ -169,7 +169,7 @@ describe('G3.5 Registry exact resource query preflight', () => {
             resource_id: fixtureInput.ref.id,
             resource_version: fixtureInput.ref.version,
             owner_core_ref: null,
-            owner_feature_id: 'fixture.feature',
+            owner_pack_id: 'fixture.pack',
             canonical_value_id: `registry-value:${resourceId}`,
             content_hash: fixtureInput.content_hash,
             publication_state: 'staged',
@@ -197,7 +197,7 @@ describe('G3.5 Registry exact resource query preflight', () => {
       );
     });
     const ownerDrift = structuredClone(input);
-    ownerDrift.owner = { kind: 'feature', feature_id: 'other.feature' };
+    ownerDrift.owner = { kind: 'pack', pack_id: 'other.pack' };
     expect(queryExactRegistryResource(store, ownerDrift)).toMatchObject({
       code: 'resource_value_mismatch',
     });
@@ -208,14 +208,14 @@ describe('G3.5 Registry exact resource query preflight', () => {
     const schemaDrift = structuredClone(input);
     schemaDrift.schema_hash =
       'sha256:2222222222222222222222222222222222222222222222222222222222222222';
-    schemaDrift.owner = { kind: 'feature', feature_id: 'other.feature' };
+    schemaDrift.owner = { kind: 'pack', pack_id: 'other.pack' };
     schemaDrift.publication_state = 'published';
     expect(queryExactRegistryResource(store, schemaDrift)).toMatchObject({
       code: 'resource_schema_binding_mismatch',
     });
 
     const ownerDrift = structuredClone(input);
-    ownerDrift.owner = { kind: 'feature', feature_id: 'other.feature' };
+    ownerDrift.owner = { kind: 'pack', pack_id: 'other.pack' };
     ownerDrift.publication_state = 'published';
     expect(queryExactRegistryResource(store, ownerDrift)).toMatchObject({
       code: 'resource_owner_mismatch',

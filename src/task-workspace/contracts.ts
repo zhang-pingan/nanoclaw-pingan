@@ -18,7 +18,8 @@ export type TaskRunSelection =
       readonly kind: 'published_recipe';
       readonly recipe_ref: VersionedRef;
       readonly recipe_hash: Sha256Hash;
-      readonly recipe_kind: 'core' | 'feature' | 'personal';
+      readonly distribution_kind: 'pack' | 'personal';
+      readonly distribution_ref: VersionedRef;
     };
 
 export interface TaskSessionV1 {

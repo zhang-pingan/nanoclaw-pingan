@@ -19,7 +19,7 @@ export function checkReleaseRuntimeCompatibility(
 ): ReleaseRuntimeCompatibilityResult {
   const runtimeResources = resources.filter(
     ({ resource_type }) =>
-      resource_type === 'feature_execution_artifact' ||
+      resource_type === 'pack_execution_artifact' ||
       resource_type === 'executor_implementation',
   );
 

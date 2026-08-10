@@ -103,7 +103,7 @@ export const G4_ISOLATION_RECEIPT_SCHEMA: JsonObject = {
     'database_inode',
     'database_schema_version',
     'production_ingress_reachable',
-    'feature_ingress_reachable',
+    'pack_ingress_reachable',
     'api_ingress_reachable',
     'automation_ingress_reachable',
     'active_registry_rows_observed',
@@ -134,7 +134,7 @@ export const G4_ISOLATION_RECEIPT_SCHEMA: JsonObject = {
       const: CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
     },
     production_ingress_reachable: { const: false },
-    feature_ingress_reachable: { const: false },
+    pack_ingress_reachable: { const: false },
     api_ingress_reachable: { const: false },
     automation_ingress_reachable: { const: false },
     active_registry_rows_observed: { const: 0 },
@@ -254,7 +254,7 @@ function buildContractSet(): G4TestBootstrapContractSet {
     },
     isolation_boundary: {
       hash: isolationBoundary.hash,
-      feature_ingress: 'absent',
+      pack_ingress: 'absent',
       api_ingress: 'absent',
       automation_ingress: 'absent',
       production_data_root_access: 'forbidden',
@@ -342,7 +342,7 @@ export function validateG4IsolationReceipt(value: unknown): G4IsolationReceipt {
     throw new Error('G4 isolation receipt checksum mismatch');
   for (const field of [
     'production_ingress_reachable',
-    'feature_ingress_reachable',
+    'pack_ingress_reachable',
     'api_ingress_reachable',
     'automation_ingress_reachable',
     'production_runtime_root_touched',

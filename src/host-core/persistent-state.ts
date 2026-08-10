@@ -8,7 +8,6 @@ import type BetterSqlite3 from 'better-sqlite3';
 import {
   CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
   MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
-  SCHEMA_3_REQUIRED_EMPTY_RELATIONS,
   assertCurrentWorkflowRuntimeStructure,
   inspectWorkflowRuntimeSchema,
 } from '../workflow-runtime/gateway/host-core.js';
@@ -31,7 +30,6 @@ export interface WorkflowRuntimeStateSchema {
 export type PersistentStateDecisionKind =
   | 'NO_STATE'
   | 'SAME_SCHEMA'
-  | 'MIGRATION_SUPPORTED'
   | 'RESET_REQUIRED'
   | 'UNKNOWN_BLOCKED';
 
@@ -236,7 +234,6 @@ function assertTarget(input: HostCoreTargetSchema): HostCoreTargetSchema {
 
 function inspectDatabase(databasePath: string): {
   schema: WorkflowRuntimeStateSchema;
-  schema3MigrationSafe: boolean;
 } {
   const Database = require('better-sqlite3') as typeof BetterSqlite3;
   const database = new Database(databasePath, {
@@ -248,25 +245,8 @@ function inspectDatabase(databasePath: string): {
     if (inspection.schemaVersion < 1)
       throw new Error('workflow_runtime_schema_version_invalid');
     if (inspection.current) assertCurrentWorkflowRuntimeStructure(database);
-    let schema3MigrationSafe = true;
-    if (inspection.schemaVersion === 3) {
-      schema3MigrationSafe = SCHEMA_3_REQUIRED_EMPTY_RELATIONS.every(
-        (relation) => {
-          const escaped = relation.replaceAll('"', '""');
-          return (
-            Number(
-              database
-                .prepare(`SELECT count(*) FROM "${escaped}"`)
-                .pluck()
-                .get(),
-            ) === 0
-          );
-        },
-      );
-    }
     return {
       schema: { database_schema_version: inspection.schemaVersion },
-      schema3MigrationSafe,
     };
   } finally {
     database.close();
@@ -432,22 +412,13 @@ export function decidePersistentStateCompatibility(
       members,
       reason: 'database_schema_older_than_supported_range',
     };
-  if (version === 3 && !observed.schema3MigrationSafe)
-    return {
-      decision: 'RESET_REQUIRED',
-      observed_schema: observed.schema,
-      target_schema: target,
-      affected_paths: affectedPaths,
-      members,
-      reason: 'schema_3_migration_requires_empty_relations',
-    };
   return {
-    decision: 'MIGRATION_SUPPORTED',
+    decision: 'RESET_REQUIRED',
     observed_schema: observed.schema,
     target_schema: target,
     affected_paths: affectedPaths,
     members,
-    reason: 'supported_schema_version_migration',
+    reason: 'database_schema_requires_latest_only_reset',
   };
 }
 

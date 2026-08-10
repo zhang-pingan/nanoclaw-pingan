@@ -166,16 +166,9 @@ function launchedTemporary(key: string): {
   const store = openFresh();
   ensureTaskWorkspaceCore(store, 1_000);
   const gateway = new RuntimeWorkspaceGateway(store, Buffer.alloc(32, 7));
-  const recipe = gateway
-    .listRecipes({
-      principal_ref: 'human:local-owner',
-      now_ms: 2_000,
-    })
-    .items.find((item) => item.recipe_ref.id === 'ad_hoc_personal_task')!;
   const source = terminalChildSource();
   const compilation = gateway.prepareTemporaryDraft({
     principal_ref: 'human:local-owner',
-    selection_token: recipe.selection_token,
     source_json: source,
     now_ms: 2_001,
   });
@@ -183,7 +176,6 @@ function launchedTemporary(key: string): {
   const attachments: JsonValue = [];
   const receipt = gateway.launchTemporary({
     principal_ref: 'human:local-owner',
-    selection_token: recipe.selection_token,
     authorization_ref: `temporary-confirmation:${key}`,
     launch: {
       request_id: `launch:${key}`,
@@ -538,55 +530,44 @@ describe('RuntimeWorkspaceGateway', () => {
 
     expect(selected?.exitName).toBe('failed');
   });
-  it('refreshes a persisted exact Recipe selection after token expiry or Host secret rotation', () => {
+
+  it('hides Core System Recipes and resolves Temporary Workflow only through the Host protocol', () => {
     const store = openFresh();
     ensureTaskWorkspaceCore(store, 1_000);
     const original = new RuntimeWorkspaceGateway(store, Buffer.alloc(32, 7), {
       token_ttl_ms: 100,
     });
-    const selected = original
-      .listRecipes({
+    expect(
+      original.listRecipes({
         principal_ref: 'human:local-owner',
         now_ms: 2_000,
-      })
-      .items.find((item) => item.recipe_ref.id === 'ad_hoc_personal_task')!;
+      }).items,
+    ).toEqual([]);
+    const selected = original.resolveSystemRecipe({
+      purpose: 'temporary_workflow',
+      principal_ref: 'human:local-owner',
+      now_ms: 2_000,
+    });
+    expect(selected).toMatchObject({
+      purpose: 'temporary_workflow',
+      recipe_ref: { id: 'ad_hoc_personal_task' },
+    });
     const source = terminalChildSource();
 
-    expect(() =>
+    expect(
       original.prepareTemporaryDraft({
         principal_ref: 'human:local-owner',
-        selection_token: selected.selection_token,
         source_json: source,
         now_ms: 2_101,
-      }),
-    ).toThrow(/stale/);
+      }).source_hash,
+    ).toMatch(/^sha256:/);
 
     const restarted = new RuntimeWorkspaceGateway(store, Buffer.alloc(32, 8), {
       token_ttl_ms: 100,
     });
-    expect(() =>
-      restarted.prepareTemporaryDraft({
-        principal_ref: 'human:local-owner',
-        selection_token: selected.selection_token,
-        source_json: source,
-        now_ms: 2_050,
-      }),
-    ).toThrow(/signature is invalid/);
-
-    const refreshed = restarted.refreshRecipeSelection({
-      principal_ref: 'human:local-owner',
-      recipe_ref: selected.recipe_ref,
-      recipe_hash: selected.recipe_hash,
-      now_ms: 2_200,
-    });
-    expect(refreshed).toMatchObject({
-      recipe_ref: selected.recipe_ref,
-      recipe_hash: selected.recipe_hash,
-    });
     expect(
       restarted.prepareTemporaryDraft({
         principal_ref: 'human:local-owner',
-        selection_token: refreshed.selection_token,
         source_json: source,
         now_ms: 2_201,
       }).source_hash,
@@ -595,7 +576,7 @@ describe('RuntimeWorkspaceGateway', () => {
       restarted.refreshRecipeSelection({
         principal_ref: 'human:local-owner',
         recipe_ref: selected.recipe_ref,
-        recipe_hash: hash('stale-recipe', {}),
+        recipe_hash: selected.recipe_hash,
         now_ms: 2_202,
       }),
     ).toThrow(/no longer present in the active Catalog/);
@@ -968,7 +949,7 @@ describe('RuntimeWorkspaceGateway', () => {
           principal_ref: 'human:local-owner',
           now_ms: 4_001,
         })
-        .items.filter((item) => item.recipe_kind === 'personal'),
+        .items.filter((item) => item.distribution_kind === 'personal'),
     ).toEqual([]);
 
     const activeV1 = temporary.gateway.activatePersonalWorkflowRelease({
@@ -986,13 +967,13 @@ describe('RuntimeWorkspaceGateway', () => {
       now_ms: 4_003,
     });
     const personalV1 = ownerCatalogV1.items.find(
-      (item) => item.recipe_kind === 'personal',
+      (item) => item.distribution_kind === 'personal',
     )!;
     expect(personalV1.recipe_ref.version).toBe('1.0.0');
     expect(
       temporary.gateway
         .listRecipes({ principal_ref: 'human:other', now_ms: 4_003 })
-        .items.some((item) => item.recipe_kind === 'personal'),
+        .items.some((item) => item.distribution_kind === 'personal'),
     ).toBe(false);
 
     const launch = (selectionToken: string, key: string, nowMs: number) => {
@@ -1063,7 +1044,7 @@ describe('RuntimeWorkspaceGateway', () => {
           principal_ref: 'human:local-owner',
           now_ms: 4_006,
         })
-        .items.find((item) => item.recipe_kind === 'personal')?.recipe_ref
+        .items.find((item) => item.distribution_kind === 'personal')?.recipe_ref
         .version,
     ).toBe('1.0.0');
     temporary.gateway.activatePersonalWorkflowRelease({
@@ -1109,7 +1090,7 @@ describe('RuntimeWorkspaceGateway', () => {
         principal_ref: 'human:local-owner',
         now_ms: 5_100,
       })
-      .items.find((item) => item.recipe_kind === 'personal')!;
+      .items.find((item) => item.distribution_kind === 'personal')!;
     expect(personalV2.recipe_ref.version).toBe('2.0.0');
     const launchedV2 = launch(personalV2.selection_token, 'personal-v2', 5_101);
     advanceWorkflowToCompletion(temporary.store, launchedV2.workflowId, 5_200);
@@ -1176,7 +1157,8 @@ describe('RuntimeWorkspaceGateway', () => {
         WHERE resource.owner_core_ref = ?`,
       [`icarus.core.task-workspace@${TASK_WORKSPACE_CORE_VERSION}`],
     );
-    expect(releaseDocuments.length).toBe(members.length);
+    // Dependency closures exclude their root Recipe by contract.
+    expect(releaseDocuments.length).toBe(members.length + 1);
     for (const document of releaseDocuments) {
       expect(document.content).not.toContain('fixture.');
       expect(document.content).not.toContain('test-only:');
@@ -1222,10 +1204,14 @@ describe('RuntimeWorkspaceGateway', () => {
       principal_ref: 'human:local-owner',
       now_ms: 2_000,
     });
-    const recipe = catalog.items.find(
-      (item) => item.recipe_ref.id === 'ad_hoc_personal_task',
-    );
-    expect(recipe?.recipe_kind).toBe('core');
+    expect(catalog.items).toEqual([]);
+    expect(
+      gateway.resolveSystemRecipe({
+        purpose: 'temporary_workflow',
+        principal_ref: 'human:local-owner',
+        now_ms: 2_000,
+      }).recipe_ref.id,
+    ).toBe('ad_hoc_personal_task');
 
     const source = terminalChildSource();
     const before = store.queryOne<{ count: number }>(
@@ -1234,7 +1220,6 @@ describe('RuntimeWorkspaceGateway', () => {
     );
     const compilation = gateway.prepareTemporaryDraft({
       principal_ref: 'human:local-owner',
-      selection_token: recipe!.selection_token,
       source_json: source,
       now_ms: 2_001,
     });
@@ -1274,7 +1259,6 @@ describe('RuntimeWorkspaceGateway', () => {
     const attachmentManifest: JsonValue = [];
     const receipt = gateway.launchTemporary({
       principal_ref: 'human:local-owner',
-      selection_token: recipe!.selection_token,
       authorization_ref: 'temporary-confirmation:revision-1',
       launch: {
         request_id: 'launch-1',
@@ -1435,18 +1419,16 @@ describe('RuntimeWorkspaceGateway', () => {
       const store = openFresh();
       ensureTaskWorkspaceCore(store, 1_000);
       const gateway = new RuntimeWorkspaceGateway(store, Buffer.alloc(32, 7));
-      const recipe = gateway
-        .listRecipes({
-          principal_ref: 'human:local-owner',
-          now_ms: 2_000,
-        })
-        .items.find((item) => item.recipe_ref.id === 'ad_hoc_personal_task')!;
+      const recipe = gateway.resolveSystemRecipe({
+        purpose: 'temporary_workflow',
+        principal_ref: 'human:local-owner',
+        now_ms: 2_000,
+      });
       expect(recipe.recipe_ref.version).toBe(TASK_WORKSPACE_CORE_VERSION);
       const response = cloneJson(TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE);
       const source = (response.graph_scope as JsonObject).source as JsonObject;
       const compilation = gateway.prepareTemporaryDraft({
         principal_ref: 'human:local-owner',
-        selection_token: recipe.selection_token,
         source_json: source,
         now_ms: 2_001,
       });
@@ -1464,7 +1446,6 @@ describe('RuntimeWorkspaceGateway', () => {
       const attachmentManifest: JsonValue = [];
       const receipt = gateway.launchTemporary({
         principal_ref: 'human:local-owner',
-        selection_token: recipe.selection_token,
         authorization_ref: `temporary-confirmation:codex-e2e:${scenario.name}`,
         launch: {
           request_id: `launch:codex-e2e:${scenario.name}`,
@@ -1686,17 +1667,17 @@ describe('RuntimeWorkspaceGateway', () => {
     const store = openFresh();
     ensureTaskWorkspaceCore(store, 1_000);
     const gateway = new RuntimeWorkspaceGateway(store, Buffer.alloc(32, 7));
-    const recipe = gateway
-      .listRecipes({
+    expect(
+      gateway.resolveSystemRecipe({
+        purpose: 'temporary_workflow',
         principal_ref: 'human:local-owner',
         now_ms: 2_000,
-      })
-      .items.find((item) => item.recipe_ref.id === 'ad_hoc_personal_task')!;
+      }).recipe_ref.version,
+    ).toBe(TASK_WORKSPACE_CORE_VERSION);
     const response = cloneJson(TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE);
     const source = (response.graph_scope as JsonObject).source as JsonObject;
     const compilation = gateway.prepareTemporaryDraft({
       principal_ref: 'human:local-owner',
-      selection_token: recipe.selection_token,
       source_json: source,
       now_ms: 2_001,
     });
@@ -1706,7 +1687,6 @@ describe('RuntimeWorkspaceGateway', () => {
     const attachmentManifest: JsonValue = [];
     const receipt = gateway.launchTemporary({
       principal_ref: 'human:local-owner',
-      selection_token: recipe.selection_token,
       authorization_ref: 'temporary-confirmation:codex-user-cancel',
       launch: {
         request_id: 'launch:codex-user-cancel',

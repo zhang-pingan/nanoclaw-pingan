@@ -36,7 +36,7 @@ export interface RuntimeCommandIngressTerminalBindingFields {
   readonly actor_kind: string;
   readonly auth_session_ref: string;
   readonly entrypoint: string;
-  readonly source_feature_id: string | null;
+  readonly source_pack_id: string | null;
   readonly delegation_chain_ref: string | null;
   readonly resolution_result: string;
   readonly authorization_result: string;
@@ -72,7 +72,7 @@ interface RuntimeCommandIngressIntegrityRow
   readonly invocation_actor_kind: string | null;
   readonly invocation_auth_session_ref: string | null;
   readonly invocation_entrypoint: string | null;
-  readonly invocation_source_feature_id: string | null;
+  readonly invocation_source_pack_id: string | null;
   readonly invocation_delegation_chain_ref: string | null;
   readonly invocation_authorization_result: string | null;
   readonly invocation_execution_result: string | null;
@@ -174,7 +174,7 @@ export function calculateRuntimeCommandIngressTerminalBinding(
         actor_kind: row.actor_kind,
         auth_session_ref: row.auth_session_ref,
         entrypoint: row.entrypoint,
-        source_feature_id: row.source_feature_id,
+        source_pack_id: row.source_pack_id,
         delegation_chain_ref: row.delegation_chain_ref,
       },
       terminal: {
@@ -279,7 +279,7 @@ function assertTerminalRow(row: RuntimeCommandIngressIntegrityRow): void {
     row.invocation_actor_kind !== row.actor_kind ||
     row.invocation_auth_session_ref !== row.auth_session_ref ||
     row.invocation_entrypoint !== row.entrypoint ||
-    row.invocation_source_feature_id !== row.source_feature_id ||
+    row.invocation_source_pack_id !== row.source_pack_id ||
     row.invocation_delegation_chain_ref !== row.delegation_chain_ref ||
     row.invocation_execution_result !== row.execution_result ||
     row.invocation_requested_at_ms !== row.requested_at_ms ||
@@ -343,7 +343,7 @@ export function assertRuntimeCommandIngressIntegrity(
             invocation.actor_kind AS invocation_actor_kind,
             invocation.auth_session_ref AS invocation_auth_session_ref,
             invocation.entrypoint AS invocation_entrypoint,
-            invocation.source_feature_id AS invocation_source_feature_id,
+            invocation.source_pack_id AS invocation_source_pack_id,
             invocation.delegation_chain_ref AS invocation_delegation_chain_ref,
             invocation.authorization_result AS invocation_authorization_result,
             invocation.execution_result AS invocation_execution_result,

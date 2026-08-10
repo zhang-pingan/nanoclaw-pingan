@@ -190,7 +190,7 @@ function semanticPayload(format: string): unknown {
         authorization_intersection: [
           'actor_permission',
           'resource_scope_or_ownership',
-          'feature_ceiling',
+          'pack_ceiling',
           'published_command_policy',
           'state_guard',
           'expected_row_version',

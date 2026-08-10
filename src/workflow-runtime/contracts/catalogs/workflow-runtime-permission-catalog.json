@@ -14,64 +14,64 @@
       {
         "permission": "workflow.operate",
         "human_local_owner": true,
-        "feature_human_ceiling_allowed": true,
-        "feature_service_or_automation_grantable": false,
+        "pack_human_ceiling_allowed": true,
+        "pack_service_or_automation_grantable": false,
         "ownership_required": false
       },
       {
         "permission": "workflow.cancel.own",
         "human_local_owner": true,
-        "feature_human_ceiling_allowed": true,
-        "feature_service_or_automation_grantable": true,
+        "pack_human_ceiling_allowed": true,
+        "pack_service_or_automation_grantable": true,
         "ownership_required": true
       },
       {
         "permission": "workflow.cancel.any",
         "human_local_owner": true,
-        "feature_human_ceiling_allowed": false,
-        "feature_service_or_automation_grantable": false,
+        "pack_human_ceiling_allowed": false,
+        "pack_service_or_automation_grantable": false,
         "ownership_required": false
       },
       {
         "permission": "workflow.node.skip",
         "human_local_owner": true,
-        "feature_human_ceiling_allowed": true,
-        "feature_service_or_automation_grantable": false,
+        "pack_human_ceiling_allowed": true,
+        "pack_service_or_automation_grantable": false,
         "ownership_required": false
       },
       {
         "permission": "workflow.retry.advance",
         "human_local_owner": true,
-        "feature_human_ceiling_allowed": true,
-        "feature_service_or_automation_grantable": false,
+        "pack_human_ceiling_allowed": true,
+        "pack_service_or_automation_grantable": false,
         "ownership_required": false
       },
       {
         "permission": "workflow.effect.remediate",
         "human_local_owner": true,
-        "feature_human_ceiling_allowed": true,
-        "feature_service_or_automation_grantable": false,
+        "pack_human_ceiling_allowed": true,
+        "pack_service_or_automation_grantable": false,
         "ownership_required": false
       },
       {
         "permission": "workflow.blocker.remediate",
         "human_local_owner": true,
-        "feature_human_ceiling_allowed": true,
-        "feature_service_or_automation_grantable": false,
+        "pack_human_ceiling_allowed": true,
+        "pack_service_or_automation_grantable": false,
         "ownership_required": false
       },
       {
         "permission": "workflow.integrity.restore",
         "human_local_owner": true,
-        "feature_human_ceiling_allowed": false,
-        "feature_service_or_automation_grantable": false,
+        "pack_human_ceiling_allowed": false,
+        "pack_service_or_automation_grantable": false,
         "ownership_required": false
       },
       {
         "permission": "workflow.administrative_abandon",
         "human_local_owner": true,
-        "feature_human_ceiling_allowed": false,
-        "feature_service_or_automation_grantable": false,
+        "pack_human_ceiling_allowed": false,
+        "pack_service_or_automation_grantable": false,
         "ownership_required": false
       }
     ]

@@ -184,7 +184,7 @@ function buildArtifacts(): Array<[string, ContractArtifactEnvelope]> {
       domain_separator: G37_APPROVED_REVIEW_DOMAIN,
     },
     {
-      format: 'icarus.workflow-staged-feature-release/1',
+      format: 'icarus.workflow-staged-pack-release/1',
       domain_separator: G37_TARGET_RELEASE_DOMAIN,
     },
     {
@@ -256,7 +256,7 @@ function buildManifest(
       store_transaction: 'single_begin_immediate',
       durable_dispositions: ['applied', 'duplicate', 'conflict', 'failed'],
       registry_publication_written: true,
-      staged_feature_release_written: true,
+      staged_pack_release_written: true,
       published_retention_root_written: true,
       activation_or_active_pointer_written: false,
       production_loader_implemented: false,

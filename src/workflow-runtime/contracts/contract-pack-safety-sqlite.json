@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-contract-pack-safety-sqlite:1\n",
-  "hash": "sha256:387e3d0b6b948f43a9420ada001eb375ad8889645ed7d298633bdb8145753258",
+  "hash": "sha256:01e28019c7851ef0447130615394a350b05e7d85fc5338c7ca9ef76fbe3e61f9",
   "payload": {
     "gate": "G0.5",
     "status": "safety_retention_sqlite_contracts",
@@ -82,7 +82,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-runtime-retention-policy:1\n",
-        "hash": "sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d"
+        "hash": "sha256:1a5c45d14dc1a098d22db305b3f0fea9247607a67a399a10173b0cb37aa9d9da"
       },
       {
         "path": "safety/local_single_user_safety@1.json",
@@ -126,7 +126,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-runtime-retention-policy-schema:1\n",
-        "hash": "sha256:7a99fe14f31ed2023556c2938f68fb2a1c672efd6c27f71a91915efc52d4d832"
+        "hash": "sha256:aa849feed86a2dc0bb466977277f8b400e4c02bb75e4abe40f028c485ce6f3e4"
       },
       {
         "path": "safety/workflow-runtime-safety-profile-schema.json",

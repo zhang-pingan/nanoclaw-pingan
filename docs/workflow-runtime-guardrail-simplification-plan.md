@@ -813,7 +813,7 @@ Capacity initialization must distinguish a truly empty Store from an existing he
 
 ### 13.4 Schema Drift Without Physical Identity Hashes
 
-Removing exact SQLite Schema hashes means a manually edited database can no longer be classified by a byte-derived identity. This is acceptable for an internal local tool. Mitigate it with transactional migrations, one integer Schema version, focused checks for required current tables/columns/indexes, and startup tests for missing or newer structures. Do not recreate a canonical full-DDL hash under another name.
+Removing exact SQLite Schema hashes means a manually edited database can no longer be classified by a byte-derived identity. This is acceptable for an internal local tool. The current Store is latest-only: one integer Schema version plus focused current-table/column/index checks accepts exact v16 and blocks older, newer, or structurally invalid stores for explicit backup/reset/reinitialize. Do not recreate a canonical full-DDL hash under another name or restore an automatic migration chain.
 
 ### 13.5 SQLite Backup Consistency
 

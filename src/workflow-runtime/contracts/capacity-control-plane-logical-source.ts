@@ -453,7 +453,7 @@ const TABLE_SEEDS: readonly TableSeed[] = [
       external('actor_ref', 'capacity_admin_gateway', 'principal'),
       text('actor_kind', false, [
         'human',
-        'feature_service',
+        'pack_service',
         'automation',
         'system',
       ]),

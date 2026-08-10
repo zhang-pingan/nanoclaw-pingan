@@ -9,6 +9,7 @@ import {
   CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
   MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
 } from '../workflow-runtime/gateway/host-core.js';
+import { validateAnchoredFileHelperDirectory } from '../workflow-packs/anchored-file-creation.js';
 import { selectHostCoreSnapshot, verifyActiveHostCore } from './activation.js';
 import { parseHostCoreReleaseArguments } from './host-core-release-cli.js';
 import {
@@ -19,6 +20,7 @@ import {
 import {
   HOST_CORE_SNAPSHOT_DIRECTORY,
   HOST_CORE_SNAPSHOT_FILENAME,
+  buildHostCoreDist,
   installHostCoreSnapshotFromDist,
   listHostCoreSnapshots,
   removeHostCoreSnapshot,
@@ -130,11 +132,12 @@ function createSchemaDatabase(home: string, version: number): string {
         path.join(
           projectRoot,
           'src/workflow-runtime/store/schema/migration',
-          `workflow-runtime-schema-v${String(version)}.sql`,
+          `workflow-runtime-schema-v${String(CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION)}.sql`,
         ),
         'utf8',
       ),
     );
+    database.pragma(`user_version = ${String(version)}`);
   } finally {
     database.close();
   }
@@ -185,6 +188,25 @@ describe('Host Core snapshot CLI', () => {
 });
 
 describe('Host Core local snapshots', () => {
+  it('builds a snapshot dist with its target-specific anchored helper', () => {
+    const dist = path.join(temporaryRoot('icarus-host-core-build'), 'dist');
+    fs.mkdirSync(dist, { recursive: true });
+
+    buildHostCoreDist(projectRoot, dist);
+
+    const helper = validateAnchoredFileHelperDirectory(
+      fs.realpathSync(
+        path.join(
+          dist,
+          'workflow-packs',
+          'native',
+          `${process.platform}-${process.arch}`,
+        ),
+      ),
+    );
+    expect(fs.statSync(helper).isFile()).toBe(true);
+  }, 15_000);
+
   it('executes the complete entry module graph during startup smoke', () => {
     const missingImportHome = runtimeHome();
     expect(() =>
@@ -353,7 +375,7 @@ describe('Host Core Workflow schema compatibility', () => {
     minimum_supported_schema_version: MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
   };
 
-  it('recognizes no state and a supported older schema by integer version', () => {
+  it('recognizes no state and requires reset for an older schema', () => {
     const empty = runtimeHome();
     expect(decidePersistentStateCompatibility(empty, target).decision).toBe(
       'NO_STATE',
@@ -362,9 +384,9 @@ describe('Host Core Workflow schema compatibility', () => {
     const old = runtimeHome();
     createSchemaDatabase(old, 10);
     expect(decidePersistentStateCompatibility(old, target)).toMatchObject({
-      decision: 'MIGRATION_SUPPORTED',
+      decision: 'RESET_REQUIRED',
       observed_schema: { database_schema_version: 10 },
-      reason: 'supported_schema_version_migration',
+      reason: 'database_schema_older_than_supported_range',
     });
   });
 

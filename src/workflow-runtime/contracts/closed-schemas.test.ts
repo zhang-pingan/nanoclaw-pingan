@@ -87,7 +87,7 @@ describe('G0.3 closed schema Contract Pack', () => {
     }
   });
 
-  it('freezes the complete state, node, command, and feature resource unions', () => {
+  it('freezes the complete state, node, command, and pack resource unions', () => {
     expect(CLOSED_SCHEMA_UNIONS.workflow_state_types).toEqual([
       'delegation',
       'system',
@@ -107,7 +107,7 @@ describe('G0.3 closed schema Contract Pack', () => {
     ]);
     expect(CLOSED_SCHEMA_UNIONS.command_types).toHaveLength(13);
     expect(CLOSED_SCHEMA_UNIONS.command_reason_codes).toHaveLength(17);
-    expect(CLOSED_SCHEMA_UNIONS.feature_resource_kinds).toHaveLength(24);
+    expect(CLOSED_SCHEMA_UNIONS.pack_resource_kinds).toHaveLength(23);
     expect(CLOSED_SCHEMA_UNIONS.value_binding_sources).toEqual([
       'workflow_input',
       'context_slot',
@@ -128,7 +128,7 @@ describe('G0.3 closed schema Contract Pack', () => {
     ]);
   });
 
-  it('pins explicit regressions for removed Definition, Transition, and Feature fields', () => {
+  it('pins explicit regressions for removed Definition, Transition, and Pack fields', () => {
     const caseIds = new Set(
       CLOSED_SCHEMA_NEGATIVE_CASES.map((testCase) => testCase.case_id),
     );
@@ -137,11 +137,11 @@ describe('G0.3 closed schema Contract Pack', () => {
       'transition_rejects_notification_delivery_requirement',
       'transition_rejects_child_creation_key_template',
       'transition_rejects_both_child_delivery_policies',
-      'feature_manifest_rejects_workflowDefinitions',
-      'feature_manifest_rejects_cards',
-      'feature_manifest_rejects_artifactContracts',
-      'feature_manifest_rejects_workflowEvaluators',
-      'feature_manifest_rejects_parent_source_path',
+      'pack_manifest_rejects_workflowDefinitions',
+      'pack_manifest_rejects_cards',
+      'pack_manifest_rejects_artifactContracts',
+      'pack_manifest_rejects_workflowEvaluators',
+      'pack_manifest_rejects_parent_source_path',
       'source_rejects_loop_node',
       'compiled_plan_rejects_unknown_field',
       'compiled_plan_rejects_unknown_generated_schema_scheme',

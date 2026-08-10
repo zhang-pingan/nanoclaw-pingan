@@ -30,7 +30,7 @@
         "reason_class": "business",
         "allowed_actor_kinds": [
           "human",
-          "feature_service",
+          "pack_service",
           "automation"
         ],
         "evidence_required": false
@@ -40,7 +40,7 @@
         "reason_class": "business",
         "allowed_actor_kinds": [
           "human",
-          "feature_service",
+          "pack_service",
           "automation"
         ],
         "evidence_required": false
@@ -50,7 +50,7 @@
         "reason_class": "business",
         "allowed_actor_kinds": [
           "human",
-          "feature_service",
+          "pack_service",
           "automation"
         ],
         "evidence_required": false

@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-registry-publish-preflight-schema:1\n",
-  "hash": "sha256:923804e1a89018343acc7c9f70e03bb77c8fc6eb22b98e3eaf614d199ab8ecd0",
+  "hash": "sha256:9d569e88fa8cad91742c7880a9f61d178a207c4c4d96705be9fb585810aaddd2",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-registry-publish-preflight/1",
@@ -18,10 +18,10 @@
       "operation",
       "target_registry",
       "fixture_scope",
-      "feature_manifest_ref",
-      "feature_manifest_hash",
-      "feature_release_ref",
-      "feature_release_hash",
+      "pack_manifest_ref",
+      "pack_manifest_hash",
+      "pack_release_ref",
+      "pack_release_hash",
       "resources",
       "expected_oracle",
       "production_compiler_actual_role",
@@ -50,7 +50,7 @@
           "test_only"
         ]
       },
-      "feature_manifest_ref": {
+      "pack_manifest_ref": {
         "anyOf": [
           {
             "$ref": "#/$defs/versioned_ref"
@@ -60,7 +60,7 @@
           }
         ]
       },
-      "feature_manifest_hash": {
+      "pack_manifest_hash": {
         "anyOf": [
           {
             "type": "string",
@@ -71,7 +71,7 @@
           }
         ]
       },
-      "feature_release_ref": {
+      "pack_release_ref": {
         "anyOf": [
           {
             "$ref": "#/$defs/versioned_ref"
@@ -81,7 +81,7 @@
           }
         ]
       },
-      "feature_release_hash": {
+      "pack_release_hash": {
         "anyOf": [
           {
             "type": "string",
@@ -180,7 +180,7 @@
               "evaluator",
               "execution_policy",
               "executor_implementation",
-              "feature_execution_artifact",
+              "pack_execution_artifact",
               "graph_policy",
               "graph_template",
               "notification_contract",
@@ -192,8 +192,10 @@
               "root_finalization_policy",
               "routing_capability",
               "routing_scope",
+              "runtime_supported_limits",
               "schema",
               "scope_interface",
+              "sqlite_execution_profile",
               "tool_binding",
               "wait_contract"
             ]
@@ -374,7 +376,7 @@
               "evaluator",
               "execution_policy",
               "executor_implementation",
-              "feature_execution_artifact",
+              "pack_execution_artifact",
               "graph_policy",
               "graph_template",
               "notification_contract",
@@ -386,8 +388,10 @@
               "root_finalization_policy",
               "routing_capability",
               "routing_scope",
+              "runtime_supported_limits",
               "schema",
               "scope_interface",
+              "sqlite_execution_profile",
               "tool_binding",
               "wait_contract"
             ]

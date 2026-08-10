@@ -11,6 +11,8 @@ const ALLOWED_RUNTIME_TARGETS = new Set([
   'gateway/execution',
   'gateway/host-core',
   'gateway/workspace',
+  'gateway/workflow-packs',
+  'gateway/workflow-packs-test',
   'contracts/hash',
   'contracts/strict-json',
   'contracts/types',

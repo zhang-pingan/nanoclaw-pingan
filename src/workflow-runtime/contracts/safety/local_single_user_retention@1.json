@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-retention-policy:1\n",
-  "hash": "sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d",
+  "hash": "sha256:1a5c45d14dc1a098d22db305b3f0fea9247607a67a399a10173b0cb37aa9d9da",
   "payload": {
     "profile_id": "local_single_user_retention@1",
     "deployment_profile": "local_single_user",
@@ -36,7 +36,7 @@
         "quarantined"
       ],
       "user_artifact_not_before_workflow_closed": true,
-      "feature_policy_may_only_extend_user_artifact": true,
+      "pack_policy_may_only_extend_user_artifact": true,
       "manual_pin_may_extend_backup": true,
       "existing_objects_pin_policy_ref_and_hash": true
     }

@@ -8,7 +8,7 @@ import {
   calculateG37ApprovedReviewHash,
   calculateG37DomainRequestHash,
   calculateG37RequestHash,
-  workflowFeatureReleaseId,
+  workflowPackReleaseId,
 } from '../contracts/g3-workflow-publisher.js';
 import { g37WorkflowPublisherStoreFixtureForTest } from '../contracts/g3-workflow-publisher-fixtures.js';
 import { calculateG3PublishPreflightHash } from '../contracts/g3-registry-publish-foundation.js';
@@ -90,11 +90,11 @@ function counts(store: WorkflowRuntimeStore) {
       (SELECT COUNT(*) FROM workflow_publisher_commands) AS commands,
       (SELECT COUNT(*) FROM workflow_publisher_command_invocations) AS invocations,
       (SELECT COUNT(*) FROM workflow_publisher_events) AS events,
-      (SELECT COUNT(*) FROM workflow_feature_releases) AS releases,
-      (SELECT COUNT(*) FROM workflow_feature_release_resources) AS release_resources,
+      (SELECT COUNT(*) FROM workflow_pack_releases) AS releases,
+      (SELECT COUNT(*) FROM workflow_pack_release_resources) AS release_resources,
       (SELECT COUNT(*) FROM workflow_registry_retention_handles) AS handles,
       (SELECT COUNT(*) FROM workflow_registry_retention_handle_members) AS handle_members,
-      (SELECT COUNT(*) FROM workflow_feature_active_releases) AS active_pointers`,
+      (SELECT COUNT(*) FROM workflow_pack_active_releases) AS active_pointers`,
     [],
   )!;
 }
@@ -136,8 +136,8 @@ describe('G3.7 WorkflowPublisher staged publish', () => {
     });
     expect(
       store.queryOne<{ status: string }>(
-        `SELECT status FROM workflow_feature_releases WHERE id = ?`,
-        [workflowFeatureReleaseId(fixture.request.target_release.release_ref)],
+        `SELECT status FROM workflow_pack_releases WHERE id = ?`,
+        [workflowPackReleaseId(fixture.request.target_release.release_ref)],
       ),
     ).toEqual({ status: 'staged' });
     expect(
@@ -323,7 +323,7 @@ describe('G3.7 WorkflowPublisher staged publish', () => {
   it.each([
     'after_command_pending',
     'after_registry_publication',
-    'after_feature_release_resources',
+    'after_pack_release_resources',
     'after_retention_root',
     'before_command_finalize',
   ] satisfies WorkflowPublisherFaultPoint[])(
@@ -391,11 +391,11 @@ describe('G3.7 WorkflowPublisher staged publish', () => {
         [],
       ),
       releases: store.queryAll(
-        `SELECT * FROM workflow_feature_releases ORDER BY id`,
+        `SELECT * FROM workflow_pack_releases ORDER BY id`,
         [],
       ),
       releaseResources: store.queryAll(
-        `SELECT * FROM workflow_feature_release_resources ORDER BY release_id, resource_id`,
+        `SELECT * FROM workflow_pack_release_resources ORDER BY release_id, resource_id`,
         [],
       ),
       handles: store.queryAll(
@@ -476,20 +476,18 @@ describe('G3.7 WorkflowPublisher staged publish', () => {
     const collision = seed(collisionStore);
     collisionStore.withImmediateTransaction((transaction) => {
       transaction.execute(
-        `INSERT INTO workflow_feature_releases (
-          id, feature_id, release_ref, release_version, release_hash,
+        `INSERT INTO workflow_pack_releases (
+          id, pack_id, release_ref, release_version, release_hash,
           execution_artifact_resource_id, execution_artifact_hash, status,
           staged_at_ms, activated_at_ms, disabled_at_ms, row_version
         ) VALUES (?, ?, ?, ?, ?, ?, ?, 'staged', ?, NULL, NULL, 1)`,
         [
-          workflowFeatureReleaseId(
-            collision.request.target_release.release_ref,
-          ),
-          collision.request.target_release.feature_id,
+          workflowPackReleaseId(collision.request.target_release.release_ref),
+          collision.request.target_release.pack_id,
           collision.request.target_release.release_ref.id,
           collision.request.target_release.release_ref.version,
           collision.request.target_release.release_hash,
-          `registry-resource:feature_execution_artifact:${collision.request.target_release.execution_artifact.ref.id}@${collision.request.target_release.execution_artifact.ref.version}`,
+          `registry-resource:pack_execution_artifact:${collision.request.target_release.execution_artifact.ref.id}@${collision.request.target_release.execution_artifact.ref.version}`,
           collision.request.target_release.execution_artifact.hash,
           collision.invocation.requested_at_ms,
         ],
@@ -504,7 +502,7 @@ describe('G3.7 WorkflowPublisher staged publish', () => {
         registry(collision.approved_review),
       ),
     ).toThrowError(
-      expect.objectContaining({ code: 'feature_release_identity_collision' }),
+      expect.objectContaining({ code: 'pack_release_identity_collision' }),
     );
     expect(counts(collisionStore)).toEqual(before);
   });

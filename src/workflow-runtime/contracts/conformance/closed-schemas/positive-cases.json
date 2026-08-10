@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-closed-schema-positive-cases:1\n",
-  "hash": "sha256:be17d54a7ec5104fa06c06431ee2812e35822293c16885002675fab2fe430f0c",
+  "hash": "sha256:be1b00ece16af7d6d3bed0066b24a9c4f22f9e4df40802e4cfd52f2efdfde3b8",
   "payload": {
     "cases": [
       {
@@ -18,7 +18,7 @@
             "id": "example.workflow",
             "version": "1.0.0"
           },
-          "owner_feature_id": "example-feature",
+          "owner_pack_id": "example-pack",
           "name": "Example workflow",
           "context_contract_ref": {
             "id": "example.context",
@@ -133,11 +133,15 @@
         "case_id": "workflow_recipe_exact_refs",
         "schema_format": "icarus.workflow-recipe-schema/1",
         "instance": {
+          "format": "icarus.workflow-recipe/1",
           "ref": {
             "id": "example.recipe",
             "version": "1.0.0"
           },
-          "owner_feature_id": "example-feature",
+          "owner_pack_id": "example-pack",
+          "catalog_visibility": "selectable",
+          "name": "Example Recipe",
+          "description": "A selectable example Workflow",
           "recipe_family": "example",
           "task_kinds": [
             "example_task"
@@ -167,8 +171,13 @@
             "id": "example.output",
             "version": "1.0.0"
           },
+          "routing_scope_ref": {
+            "id": "example.routing",
+            "version": "1.0.0"
+          },
           "launch_policy": "confirm",
           "effect_ceiling": "read_only",
+          "input_summary": {},
           "derived_effect_summary": {
             "max_impact": "read_only",
             "recovery_kinds": [
@@ -206,30 +215,20 @@
         }
       },
       {
-        "case_id": "feature_manifest_vnext",
-        "schema_format": "icarus.workflow-feature-manifest-v2-schema/1",
+        "case_id": "pack_manifest_vnext",
+        "schema_format": "icarus.workflow-pack-manifest-schema/1",
         "instance": {
-          "format": "icarus.feature-manifest/2",
-          "feature_ref": {
-            "id": "example.feature",
+          "format": "icarus.workflow-pack/1",
+          "pack_ref": {
+            "id": "example.pack",
             "version": "1.0.0"
           },
+          "display_name": "Example Pack",
+          "description": "Example workflows",
           "namespace": "example",
           "owner_principal_ref": "human:local-owner",
           "dependencies": [],
-          "package_resources": {
-            "skills": [],
-            "agents": [],
-            "mcp": [],
-            "scripts": [],
-            "templates": []
-          },
-          "extension_surfaces": {
-            "api_entry": null,
-            "nav_entry": null,
-            "renderer_entry": null
-          },
-          "dynamic_workflow_resources": [
+          "workflow_resources": [
             {
               "kind": "definition",
               "ref": {
@@ -240,25 +239,18 @@
               "expected_source_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
             }
           ],
-          "ownership": {
-            "feature_source_root": "features/example",
-            "workflow_source_root": "features/example/workflow-src",
-            "execution_bundle_owner": "feature_release",
-            "registry_namespace": "example"
+          "execution_resources": {
+            "agents": null,
+            "skills": null,
+            "mcp": null,
+            "scripts": null,
+            "templates": null
           },
-          "lifecycle": {
-            "draining_policy_ref": {
-              "id": "example.draining",
-              "version": "1.0.0"
-            },
-            "retention_policy_ref": {
-              "id": "example.retention",
-              "version": "1.0.0"
-            },
-            "deletion_policy_ref": {
-              "id": "example.deletion",
-              "version": "1.0.0"
-            }
+          "permissions": {
+            "host_actions": [],
+            "file_scopes": [],
+            "mcp_servers": [],
+            "effect_ceiling": "read_only"
           },
           "manifest_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
         }
@@ -272,7 +264,7 @@
             "id": "example.card",
             "version": "1.0.0"
           },
-          "owner_feature_id": "example-feature",
+          "owner_pack_id": "example-pack",
           "template_ref": {
             "id": "example.card-template",
             "version": "1.0.0"

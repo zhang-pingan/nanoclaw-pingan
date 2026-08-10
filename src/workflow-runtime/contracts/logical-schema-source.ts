@@ -942,7 +942,7 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
       id('owner_workflow_id', true),
       id('owner_graph_run_id', true),
       id('owner_registry_resource_id', true),
-      id('owner_feature_release_id', true),
+      id('owner_pack_release_id', true),
       ext(
         'system_owner_ref',
         'core_subsystem_registry',
@@ -966,9 +966,9 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
         'workflow_registry_resources',
       ),
       fk(
-        'fk:value_ownerships:feature_release',
-        'owner_feature_release_id',
-        'workflow_feature_releases',
+        'fk:value_ownerships:pack_release',
+        'owner_pack_release_id',
+        'workflow_pack_releases',
       ),
     ],
     exactlyOne: [
@@ -976,7 +976,7 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
         'owner_workflow_id',
         'owner_graph_run_id',
         'owner_registry_resource_id',
-        'owner_feature_release_id',
+        'owner_pack_release_id',
         'system_owner_ref',
       ],
     ],
@@ -1067,7 +1067,7 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
       text('resource_id'),
       text('resource_version'),
       ext('owner_core_ref', 'core_release_registry', 'core_release', true),
-      ext('owner_feature_id', 'feature_registry', 'feature', true),
+      ext('owner_pack_id', 'pack_registry', 'pack', true),
       ext(
         'owner_principal_ref',
         'principal_identity_resolver',
@@ -1099,7 +1099,7 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
       ]),
       uk('uk:registry_resources:id_hash', ['id', 'content_hash']),
     ],
-    exactlyOne: [['owner_core_ref', 'owner_feature_id', 'owner_principal_ref']],
+    exactlyOne: [['owner_core_ref', 'owner_pack_id', 'owner_principal_ref']],
     checks: [
       check(
         'ck:registry_resources:publication_time',
@@ -1208,12 +1208,12 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
     ],
   },
   {
-    name: 'workflow_feature_releases',
+    name: 'workflow_pack_releases',
     sourceSection: 'Registry, Release, Retention and Backup',
     columns: [
       id('id'),
-      ext('feature_id', 'feature_registry', 'feature'),
-      ext('release_ref', 'feature_release_ref_validator', 'feature_release'),
+      ext('pack_id', 'pack_registry', 'pack'),
+      ext('release_ref', 'pack_release_ref_validator', 'pack_release'),
       text('release_version'),
       hash('release_hash'),
       id('execution_artifact_resource_id', true),
@@ -1233,26 +1233,26 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
     primaryKey: ['id'],
     foreignKeys: [
       fk(
-        'fk:feature_releases:execution_artifact',
+        'fk:pack_releases:execution_artifact',
         ['execution_artifact_resource_id', 'execution_artifact_hash'],
         'workflow_registry_resources',
         ['id', 'content_hash'],
       ),
     ],
     uniqueKeys: [
-      uk('uk:feature_releases:feature_ref', [
-        'feature_id',
+      uk('uk:pack_releases:pack_ref', [
+        'pack_id',
         'release_ref',
         'release_version',
       ]),
-      uk('uk:feature_releases:id_hash', ['id', 'release_hash']),
+      uk('uk:pack_releases:id_hash', ['id', 'release_hash']),
     ],
     pairedColumns: [
       ['execution_artifact_resource_id', 'execution_artifact_hash'],
     ],
   },
   {
-    name: 'workflow_feature_release_resources',
+    name: 'workflow_pack_release_resources',
     sourceSection: 'Registry, Release, Retention and Backup',
     columns: [
       id('release_id'),
@@ -1263,12 +1263,12 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
     primaryKey: ['release_id', 'resource_id'],
     foreignKeys: [
       fk(
-        'fk:feature_release_resources:release',
+        'fk:pack_release_resources:release',
         'release_id',
-        'workflow_feature_releases',
+        'workflow_pack_releases',
       ),
       fk(
-        'fk:feature_release_resources:resource',
+        'fk:pack_release_resources:resource',
         ['resource_id', 'content_hash'],
         'workflow_registry_resources',
         ['id', 'content_hash'],
@@ -1276,21 +1276,21 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
     ],
   },
   {
-    name: 'workflow_feature_active_releases',
+    name: 'workflow_pack_active_releases',
     sourceSection: 'Registry, Release, Retention and Backup',
     columns: [
-      ext('feature_id', 'feature_registry', 'feature'),
+      ext('pack_id', 'pack_registry', 'pack'),
       id('release_id'),
       hash('release_hash'),
       rowVersion(),
       at('activated_at_ms'),
     ],
-    primaryKey: ['feature_id'],
+    primaryKey: ['pack_id'],
     foreignKeys: [
       fk(
-        'fk:feature_active_releases:release',
+        'fk:pack_active_releases:release',
         ['release_id', 'release_hash'],
-        'workflow_feature_releases',
+        'workflow_pack_releases',
         ['id', 'release_hash'],
       ),
     ],
@@ -1493,7 +1493,7 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
         'manual_pin',
         'investigation',
       ]),
-      id('feature_release_id', true),
+      id('pack_release_id', true),
       id('graph_run_id', true),
       id('backup_id', true),
       ext(
@@ -1512,9 +1512,9 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
     primaryKey: ['id'],
     foreignKeys: [
       fk(
-        'fk:retention_handles:feature_release',
-        'feature_release_id',
-        'workflow_feature_releases',
+        'fk:retention_handles:pack_release',
+        'pack_release_id',
+        'workflow_pack_releases',
       ),
       fk('fk:retention_handles:run', 'graph_run_id', 'workflow_graph_runs'),
       fk('fk:retention_handles:backup', 'backup_id', 'workflow_backups'),
@@ -1526,13 +1526,13 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
       ),
     ],
     exactlyOne: [
-      ['feature_release_id', 'graph_run_id', 'backup_id', 'external_actor_ref'],
+      ['pack_release_id', 'graph_run_id', 'backup_id', 'external_actor_ref'],
     ],
     uniqueKeys: [
       uk(
-        'uk:retention_handles:feature',
-        ['handle_kind', 'feature_release_id', 'closure_manifest_id'],
-        'feature_release_id is non-null',
+        'uk:retention_handles:pack',
+        ['handle_kind', 'pack_release_id', 'closure_manifest_id'],
+        'pack_release_id is non-null',
       ),
       uk(
         'uk:retention_handles:run',
@@ -1556,7 +1556,7 @@ const VALUE_REGISTRY_BACKUP_TABLES: readonly TableSeed[] = [
         'closed_target_mapping',
         [
           'handle_kind',
-          'feature_release_id',
+          'pack_release_id',
           'graph_run_id',
           'backup_id',
           'external_actor_ref',
@@ -1670,7 +1670,6 @@ const CREATION_WORKFLOW_CONTEXT_TABLES: readonly TableSeed[] = [
       text('creation_key'),
       text('source', false, [
         'global_assistant',
-        'feature_ui',
         'schedule',
         'api',
         'task_workspace',
@@ -1766,7 +1765,7 @@ const CREATION_WORKFLOW_CONTEXT_TABLES: readonly TableSeed[] = [
       id('source_routing_attempt_id', true),
       text('actor_kind', false, [
         'human',
-        'feature_service',
+        'pack_service',
         'automation',
         'system',
       ]),
@@ -2062,7 +2061,7 @@ const CREATION_WORKFLOW_CONTEXT_TABLES: readonly TableSeed[] = [
       text('creation_domain'),
       text('creation_key'),
       ext('owner_principal_ref', 'principal_identity_resolver', 'principal'),
-      ext('controlling_feature_id', 'feature_registry', 'feature', true),
+      ext('controlling_pack_id', 'pack_registry', 'pack', true),
       ext('creator_automation_ref', 'automation_registry', 'automation', true),
       hash('ownership_hash'),
       id('root_workflow_id'),
@@ -5321,7 +5320,7 @@ const OUTBOX_COMMAND_CHECKPOINT_TABLES: readonly TableSeed[] = [
       ext('actor_ref', 'command_actor_registry', 'command_actor'),
       text('actor_kind', false, [
         'human',
-        'feature_service',
+        'pack_service',
         'automation',
         'system',
       ]),
@@ -5331,7 +5330,7 @@ const OUTBOX_COMMAND_CHECKPOINT_TABLES: readonly TableSeed[] = [
         'auth_session',
       ),
       text('entrypoint'),
-      ext('source_feature_id', 'feature_registry', 'feature', true),
+      ext('source_pack_id', 'pack_registry', 'pack', true),
       ext(
         'delegation_chain_ref',
         'delegation_authorization_registry',

@@ -2,7 +2,7 @@
 
 > **状态**：方案讨论稿
 > **实施前置**：[Dynamic Workflow Runtime](../../docs/dynamic-workflow-runtime.md) 已完整实现、验收并归档施工生命周期
-> **范围**：Icarus Core、独立 Agent 执行链路、Core-owned Workflow，以及由一个或多个 Workflow 组成的 Feature Package
+> **范围**：Icarus Core、独立 Agent 执行链路、Core System Workflow，以及由一个或多个 Workflow 组成的 Workflow Pack
 > **项目边界**：本文中的 Production Activation、certification、Gate、正式发布和合同仅表示内部基线、可选验证、本地选择和机器接口。它们不构成外部交付或治理要求，也不要求新模块复制 G0-G9 证据链。详见 [`../../docs/internal-experimental-scope.md`](../../docs/internal-experimental-scope.md)。
 
 ## 导航
@@ -29,25 +29,25 @@
 
 ## 背景与目标
 
-Icarus 需要建立一套统一的评估与自进化框架，使 Core 和 Feature 的执行质量可以持续测量、定位、优化和验证。框架既要支持定时发现问题并生成候选，也要支持开发者手动修改某个 Prompt、Skill 或 Workflow 后，单独运行一次 baseline/candidate 对比。
+Icarus 需要建立一套统一的评估与自进化框架，使 Core 和 Workflow Pack 的执行质量可以持续测量、定位、优化和验证。框架既要支持定时发现问题并生成候选，也要支持开发者手动修改某个 Prompt、Skill 或 Workflow 后，单独运行一次 baseline/candidate 对比。
 
 评估对象覆盖：
 
 1. Icarus Core 主服务整体执行链路，包括群聊、私聊、直接 Agent 对话、路由、上下文、记忆、模型选择、工具调用、容器执行、渠道响应和人工交互。
 2. Icarus Core Dynamic Workflow Runtime，包括编译、调度、状态推进、恢复、等待、重试、质量修订、完成、预算、权限和副作用协议。
-3. Core-owned Workflow 的流程设计和执行效果。
-4. Feature-owned Workflow 的运行实现、Workflow 拓扑、Prompt、Skill、Policy、Model 和 Tool Binding。
+3. Core System Workflow 的流程设计和执行效果。
+4. Pack-owned Workflow 的运行实现、Workflow 拓扑、Prompt、Skill、Policy、Model 和 Tool Binding。
 
-本方案中的 Feature 不拥有第二套执行框架。就可执行评估对象而言，一个 Feature 是一个或多个 Published Recipe/Workflow 及其领域资源、数据集、Evaluator 和指标定义的集合，全部通过通用 Dynamic Workflow Runtime 执行。Feature 的 API、导航、Renderer 和领域 Projection 仍由 Feature Package Runtime 管理，但它们不形成新的执行 Adapter；Feature Package Runtime 本身的加载、隔离和权限正确性归 Core Conformance 评估。
+本方案中的 Workflow Pack 不拥有第二套执行框架。就可执行评估对象而言，一个 Pack 是一个或多个 Published Recipe/Workflow 及其声明式资源、数据集、Evaluator 和指标定义的集合，全部通过通用 Dynamic Workflow Runtime 执行。Pack 不提供 API、导航、Renderer、领域 Projection 或 Host lifecycle；其 Manifest、Registry closure、Core binding allowlist、execution bundle pin 和权限正确性归 Core Conformance 评估。
 
 ### 目标
 
 - 建立统一、版本化、可重放的数据集和案例合同。
 - 对 baseline 与 candidate 执行同案例成对回放，并输出可解释的多维指标差异。
 - 支持独立 Agent 与 Workflow 两类正式执行入口。
-- 支持 Core、Feature、Workflow、Prompt、Skill、Executor、Policy、Model 和 Tool 配置的精确版本比较。
+- 支持 Core、Workflow Pack、Workflow、Prompt、Skill、Executor、Policy、Model 和 Tool 配置的精确版本比较。
 - 支持确定性检查、业务规则、LLM Judge、人工评价和真实结果信号的组合评估。
-- 允许 Feature 通过受约束、版本化的通用合同接入领域信号、候选约束、发布依赖闭包和推荐触发配置，而不创建 Feature-specific 评估引擎。
+- 允许 Workflow Pack 通过受约束、版本化的通用合同接入领域信号、候选约束、发布依赖闭包和推荐触发配置，而不创建 Pack-specific 评估引擎。
 - 建立从问题发现、归因、候选生成、评估、审批、发布、观察到回滚的完整自进化闭环。
 - 所有阶段既可被完整闭环编排，也可通过 API/CLI/UI 单独调用。
 - 在本地、小样本、模型非确定性的条件下提供可靠的成对比较和退化门禁。
@@ -57,10 +57,10 @@ Icarus 需要建立一套统一的评估与自进化框架，使 Core 和 Featur
 
 - 不实现在线大流量分桶实验平台。
 - 不把经典线上 A/B Test 的显著性检验生搬到本地小样本环境。
-- 不允许自进化直接修改 active Registry pointer、运行中 Workflow Snapshot 或 Feature 安装目录。
+- 不允许自进化直接修改 active Registry pointer、运行中 Workflow Snapshot 或 Workflow Pack 安装目录。
 - 不用单个加权总分替代安全、正确性和关键场景门禁。
-- 不让 Feature 自己实现另一套回放、实验调度或指标存储系统。
-- 不让 Feature 直接写 Evaluation Store、执行 active pointer 切换、注册任意发布脚本或以领域扩展绕过 Candidate/Promotion hard gate。
+- 不让 Workflow Pack 自己实现另一套回放、实验调度或指标存储系统。
+- 不让 Workflow Pack 直接写 Evaluation Store、执行 active pointer 切换、注册任意发布脚本或以领域扩展绕过 Candidate/Promotion hard gate。
 - 不让 LLM Judge 成为安全、权限、Schema、幂等或副作用正确性的唯一判断者。
 
 ## 已确认架构决策
@@ -75,11 +75,11 @@ Icarus 需要建立一套统一的评估与自进化框架，使 Core 和 Featur
 Evaluation Execution Adapters
   - StandaloneAgentAdapter
   - WorkflowAdapter
-      - Core-owned Workflow
-      - Feature-owned Workflow x N
+      - Core System Workflow
+      - Pack-owned Workflow x N
 ```
 
-Feature 不是第三类 Adapter。Feature 通过一个或多个 Workflow/Recipe 使用同一个 `WorkflowAdapter`。Feature-specific 的差异由精确 resource refs、Dataset、Evaluator 和 Metric Suite 表达。
+Workflow Pack 不是第三类 Adapter。Pack 通过一个或多个 Workflow/Recipe 使用同一个 `WorkflowAdapter`。Pack-specific 的差异由精确 resource refs、Dataset、Evaluator 和 Metric Suite 表达。
 
 ### 3. Core Runtime Conformance Harness 不是业务 Adapter
 
@@ -106,11 +106,11 @@ Dataset 构建、Replay、Evaluator、Metric、Comparison、Candidate Builder �
 
 ### 7. 发布与评估解耦
 
-Candidate 可以是 staged、不可生产执行的 Evaluation Variant。通过评估只表示满足 Promotion Policy，不等于已经 Published 或 Activated。最终发布必须继续走 Dynamic Workflow Runtime 已定义的 review/publish/activate、Local Prompt Promotion、Feature Release 或 Core Release 流程。
+Candidate 可以是 staged、不可生产执行的 Evaluation Variant。通过评估只表示满足 Promotion Policy，不等于已经 Published 或 Activated。最终发布必须继续走 Dynamic Workflow Runtime 已定义的 review/publish/activate、Local Prompt Promotion、Pack Release 或 Core Release 流程。
 
 ### 8. 领域差异通过通用闭合合同接入
 
-Feature-specific 的真实结果信号、文件或数据库事实源、候选不可修改区域、依赖闭包发布顺序和默认触发建议，不得散落为 Feature-owned scheduler、Candidate Builder、Promotion Gateway 或 Evaluation Store writer。Core 提供统一的 `DomainSignalSource`、`CandidateConstraint`、`PromotionBinding` 和 `EvaluationTriggerTemplate` 合同；Feature 只能发布 exact ref/hash 的声明和受限实现资源。
+Pack-specific 的真实结果信号、文件或数据库事实源、候选不可修改区域、依赖闭包发布顺序和默认触发建议，不得散落为 Pack-owned scheduler、Candidate Builder、Promotion Gateway 或 Evaluation Store writer。Core 提供统一的 `DomainSignalSource`、`CandidateConstraint`、`PromotionBinding` 和 `EvaluationTriggerTemplate` 合同；Pack 只能发布 exact ref/hash 的声明和受限资源，并引用 allowlisted Core Capability/Adapter binding。
 
 这些扩展资源只定义“领域语义和约束”，不取得以下控制权：
 
@@ -130,9 +130,9 @@ Feature-specific 的真实结果信号、文件或数据库事实源、候选不
 type EvaluationOwner =
   | { kind: 'core'; core_release_ref: VersionedRef; core_build_hash: string }
   | {
-      kind: 'feature';
-      feature_release_ref: VersionedRef;
-      feature_release_hash: string;
+      kind: 'pack';
+      pack_release_ref: VersionedRef;
+      pack_release_hash: string;
     };
 ```
 
@@ -166,9 +166,9 @@ type EvaluationChangeLayer =
 | Core 群聊/私聊/直接 Agent 链路 | `StandaloneAgentAdapter` | Core Bundle、链路配置、Prompt、Skill、Model、Tool、Memory/Context Policy |
 | Core-owned Workflow 效果 | `WorkflowAdapter` | Recipe、Definition、Registry Closure、Execution Policy、Prompt/Skill/Capability refs |
 | Core Workflow Runtime 正确性 | `RuntimeConformanceHarness` | Core Bundle、Protocol、ABI、DDL、SQLite Profile、Golden/Model/Fault Suite |
-| Feature 运行实现 | `WorkflowAdapter` | Feature Execution Artifact、Executor Implementation、Capability 和依赖闭包 |
-| Feature 流程设计 | `WorkflowAdapter` | Recipe、Definition、Graph Template、Policy、Artifact/Evaluator Contract |
-| Feature Prompt/Skill | `WorkflowAdapter` | Prompt exact ref/hash、Capability `skill_refs` 和 dependency closure |
+| Pack 运行绑定 | `WorkflowAdapter` | Pack Execution Artifact、Core-owned Executor binding、Capability 和依赖闭包 |
+| Pack 流程设计 | `WorkflowAdapter` | Recipe、Definition、Graph Template、Policy、Artifact/Evaluator Contract |
+| Pack Prompt/Skill | `WorkflowAdapter` | Prompt exact ref/hash、Capability `skill_refs` 和 dependency closure |
 
 ### EvaluationSubject
 
@@ -208,7 +208,7 @@ interface EvaluationSubjectV1 {
 
 ```text
 Real Trace / Human Case / Incident / Synthetic Generator
-Domain Signal Source / Feature-supplied Seed
+Domain Signal Source / Pack-supplied Seed
                          |
                          v
        Signal Ingestion + Dataset Builder + Redaction
@@ -257,7 +257,7 @@ Domain Signal Source / Feature-supplied Seed
 | Experiment Planner | 生成 case x variant x repetition 的固定 Run Matrix |
 | Replay Coordinator | lease、预算、并发、顺序随机化、失败恢复和清理 |
 | StandaloneAgentAdapter | 隔离运行非 Workflow Agent 链路并产生标准 Observation |
-| WorkflowAdapter | 通过正式 dry-run/evaluation execution surface 运行 Core/Feature Workflow |
+| WorkflowAdapter | 通过正式 dry-run/evaluation execution surface 运行 Core/Pack Workflow |
 | RuntimeConformanceHarness | 评估 Core Workflow Runtime 的合同、模型、故障和性能 |
 | Observation Store | 保存输入、输出、Trace、Artifact、usage、failure 和 effect 摘要 |
 | Evaluator Registry | 版本化外部评估器和组合 Suite |
@@ -311,7 +311,7 @@ Evolution Campaign
 7. 安全、权限、Schema、幂等和副作用合同由确定性 Evaluator 判定，不能被 LLM 分数覆盖。
 8. In-workflow Quality Evaluator 属于被评估 Subject Snapshot；Experiment Evaluator 位于 Subject 外部，不能改变被评估 Run 的控制流。
 9. Candidate Builder 无权直接 Publish/Activate；Promotion Gateway 只消费 sealed Comparison Report 和 Human Review/Policy decision。
-10. Feature 不能注册自己的实验调度器、Candidate Builder、Promotion Gateway 或 Evaluation Store writer，只能发布受约束的 Subject、Dataset seed、Domain Signal Source、Evaluator、Metric、Candidate Constraint、Promotion Binding 和 Trigger Template。
+10. Workflow Pack 不能注册自己的实验调度器、Candidate Builder、Promotion Gateway 或 Evaluation Store writer，只能发布受约束的 Subject、Dataset seed、Domain Signal Source、Evaluator、Metric、Candidate Constraint、Promotion Binding 和 Trigger Template。
 11. 回放默认禁止真实外部副作用；任何允许的 live read 或 approved effect 都必须在 Experiment Spec 中显式声明并进入报告。
 12. Evaluation raw data、Prompt、Trace 和 Artifact 遵守 sensitivity、redaction、retention 和容量合同；Credential 原文永不进入 Evaluation Store。
 13. 自进化使用的优化集与最终 holdout 分离；Candidate Generator 不获得 locked holdout 的 case 内容或逐 case反馈。
@@ -417,7 +417,7 @@ type EvaluationCaseOrigin =
   | 'incident_regression'
   | 'synthetic_generated'
   | 'property_counterexample'
-  | 'feature_supplied';
+  | 'pack_supplied';
 ```
 
 真实 Trace 不能直接成为可执行 Case。Dataset Builder 必须完成：
@@ -485,7 +485,7 @@ Fixture Bundle 可以包含：
 - `origin/*`。
 - `difficulty/*`。
 
-Feature 可以增加领域 Slice，但不能覆盖保留 namespace。Comparison 必须同时报告 overall 和声明为 critical 的 Slice，避免总体平均值掩盖关键场景退化。
+Workflow Pack 可以增加领域 Slice，但不能覆盖保留 namespace。Comparison 必须同时报告 overall 和声明为 critical 的 Slice，避免总体平均值掩盖关键场景退化。
 
 ### 数据污染防护
 
@@ -611,7 +611,7 @@ frozen inbound message
 
 ### WorkflowAdapter
 
-覆盖所有 Core-owned 和 Feature-owned Workflow：
+覆盖所有 Core System 和 Pack-owned Workflow：
 
 ```text
 sealed Evaluation Case
@@ -629,10 +629,10 @@ sealed Evaluation Case
 必须满足：
 
 - 使用正式 Compiler、Store、Reconciler、Scheduler、Attempt、Quality Gate、Wait、Close/Cut 和 Recovery 语义。
-- 使用正式 authoring dry-run/evaluation execution contract；`test_only` synthetic Recipe 的 production launchability 规则保持不变，不把 Feature 的真实 Recipe 重标记为 test-only。
+- 使用正式 authoring dry-run/evaluation execution contract；`test_only` synthetic Recipe 的 production launchability 规则保持不变，不把 Pack 的真实 Recipe 重标记为 test-only。
 - 每个 Evaluation Run 使用独立 data/store root；baseline 与 candidate 不共享可变 DB、workspace 或 cache。
-- Production ingress、Feature API、Automation、真实 channel 和真实 effect adapter 全部关闭。
-- Feature 通过 `feature_release_ref + recipe_ref` 接入，同一 Feature 可以声明任意多个 Workflow Subject。
+- Production ingress、Pack Catalog launch、Automation、真实 channel 和真实 effect adapter 全部关闭。
+- Pack 通过 `pack_release_ref + recipe_ref` 接入，同一 Pack 可以声明任意多个 Workflow Subject。
 - Staged candidate 只进入隔离 Registry namespace，不进入 production Registry。
 - 运行结果携带完整 Workflow correlation，但不能写入 production Runtime Center Projection。
 
@@ -800,7 +800,7 @@ type ExperimentEvaluatorKind =
 
 - `deterministic_contract`：Schema、Artifact、权限、Trace、effect、路径和不变量。
 - `reference_oracle`：与 expected value、reference model 或 golden artifact 比较。
-- `domain_rule`：Feature 发布的领域逻辑，必须是版本化 closed input/output。
+- `domain_rule`：Pack 发布的声明式领域逻辑，必须是版本化 closed input/output。
 - `llm_rubric`：对单个结果按 rubric 评分。
 - `llm_pairwise_judge`：盲化比较 baseline/candidate，展示顺序随机化。
 - `human_review`：结构化人工标签和理由。
@@ -875,17 +875,17 @@ pass@k = 1 - C(n-c, k) / C(n, k)
 | 可观测性 | Trace completeness、correlation integrity、failure classification、replay completeness |
 | Workflow | critical path、idle wait、revision count、handoff loss、skipped/dead node、completion outcome |
 
-### Feature 指标
+### Workflow Pack 指标
 
-Feature 不创建独立 Metric Engine，但可以发布：
+Workflow Pack 不创建独立 Metric Engine，但可以发布：
 
 - 领域成功条件。
 - 领域 Artifact/Schema Evaluator。
-- Feature-specific Slice。
+- Pack-specific Slice。
 - 业务质量 Metric Definition。
 - Promotion Policy 的额外收紧条件。
 
-Feature 不能降低 Core safety/reliability hard gate，也不能把缺失值配置为静默成功。
+Workflow Pack 不能降低 Core safety/reliability hard gate，也不能把缺失值配置为静默成功。
 
 ### 归因信号
 
@@ -911,11 +911,11 @@ type EvaluationFailureAttribution =
 
 ## 领域扩展合同
 
-领域扩展的目标是让 Core 不理解每个 Feature 的文件、表、业务事件和发布拓扑，同时仍由 Core 统一掌握导入、评估、候选、审批、发布和审计控制面。所有扩展对象均使用 closed schema、exact `VersionedRef`、内容 hash、owner namespace 和 dependency closure 校验。
+领域扩展的目标是让 Core 不理解每个 Workflow Pack 的文件、表、业务事件和发布拓扑，同时仍由 Core 统一掌握导入、评估、候选、审批、发布和审计控制面。所有扩展对象均使用 closed schema、exact `VersionedRef`、内容 hash、owner namespace 和 dependency closure 校验。
 
 ### Domain Signal Source
 
-`DomainSignalSource` 把 Feature-owned 的追加日志、领域表、结构化文件、业务事件或只读 Projection 映射为 Evaluation 能消费的 Evidence、Case seed 或 observed outcome。它不是新的 Dataset Builder，也无权写 Evaluation Store。
+`DomainSignalSource` 把 Pack-owned managed data、结构化文件、业务事件或 allowlisted 只读 Projection 映射为 Evaluation 能消费的 Evidence、Case seed 或 observed outcome。它不是新的 Dataset Builder，也无权写 Evaluation Store。
 
 ```ts
 interface DomainSignalSourceV1 {
@@ -954,7 +954,7 @@ resolve exact source + reader capability
 
 每次导入保存 immutable `SignalImportBatch`，至少包含 source ref/hash、before/after cursor、source revision、record keys、accepted/rejected counts、redaction result、normalized value refs 和 import operation key。同一 source revision、cursor window 和 mapping hash 重放必须返回相同 batch；同一 dedupe key 不得生成两个 accepted logical signal。
 
-`reader_capability_ref` 必须是无 mutation、无任意路径、无任意 SQL 的 typed read capability。Feature 不能把 source locator、查询字符串或脚本路径作为未校验自由文本交给 runner，也不能通过 mapping 返回 Credential、active pointer mutation 或跨 owner 引用。
+`reader_capability_ref` 必须是无 mutation、无任意路径、无任意 SQL 的 typed Core Capability binding。Pack 不能把 source locator、查询字符串或脚本路径作为未校验自由文本交给 runner，也不能通过 mapping 返回 Credential、active pointer mutation 或跨 owner 引用。
 
 ### Candidate Constraint
 
@@ -1045,7 +1045,7 @@ validate sealed Report/Review/Candidate/Constraint results
 
 ### Evaluation Trigger Template
 
-Feature 可以发布 owner-scoped `EvaluationTriggerTemplate`，声明推荐的 schedule、threshold、Dataset/evidence selection、cooldown、dedupe、budget 和是否允许创建 Campaign。Template 本身不是启用中的 Trigger，不创建 scheduler state；安装 Feature 后必须由授权主体或显式 policy materialize 为 Core-owned Trigger instance。
+Workflow Pack 可以发布 owner-scoped `EvaluationTriggerTemplate`，声明推荐的 schedule、threshold、Dataset/evidence selection、cooldown、dedupe、budget 和是否允许创建 Campaign。Template 本身不是启用中的 Trigger，不创建 scheduler state；安装 Pack 后必须由授权主体或显式 policy materialize 为 Core-owned Trigger instance。
 
 ```ts
 interface EvaluationTriggerTemplateV1 {
@@ -1070,7 +1070,7 @@ interface EvaluationTriggerTemplateV1 {
 
 `trigger_kind` 对应的 schedule/threshold 字段使用 closed discriminated validation：schedule 必须有 `schedule_ref` 且无 threshold；metric threshold 反之；incident 和 post-promotion 使用各自 policy schema，不能通过 nullable 字段组合产生未定义模式。
 
-Template 不能请求自动 sealed 未审查的真实信号，不能降低高风险 Candidate 的 Human Review 要求，也不能指定 Feature-owned scheduler 或 Store writer。
+Template 不能请求自动 sealed 未审查的真实信号，不能降低高风险 Candidate 的 Human Review 要求，也不能指定 Pack-owned scheduler 或 Store writer。
 
 ## 自进化闭环
 
@@ -1169,10 +1169,10 @@ interface OptimizationHypothesisV1 {
 - Prompt Candidate：生成 Local Prompt Revision Candidate，保护 permission/tool/safety/output contract section。
 - Skill Candidate：生成 immutable Skill artifact 和 Capability dependency diff。
 - Workflow Candidate：生成 staged Recipe/Definition/Graph/Policy diff，通过 validate/compile/dry-run。
-- Feature Implementation Candidate：生成 Feature Execution Artifact/Executor Candidate，通过 ABI、permission/effect 和 dependency closure gate。
+- Pack Binding Candidate：生成 Pack Execution Artifact/Capability binding Candidate，通过 ABI、permission/effect 和 dependency closure gate；Executor/Adapter implementation 仍由 Core 静态托管。
 - Core Candidate：生成 Core Bundle/代码变更候选，通过完整 CI、Conformance 和 representative Dataset。
 
-Candidate Builder 只能写 authoring/staging/evaluation root，不能改 active Feature files、Registry pointer 或 production data。
+Candidate Builder 只能写 authoring/staging/evaluation root，不能改 active Pack files、Registry pointer 或 production data。
 
 Candidate Builder 必须解析 Subject 默认和本次 Policy 追加的 Candidate Constraint closure。Candidate 只有在 build-phase Constraint 全部通过并保存 immutable result 后才能 seal；Candidate bytes、base hash 或 constraint closure 发生变化都必须创建新 Candidate。
 
@@ -1192,7 +1192,7 @@ Candidate Builder 必须解析 Subject 默认和本次 Policy 追加的 Candidat
 | Prompt Local Variant | hard gate + validation/holdout + policy 可允许低风险自动 Promote |
 | Skill | hard gate + dependency/permission diff + Human Review |
 | Workflow topology/policy | compile/dry-run + hard gate + Human Review |
-| Feature Executor/Artifact | ABI/effect/permission + hard gate + Human Review |
+| Pack Capability/Artifact | ABI/effect/permission + hard gate + Human Review |
 | Core Runtime | full CI + Conformance + benchmark + hard gate + Human Review +正式 Release activation |
 
 任何 permission expansion、effect impact 提升、safety ceiling 变化、credential/mount/network 扩大都不能自动 Promote。
@@ -1200,11 +1200,11 @@ Candidate Builder 必须解析 Subject 默认和本次 Policy 追加的 Candidat
 ### 发布
 
 - Prompt 使用 Runtime `prompt-registry` 的 Candidate/Promotion/Local Publish 协议。
-- Workflow/Feature 使用 authoring `review -> publish -> activate`。
-- Feature Executor 通过新的 Feature Release/Execution Artifact 发布。
+- Workflow/Pack 使用 authoring `review -> publish -> activate`。
+- Pack Capability binding 通过 Pack Release/Execution Artifact 发布；Pack 不发布 Executor/Adapter implementation。
 - Core 使用 Core Release、Compatibility、certification 和 Production Activation。
 
-Promotion Gateway 必须把 Comparison Report、Human Review、source/staged hash、Candidate Constraint results、Promotion Binding、Promotion Bundle、dependency/permission/effect diff 和 idempotency key 一并提交。发布失败不改变当前 active catalog root。Promotion Gateway 不接受页面或 Feature 直接提交任意 member list、Publisher 名称、active pointer 或发布顺序。
+Promotion Gateway 必须把 Comparison Report、Human Review、source/staged hash、Candidate Constraint results、Promotion Binding、Promotion Bundle、dependency/permission/effect diff 和 idempotency key 一并提交。发布失败不改变当前 active catalog root。Promotion Gateway 不接受页面或 Pack 直接提交任意 member list、Publisher 名称、active pointer 或发布顺序。
 
 ### 上线观察与回滚
 
@@ -1233,7 +1233,7 @@ type EvaluationTriggerKind =
 
 每个 Trigger 固定 subject、dataset/evidence selection policy、cooldown、dedupe key、budget、最大并发和是否允许生成 Candidate。
 
-Feature 安装包可以提供 `EvaluationTriggerTemplate`，但 Template 只有在授权主体显式启用或安装 policy 明确允许时，才由 Evaluation Service 物化为 Core-owned Trigger。后续 schedule state、lease、history、cooldown 和 disable/delete 全部归 Evaluation Store，不归 Feature Projection。
+Workflow Pack 可以提供 `EvaluationTriggerTemplate`，但 Template 只有在授权主体显式启用或安装 policy 明确允许时，才由 Evaluation Service 物化为 Core-owned Trigger。后续 schedule state、lease、history、cooldown 和 disable/delete 全部归 Evaluation Store，不归 Pack。
 
 ### 定时触发
 
@@ -1282,7 +1282,7 @@ select subject
 - `candidate.validate`：按 frozen Constraint closure 校验已有 staged Candidate。
 - `promotion.plan`：根据 Binding 生成并校验 immutable Promotion Bundle，不执行发布。
 - `promotion.request`：提交已完成 Report 进入 review/publish。
-- `trigger.materialize`：从 exact Trigger Template 创建 Core-owned Trigger instance，不启动 Feature scheduler。
+- `trigger.materialize`：从 exact Trigger Template 创建 Core-owned Trigger instance，不启动 Pack scheduler。
 
 重新运行 Evaluator/Metric/Comparison 必须创建新的 immutable derivation，不能覆盖旧结果。只有 Evaluator 输入合同兼容且原始 Observation retention 未过期时才能重算。
 
@@ -1433,12 +1433,12 @@ workflow-runtime public contracts/query clients
   -> evaluation/execution/workflow-adapter
 ```
 
-### Feature 扩展点
+### Workflow Pack 扩展点
 
-Feature Manifest vNext 建议新增独立 closed evaluation resource union，或在后续 manifest major 中加入：
+当前 `icarus.workflow-pack/1` 只接受 closed `workflow_resources` kind。Evaluation 合同应优先映射为已支持的 `schema`、`artifact_contract`、`evaluator`、`prompt`、`tool_binding` 或 policy resources；确实需要新的 Registry resource type 时必须发布新的 Workflow Pack manifest/schema major，不能依赖 unknown field 或目录扫描。
 
 ```ts
-type FeatureEvaluationResourceKind =
+type WorkflowPackEvaluationResourceKind =
   | 'evaluation_subject'
   | 'dataset_seed'
   | 'domain_signal_source'
@@ -1451,12 +1451,12 @@ type FeatureEvaluationResourceKind =
   | 'trigger_template';
 ```
 
-Feature 只能声明 owner namespace 内的资源。`dataset_seed` 进入 Dataset Builder 后才能形成 sealed Dataset；`domain_signal_source` 只能产生待校验的 normalized signal；`trigger_template` 必须经过显式 materialize；`promotion_binding` 只能引用 allowlisted 正式 Publisher。任何 Feature resource 都不能让 Feature 安装包直接写 Evaluation DB、注册 scheduler 或切换 active pointer。
+Pack 只能声明 owner namespace 内的资源。`dataset_seed` 进入 Dataset Builder 后才能形成 sealed Dataset；`domain_signal_source` 只能产生待校验的 normalized signal；`trigger_template` 必须经过显式 materialize；`promotion_binding` 只能引用 allowlisted 正式 Publisher。任何 Pack resource 都不能让 Pack 直接写 Evaluation DB、注册 scheduler、加载 Host implementation 或切换 active pointer。
 
-普通 Feature 结构：
+普通 Workflow Pack 结构：
 
 ```text
-Feature Package
+Workflow Pack (`icarus.workflow-pack/1`)
   - Workflow/Recipe A
   - Workflow/Recipe B
   - Workflow/Recipe C
@@ -1482,7 +1482,7 @@ Feature Package
 - `service:evaluation-runner`：读取单次 sealed input，返回 Observation，无 Registry/production DB 写权限。
 - `service:candidate-builder`：写 staging root，无 active pointer 权限。
 - `service:promotion-gateway`：在有效 Human/Policy 授权下调用正式 Publisher。
-- `feature:<id>:evaluation-provider`：发布 Feature-owned evaluation resources，无调度、任意 source read、Store 直写、Publisher 调用和 active pointer 权限。
+- `pack:<id>:evaluation-provider`：发布 Pack-owned evaluation resources，无调度、任意 source read、Store 直写、Publisher 调用和 active pointer 权限。
 
 ### Effect Policy
 
@@ -1614,7 +1614,7 @@ Workflow/Standalone Agent 详情通过 typed deep link 跳转到 Runtime Center/
 
 - Subject、Domain Signal Source、Signal Import Batch、Dataset、Case、Variant、Overlay、Candidate Constraint、Promotion Binding/Bundle、Experiment、Observation、Evaluator、Metric、Report schema 的正负例。
 - strict parse、canonicalization、hash、duplicate key、unsafe integer 和 unknown field。
-- same ref/different hash、latest/range ref、跨 Feature namespace 和不完整 closure 拒绝。
+- same ref/different hash、latest/range ref、跨 Pack namespace 和不完整 closure 拒绝。
 
 ### Adapter Contract Test
 
@@ -1652,7 +1652,7 @@ Workflow/Standalone Agent 详情通过 typed deep link 跳转到 Runtime Center/
 - Candidate 不能写 active pointer。
 - Candidate Constraint 在 build/seal/promotion 三个边界固定 exact ref/hash，hard failure 不可被普通批准覆盖。
 - rejected/inconclusive 不触发 Promotion。
-- Prompt/Workflow/Feature/Core 使用正确发布协议。
+- Prompt/Workflow/Pack/Core 使用正确发布协议。
 - permission/effect 扩大总是进入 Human Review。
 - Promotion/rollback crash 能按 receipt 和 exact ref 收敛。
 - Promotion Bundle 只有全部 inactive member 和 closure 校验完成后才能切换单一 activation catalog root。
@@ -1670,7 +1670,7 @@ Workflow/Standalone Agent 详情通过 typed deep link 跳转到 Runtime Center/
 ### 安全测试
 
 - 真实 channel send、生产 DB write、host path、credential 和 network mutation 全部被拒绝。
-- Feature evaluator 不能读取其他 Feature Dataset 或降低 Core hard gate。
+- Pack evaluator 不能读取其他 Pack Dataset 或降低 Core hard gate。
 - Domain Signal Source、Candidate Constraint 和 Promotion Binding 不能跨 owner、申请任意 capability 或旁路 Evaluation control/Promotion Gateway。
 - staged overlay 不能被 production ingress 解析。
 - candidate Core Bundle 不能访问 Evaluation control DB。
@@ -1685,7 +1685,7 @@ Workflow/Standalone Agent 详情通过 typed deep link 跳转到 Runtime Center/
 
 ## 实施顺序
 
-Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节阶段共同组成评估与自进化框架第一版，不表示 Feature 或 Workflow 留到后续再接入。
+Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节阶段共同组成评估与自进化框架第一版，不表示 Workflow Pack 或 Workflow 留到后续再接入。
 
 ### E0：合同与边界
 
@@ -1701,14 +1701,14 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 - 实现 `evaluation.db`、Value/Blob、migration、Schema Manifest 和 GC。
 - 实现 Dataset Builder、redaction、partition、Slice、contamination 和 seal。
 - 实现 Domain Signal Source registry、readonly ingestion、cursor、dedupe、mapping、snapshot 和 import audit。
-- 支持人工 Case、Trace-derived Case 和 Feature-supplied normalized signal。
+- 支持人工 Case、Trace-derived Case 和 Pack-supplied normalized signal。
 
 退出条件：Dataset 可版本化、可审计、可独立导入导出且不依赖 source retention。
 
 ### E2：两类 Adapter 与 Replay
 
 - 实现 `StandaloneAgentAdapter`。
-- 实现正式 `WorkflowAdapter`，对 Core-owned/Feature-owned Workflow 使用相同合同。
+- 实现正式 `WorkflowAdapter`，对 Core System/Pack-owned Workflow 使用相同合同。
 - 接入 RuntimeConformanceHarness 结果引用。
 - 实现 isolation、Fixture Broker、Observation Normalizer 和 Run Matrix。
 
@@ -1721,7 +1721,7 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 - 实现 Metric Engine、Slice、paired comparison 和 uncertainty。
 - 实现 Promotion Policy 与 immutable Report。
 
-退出条件：手动 Prompt、Skill、Workflow、Feature Executor 和 Core Bundle candidate 都能生成可信对比报告。
+退出条件：手动 Prompt、Skill、Workflow、Pack Capability binding 和 Core Bundle candidate 都能生成可信对比报告。
 
 ### E4：手动评估产品闭环
 
@@ -1739,7 +1739,7 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 - 实现 evidence collection、diagnosis、hypothesis、Candidate Builder、multi-round evaluation。
 - 接入 Human Review、Publisher、Activation、monitor 和 rollback。
 
-退出条件：Prompt、Skill、Workflow、Feature Executor 和 Core Candidate 均遵守各自 Promotion Policy，不存在直写 active pointer。
+退出条件：Prompt、Skill、Workflow、Pack Capability binding 和 Core Candidate 均遵守各自 Promotion Policy，不存在直写 active pointer。
 
 ### E6：定时、漂移与运营门禁
 
@@ -1765,15 +1765,15 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 - Prompt、Skill、Model、Tool、Memory/Context 变体可以成对比较。
 - token、latency、tool、artifact、failure 和输出质量指标完整。
 
-### Workflow 与 Feature
+### Workflow 与 Workflow Pack
 
-- Core-owned 和 Feature-owned Workflow 使用同一个 `WorkflowAdapter`。
-- 一个 Feature 可以注册多个 Workflow Subject，不创建 Feature-specific runner。
+- Core System 和 Pack-owned Workflow 使用同一个 `WorkflowAdapter`。
+- 一个 Pack 可以注册多个 Workflow Subject，不创建 Pack-specific runner。
 - Workflow topology、Prompt、Skill、Policy、Evaluator、Executor/Artifact 变体可以被精确隔离。
 - 回放使用正式 Dynamic Runtime 语义和独立 root，不写 production Runtime DB/Projection。
-- Feature 可以通过通用 Domain Signal Source 导入领域 Evidence/Case seed/observed outcome，但不能直接写 Evaluation Store。
-- Feature-specific Candidate Constraint 和 Promotion Binding 在 Core control plane 中执行，不产生 Feature-owned Candidate Builder、Publisher 或 activation state。
-- Feature Trigger Template 只有显式 materialize 后才产生 Core-owned Trigger；Feature disable/draining 不留下不可审计的 scheduler state。
+- Pack 可以通过通用 Domain Signal Source 导入领域 Evidence/Case seed/observed outcome，但不能直接写 Evaluation Store。
+- Pack-specific Candidate Constraint 和 Promotion Binding 在 Core control plane 中执行，不产生 Pack-owned Candidate Builder、Publisher 或 activation state。
+- Pack Trigger Template 只有显式 materialize 后才产生 Core-owned Trigger；Pack disable/draining 不留下不可审计的 scheduler state。
 
 ### Core Runtime
 
@@ -1801,7 +1801,7 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 
 - 问题、证据、归因、假设、Candidate、Experiment、Report、Review、Publish、Monitor 和 Rollback 形成完整 lineage。
 - Candidate 无权直接修改 active pointer 或 production data。
-- Prompt、Skill、Workflow、Feature Executor 和 Core 使用各自正式发布门禁。
+- Prompt、Skill、Workflow、Pack Capability binding 和 Core 使用各自正式发布门禁。
 - 高风险或权限/effect 扩大必须 Human Review。
 - budget、round、candidate 和 deadline 耗尽后有限终止。
 - 多资源 Candidate 通过 immutable Promotion Bundle 发布；任意中间失败都不改变旧 active catalog root，并可按 bundle receipt 恢复。
@@ -1810,7 +1810,7 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 
 - 第一版 Evaluation Effect Policy 不存在 live mutation。
 - Credential/Secret 不进入 Dataset、Observation、Judge 或 Report。
-- Feature 不能跨 owner 访问评估资源或降低 Core hard gate。
+- Pack 不能跨 owner 访问评估资源或降低 Core hard gate。
 - staged overlay 对 production ingress 不可达。
 
 ## 待确认决策
@@ -1821,8 +1821,8 @@ Dynamic Workflow Runtime Production Activation 是所有阶段的前置。本节
 2. Prompt Local Variant 是否允许低风险自动 Promote：建议默认关闭，仅在用户显式开启且连续通过 validation、holdout 和 post-promotion monitor 后允许。
 3. Trace-derived Dataset 的默认 retention：需要结合本地磁盘预算确定 Case bytes、raw Observation 和 Report 的不同保留周期。
 4. LLM Judge 默认模型和 calibration 阈值：应在实现期用人工标注集实测后冻结，不在方案阶段指定厂商或型号。
-5. Feature evaluation resources 是加入 `icarus.feature-manifest/2` 的兼容扩展，还是发布新的 manifest major：建议根据 v2 closed schema 的兼容规则决定；不得以 unknown field 或目录扫描旁路接入。
+5. Evaluation-specific resource type 是否值得发布新的 Workflow Pack manifest/schema major；`icarus.workflow-pack/1` 保持 closed，不得以 unknown field 或目录扫描旁路接入。
 6. Promotion 后自动观察窗口的默认大小：建议同时支持固定运行数和最长 duration，以先到者为准。
 7. Domain Signal Source 第一版允许的 locator/cursor 组合：建议先支持受控文件 append/event-key 与只读 Projection event-key，任意 SQL 和动态脚本永久不开放。
-8. 单一 activation catalog root 的最小 Publisher ABI：需要与 Runtime authoring/prompt/feature publisher 合同一起冻结，避免各资源类型实现不同的半发布恢复语义。
+8. 单一 activation catalog root 的最小 Publisher ABI：需要与 Runtime authoring/prompt/Pack publisher 合同一起冻结，避免各资源类型实现不同的半发布恢复语义。
 9. `pass@k` 的默认 k 集合：建议第一版固定支持 `k in {1, 3}`；若 Dataset Policy 将 repetition 收紧为 1，则只输出 `pass@1`，`pass@3` 标记为 `inconclusive`。

@@ -55,48 +55,6 @@
         "reference_domain": "value_provenance"
       },
       {
-        "relation_id": "ext:workflow_feature_active_releases:feature_id",
-        "relation_kind": "external_reference",
-        "source_table": "workflow_feature_active_releases",
-        "source_columns": [
-          "feature_id"
-        ],
-        "target_table": null,
-        "target_columns": [],
-        "on_delete": null,
-        "deferrability": null,
-        "validator_owner": "feature_registry",
-        "reference_domain": "feature"
-      },
-      {
-        "relation_id": "ext:workflow_feature_releases:feature_id",
-        "relation_kind": "external_reference",
-        "source_table": "workflow_feature_releases",
-        "source_columns": [
-          "feature_id"
-        ],
-        "target_table": null,
-        "target_columns": [],
-        "on_delete": null,
-        "deferrability": null,
-        "validator_owner": "feature_registry",
-        "reference_domain": "feature"
-      },
-      {
-        "relation_id": "ext:workflow_feature_releases:release_ref",
-        "relation_kind": "external_reference",
-        "source_table": "workflow_feature_releases",
-        "source_columns": [
-          "release_ref"
-        ],
-        "target_table": null,
-        "target_columns": [],
-        "on_delete": null,
-        "deferrability": null,
-        "validator_owner": "feature_release_ref_validator",
-        "reference_domain": "feature_release"
-      },
-      {
         "relation_id": "ext:workflow_graph_effect_operations:lease_owner",
         "relation_kind": "external_reference",
         "source_table": "workflow_graph_effect_operations",
@@ -335,6 +293,48 @@
         "reference_domain": "worker_lease"
       },
       {
+        "relation_id": "ext:workflow_pack_active_releases:pack_id",
+        "relation_kind": "external_reference",
+        "source_table": "workflow_pack_active_releases",
+        "source_columns": [
+          "pack_id"
+        ],
+        "target_table": null,
+        "target_columns": [],
+        "on_delete": null,
+        "deferrability": null,
+        "validator_owner": "pack_registry",
+        "reference_domain": "pack"
+      },
+      {
+        "relation_id": "ext:workflow_pack_releases:pack_id",
+        "relation_kind": "external_reference",
+        "source_table": "workflow_pack_releases",
+        "source_columns": [
+          "pack_id"
+        ],
+        "target_table": null,
+        "target_columns": [],
+        "on_delete": null,
+        "deferrability": null,
+        "validator_owner": "pack_registry",
+        "reference_domain": "pack"
+      },
+      {
+        "relation_id": "ext:workflow_pack_releases:release_ref",
+        "relation_kind": "external_reference",
+        "source_table": "workflow_pack_releases",
+        "source_columns": [
+          "release_ref"
+        ],
+        "target_table": null,
+        "target_columns": [],
+        "on_delete": null,
+        "deferrability": null,
+        "validator_owner": "pack_release_ref_validator",
+        "reference_domain": "pack_release"
+      },
+      {
         "relation_id": "ext:workflow_personal_active_releases:owner_principal_ref",
         "relation_kind": "external_reference",
         "source_table": "workflow_personal_active_releases",
@@ -433,18 +433,18 @@
         "reference_domain": "core_release"
       },
       {
-        "relation_id": "ext:workflow_registry_resources:owner_feature_id",
+        "relation_id": "ext:workflow_registry_resources:owner_pack_id",
         "relation_kind": "external_reference",
         "source_table": "workflow_registry_resources",
         "source_columns": [
-          "owner_feature_id"
+          "owner_pack_id"
         ],
         "target_table": null,
         "target_columns": [],
         "on_delete": null,
         "deferrability": null,
-        "validator_owner": "feature_registry",
-        "reference_domain": "feature"
+        "validator_owner": "pack_registry",
+        "reference_domain": "pack"
       },
       {
         "relation_id": "ext:workflow_registry_resources:owner_principal_ref",
@@ -559,18 +559,18 @@
         "reference_domain": "delegation_chain"
       },
       {
-        "relation_id": "ext:workflow_runtime_command_invocations:source_feature_id",
+        "relation_id": "ext:workflow_runtime_command_invocations:source_pack_id",
         "relation_kind": "external_reference",
         "source_table": "workflow_runtime_command_invocations",
         "source_columns": [
-          "source_feature_id"
+          "source_pack_id"
         ],
         "target_table": null,
         "target_columns": [],
         "on_delete": null,
         "deferrability": null,
-        "validator_owner": "feature_registry",
-        "reference_domain": "feature"
+        "validator_owner": "pack_registry",
+        "reference_domain": "pack"
       },
       {
         "relation_id": "ext:workflow_task_intake_revisions:principal_ref",
@@ -643,18 +643,18 @@
         "reference_domain": "value_provenance"
       },
       {
-        "relation_id": "ext:workflows:controlling_feature_id",
+        "relation_id": "ext:workflows:controlling_pack_id",
         "relation_kind": "external_reference",
         "source_table": "workflows",
         "source_columns": [
-          "controlling_feature_id"
+          "controlling_pack_id"
         ],
         "target_table": null,
         "target_columns": [],
         "on_delete": null,
         "deferrability": null,
-        "validator_owner": "feature_registry",
-        "reference_domain": "feature"
+        "validator_owner": "pack_registry",
+        "reference_domain": "pack"
       },
       {
         "relation_id": "ext:workflows:creator_automation_ref",
@@ -2321,76 +2321,6 @@
         "reference_domain": null
       },
       {
-        "relation_id": "fk:feature_active_releases:release",
-        "relation_kind": "foreign_key",
-        "source_table": "workflow_feature_active_releases",
-        "source_columns": [
-          "release_id",
-          "release_hash"
-        ],
-        "target_table": "workflow_feature_releases",
-        "target_columns": [
-          "id",
-          "release_hash"
-        ],
-        "on_delete": "restrict",
-        "deferrability": "deferred",
-        "validator_owner": null,
-        "reference_domain": null
-      },
-      {
-        "relation_id": "fk:feature_release_resources:release",
-        "relation_kind": "foreign_key",
-        "source_table": "workflow_feature_release_resources",
-        "source_columns": [
-          "release_id"
-        ],
-        "target_table": "workflow_feature_releases",
-        "target_columns": [
-          "id"
-        ],
-        "on_delete": "restrict",
-        "deferrability": "deferred",
-        "validator_owner": null,
-        "reference_domain": null
-      },
-      {
-        "relation_id": "fk:feature_release_resources:resource",
-        "relation_kind": "foreign_key",
-        "source_table": "workflow_feature_release_resources",
-        "source_columns": [
-          "resource_id",
-          "content_hash"
-        ],
-        "target_table": "workflow_registry_resources",
-        "target_columns": [
-          "id",
-          "content_hash"
-        ],
-        "on_delete": "restrict",
-        "deferrability": "deferred",
-        "validator_owner": null,
-        "reference_domain": null
-      },
-      {
-        "relation_id": "fk:feature_releases:execution_artifact",
-        "relation_kind": "foreign_key",
-        "source_table": "workflow_feature_releases",
-        "source_columns": [
-          "execution_artifact_resource_id",
-          "execution_artifact_hash"
-        ],
-        "target_table": "workflow_registry_resources",
-        "target_columns": [
-          "id",
-          "content_hash"
-        ],
-        "on_delete": "restrict",
-        "deferrability": "deferred",
-        "validator_owner": null,
-        "reference_domain": null
-      },
-      {
         "relation_id": "fk:graph_runs:activation",
         "relation_kind": "foreign_key",
         "source_table": "workflow_graph_runs",
@@ -3919,6 +3849,76 @@
         "reference_domain": null
       },
       {
+        "relation_id": "fk:pack_active_releases:release",
+        "relation_kind": "foreign_key",
+        "source_table": "workflow_pack_active_releases",
+        "source_columns": [
+          "release_id",
+          "release_hash"
+        ],
+        "target_table": "workflow_pack_releases",
+        "target_columns": [
+          "id",
+          "release_hash"
+        ],
+        "on_delete": "restrict",
+        "deferrability": "deferred",
+        "validator_owner": null,
+        "reference_domain": null
+      },
+      {
+        "relation_id": "fk:pack_release_resources:release",
+        "relation_kind": "foreign_key",
+        "source_table": "workflow_pack_release_resources",
+        "source_columns": [
+          "release_id"
+        ],
+        "target_table": "workflow_pack_releases",
+        "target_columns": [
+          "id"
+        ],
+        "on_delete": "restrict",
+        "deferrability": "deferred",
+        "validator_owner": null,
+        "reference_domain": null
+      },
+      {
+        "relation_id": "fk:pack_release_resources:resource",
+        "relation_kind": "foreign_key",
+        "source_table": "workflow_pack_release_resources",
+        "source_columns": [
+          "resource_id",
+          "content_hash"
+        ],
+        "target_table": "workflow_registry_resources",
+        "target_columns": [
+          "id",
+          "content_hash"
+        ],
+        "on_delete": "restrict",
+        "deferrability": "deferred",
+        "validator_owner": null,
+        "reference_domain": null
+      },
+      {
+        "relation_id": "fk:pack_releases:execution_artifact",
+        "relation_kind": "foreign_key",
+        "source_table": "workflow_pack_releases",
+        "source_columns": [
+          "execution_artifact_resource_id",
+          "execution_artifact_hash"
+        ],
+        "target_table": "workflow_registry_resources",
+        "target_columns": [
+          "id",
+          "content_hash"
+        ],
+        "on_delete": "restrict",
+        "deferrability": "deferred",
+        "validator_owner": null,
+        "reference_domain": null
+      },
+      {
         "relation_id": "fk:personal_active_releases:owner_release",
         "relation_kind": "foreign_key",
         "source_table": "workflow_personal_active_releases",
@@ -4553,13 +4553,13 @@
         "reference_domain": null
       },
       {
-        "relation_id": "fk:retention_handles:feature_release",
+        "relation_id": "fk:retention_handles:pack_release",
         "relation_kind": "foreign_key",
         "source_table": "workflow_registry_retention_handles",
         "source_columns": [
-          "feature_release_id"
+          "pack_release_id"
         ],
-        "target_table": "workflow_feature_releases",
+        "target_table": "workflow_pack_releases",
         "target_columns": [
           "id"
         ],
@@ -6381,13 +6381,13 @@
         "reference_domain": null
       },
       {
-        "relation_id": "fk:value_ownerships:feature_release",
+        "relation_id": "fk:value_ownerships:pack_release",
         "relation_kind": "foreign_key",
         "source_table": "workflow_value_ownerships",
         "source_columns": [
-          "owner_feature_release_id"
+          "owner_pack_release_id"
         ],
-        "target_table": "workflow_feature_releases",
+        "target_table": "workflow_pack_releases",
         "target_columns": [
           "id"
         ],
@@ -6946,5 +6946,5 @@
       }
     ]
   },
-  "hash": "sha256:e600c01fd539af8a42dc9644ceae9304a17f4936b67f7d85ba2e9b0fffe52007"
+  "hash": "sha256:37b58e1a93b76d810e3a26aef9dd902ca258f7cb3c4dab96add60df222d0b6a0"
 }

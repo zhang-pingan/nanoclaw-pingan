@@ -1023,7 +1023,7 @@ export const RUNTIME_COMMAND_PROTOCOL_ENTRIES = [
       fallback_permission: 'workflow.cancel.any',
     },
     allowed_reason_codes: localGraphCancelReasons,
-    allowed_actor_kinds: ['human', 'feature_service', 'automation'],
+    allowed_actor_kinds: ['human', 'pack_service', 'automation'],
     minimum_evidence_refs: 0,
     confirmation_ref_required: false,
     policy_guard: 'command_policy_allows_local_graph_cancel',
@@ -1040,7 +1040,7 @@ export const RUNTIME_COMMAND_PROTOCOL_ENTRIES = [
       fallback_permission: 'workflow.cancel.any',
     },
     allowed_reason_codes: cancelReasons,
-    allowed_actor_kinds: ['human', 'feature_service', 'automation', 'system'],
+    allowed_actor_kinds: ['human', 'pack_service', 'automation', 'system'],
     system_grant: {
       actor_kind: 'system',
       reason_codes: ['deadline_enforced', 'safety_enforced'],

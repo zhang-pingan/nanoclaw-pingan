@@ -31,7 +31,7 @@ export interface CapacityAuthenticatedInvocation {
   readonly authenticated: boolean;
   readonly actorRef: string;
   readonly sessionActorRef: string;
-  readonly actorKind: 'human' | 'feature_service' | 'automation' | 'system';
+  readonly actorKind: 'human' | 'pack_service' | 'automation' | 'system';
   readonly authSessionRef: string | null;
   readonly entrypoint:
     | 'runtime_center'

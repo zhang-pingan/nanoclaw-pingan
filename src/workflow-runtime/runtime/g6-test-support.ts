@@ -343,7 +343,7 @@ function seedG6Runtime(
       transaction.execute(
         `INSERT INTO workflow_registry_resources (
            id, resource_type, resource_id, resource_version, owner_core_ref,
-           owner_feature_id, canonical_value_id, content_hash,
+           owner_pack_id, canonical_value_id, content_hash,
            publication_state, created_at_ms, published_at_ms, retired_at_ms,
            row_version
          ) VALUES (?, ?, ?, ?, 'icarus.core@1.0.0', NULL, ?, ?, 'published',

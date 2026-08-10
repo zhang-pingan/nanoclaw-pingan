@@ -2,7 +2,12 @@
  * Container Runner for Icarus
  * Spawns agent execution in containers and handles IPC
  */
-import { ChildProcess, exec, spawn } from 'child_process';
+import {
+  ChildProcess,
+  ChildProcessWithoutNullStreams,
+  exec,
+  spawn,
+} from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -38,13 +43,26 @@ import {
 import { detectAuthMode } from './credential-proxy.js';
 import { ClassifiedFailure, classifyFailure } from './failure-taxonomy.js';
 import {
-  prepareFeatureResourceMountDir,
+  clearContainerAgents,
   prepareMergedMcpConfigDir,
-  syncContainerAgents,
   syncContainerSkills,
-} from './features/container-resources.js';
+} from './container-resources.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredAgent } from './types.js';
+import {
+  verifyWorkflowPackExecutionResourcePin,
+  type WorkflowPackExecutionResourcePin,
+} from './workflow-packs/execution-resources.js';
+import {
+  prepareWorkflowPackReadOnlyFileGate,
+  type WorkflowPackPersistentFileScope,
+  type WorkflowPackReadOnlyFileGate,
+  type WorkflowPackReadOnlyFileGateResult,
+} from './workflow-packs/read-only-file-gate.js';
+import {
+  createWorkflowPackExecutionFileScopeAuthority,
+  type WorkflowPackExecutionFileScopeAuthority,
+} from './workflow-packs/execution-file-scope-authority.js';
 
 const HOME_DIR = process.env.HOME || os.homedir();
 const DEFAULT_HOST_MAVEN_SETTINGS_PATH = path.join(
@@ -96,6 +114,62 @@ export interface ContainerInput {
   executionContext?: {
     delegationId?: string;
   };
+  workflowPackExecutionResources?: WorkflowPackExecutionResourcePin;
+}
+
+export interface ContainerWorkflowPackExecutionResources {
+  readonly format: 'icarus.workflow-pack-run-resources/1';
+  readonly pack_id: string;
+  readonly pack_version: string;
+  readonly manifest_hash: string;
+  readonly registry_snapshot_id: string;
+  readonly registry_snapshot_hash: string;
+  readonly execution_resource_files: WorkflowPackExecutionResourcePin['execution_resource_files'];
+  readonly permissions: WorkflowPackExecutionResourcePin['permissions'];
+  readonly root_path: '/workspace/workflow-pack-resources';
+  readonly resource_paths: Partial<
+    Record<'agents' | 'skills' | 'mcp' | 'scripts' | 'templates', string>
+  >;
+}
+
+const WORKFLOW_PACK_CONTAINER_ROOT =
+  '/workspace/workflow-pack-resources' as const;
+const WORKFLOW_PACK_FILE_SCOPES = new Set([
+  'agent',
+  'workspace',
+  'attachments',
+  'desktop_captures',
+  'ai_images',
+]);
+
+export function workflowPackContainerResources(
+  pin: WorkflowPackExecutionResourcePin,
+): ContainerWorkflowPackExecutionResources {
+  const resourcePaths: ContainerWorkflowPackExecutionResources['resource_paths'] =
+    {};
+  for (const kind of [
+    'agents',
+    'skills',
+    'mcp',
+    'scripts',
+    'templates',
+  ] as const) {
+    if (pin.execution_resource_files[kind]) {
+      resourcePaths[kind] = `${WORKFLOW_PACK_CONTAINER_ROOT}/${kind}`;
+    }
+  }
+  return {
+    format: 'icarus.workflow-pack-run-resources/1',
+    pack_id: pin.pack_id,
+    pack_version: pin.pack_version,
+    manifest_hash: pin.manifest_hash,
+    registry_snapshot_id: pin.registry_snapshot_id,
+    registry_snapshot_hash: pin.registry_snapshot_hash,
+    execution_resource_files: pin.execution_resource_files,
+    permissions: pin.permissions,
+    root_path: WORKFLOW_PACK_CONTAINER_ROOT,
+    resource_paths: resourcePaths,
+  };
 }
 
 export interface ContainerOutput {
@@ -123,6 +197,12 @@ interface VolumeMount {
   hostPath: string;
   containerPath: string;
   readonly: boolean;
+}
+
+interface VolumeMountPlan {
+  readonly mounts: VolumeMount[];
+  readonly readOnlyFileGate: WorkflowPackReadOnlyFileGate | null;
+  readonly fileScopeAuthority: WorkflowPackExecutionFileScopeAuthority | null;
 }
 
 type TraceEventWriter = (event: NonNullable<ContainerOutput['event']>) => void;
@@ -166,6 +246,37 @@ function makeMissingRequiredResultOutput(): ContainerOutput {
       retryable: true,
     }),
   );
+}
+
+function makeWorkflowPackReadOnlyFileGateError(
+  result: WorkflowPackReadOnlyFileGateResult | null,
+  cause?: unknown,
+): ContainerOutput {
+  const changes = result?.changes ?? [];
+  const detail = changes.length > 0 ? ` Changes: ${changes.join('; ')}.` : '';
+  const verificationError = cause
+    ? ` Gate error: ${cause instanceof Error ? cause.message : String(cause)}.`
+    : '';
+  const error =
+    'The read_only Workflow Pack Run did not restore its declared persistent file scopes to their initial state before completion.' +
+    `${detail}${verificationError} Restore the persistent file state before retrying.`;
+  return makeContainerErrorOutput(error, {
+    failureType: 'sandbox_error',
+    failureSubtype: 'workflow_pack_read_only_file_state_changed',
+    failureOrigin: 'system',
+    retryable: true,
+    details: {
+      module: 'container-runner',
+      action: 'verify_workflow_pack_persistent_file_state',
+      changes,
+      ...(cause
+        ? {
+            verification_error:
+              cause instanceof Error ? cause.message : String(cause),
+          }
+        : {}),
+    },
+  });
 }
 
 function sanitizeTracePreview(
@@ -419,22 +530,52 @@ function buildVolumeMounts(
   opts: {
     externalSystemOnce?: boolean;
     workspace?: ContainerInput['workspace'];
+    workflowPackExecutionResources?: WorkflowPackExecutionResourcePin;
+    runId?: string;
+    queryId?: string;
   } = {},
-): VolumeMount[] {
+): VolumeMountPlan {
   const mounts: VolumeMount[] = [];
+  const persistentScopeMounts: Array<{
+    readonly scope: WorkflowPackPersistentFileScope;
+    readonly mount: VolumeMount;
+  }> = [];
   const projectRoot = process.cwd();
   const agentDir = resolveAgentFolderPath(agent.folder);
   const isExternalSystemOnce = opts.externalSystemOnce === true;
+  const pinnedPack = opts.workflowPackExecutionResources
+    ? verifyWorkflowPackExecutionResourcePin(
+        opts.workflowPackExecutionResources,
+      )
+    : null;
+  const packReadOnly = pinnedPack?.permissions.effect_ceiling === 'read_only';
+  const packFileScopes = new Set(pinnedPack?.permissions.file_scopes ?? []);
+  for (const scope of packFileScopes) {
+    if (!WORKFLOW_PACK_FILE_SCOPES.has(scope)) {
+      throw new Error(`Workflow Pack file scope is unsupported: ${scope}`);
+    }
+  }
 
   const explicitProjectWorkspace = isExternalSystemOnce
     ? opts.workspace
     : undefined;
+  if (
+    pinnedPack &&
+    explicitProjectWorkspace &&
+    !packFileScopes.has('workspace')
+  ) {
+    throw new Error(
+      'Workflow Pack Run did not declare the workspace file scope',
+    );
+  }
   if (explicitProjectWorkspace) {
-    mounts.push({
+    const mount = {
       hostPath: explicitProjectWorkspace.hostPath,
       containerPath: '/workspace/project',
-      readonly: explicitProjectWorkspace.readonly,
-    });
+      readonly: packReadOnly || explicitProjectWorkspace.readonly,
+    };
+    mounts.push(mount);
+    persistentScopeMounts.push({ scope: 'workspace', mount });
     const envFile = path.join(explicitProjectWorkspace.hostPath, '.env');
     if (fs.existsSync(envFile))
       mounts.push({
@@ -442,17 +583,19 @@ function buildVolumeMounts(
         containerPath: '/workspace/project/.env',
         readonly: true,
       });
-  } else if (isMain) {
+  } else if (isMain && !pinnedPack) {
     // Main gets the project root read-only. Writable paths the agent needs
     // (agent folder, IPC, .claude/) are mounted separately below.
     // Read-only prevents the agent from modifying host application code
     // (src/, dist/, package.json, etc.) which would bypass the sandbox
     // entirely on next restart.
-    mounts.push({
+    const mount = {
       hostPath: projectRoot,
       containerPath: '/workspace/project',
       readonly: false,
-    });
+    };
+    mounts.push(mount);
+    persistentScopeMounts.push({ scope: 'workspace', mount });
 
     fs.mkdirSync(CONTAINER_NODE_MODULES_DIR, { recursive: true });
     mounts.push({
@@ -473,12 +616,16 @@ function buildVolumeMounts(
     }
   }
 
-  mounts.push({
-    hostPath: agentDir,
-    containerPath: '/workspace/agent',
-    readonly: false,
-  });
-  if (!isMain) {
+  if (!pinnedPack || packFileScopes.has('agent')) {
+    const mount = {
+      hostPath: agentDir,
+      containerPath: '/workspace/agent',
+      readonly: packReadOnly === true,
+    };
+    mounts.push(mount);
+    persistentScopeMounts.push({ scope: 'agent', mount });
+  }
+  if (!isMain && !pinnedPack) {
     // Global memory directory (read-only for non-main)
     // Only directory mounts are supported, not file mounts
     const globalDir = path.join(AGENTS_DIR, 'global');
@@ -523,14 +670,14 @@ function buildVolumeMounts(
     );
   }
 
-  // Sync enabled core/feature skills into each agent's .claude/skills/.
+  // Sync only Core resources into the general Agent environment.
   const skillsDst = path.join(agentSessionsDir, 'skills');
   if (!isExternalSystemOnce) {
     syncContainerSkills({ agentFolder: agent.folder, skillsDst });
-    syncContainerAgents({
-      agentFolder: agent.folder,
-      agentsDst: path.join(agentSessionsDir, 'agents'),
-    });
+    clearContainerAgents(path.join(agentSessionsDir, 'agents'));
+  } else {
+    fs.rmSync(skillsDst, { recursive: true, force: true });
+    clearContainerAgents(path.join(agentSessionsDir, 'agents'));
   }
   mounts.push({
     hostPath: agentSessionsDir,
@@ -554,17 +701,21 @@ function buildVolumeMounts(
 
   // Per-agent IPC namespace: each agent gets its own IPC directory
   // This prevents cross-agent privilege escalation via IPC
-  const agentIpcDir = resolveAgentIpcPath(agent.folder);
-  fs.mkdirSync(path.join(agentIpcDir, 'messages'), { recursive: true });
-  fs.mkdirSync(path.join(agentIpcDir, 'tasks'), { recursive: true });
-  fs.mkdirSync(path.join(agentIpcDir, 'input'), { recursive: true });
-  mounts.push({
-    hostPath: agentIpcDir,
-    containerPath: '/workspace/ipc',
-    readonly: false,
-  });
+  if (!pinnedPack || pinnedPack.permissions.host_actions.length > 0) {
+    const agentIpcDir = resolveAgentIpcPath(agent.folder);
+    fs.mkdirSync(path.join(agentIpcDir, 'messages'), { recursive: true });
+    fs.mkdirSync(path.join(agentIpcDir, 'tasks'), { recursive: true });
+    fs.mkdirSync(path.join(agentIpcDir, 'input'), { recursive: true });
+    mounts.push({
+      hostPath: agentIpcDir,
+      containerPath: '/workspace/ipc',
+      readonly: false,
+    });
+  }
 
-  const mcpConfigDir = prepareMergedMcpConfigDir(agent.folder);
+  const mcpConfigDir = pinnedPack
+    ? null
+    : prepareMergedMcpConfigDir(agent.folder);
   if (mcpConfigDir && fs.existsSync(mcpConfigDir)) {
     mounts.push({
       hostPath: mcpConfigDir,
@@ -573,42 +724,60 @@ function buildVolumeMounts(
     });
   }
 
-  const featureResourceDir = !isExternalSystemOnce
-    ? prepareFeatureResourceMountDir(agent.folder)
-    : null;
-  if (featureResourceDir && fs.existsSync(featureResourceDir)) {
+  if (pinnedPack) {
     mounts.push({
-      hostPath: featureResourceDir,
-      containerPath: '/workspace/feature-resources',
+      hostPath: pinnedPack.root_path,
+      containerPath: WORKFLOW_PACK_CONTAINER_ROOT,
       readonly: true,
     });
+    for (const kind of ['skills', 'agents'] as const) {
+      if (pinnedPack.execution_resource_files[kind]) {
+        mounts.push({
+          hostPath: path.join(pinnedPack.root_path, kind),
+          containerPath: `/home/node/.claude/${kind}`,
+          readonly: true,
+        });
+      }
+    }
   }
 
   // Shared attachments directory: inbound channel files are stored here.
   // Mounted for all agents so agents can reference files with stable paths.
-  fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true });
-  mounts.push({
-    hostPath: ATTACHMENTS_DIR,
-    containerPath: '/workspace/attachments',
-    readonly: false,
-  });
+  if (!pinnedPack || packFileScopes.has('attachments')) {
+    fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true });
+    const mount = {
+      hostPath: ATTACHMENTS_DIR,
+      containerPath: '/workspace/attachments',
+      readonly: pinnedPack?.permissions.effect_ceiling === 'read_only',
+    };
+    mounts.push(mount);
+    persistentScopeMounts.push({ scope: 'attachments', mount });
+  }
 
   // Shared desktop capture directory: screenshots captured through the host
   // desktop client are stored here, separate from inbound attachments.
-  fs.mkdirSync(DESKTOP_CAPTURES_DIR, { recursive: true });
-  mounts.push({
-    hostPath: DESKTOP_CAPTURES_DIR,
-    containerPath: '/workspace/desktop-captures',
-    readonly: false,
-  });
+  if (!pinnedPack || packFileScopes.has('desktop_captures')) {
+    fs.mkdirSync(DESKTOP_CAPTURES_DIR, { recursive: true });
+    const mount = {
+      hostPath: DESKTOP_CAPTURES_DIR,
+      containerPath: '/workspace/desktop-captures',
+      readonly: pinnedPack?.permissions.effect_ceiling === 'read_only',
+    };
+    mounts.push(mount);
+    persistentScopeMounts.push({ scope: 'desktop_captures', mount });
+  }
 
   // Shared AI image directory: generated and edited images are stored here.
-  fs.mkdirSync(AI_IMAGES_DIR, { recursive: true });
-  mounts.push({
-    hostPath: AI_IMAGES_DIR,
-    containerPath: '/workspace/ai-images',
-    readonly: false,
-  });
+  if (!pinnedPack || packFileScopes.has('ai_images')) {
+    fs.mkdirSync(AI_IMAGES_DIR, { recursive: true });
+    const mount = {
+      hostPath: AI_IMAGES_DIR,
+      containerPath: '/workspace/ai-images',
+      readonly: pinnedPack?.permissions.effect_ceiling === 'read_only',
+    };
+    mounts.push(mount);
+    persistentScopeMounts.push({ scope: 'ai_images', mount });
+  }
 
   // Mount agent-runner source directly because entrypoint compiles /app/src.
   const agentRunnerSrc = path.join(
@@ -627,28 +796,32 @@ function buildVolumeMounts(
 
   // Shared uploads directory: web client uploads are stored here.
   // Mounted at /workspace/uploads for all agents so agents can access uploaded files.
-  const uploadsDir = path.join(DATA_DIR, 'web-uploads');
-  fs.mkdirSync(uploadsDir, { recursive: true });
-  mounts.push({
-    hostPath: uploadsDir,
-    containerPath: '/workspace/uploads',
-    readonly: false,
-  });
+  if (!pinnedPack) {
+    const uploadsDir = path.join(DATA_DIR, 'web-uploads');
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    mounts.push({
+      hostPath: uploadsDir,
+      containerPath: '/workspace/uploads',
+      readonly: false,
+    });
+  }
 
   // Per-agent custom tools directory (plugin mechanism).
   // Agents can add .ts tool files here; reload_tools restarts the container
   // to pick them up.
-  const customToolsDir = path.join(agentDir, 'custom-tools');
-  fs.mkdirSync(customToolsDir, { recursive: true });
-  mounts.push({
-    hostPath: customToolsDir,
-    containerPath: '/app/custom-tools',
-    readonly: false,
-  });
+  if (!pinnedPack) {
+    const customToolsDir = path.join(agentDir, 'custom-tools');
+    fs.mkdirSync(customToolsDir, { recursive: true });
+    mounts.push({
+      hostPath: customToolsDir,
+      containerPath: '/app/custom-tools',
+      readonly: false,
+    });
+  }
 
   // Per-agent service repo mounts: only mount repos this agent needs
   const agentServices = agent.containerConfig?.services as string[] | undefined;
-  if (agentServices && agentServices.length > 0) {
+  if (!pinnedPack && agentServices && agentServices.length > 0) {
     const servicesJsonPath = path.join(AGENTS_DIR, 'global', 'services.json');
     if (fs.existsSync(servicesJsonPath)) {
       try {
@@ -681,7 +854,7 @@ function buildVolumeMounts(
   // Build a synthetic .ssh directory per agent, combining git keys from
   // ~/.ssh with a dedicated devops key (SSH_KEY_PATH). This avoids the
   // Docker limitation where file mounts cannot overlay read-only dir mounts.
-  if ((agentServices && agentServices.length > 0) || isMain) {
+  if (!pinnedPack && ((agentServices && agentServices.length > 0) || isMain)) {
     const hostSshDir = path.join(HOME_DIR, '.ssh');
     const synthSshDir = path.join(DATA_DIR, 'sessions', agent.folder, 'ssh');
     fs.mkdirSync(synthSshDir, { recursive: true });
@@ -739,7 +912,7 @@ function buildVolumeMounts(
   }
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
-  if (agent.containerConfig?.additionalMounts) {
+  if (!pinnedPack && agent.containerConfig?.additionalMounts) {
     const validatedMounts = validateAdditionalMounts(
       agent.containerConfig.additionalMounts,
       agent.name,
@@ -748,14 +921,112 @@ function buildVolumeMounts(
     mounts.push(...validatedMounts);
   }
 
-  addMavenMounts(mounts);
+  if (!pinnedPack) addMavenMounts(mounts);
 
-  return mounts;
+  if (!packReadOnly) {
+    return {
+      mounts,
+      readOnlyFileGate: null,
+      fileScopeAuthority: null,
+    };
+  }
+
+  if (!opts.runId || !opts.queryId) {
+    throw new Error(
+      'read_only Workflow Pack Run requires exact runId and queryId file scope authority',
+    );
+  }
+
+  let readOnlyFileGate: WorkflowPackReadOnlyFileGate | null = null;
+  let fileScopeAuthority: WorkflowPackExecutionFileScopeAuthority | null = null;
+  try {
+    readOnlyFileGate = prepareWorkflowPackReadOnlyFileGate({
+      parentDirectory: path.join(DATA_DIR, 'workflow-pack-read-only-runs'),
+      runKey: opts.runId,
+      scopes: persistentScopeMounts.map(({ scope, mount }) => ({
+        scope,
+        sourcePath: mount.hostPath,
+      })),
+    });
+    const mappings = persistentScopeMounts.map(({ scope, mount }) => ({
+      scope,
+      sourcePath: mount.hostPath,
+      shadowHostPath: readOnlyFileGate!.mountPath(scope),
+    }));
+    for (const mapping of mappings) {
+      const scopeMount = persistentScopeMounts.find(
+        ({ scope }) => scope === mapping.scope,
+      )!.mount;
+      scopeMount.hostPath = mapping.shadowHostPath;
+      scopeMount.readonly = false;
+    }
+    fileScopeAuthority = createWorkflowPackExecutionFileScopeAuthority({
+      parentDirectory: path.join(DATA_DIR, 'workflow-pack-run-authorities'),
+      runId: opts.runId,
+      queryId: opts.queryId,
+      agentFolder: agent.folder,
+      isMain,
+      hostActions: pinnedPack.permissions.host_actions,
+      mappings,
+    });
+    if (pinnedPack.permissions.host_actions.length > 0) {
+      mounts.push(
+        {
+          hostPath: path.join(fileScopeAuthority.ipcRootPath, 'messages'),
+          containerPath: '/workspace/ipc/messages',
+          readonly: false,
+        },
+        {
+          hostPath: path.join(fileScopeAuthority.ipcRootPath, 'tasks'),
+          containerPath: '/workspace/ipc/tasks',
+          readonly: false,
+        },
+        {
+          hostPath: fileScopeAuthority.hostActionResultsPath,
+          containerPath: '/workspace/ipc/host-action-results',
+          readonly: true,
+        },
+      );
+    }
+    return {
+      mounts,
+      readOnlyFileGate,
+      fileScopeAuthority,
+    };
+  } catch (error) {
+    try {
+      fileScopeAuthority?.cleanup();
+    } finally {
+      readOnlyFileGate?.cleanup();
+    }
+    throw error;
+  }
+}
+
+async function cleanupUnstartedMountPlan(plan: VolumeMountPlan): Promise<void> {
+  let firstError: unknown;
+  try {
+    await plan.fileScopeAuthority?.deactivateAndDrain();
+  } catch (error) {
+    firstError = error;
+  }
+  for (const cleanup of [
+    () => plan.fileScopeAuthority?.cleanup(),
+    () => plan.readOnlyFileGate?.cleanup(),
+  ]) {
+    try {
+      cleanup();
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+  if (firstError) throw firstError;
 }
 
 function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
+  restrictedWorkflowPack: boolean,
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
@@ -779,27 +1050,27 @@ function buildContainerArgs(
     args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
   }
 
-  // Jenkins credentials for deployment operations
-  const devopsSecrets = readEnvFile([
-    'JENKINS_URL',
-    'JENKINS_USER',
-    'JENKINS_PASSWORD',
-  ]);
-  if (devopsSecrets.JENKINS_URL) {
-    args.push('-e', `JENKINS_URL=${devopsSecrets.JENKINS_URL}`);
-    args.push('-e', `JENKINS_USER=${devopsSecrets.JENKINS_USER || ''}`);
-    args.push('-e', `JENKINS_PASSWORD=${devopsSecrets.JENKINS_PASSWORD || ''}`);
+  if (!restrictedWorkflowPack) {
+    // Jenkins credentials and Host data proxies are Core Agent facilities.
+    const devopsSecrets = readEnvFile([
+      'JENKINS_URL',
+      'JENKINS_USER',
+      'JENKINS_PASSWORD',
+    ]);
+    if (devopsSecrets.JENKINS_URL) {
+      args.push('-e', `JENKINS_URL=${devopsSecrets.JENKINS_URL}`);
+      args.push('-e', `JENKINS_USER=${devopsSecrets.JENKINS_USER || ''}`);
+      args.push(
+        '-e',
+        `JENKINS_PASSWORD=${devopsSecrets.JENKINS_PASSWORD || ''}`,
+      );
+    }
+    args.push(
+      '-e',
+      `MYSQL_PROXY_URL=http://${CONTAINER_HOST_GATEWAY}:${MYSQL_PROXY_PORT}`,
+    );
+    args.push('-e', `MAVEN_OPTS=${buildMavenOpts()}`);
   }
-
-  // MySQL proxy URL for database queries
-  args.push(
-    '-e',
-    `MYSQL_PROXY_URL=http://${CONTAINER_HOST_GATEWAY}:${MYSQL_PROXY_PORT}`,
-  );
-
-  // Keep Maven cache stable at the container default path even when the
-  // mounted settings.xml contains a host-specific <localRepository>.
-  args.push('-e', `MAVEN_OPTS=${buildMavenOpts()}`);
 
   // Runtime-specific args for host gateway resolution
   args.push(...hostGatewayArgs());
@@ -838,13 +1109,27 @@ export async function runContainerAgent(
   const agentDir = resolveAgentFolderPath(agent.folder);
   fs.mkdirSync(agentDir, { recursive: true });
 
-  const mounts = buildVolumeMounts(agent, input.isMain, {
+  const mountPlan = buildVolumeMounts(agent, input.isMain, {
     externalSystemOnce: input.executionMode === 'external_system_once',
     workspace: input.workspace,
+    workflowPackExecutionResources: input.workflowPackExecutionResources,
+    runId: input.runId,
+    queryId: input.queryId,
   });
+  const { mounts, readOnlyFileGate, fileScopeAuthority } = mountPlan;
   const safeName = agent.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `icarus-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(mounts, containerName);
+  let containerArgs: string[];
+  try {
+    containerArgs = buildContainerArgs(
+      mounts,
+      containerName,
+      Boolean(input.workflowPackExecutionResources),
+    );
+  } catch (error) {
+    await cleanupUnstartedMountPlan(mountPlan);
+    throw error;
+  }
   const emitContainerTraceEvent: TraceEventWriter | undefined =
     onOutput && input.queryId
       ? (event) =>
@@ -888,7 +1173,12 @@ export async function runContainerAgent(
   );
 
   const logsDir = path.join(agentDir, 'logs');
-  fs.mkdirSync(logsDir, { recursive: true });
+  try {
+    fs.mkdirSync(logsDir, { recursive: true });
+  } catch (error) {
+    await cleanupUnstartedMountPlan(mountPlan);
+    throw error;
+  }
 
   emitTraceEvent(emitContainerTraceEvent, {
     type: 'container',
@@ -915,11 +1205,97 @@ export async function runContainerAgent(
   });
 
   return new Promise((resolve) => {
-    const container = spawn(CONTAINER_RUNTIME_BIN, containerArgs, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    let container: ChildProcessWithoutNullStreams;
+    try {
+      container = spawn(CONTAINER_RUNTIME_BIN, containerArgs, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      void cleanupUnstartedMountPlan(mountPlan)
+        .catch((cleanupError) => {
+          logger.warn(
+            { cleanupError, agent: agent.name },
+            'Failed to clean unstarted container mount plan',
+          );
+        })
+        .finally(() =>
+          resolve(
+            makeContainerErrorOutput(
+              `Container spawn error: ${message}`,
+              classifyContainerFailure(error, 'container_spawn_error', true),
+            ),
+          ),
+        );
+      return;
+    }
 
-    onProcess(container, containerName);
+    try {
+      onProcess(container, containerName);
+    } catch (error) {
+      try {
+        container.kill('SIGKILL');
+      } catch (killError) {
+        logger.warn(
+          { agent: agent.name, containerName, err: killError },
+          'Failed to kill unregistered container process',
+        );
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      void cleanupUnstartedMountPlan(mountPlan)
+        .catch((cleanupError) => {
+          logger.warn(
+            { cleanupError, agent: agent.name },
+            'Failed to clean unregistered container mount plan',
+          );
+        })
+        .finally(() =>
+          resolve(
+            makeContainerErrorOutput(
+              `Container process registration error: ${message}`,
+              classifyContainerFailure(
+                error,
+                'container_process_registration_error',
+                true,
+              ),
+            ),
+          ),
+        );
+      return;
+    }
+    try {
+      fileScopeAuthority?.register();
+    } catch (error) {
+      try {
+        container.kill('SIGKILL');
+      } catch (killError) {
+        logger.warn(
+          { agent: agent.name, containerName, err: killError },
+          'Failed to kill container after file scope authority registration error',
+        );
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      void cleanupUnstartedMountPlan(mountPlan)
+        .catch((cleanupError) => {
+          logger.warn(
+            { cleanupError, agent: agent.name },
+            'Failed to clean container file scope authority registration error',
+          );
+        })
+        .finally(() =>
+          resolve(
+            makeContainerErrorOutput(
+              `Container file scope authority registration error: ${message}`,
+              classifyContainerFailure(
+                error,
+                'container_file_scope_authority_registration_error',
+                true,
+              ),
+            ),
+          ),
+        );
+      return;
+    }
     emitTraceEvent(emitContainerTraceEvent, {
       type: 'container',
       name: 'container_spawned',
@@ -941,15 +1317,6 @@ export async function runContainerAgent(
     let stdoutTruncated = false;
     let stderrTruncated = false;
 
-    const { workspace: _workspace, ...containerInput } = input;
-    container.stdin.write(
-      JSON.stringify({
-        ...containerInput,
-        projectWorkspaceMounted: Boolean(input.workspace),
-      }),
-    );
-    container.stdin.end();
-
     // Streaming output: parse OUTPUT_START/END marker pairs as they arrive
     let parseBuffer = '';
     let newSessionId: string | undefined;
@@ -960,6 +1327,116 @@ export async function runContainerAgent(
     let hadTextResult = false;
     let lastErrorOutput: ContainerOutput | null = null;
     let outputChain = Promise.resolve();
+    const bufferedSuccessOutputs: ContainerOutput[] = [];
+    let settled = false;
+    let processFailureOutput: ContainerOutput | null = null;
+
+    const queueOutput = (output: ContainerOutput): void => {
+      if (!onOutput) return;
+      outputChain = outputChain
+        .then(() => onOutput(output))
+        .catch((err) => {
+          logger.error(
+            { agent: agent.name, err },
+            'Error in onOutput callback',
+          );
+        });
+    };
+
+    const settle = (candidate: ContainerOutput): void => {
+      if (settled) return;
+      settled = true;
+      void outputChain.then(async () => {
+        let output = candidate;
+        let gateFailure = false;
+        let gateError: unknown;
+        try {
+          await fileScopeAuthority?.deactivateAndDrain();
+        } catch (error) {
+          gateFailure = Boolean(readOnlyFileGate);
+          gateError = error;
+          logger.error(
+            { err: error, agent: agent.name, runId: input.runId },
+            'Failed to drain Workflow Pack file scope authority',
+          );
+        }
+        if (readOnlyFileGate) {
+          try {
+            if (gateError) throw gateError;
+            const result = readOnlyFileGate.verify();
+            if (!result.clean) {
+              gateFailure = true;
+              output = {
+                ...makeWorkflowPackReadOnlyFileGateError(result),
+                newSessionId,
+                selectedModel,
+                runId: input.runId,
+                queryId: input.queryId,
+              };
+            }
+          } catch (error) {
+            gateFailure = true;
+            output = {
+              ...makeWorkflowPackReadOnlyFileGateError(null, error),
+              newSessionId,
+              selectedModel,
+              runId: input.runId,
+              queryId: input.queryId,
+            };
+          }
+
+          for (const cleanup of [
+            () => fileScopeAuthority?.cleanup(),
+            () => readOnlyFileGate.cleanup(),
+          ]) {
+            try {
+              cleanup();
+            } catch (error) {
+              gateFailure = true;
+              output = {
+                ...makeWorkflowPackReadOnlyFileGateError(null, error),
+                newSessionId,
+                selectedModel,
+                runId: input.runId,
+                queryId: input.queryId,
+              };
+            }
+          }
+
+          if (!gateFailure && output.status === 'success' && onOutput) {
+            for (const buffered of bufferedSuccessOutputs) {
+              try {
+                await onOutput(buffered);
+              } catch (error) {
+                logger.error(
+                  { agent: agent.name, err: error },
+                  'Error in buffered onOutput callback',
+                );
+              }
+            }
+          } else if (gateFailure && onOutput) {
+            try {
+              await onOutput(output);
+            } catch (error) {
+              logger.error(
+                { agent: agent.name, err: error },
+                'Error delivering Workflow Pack file gate failure',
+              );
+            }
+          }
+        } else {
+          try {
+            fileScopeAuthority?.cleanup();
+          } catch (error) {
+            logger.error(
+              { err: error, agent: agent.name, runId: input.runId },
+              'Failed to clean container file scope authority',
+            );
+          }
+        }
+        resolve(output);
+      });
+    };
 
     container.stdout.on('data', (data) => {
       const chunk = data.toString();
@@ -1040,14 +1517,15 @@ export async function runContainerAgent(
             // so idle timers start even for "silent" query completions.
             // Catch errors to prevent a single failed callback from breaking
             // the entire chain (which would leave runContainerAgent hanging).
-            outputChain = outputChain
-              .then(() => onOutput(parsed))
-              .catch((err) => {
-                logger.error(
-                  { agent: agent.name, err },
-                  'Error in onOutput callback',
-                );
-              });
+            if (
+              readOnlyFileGate &&
+              parsed.status === 'success' &&
+              !parsed.event
+            ) {
+              bufferedSuccessOutputs.push(parsed);
+            } else {
+              queueOutput(parsed);
+            }
           } catch (err) {
             streamingParseFailure = classifyFailure(err, {
               module: 'container-runner',
@@ -1208,6 +1686,11 @@ export async function runContainerAgent(
         },
       });
 
+      if (processFailureOutput) {
+        outputChain.then(() => settle(processFailureOutput!));
+        return;
+      }
+
       if (timedOut) {
         const ts = new Date().toISOString().replace(/[:.]/g, '-');
         const timeoutLog = path.join(logsDir, `container-${ts}.log`);
@@ -1234,7 +1717,7 @@ export async function runContainerAgent(
               'Container timed out after streamed error output',
             );
             outputChain.then(() => {
-              resolve(lastErrorOutput!);
+              settle(lastErrorOutput!);
             });
             return;
           }
@@ -1244,7 +1727,7 @@ export async function runContainerAgent(
               'Container timed out without required text result',
             );
             outputChain.then(() => {
-              resolve(makeMissingRequiredResultOutput());
+              settle(makeMissingRequiredResultOutput());
             });
             return;
           }
@@ -1253,7 +1736,7 @@ export async function runContainerAgent(
             'Container timed out after output (idle cleanup)',
           );
           outputChain.then(() => {
-            resolve({
+            settle({
               status: 'success',
               result: null,
               newSessionId,
@@ -1271,7 +1754,7 @@ export async function runContainerAgent(
             'Container timed out after invalid streamed output',
           );
           outputChain.then(() => {
-            resolve(makeContainerErrorOutput(error, streamingParseFailure!));
+            settle(makeContainerErrorOutput(error, streamingParseFailure!));
           });
           return;
         }
@@ -1281,7 +1764,7 @@ export async function runContainerAgent(
           'Container timed out with no output',
         );
 
-        resolve({
+        settle({
           status: 'error',
           result: null,
           error: `Container timed out after ${configTimeout}ms`,
@@ -1366,7 +1849,7 @@ export async function runContainerAgent(
         const error =
           streamingParseError || 'Failed to parse streamed output chunk';
         outputChain.then(() => {
-          resolve(makeContainerErrorOutput(error, failure));
+          settle(makeContainerErrorOutput(error, failure));
         });
         return;
       }
@@ -1395,7 +1878,7 @@ export async function runContainerAgent(
             stderr,
             stdout,
           });
-          resolve(
+          settle(
             makeContainerErrorOutput(
               error,
               classifyContainerFailure(
@@ -1419,7 +1902,7 @@ export async function runContainerAgent(
               { agent: agent.name, duration, newSessionId },
               'Container completed after streamed error output',
             );
-            resolve(lastErrorOutput!);
+            settle(lastErrorOutput!);
             return;
           }
           if (input.requireResult && !hadTextResult) {
@@ -1427,14 +1910,14 @@ export async function runContainerAgent(
               { agent: agent.name, duration, newSessionId },
               'Container completed without required text result',
             );
-            resolve(makeMissingRequiredResultOutput());
+            settle(makeMissingRequiredResultOutput());
             return;
           }
           logger.info(
             { agent: agent.name, duration, newSessionId },
             'Container completed (streaming mode)',
           );
-          resolve({
+          settle({
             status: 'success',
             result: null,
             final: true,
@@ -1493,7 +1976,7 @@ export async function runContainerAgent(
           'Container completed',
         );
 
-        resolve(output);
+        settle(output);
       } catch (err) {
         emitTraceEvent(emitContainerTraceEvent, {
           type: 'container',
@@ -1527,7 +2010,7 @@ export async function runContainerAgent(
         const error = `Failed to parse container output: ${
           err instanceof Error ? err.message : String(err)
         }`;
-        resolve(
+        settle(
           makeContainerErrorOutput(
             error,
             classifyFailure(err, {
@@ -1565,13 +2048,43 @@ export async function runContainerAgent(
         { agent: agent.name, containerName, error: err },
         'Container spawn error',
       );
-      resolve(
-        makeContainerErrorOutput(
-          `Container spawn error: ${err.message}`,
-          classifyContainerFailure(err, 'container_spawn_error', true),
-        ),
+      processFailureOutput = makeContainerErrorOutput(
+        `Container spawn error: ${err.message}`,
+        classifyContainerFailure(err, 'container_spawn_error', true),
       );
     });
+
+    try {
+      const {
+        workspace: _workspace,
+        workflowPackExecutionResources: hostPackResources,
+        ...containerInput
+      } = input;
+      container.stdin.write(
+        JSON.stringify({
+          ...containerInput,
+          workflowPackExecutionResources: hostPackResources
+            ? workflowPackContainerResources(hostPackResources)
+            : undefined,
+          projectWorkspaceMounted: Boolean(input.workspace),
+        }),
+      );
+      container.stdin.end();
+    } catch (error) {
+      try {
+        container.kill('SIGKILL');
+      } catch (killError) {
+        logger.warn(
+          { agent: agent.name, containerName, err: killError },
+          'Failed to kill container after stdin delivery error',
+        );
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      processFailureOutput = makeContainerErrorOutput(
+        `Container input delivery error: ${message}`,
+        classifyContainerFailure(error, 'container_input_delivery_error', true),
+      );
+    }
   });
 }
 

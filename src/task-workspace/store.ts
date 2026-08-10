@@ -3077,7 +3077,7 @@ export class TaskWorkspaceStore {
     interactionId: string;
     status: Exclude<TaskPendingInteractionV1['status'], 'pending'>;
     canonicalResult: JsonObject;
-    actorKind?: 'human' | 'system' | 'automation' | 'feature_service';
+    actorKind?: 'human' | 'system' | 'automation';
     actorRef: string;
     nowMs?: number;
   }): TaskPendingInteractionV1 {
@@ -4537,7 +4537,7 @@ export class TaskWorkspaceStore {
 
   audit(input: {
     sessionId: string | null;
-    actorKind: 'human' | 'system' | 'automation' | 'feature_service';
+    actorKind: 'human' | 'system' | 'automation';
     actorRef: string;
     action: string;
     targetRef: string | null;

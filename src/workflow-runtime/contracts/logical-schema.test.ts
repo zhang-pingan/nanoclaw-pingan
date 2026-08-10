@@ -105,7 +105,7 @@ describe('G0.6 Logical Schema Metadata Contract Pack', () => {
       'owner_workflow_id',
       'owner_graph_run_id',
       'owner_registry_resource_id',
-      'owner_feature_release_id',
+      'owner_pack_release_id',
       'system_owner_ref',
       'created_at_ms',
     ]);

@@ -137,11 +137,11 @@ export const CATALOG_PROTOCOL_NEGATIVE_CASES = [
     expected_code: 'catalog_protocol_contract_drift',
   },
   {
-    case_id: 'permission_catalog_rejects_feature_integrity_restore',
+    case_id: 'permission_catalog_rejects_pack_integrity_restore',
     artifact_format: 'icarus.workflow-runtime-permission-catalog/1',
     mutation: {
       operation: 'replace',
-      pointer: '/entries/7/feature_human_ceiling_allowed',
+      pointer: '/entries/7/pack_human_ceiling_allowed',
       value: true,
     },
     expected_code: 'catalog_protocol_contract_drift',

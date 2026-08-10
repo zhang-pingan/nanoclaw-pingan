@@ -53,7 +53,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-registry-exact-resource-query-input-schema:1\n",
-        "hash": "sha256:890468057a5e39303ed75c3df136f9dc92f150b86109bc75d24d030f83e3e387"
+        "hash": "sha256:d5ef3c0102fcf1a229c4da5b122aa545add3b46fafdedeef282a1cbfa8ec2f1f"
       },
       {
         "path": "registry/workflow-registry-exact-resource-query-result-schema@1.json",
@@ -64,7 +64,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-registry-exact-resource-query-result-schema:1\n",
-        "hash": "sha256:8f4e31e804b9498c7f0eff223321367f48fb3b98baba1e36ba223142a2fd8f63"
+        "hash": "sha256:46d0db26f387d87bedc2d671986878320d2f1c329f9a72bed32e5376cd37c3c7"
       },
       {
         "path": "conformance/g3-registry-exact-resource-query/positive-cases.json",
@@ -75,7 +75,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-registry-exact-resource-query-positive-cases:1\n",
-        "hash": "sha256:1f05ca7fd6824307bc5ae134f9df7ef9b2bc2822fd84c4dd41b9847b454c0be2"
+        "hash": "sha256:f6000f304baf51ce368e96eecf0e664c9d1aa9cce91f4a4fdea4016240149cfc"
       },
       {
         "path": "conformance/g3-registry-exact-resource-query/negative-cases.json",
@@ -86,7 +86,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-g3-registry-exact-resource-query-negative-cases:1\n",
-        "hash": "sha256:3a06af87c002ebcf3063ac289e5556cc78e4482ba3bbec98013436b16ff12643"
+        "hash": "sha256:75cae2fd87c715e5f5545052f6151b286dafb4d1d04b0727e471fc1a08d76c62"
       },
       {
         "path": "registry/workflow-registry-exact-resource-query-domain-separators@1.json",
@@ -104,5 +104,5 @@
     "negative_case_count": 5,
     "g4_through_g9_status": "NOT_READY"
   },
-  "hash": "sha256:5dfb07dcfe3399e9bdf81923315f10acc0e7bfaf5628af88d2cc5d078f2f13de"
+  "hash": "sha256:eabd1397cbbb808ad543f2adc6e4f1d5cc0766517a40c8b87d6b4aa0500305a2"
 }

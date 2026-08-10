@@ -1,0 +1,768 @@
+import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
+
+import {
+  calculateRegistryResourceContentHash,
+  compareAscii,
+  registryResourceId,
+  registryResourceKey,
+} from './g3-registry-persistence.js';
+import { G3_REGISTRY_EXACT_RESOURCE_QUERY_INPUT_SCHEMA } from './g3-registry-exact-resource-query.js';
+import {
+  G39_ACTIVATION_ERROR_PRECEDENCE,
+  G39_ACTIVATION_DISPOSITIONS,
+  G39_PACK_RELEASE_ACTIVATION_FORMATS,
+  G39_TERMINAL_DISPOSITIONS,
+  type G39ActivationErrorCode,
+  type G39ActivationFailure,
+  type G39ExpectedPointer,
+  type G39PackReleaseActivationReceipt,
+  type G39PackReleaseActivationRequest,
+  type G39PackReleaseActivationResult,
+  type G39ObservedPointer,
+  type G39TerminalResultReference,
+} from './g3-pack-release-activation-types.js';
+import { canonicalJson, domainSeparatedSha256 } from './hash.js';
+import type {
+  JsonObject,
+  JsonValue,
+  Sha256Hash,
+  VersionedRef,
+} from './types.js';
+
+export const G39_REQUEST_DOMAIN =
+  'icarus:workflow-pack-release-activation-request:1\n';
+export const G39_DOMAIN_REQUEST_DOMAIN =
+  'icarus:workflow-pack-release-activation-domain-request:1\n';
+export const G39_RECEIPT_DOMAIN =
+  'icarus:workflow-pack-release-activation-receipt:1\n';
+export const G39_RESULT_DOMAIN =
+  'icarus:workflow-pack-release-activation-result:1\n';
+export const G39_INVOCATION_DOMAIN =
+  'icarus:workflow-pack-release-activation-invocation:1\n';
+export const G39_EVENT_DOMAIN =
+  'icarus:workflow-pack-release-activation-event:1\n';
+export const G39_COMMAND_ID_DOMAIN =
+  'icarus:workflow-pack-release-activation-command-id:1\n';
+
+export const G39_SCHEMA_REFS = {
+  request: {
+    id: 'icarus.workflow-pack-release-activation-request-schema',
+    version: '1.0.0',
+  },
+  receipt: {
+    id: 'icarus.workflow-pack-release-activation-receipt-schema',
+    version: '1.0.0',
+  },
+  result: {
+    id: 'icarus.workflow-pack-release-activation-result-schema',
+    version: '1.0.0',
+  },
+} as const;
+
+const DRAFT_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
+const HASH_PATTERN = '^sha256:[0-9a-f]{64}$';
+const hashSchema: JsonObject = { type: 'string', pattern: HASH_PATTERN };
+const nonEmptyString: JsonObject = { type: 'string', minLength: 1 };
+const safeInteger: JsonObject = {
+  type: 'integer',
+  minimum: 0,
+  maximum: Number.MAX_SAFE_INTEGER,
+};
+const positiveInteger: JsonObject = {
+  type: 'integer',
+  minimum: 1,
+  maximum: Number.MAX_SAFE_INTEGER,
+};
+
+function object(
+  required: string[],
+  properties: Record<string, JsonValue>,
+  extra: JsonObject = {},
+): JsonObject {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required,
+    properties,
+    ...extra,
+  };
+}
+
+const exactQueryDefs = structuredClone(
+  G3_REGISTRY_EXACT_RESOURCE_QUERY_INPUT_SCHEMA.$defs as JsonObject,
+);
+const exactQueryCore = structuredClone(
+  G3_REGISTRY_EXACT_RESOURCE_QUERY_INPUT_SCHEMA,
+) as JsonObject;
+delete exactQueryCore.$schema;
+delete exactQueryCore.$id;
+delete exactQueryCore.$defs;
+
+const releaseIdentitySchema = object(['release_id', 'ref', 'hash'], {
+  release_id: nonEmptyString,
+  ref: { $ref: '#/$defs/versioned_ref' },
+  hash: hashSchema,
+});
+
+const releaseClaimSchema = object(
+  ['release_id', 'ref', 'hash', 'expected_lifecycle'],
+  {
+    release_id: nonEmptyString,
+    ref: { $ref: '#/$defs/versioned_ref' },
+    hash: hashSchema,
+    expected_lifecycle: { enum: ['staged', 'active'] },
+  },
+);
+
+const releaseResourceSchema = object(
+  ['resource_type', 'ref', 'content_hash', 'role'],
+  {
+    resource_type: { type: 'string', minLength: 1 },
+    ref: { $ref: '#/$defs/versioned_ref' },
+    content_hash: hashSchema,
+    role: { enum: ['closure_root', 'closure_member'] },
+  },
+);
+
+const targetReleaseSchema = object(
+  ['release_id', 'ref', 'hash', 'expected_lifecycle', 'resources'],
+  {
+    release_id: nonEmptyString,
+    ref: { $ref: '#/$defs/versioned_ref' },
+    hash: hashSchema,
+    expected_lifecycle: { const: 'staged' },
+    resources: {
+      type: 'array',
+      minItems: 1,
+      items: releaseResourceSchema,
+    },
+  },
+);
+
+const retentionClaimSchema = object(
+  [
+    'handle_id',
+    'handle_kind',
+    'pack_release_id',
+    'closure_ref',
+    'closure_hash',
+    'expected_status',
+    'expected_row_version',
+  ],
+  {
+    handle_id: nonEmptyString,
+    handle_kind: { const: 'published' },
+    pack_release_id: nonEmptyString,
+    closure_ref: { $ref: '#/$defs/versioned_ref' },
+    closure_hash: hashSchema,
+    expected_status: { const: 'held' },
+    expected_row_version: safeInteger,
+  },
+);
+
+const absentPointerSchema = object(['state', 'row_version', 'release'], {
+  state: { const: 'absent' },
+  row_version: { type: 'null' },
+  release: { type: 'null' },
+});
+
+const presentPointerSchema = object(['state', 'row_version', 'release'], {
+  state: { const: 'present' },
+  row_version: positiveInteger,
+  release: releaseIdentitySchema,
+});
+
+const contractSchemasSchema = object(['request', 'receipt', 'result'], {
+  request: { $ref: '#/$defs/exact_query' },
+  receipt: { $ref: '#/$defs/exact_query' },
+  result: { $ref: '#/$defs/exact_query' },
+});
+
+export const G39_REQUEST_SCHEMA: JsonObject = {
+  $schema: DRAFT_2020_12,
+  ...object(
+    [
+      'format',
+      'command_type',
+      'idempotency_domain',
+      'idempotency_key',
+      'actor_ref',
+      'auth_session_ref',
+      'requested_at_ms',
+      'pack_id',
+      'target_release',
+      'previous_release',
+      'expected_pointer',
+      'target_retention',
+      'previous_retention',
+      'contract_schemas',
+      'domain_request_hash',
+      'request_hash',
+    ],
+    {
+      format: { const: G39_PACK_RELEASE_ACTIVATION_FORMATS.request },
+      command_type: { const: 'activate_pack_release' },
+      idempotency_domain: nonEmptyString,
+      idempotency_key: nonEmptyString,
+      actor_ref: nonEmptyString,
+      auth_session_ref: nonEmptyString,
+      requested_at_ms: safeInteger,
+      pack_id: nonEmptyString,
+      target_release: targetReleaseSchema,
+      previous_release: {
+        anyOf: [releaseClaimSchema, { type: 'null' }],
+      },
+      expected_pointer: {
+        oneOf: [absentPointerSchema, presentPointerSchema],
+      },
+      target_retention: retentionClaimSchema,
+      previous_retention: {
+        anyOf: [retentionClaimSchema, { type: 'null' }],
+      },
+      contract_schemas: contractSchemasSchema,
+      domain_request_hash: hashSchema,
+      request_hash: hashSchema,
+    },
+  ),
+  $defs: { ...exactQueryDefs, exact_query: exactQueryCore },
+};
+
+const receiptCoreSchema = object(
+  [
+    'format',
+    'command_id',
+    'domain_request_hash',
+    'pack_id',
+    'target_release',
+    'previous_release',
+    'pointer',
+    'target_lifecycle',
+    'previous_lifecycle',
+    'target_retention',
+    'previous_retention',
+    'activated_at_ms',
+    'active_pointer_changed',
+    'receipt_hash',
+  ],
+  {
+    format: { const: G39_PACK_RELEASE_ACTIVATION_FORMATS.receipt },
+    command_id: nonEmptyString,
+    domain_request_hash: hashSchema,
+    pack_id: nonEmptyString,
+    target_release: releaseIdentitySchema,
+    previous_release: { anyOf: [releaseIdentitySchema, { type: 'null' }] },
+    pointer: object(
+      ['previous_state', 'previous_row_version', 'applied_row_version'],
+      {
+        previous_state: { enum: ['absent', 'present'] },
+        previous_row_version: {
+          anyOf: [positiveInteger, { type: 'null' }],
+        },
+        applied_row_version: positiveInteger,
+      },
+    ),
+    target_lifecycle: { const: 'active' },
+    previous_lifecycle: {
+      anyOf: [{ const: 'draining' }, { type: 'null' }],
+    },
+    target_retention: retentionClaimSchema,
+    previous_retention: {
+      anyOf: [retentionClaimSchema, { type: 'null' }],
+    },
+    activated_at_ms: safeInteger,
+    active_pointer_changed: { const: true },
+    receipt_hash: hashSchema,
+  },
+);
+
+export const G39_RECEIPT_SCHEMA: JsonObject = {
+  $schema: DRAFT_2020_12,
+  ...receiptCoreSchema,
+  $defs: { versioned_ref: exactQueryDefs.versioned_ref },
+};
+
+const terminalReferenceSchema = object(
+  ['value_id', 'hash', 'schema_resource_id', 'schema_hash'],
+  {
+    value_id: nonEmptyString,
+    hash: hashSchema,
+    schema_resource_id: nonEmptyString,
+    schema_hash: hashSchema,
+  },
+);
+
+const failureSchema = object(['phase', 'code'], {
+  phase: {
+    enum: [
+      'admission',
+      'idempotency',
+      'integrity',
+      'preflight',
+      'activation_transaction',
+      'persistence',
+    ],
+  },
+  code: { enum: [...G39_ACTIVATION_ERROR_PRECEDENCE] },
+});
+
+export const G39_RESULT_SCHEMA: JsonObject = {
+  $schema: DRAFT_2020_12,
+  ...object(
+    [
+      'format',
+      'disposition',
+      'code',
+      'command_id',
+      'invocation_no',
+      'submitted_domain_request_hash',
+      'bound_domain_request_hash',
+      'terminal_disposition',
+      'referenced_terminal_result',
+      'receipt',
+      'expected_pointer',
+      'observed_pointer',
+      'failure',
+      'result_hash',
+    ],
+    {
+      format: { const: G39_PACK_RELEASE_ACTIVATION_FORMATS.result },
+      disposition: { enum: [...G39_ACTIVATION_DISPOSITIONS] },
+      code: {
+        enum: [
+          'pack_release_activation_applied',
+          'pack_release_activation_duplicate',
+          ...G39_ACTIVATION_ERROR_PRECEDENCE,
+        ],
+      },
+      command_id: nonEmptyString,
+      invocation_no: positiveInteger,
+      submitted_domain_request_hash: hashSchema,
+      bound_domain_request_hash: hashSchema,
+      terminal_disposition: {
+        anyOf: [{ enum: [...G39_TERMINAL_DISPOSITIONS] }, { type: 'null' }],
+      },
+      referenced_terminal_result: {
+        anyOf: [terminalReferenceSchema, { type: 'null' }],
+      },
+      receipt: { anyOf: [receiptCoreSchema, { type: 'null' }] },
+      expected_pointer: {
+        oneOf: [absentPointerSchema, presentPointerSchema],
+      },
+      observed_pointer: {
+        anyOf: [absentPointerSchema, presentPointerSchema, { type: 'null' }],
+      },
+      failure: { anyOf: [failureSchema, { type: 'null' }] },
+      result_hash: hashSchema,
+    },
+  ),
+  $defs: { versioned_ref: exactQueryDefs.versioned_ref },
+};
+
+function schemaResourceHash(ref: VersionedRef, schema: JsonObject): Sha256Hash {
+  return calculateRegistryResourceContentHash({
+    format: 'icarus.workflow-registry-resource/1',
+    resource_type: 'schema',
+    ref,
+    content: schema,
+  });
+}
+
+export const G39_SCHEMA_RESOURCE_HASHES = {
+  request: schemaResourceHash(G39_SCHEMA_REFS.request, G39_REQUEST_SCHEMA),
+  receipt: schemaResourceHash(G39_SCHEMA_REFS.receipt, G39_RECEIPT_SCHEMA),
+  result: schemaResourceHash(G39_SCHEMA_REFS.result, G39_RESULT_SCHEMA),
+} as const;
+
+const ajv = new Ajv2020({
+  strict: true,
+  allErrors: true,
+  coerceTypes: false,
+  useDefaults: false,
+  removeAdditional: false,
+});
+const validateRequestSchema = ajv.compile(G39_REQUEST_SCHEMA as AnySchema);
+const validateReceiptSchema = ajv.compile(G39_RECEIPT_SCHEMA as AnySchema);
+const validateResultSchema = ajv.compile(G39_RESULT_SCHEMA as AnySchema);
+
+export class G39ActivationContractError extends Error {
+  constructor(
+    readonly code: G39ActivationErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'G39ActivationContractError';
+  }
+}
+
+function without<T extends JsonObject>(value: T, fields: string[]): JsonObject {
+  const cloned = structuredClone(value) as JsonObject;
+  for (const field of fields) delete cloned[field];
+  return cloned;
+}
+
+function sameRef(left: VersionedRef, right: VersionedRef): boolean {
+  return left.id === right.id && left.version === right.version;
+}
+
+function releaseIdentity(claim: {
+  release_id: string;
+  ref: VersionedRef;
+  hash: Sha256Hash;
+}): JsonObject {
+  return {
+    release_id: claim.release_id,
+    ref: claim.ref,
+    hash: claim.hash,
+  };
+}
+
+function schemaBindingMatches(
+  request: G39PackReleaseActivationRequest,
+  key: keyof typeof G39_SCHEMA_REFS,
+): boolean {
+  const query = request.contract_schemas[key];
+  return (
+    query.resource_type === 'schema' &&
+    sameRef(query.ref, G39_SCHEMA_REFS[key]) &&
+    query.content_hash === G39_SCHEMA_RESOURCE_HASHES[key] &&
+    query.publication_state === 'published'
+  );
+}
+
+function assertRequestSemantics(
+  request: G39PackReleaseActivationRequest,
+): void {
+  if (
+    !Object.keys(G39_SCHEMA_REFS).every((key) =>
+      schemaBindingMatches(request, key as keyof typeof G39_SCHEMA_REFS),
+    )
+  ) {
+    throw new G39ActivationContractError(
+      'activation_request_schema_invalid',
+      'Activation contract schema bindings must be the published current resources',
+    );
+  }
+
+  const resources = request.target_release.resources;
+  const keys = resources.map((entry) => registryResourceKey(entry));
+  if (
+    new Set(keys).size !== keys.length ||
+    canonicalJson(keys) !==
+      canonicalJson(
+        [...keys].sort((left, right) => compareAscii(left, right)),
+      ) ||
+    resources.filter((entry) => entry.role === 'closure_root').length !== 1
+  ) {
+    throw new G39ActivationContractError(
+      'activation_request_schema_invalid',
+      'Target Release resources must be unique, ASCII ordered, and have one Closure root',
+    );
+  }
+
+  if (
+    request.target_retention.pack_release_id !==
+    request.target_release.release_id
+  ) {
+    throw new G39ActivationContractError(
+      'activation_request_schema_invalid',
+      'Target Retention must belong to the target Pack Release',
+    );
+  }
+
+  if (request.expected_pointer.state === 'absent') {
+    if (
+      request.previous_release !== null ||
+      request.previous_retention !== null
+    ) {
+      throw new G39ActivationContractError(
+        'activation_request_schema_invalid',
+        'Absent expected pointer forbids previous Release and Retention claims',
+      );
+    }
+  } else {
+    if (
+      request.previous_release === null ||
+      request.previous_retention === null ||
+      request.previous_release.expected_lifecycle !== 'active' ||
+      canonicalJson(releaseIdentity(request.previous_release)) !==
+        canonicalJson(request.expected_pointer.release) ||
+      request.previous_retention.pack_release_id !==
+        request.previous_release.release_id ||
+      request.previous_release.release_id === request.target_release.release_id
+    ) {
+      throw new G39ActivationContractError(
+        'activation_request_schema_invalid',
+        'Present expected pointer requires one distinct exact active previous Release and held Retention claim',
+      );
+    }
+  }
+}
+
+export function calculateG39DomainRequestHash(
+  request: G39PackReleaseActivationRequest,
+): Sha256Hash {
+  return domainSeparatedSha256(
+    G39_DOMAIN_REQUEST_DOMAIN,
+    without(request, ['domain_request_hash', 'request_hash']),
+  );
+}
+
+export function calculateG39RequestHash(
+  request: G39PackReleaseActivationRequest,
+): Sha256Hash {
+  return domainSeparatedSha256(
+    G39_REQUEST_DOMAIN,
+    without(request, ['request_hash']),
+  );
+}
+
+export function calculateG39ReceiptHash(
+  receipt: G39PackReleaseActivationReceipt,
+): Sha256Hash {
+  return domainSeparatedSha256(
+    G39_RECEIPT_DOMAIN,
+    without(receipt, ['receipt_hash']),
+  );
+}
+
+export function calculateG39ResultHash(
+  result: G39PackReleaseActivationResult,
+): Sha256Hash {
+  return domainSeparatedSha256(
+    G39_RESULT_DOMAIN,
+    without(result, ['result_hash']),
+  );
+}
+
+export function validateG39PackReleaseActivationRequest(
+  candidate: unknown,
+): asserts candidate is G39PackReleaseActivationRequest {
+  if (!validateRequestSchema(candidate)) {
+    const unknown = validateRequestSchema.errors?.some(
+      (entry) => entry.keyword === 'additionalProperties',
+    );
+    throw new G39ActivationContractError(
+      unknown
+        ? 'activation_request_unknown_field'
+        : 'activation_request_schema_invalid',
+      ajv.errorsText(validateRequestSchema.errors),
+    );
+  }
+  const request = candidate as G39PackReleaseActivationRequest;
+  assertRequestSemantics(request);
+  if (
+    request.domain_request_hash !== calculateG39DomainRequestHash(request) ||
+    request.request_hash !== calculateG39RequestHash(request)
+  ) {
+    throw new G39ActivationContractError(
+      'activation_request_hash_mismatch',
+      'Activation request or domain request hash mismatch',
+    );
+  }
+}
+
+export function validateG39PackReleaseActivationReceipt(
+  candidate: unknown,
+): asserts candidate is G39PackReleaseActivationReceipt {
+  if (!validateReceiptSchema(candidate)) {
+    throw new G39ActivationContractError(
+      'terminal_integrity_mismatch',
+      ajv.errorsText(validateReceiptSchema.errors),
+    );
+  }
+  const receipt = candidate as G39PackReleaseActivationReceipt;
+  if (
+    receipt.receipt_hash !== calculateG39ReceiptHash(receipt) ||
+    (receipt.pointer.previous_state === 'absent' &&
+      (receipt.pointer.previous_row_version !== null ||
+        receipt.previous_release !== null ||
+        receipt.previous_retention !== null ||
+        receipt.previous_lifecycle !== null ||
+        receipt.pointer.applied_row_version !== 1)) ||
+    (receipt.pointer.previous_state === 'present' &&
+      (receipt.pointer.previous_row_version === null ||
+        receipt.previous_release === null ||
+        receipt.previous_retention === null ||
+        receipt.previous_lifecycle !== 'draining' ||
+        receipt.pointer.applied_row_version !==
+          receipt.pointer.previous_row_version + 1))
+  ) {
+    throw new G39ActivationContractError(
+      'terminal_integrity_mismatch',
+      'Activation receipt hash or pointer transition binding mismatch',
+    );
+  }
+}
+
+export function validateG39PackReleaseActivationResult(
+  candidate: unknown,
+): asserts candidate is G39PackReleaseActivationResult {
+  if (!validateResultSchema(candidate)) {
+    throw new G39ActivationContractError(
+      'terminal_integrity_mismatch',
+      ajv.errorsText(validateResultSchema.errors),
+    );
+  }
+  const result = candidate as G39PackReleaseActivationResult;
+  if (result.result_hash !== calculateG39ResultHash(result)) {
+    throw new G39ActivationContractError(
+      'terminal_integrity_mismatch',
+      'Activation result hash mismatch',
+    );
+  }
+  const receiptAllowed =
+    result.disposition === 'applied' ||
+    (result.disposition === 'duplicate' &&
+      result.terminal_disposition === 'applied');
+  if (
+    (receiptAllowed && result.receipt === null) ||
+    (!receiptAllowed && result.receipt !== null) ||
+    ((result.disposition === 'applied' || result.disposition === 'failed') &&
+      result.referenced_terminal_result !== null) ||
+    (result.disposition === 'duplicate' &&
+      (result.referenced_terminal_result === null ||
+        result.terminal_disposition === null ||
+        result.submitted_domain_request_hash !==
+          result.bound_domain_request_hash ||
+        result.code !== 'pack_release_activation_duplicate' ||
+        result.failure !== null ||
+        result.observed_pointer !== null)) ||
+    (result.disposition === 'applied' &&
+      (result.terminal_disposition !== 'applied' ||
+        result.code !== 'pack_release_activation_applied' ||
+        result.failure !== null ||
+        result.submitted_domain_request_hash !==
+          result.bound_domain_request_hash ||
+        canonicalJson(result.expected_pointer) !==
+          canonicalJson(result.observed_pointer))) ||
+    (result.disposition === 'failed' &&
+      (result.terminal_disposition !== 'failed' ||
+        result.failure === null ||
+        result.code !== result.failure.code ||
+        result.submitted_domain_request_hash !==
+          result.bound_domain_request_hash ||
+        result.observed_pointer !== null)) ||
+    (result.disposition === 'conflict' &&
+      (result.failure === null ||
+        result.code !== result.failure.code ||
+        (result.submitted_domain_request_hash ===
+        result.bound_domain_request_hash
+          ? result.terminal_disposition !== 'conflict' ||
+            result.referenced_terminal_result !== null ||
+            result.code !== 'pointer_cas_conflict' ||
+            result.observed_pointer === null
+          : result.code !== 'idempotency_conflict' ||
+            result.receipt !== null ||
+            result.observed_pointer !== null ||
+            (result.terminal_disposition === null
+              ? result.referenced_terminal_result !== null
+              : result.referenced_terminal_result === null))))
+  ) {
+    throw new G39ActivationContractError(
+      'terminal_integrity_mismatch',
+      'Activation result disposition, receipt, reference, or failure binding mismatch',
+    );
+  }
+  if (result.receipt) validateG39PackReleaseActivationReceipt(result.receipt);
+}
+
+export function buildG39Receipt(
+  candidate: Omit<G39PackReleaseActivationReceipt, 'receipt_hash'>,
+): G39PackReleaseActivationReceipt {
+  const receipt = {
+    ...candidate,
+    receipt_hash:
+      'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+  } as unknown as G39PackReleaseActivationReceipt;
+  receipt.receipt_hash = calculateG39ReceiptHash(receipt);
+  validateG39PackReleaseActivationReceipt(receipt);
+  return receipt;
+}
+
+export function buildG39Result(
+  candidate: Omit<G39PackReleaseActivationResult, 'result_hash'>,
+): G39PackReleaseActivationResult {
+  const result = {
+    ...candidate,
+    result_hash:
+      'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+  } as unknown as G39PackReleaseActivationResult;
+  result.result_hash = calculateG39ResultHash(result);
+  validateG39PackReleaseActivationResult(result);
+  return result;
+}
+
+export function g39ActivationCommandId(
+  idempotencyDomain: string,
+  idempotencyKey: string,
+): string {
+  return `activation-command:${domainSeparatedSha256(G39_COMMAND_ID_DOMAIN, {
+    idempotency_domain: idempotencyDomain,
+    idempotency_key: idempotencyKey,
+  })}`;
+}
+
+export function g39SchemaResourceId(
+  request: G39PackReleaseActivationRequest,
+  key: keyof G39PackReleaseActivationRequest['contract_schemas'],
+): string {
+  return registryResourceId(
+    request.contract_schemas[
+      key
+    ] as G39PackReleaseActivationRequest['contract_schemas']['request'],
+  );
+}
+
+export function g39ReleaseIdentity(
+  request: G39PackReleaseActivationRequest,
+  kind: 'target' | 'previous',
+): JsonObject | null {
+  const claim =
+    kind === 'target' ? request.target_release : request.previous_release;
+  return claim ? releaseIdentity(claim) : null;
+}
+
+export function g39Failure(
+  phase: G39ActivationFailure['phase'],
+  code: G39ActivationFailure['code'],
+): G39ActivationFailure {
+  return { phase, code };
+}
+
+export function g39TerminalReference(
+  valueId: string,
+  hash: Sha256Hash,
+  schemaResourceId: string,
+  schemaHash: Sha256Hash,
+): G39TerminalResultReference {
+  return {
+    value_id: valueId,
+    hash,
+    schema_resource_id: schemaResourceId,
+    schema_hash: schemaHash,
+  };
+}
+
+export function g39ExpectedPointer(
+  request: G39PackReleaseActivationRequest,
+): G39ExpectedPointer {
+  return structuredClone(request.expected_pointer);
+}
+
+export function g39ObservedPointer(
+  candidate: G39ObservedPointer,
+): G39ObservedPointer {
+  return structuredClone(candidate);
+}
+
+export function g39SchemasForTest(): {
+  request: JsonObject;
+  receipt: JsonObject;
+  result: JsonObject;
+} {
+  return {
+    request: structuredClone(G39_REQUEST_SCHEMA),
+    receipt: structuredClone(G39_RECEIPT_SCHEMA),
+    result: structuredClone(G39_RESULT_SCHEMA),
+  };
+}

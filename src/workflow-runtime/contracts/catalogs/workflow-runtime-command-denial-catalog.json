@@ -16,7 +16,7 @@
         "target_mutated": false
       },
       {
-        "denial_code": "feature_ceiling_denied",
+        "denial_code": "pack_ceiling_denied",
         "execution_result": "denied",
         "retry_disposition": "authorization_change",
         "target_mutated": false

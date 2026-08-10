@@ -30,6 +30,16 @@ function sha(char: string): Sha256Hash {
   return `sha256:${char.repeat(64)}` as Sha256Hash;
 }
 
+function resolveTemporarySystemRecipe(input: {
+  readonly principal_ref: string;
+}) {
+  return {
+    recipe_ref: { id: 'ad_hoc_personal_task', version: '1.0.0' },
+    recipe_hash: sha('b'),
+    principal_ref: input.principal_ref,
+  };
+}
+
 function openStore(): TaskWorkspaceStore {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), 'icarus-workspace-review-'),
@@ -54,7 +64,9 @@ function service(
 ): TaskWorkspaceService {
   return new TaskWorkspaceService({
     store,
-    runtimeGateway: runtimeGateway as never,
+    runtimeGateway: (runtimeGateway
+      ? { resolveSystemRecipe: resolveTemporarySystemRecipe, ...runtimeGateway }
+      : null) as never,
     runtimeEventHub,
     coordinator: coordinator as never,
     coordinatorAgentJid: () => (coordinator ? 'agent:coordinator' : null),
@@ -81,7 +93,8 @@ function appendLaunch(
       principalRef: session.owner_principal_ref,
       selection: {
         kind: 'published_recipe',
-        recipe_kind: 'core',
+        distribution_kind: 'pack',
+        distribution_ref: { id: 'pack.test', version: '1.0.0' },
         recipe_ref: { id: 'recipe:test', version: '1.0.0' },
         recipe_hash: sha('a'),
       },
@@ -214,9 +227,15 @@ describe('TaskWorkspaceService review hardening', () => {
         expires_at_ms: 200,
         items: [
           {
-            recipe_ref: { id: 'ad_hoc_personal_task', version: '1.3.0' },
+            distribution_kind: 'pack',
+            distribution_ref: { id: 'pack.example', version: '1.0.0' },
+            recipe_ref: { id: 'pack.example.recipe', version: '1.0.0' },
             recipe_hash: sha('b'),
-            selection_token: 'temporary-token',
+            display_name: 'Example Pack Recipe',
+            description: null,
+            launch_policy: 'confirm',
+            input_summary: {},
+            selection_token: 'pack-token',
           },
         ],
       })),
@@ -240,7 +259,9 @@ describe('TaskWorkspaceService review hardening', () => {
 
     expect(
       (await workspace.listRecipes(session.owner_principal_ref)).items,
-    ).toEqual([]);
+    ).toMatchObject([
+      { recipe_ref: { id: 'pack.example.recipe', version: '1.0.0' } },
+    ]);
     const launch = await workspace.run({
       sessionId: session.session_id,
       principalRef: session.owner_principal_ref,
@@ -418,7 +439,8 @@ describe('TaskWorkspaceService review hardening', () => {
       principalRef: session.owner_principal_ref,
       selection: {
         kind: 'published_recipe',
-        recipe_kind: 'core',
+        distribution_kind: 'pack',
+        distribution_ref: { id: 'pack.test', version: '1.0.0' },
         recipe_ref: { id: 'recipe:test', version: '1.0.0' },
         recipe_hash: sha('a'),
       },
@@ -466,7 +488,7 @@ describe('TaskWorkspaceService review hardening', () => {
     expect(store.listMessages(session.session_id)).toHaveLength(1);
   });
 
-  it('refreshes the persisted exact Temporary Recipe before confirmation', async () => {
+  it('launches a confirmed Temporary draft without a public selection token', async () => {
     const store = openStore();
     const target = appendLaunch(store, 'temporary_workflow');
     const revision = store.createTemporaryRevision({
@@ -488,7 +510,6 @@ describe('TaskWorkspaceService review hardening', () => {
       creationRequestId: 'creation:temporary',
     }));
     const runtime = {
-      refreshRecipeSelection: vi.fn(() => ({ selection_token: 'fresh-token' })),
       launchTemporary,
     };
     const workspace = service(store, runtime);
@@ -501,20 +522,16 @@ describe('TaskWorkspaceService review hardening', () => {
         .row_version,
     });
 
-    expect(runtime.refreshRecipeSelection).toHaveBeenCalledWith({
-      principal_ref: target.session.owner_principal_ref,
-      recipe_ref: { id: 'ad_hoc_personal_task', version: '1.0.0' },
-      recipe_hash: sha('b'),
-      now_ms: 100,
-    });
     expect(launchTemporary.mock.calls[0]?.[0]).toMatchObject({
-      selection_token: 'fresh-token',
       confirmed_revision_id: revision.revision_id,
     });
+    expect(launchTemporary.mock.calls[0]?.[0]).not.toHaveProperty(
+      'selection_token',
+    );
     expect(result.status).toBe('linked');
   });
 
-  it('refreshes the exact Recipe and persists Agent identity for a Temporary revision', async () => {
+  it('compiles through the System Recipe and persists Agent identity for a Temporary revision', async () => {
     const store = openStore();
     const target = appendLaunch(store, 'temporary_workflow');
     const coordinator = {
@@ -539,7 +556,6 @@ describe('TaskWorkspaceService review hardening', () => {
       }),
     );
     const runtime = {
-      refreshRecipeSelection: vi.fn(() => ({ selection_token: 'fresh-token' })),
       prepareTemporaryDraft,
     };
     const workspace = service(store, runtime, coordinator);
@@ -551,12 +567,14 @@ describe('TaskWorkspaceService review hardening', () => {
     });
 
     expect(prepareTemporaryDraft.mock.calls[0]?.[0]).toMatchObject({
-      selection_token: 'fresh-token',
       principal_ref: target.session.owner_principal_ref,
       source_json: (
         TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE.graph_scope as JsonObject
       ).source,
     });
+    expect(prepareTemporaryDraft.mock.calls[0]?.[0]).not.toHaveProperty(
+      'selection_token',
+    );
     const system = String(coordinator.chat.mock.calls[0]?.[0]?.system);
     expect(system).toContain(TASK_WORKSPACE_TEMPORARY_REFS.capability.id);
     expect(system).toContain(WORKFLOW_AGENT_RESULT_SCHEMA_HASH);
