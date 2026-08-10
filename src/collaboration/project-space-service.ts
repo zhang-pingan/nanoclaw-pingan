@@ -28,7 +28,10 @@ import {
   workflowDefinitionVersionKey,
   type CollaborationProjectionV3,
 } from './protocol/v3-reducer.js';
-import { COLLABORATION_CONTROL_BRANCH } from './protocol/version.js';
+import {
+  COLLABORATION_CONTROL_BRANCH,
+  CollaborationProtocolError,
+} from './protocol/version.js';
 import {
   actionDefinitionV3Schema,
   artifactMetadataV3Schema,
@@ -108,21 +111,48 @@ export interface CollaborationProjectSpaceTransport {
     readonly gitSshKeyPath?: string;
     readonly gitSshKeyPaths?: readonly string[];
     readonly identity: CollaborationEventSigningIdentity;
-    readonly buildEvent: (history: ValidatedProjectSpaceHistory) =>
-      | CollaborationEventV3
-      | {
-          readonly event: CollaborationEventV3;
-          readonly materializedFiles: readonly {
-            readonly path: string;
-            readonly contents: string | Buffer | null;
-          }[];
-        };
+    readonly buildEvent: (
+      history: ValidatedProjectSpaceHistory,
+    ) =>
+      | CollaborationProjectSpaceAppendEvent
+      | readonly CollaborationProjectSpaceAppendEvent[];
   }): Promise<ValidatedProjectSpaceHistory>;
   readVerifiedFile(input: {
     readonly repositoryPath: string;
     readonly verifiedHead: string;
     readonly repositoryFile: string;
   }): Promise<Buffer>;
+}
+
+export type CollaborationProjectSpaceAppendEvent =
+  | CollaborationEventV3
+  | {
+      readonly event: CollaborationEventV3;
+      readonly materializedFiles: readonly {
+        readonly path: string;
+        readonly contents: string | Buffer | null;
+      }[];
+    };
+
+interface CollaborationEventAppendCommand {
+  readonly aggregateType: CollaborationAggregateType;
+  readonly aggregateId: string;
+  readonly eventType: CollaborationEventTypeV3;
+  readonly payload:
+    | Record<string, unknown>
+    | ((projection: CollaborationProjectionV3) => Record<string, unknown>);
+  readonly expectedRevision?: number;
+  readonly replaceEventId?: boolean;
+  readonly eventId?: string;
+  readonly executorId?: string | null;
+  readonly materializedFiles?: readonly {
+    readonly path: string;
+    readonly contents: string | Buffer | null;
+  }[];
+}
+
+interface CollaborationLocalEventAppendCommand extends CollaborationEventAppendCommand {
+  readonly expectedRevision: number;
 }
 
 export interface ProjectSpaceInspectResult {
@@ -449,61 +479,66 @@ export class CollaborationProjectSpaceService {
       status: 'active' as const,
       registered_at_event: eventId,
     };
-    let history = await this.appendWithIdentity({
+    const permissionEventId = open ? newId('evt') : null;
+    const history = await this.appendBatchWithIdentity({
       history: inspected,
       remoteUrl: input.remoteUrl,
       repositoryPath,
       gitSshKeyPath,
       identity,
-      aggregateType: 'membership',
-      aggregateId: identity.principalId,
-      eventType: open ? 'member_registered' : 'membership_requested',
-      payload: {
-        member: {
-          format: 'icarus.collaboration-member/3',
-          principal_id: identity.principalId,
-          display_name: input.displayName,
-          status: open ? 'active' : 'requested',
-          joined_at_event: open ? eventId : null,
-        },
-        client,
-        credential: {
-          ...sharedCredential(identity, eventId),
-          created_at_event: eventId,
-        },
-        ...(!open
-          ? { invite_id: joinPolicy === 'invite_only' ? input.inviteId : null }
-          : {}),
-      },
-      eventId,
-    });
-    if (open) {
-      const permissionEventId = newId('evt');
-      const grants = collaborationPermissionsForTemplate(
-        inspected.projection.group.default_permission_template_id ??
-          DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID,
-      );
-      history = await this.appendWithIdentity({
-        history,
-        remoteUrl: input.remoteUrl,
-        repositoryPath,
-        gitSshKeyPath,
-        identity,
-        aggregateType: 'membership',
-        aggregateId: identity.principalId,
-        eventType: 'permission_granted',
-        eventId: permissionEventId,
-        payload: {
-          grant: {
-            format: 'icarus.collaboration-permission-grant/1',
-            principal_id: identity.principalId,
-            grants: [...grants],
-            revision: 1,
-            updated_at_event: permissionEventId,
+      events: [
+        {
+          aggregateType: 'membership',
+          aggregateId: identity.principalId,
+          eventType: open ? 'member_registered' : 'membership_requested',
+          payload: {
+            member: {
+              format: 'icarus.collaboration-member/3',
+              principal_id: identity.principalId,
+              display_name: input.displayName,
+              status: open ? 'active' : 'requested',
+              joined_at_event: open ? eventId : null,
+            },
+            client,
+            credential: {
+              ...sharedCredential(identity, eventId),
+              created_at_event: eventId,
+            },
+            ...(!open
+              ? {
+                  invite_id:
+                    joinPolicy === 'invite_only' ? input.inviteId : null,
+                }
+              : {}),
           },
+          eventId,
         },
-      });
-    }
+        ...(open
+          ? [
+              {
+                aggregateType: 'membership' as const,
+                aggregateId: identity.principalId,
+                eventType: 'permission_granted' as const,
+                eventId: permissionEventId!,
+                payload: (projection: CollaborationProjectionV3) => ({
+                  grant: {
+                    format: 'icarus.collaboration-permission-grant/1',
+                    principal_id: identity.principalId,
+                    grants: [
+                      ...collaborationPermissionsForTemplate(
+                        projection.group.default_permission_template_id ??
+                          DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID,
+                      ),
+                    ],
+                    revision: 1,
+                    updated_at_event: permissionEventId!,
+                  },
+                }),
+              },
+            ]
+          : []),
+      ],
+    });
     this.registerOrUpgradeMember({
       history,
       remoteUrl: input.remoteUrl,
@@ -579,32 +614,46 @@ export class CollaborationProjectSpaceService {
     const requested = history.projection.members[principalId];
     if (!requested || requested.status !== 'requested')
       throw new Error('Membership request is not pending');
-    await this.appendLocal(groupId, {
-      aggregateType: 'membership',
-      aggregateId: principalId,
-      expectedRevision,
-      eventType: 'member_registered',
-      payload: {
-        member: {
-          ...requested,
-          status: 'active',
-          joined_at_event: '__EVENT_ID__',
-        },
-      },
-      replaceEventId: true,
-    });
     const templateId =
       permissions?.templateId ??
       history.projection.group.default_permission_template_id ??
       DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID;
     const grants =
       permissions?.grants ?? collaborationPermissionsForTemplate(templateId);
-    return this.updatePermissions({
-      groupId,
-      principalId,
-      grants,
-      expectedRevision: expectedRevision + 1,
+    const permissionEventId = newId('evt');
+    const currentGrant = history.projection.permissionGrants[principalId];
+    const grant = permissionGrantSchema.parse({
+      format: 'icarus.collaboration-permission-grant/1',
+      principal_id: principalId,
+      grants: [...new Set(grants)],
+      revision: (currentGrant?.revision ?? 0) + 1,
+      updated_at_event: permissionEventId,
     });
+    return this.appendLocalBatch(groupId, [
+      {
+        aggregateType: 'membership',
+        aggregateId: principalId,
+        expectedRevision,
+        eventType: 'member_registered',
+        payload: {
+          member: {
+            ...requested,
+            status: 'active',
+            joined_at_event: '__EVENT_ID__',
+          },
+        },
+        replaceEventId: true,
+      },
+      {
+        aggregateType: 'membership',
+        aggregateId: principalId,
+        expectedRevision: expectedRevision + 1,
+        eventType:
+          grant.grants.length > 0 ? 'permission_granted' : 'permission_revoked',
+        payload: { grant },
+        eventId: permissionEventId,
+      },
+    ]);
   }
 
   async rejectMembership(
@@ -3051,21 +3100,16 @@ export class CollaborationProjectSpaceService {
 
   private async appendLocal(
     groupId: string,
-    input: {
-      readonly aggregateType: CollaborationAggregateType;
-      readonly aggregateId: string;
-      readonly expectedRevision: number;
-      readonly eventType: CollaborationEventTypeV3;
-      readonly payload: Record<string, unknown>;
-      readonly replaceEventId?: boolean;
-      readonly eventId?: string;
-      readonly executorId?: string | null;
-      readonly materializedFiles?: readonly {
-        readonly path: string;
-        readonly contents: string | Buffer | null;
-      }[];
-    },
+    input: CollaborationLocalEventAppendCommand,
   ): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.appendLocalBatch(groupId, [input]);
+  }
+
+  private async appendLocalBatch(
+    groupId: string,
+    inputs: readonly CollaborationLocalEventAppendCommand[],
+  ): Promise<CollaborationProjectSpaceGroupRecord> {
+    if (!inputs.length) throw new Error('Atomic append requires events');
     const group = this.store.getGroup(groupId);
     if (!group) throw new Error(`Collaboration Group not found: ${groupId}`);
     return this.withRepositoryOperation(group.repositoryPath, async () => {
@@ -3084,14 +3128,20 @@ export class CollaborationProjectSpaceService {
           'Observer subscriptions cannot issue collaboration commands',
         );
       const history = await this.syncUnlocked(groupId);
-      const head =
-        history.projection.aggregateHeads[
-          `${input.aggregateType}:${input.aggregateId}`
-        ];
-      if ((head?.revision ?? 0) !== input.expectedRevision)
-        throw new Error(
-          `Aggregate revision conflict: expected ${String(input.expectedRevision)}, current ${String(head?.revision ?? 0)}`,
-        );
+      const revisions = new Map<string, number>();
+      for (const input of inputs) {
+        const key = `${input.aggregateType}:${input.aggregateId}`;
+        const revision =
+          revisions.get(key) ??
+          history.projection.aggregateHeads[key]?.revision ??
+          0;
+        if (revision !== input.expectedRevision)
+          throw new CollaborationProtocolError(
+            'EVENT_CONFLICT',
+            `Aggregate revision conflict: expected ${String(input.expectedRevision)}, current ${String(revision)}`,
+          );
+        revisions.set(key, revision + 1);
+      }
       const identity: CollaborationEventSigningIdentity = {
         principalId: currentGroup.localPrincipalId,
         clientId: currentGroup.localClientId,
@@ -3101,13 +3151,13 @@ export class CollaborationProjectSpaceService {
         fingerprint: currentGroup.eventFingerprint,
         purpose: 'event_signing',
       };
-      const updated = await this.appendWithIdentity({
+      const updated = await this.appendBatchWithIdentity({
         history,
         remoteUrl: currentGroup.remoteUrl,
         repositoryPath: currentGroup.repositoryPath,
         gitSshKeyPath: currentGroup.gitSshKeyPath,
         identity,
-        ...input,
+        events: inputs,
       });
       this.saveHistory(groupId, updated);
       return this.store.getGroup(groupId)!;
@@ -3135,24 +3185,34 @@ export class CollaborationProjectSpaceService {
     }
   }
 
-  private async appendWithIdentity(input: {
+  private async appendWithIdentity(
+    input: {
+      readonly history: ValidatedProjectSpaceHistory;
+      readonly remoteUrl: string;
+      readonly repositoryPath: string;
+      readonly gitSshKeyPath: string;
+      readonly identity: CollaborationEventSigningIdentity;
+    } & CollaborationEventAppendCommand,
+  ): Promise<ValidatedProjectSpaceHistory> {
+    return this.appendBatchWithIdentity({
+      history: input.history,
+      remoteUrl: input.remoteUrl,
+      repositoryPath: input.repositoryPath,
+      gitSshKeyPath: input.gitSshKeyPath,
+      identity: input.identity,
+      events: [input],
+    });
+  }
+
+  private async appendBatchWithIdentity(input: {
     readonly history: ValidatedProjectSpaceHistory;
     readonly remoteUrl: string;
     readonly repositoryPath: string;
     readonly gitSshKeyPath: string;
     readonly identity: CollaborationEventSigningIdentity;
-    readonly aggregateType: CollaborationAggregateType;
-    readonly aggregateId: string;
-    readonly eventType: CollaborationEventTypeV3;
-    readonly payload: Record<string, unknown>;
-    readonly replaceEventId?: boolean;
-    readonly eventId?: string;
-    readonly executorId?: string | null;
-    readonly materializedFiles?: readonly {
-      readonly path: string;
-      readonly contents: string | Buffer | null;
-    }[];
+    readonly events: readonly CollaborationEventAppendCommand[];
   }): Promise<ValidatedProjectSpaceHistory> {
+    if (!input.events.length) throw new Error('Atomic append requires events');
     return this.transport.append({
       remoteUrl: input.remoteUrl,
       repositoryPath: input.repositoryPath,
@@ -3160,40 +3220,59 @@ export class CollaborationProjectSpaceService {
       previousHead: input.history.head,
       identity: input.identity,
       buildEvent: (history) => {
-        const head =
-          history.projection.aggregateHeads[
-            `${input.aggregateType}:${input.aggregateId}`
-          ];
-        const eventId = input.eventId ?? newId('evt');
-        const occurredAt = new Date(this.now()).toISOString();
-        const payload = input.replaceEventId
-          ? (JSON.parse(
-              JSON.stringify(input.payload)
-                .replaceAll('__EVENT_ID__', eventId)
-                .replaceAll('__OCCURRED_AT__', occurredAt),
-            ) as Record<string, unknown>)
-          : input.payload;
-        const event = buildCollaborationEventV3({
-          groupId: history.projection.groupId,
-          eventId,
-          aggregateType: input.aggregateType,
-          aggregateId: input.aggregateId,
-          aggregateRevision: (head?.revision ?? 0) + 1,
-          previousEventHash: head?.eventHash ?? null,
-          eventType: input.eventType,
-          actor: {
-            principal_id: input.identity.principalId,
-            client_id: input.identity.clientId,
-            credential_id: input.identity.credentialId,
-            executor_id: input.executorId ?? null,
-          },
-          occurredAt,
-          payload,
+        let projection = history.projection;
+        let previousEvent: CollaborationEventV3 | undefined;
+        return input.events.map((command) => {
+          const head =
+            projection.aggregateHeads[
+              `${command.aggregateType}:${command.aggregateId}`
+            ];
+          if (
+            command.expectedRevision !== undefined &&
+            (head?.revision ?? 0) !== command.expectedRevision
+          )
+            throw new CollaborationProtocolError(
+              'EVENT_CONFLICT',
+              `Aggregate revision conflict: expected ${String(command.expectedRevision)}, current ${String(head?.revision ?? 0)}`,
+            );
+          const eventId = command.eventId ?? newId('evt');
+          const occurredAt = new Date(this.now()).toISOString();
+          const sourcePayload =
+            typeof command.payload === 'function'
+              ? command.payload(projection)
+              : command.payload;
+          const payload = command.replaceEventId
+            ? (JSON.parse(
+                JSON.stringify(sourcePayload)
+                  .replaceAll('__EVENT_ID__', eventId)
+                  .replaceAll('__OCCURRED_AT__', occurredAt),
+              ) as Record<string, unknown>)
+            : sourcePayload;
+          const event = buildCollaborationEventV3({
+            groupId: projection.groupId,
+            eventId,
+            aggregateType: command.aggregateType,
+            aggregateId: command.aggregateId,
+            aggregateRevision: (head?.revision ?? 0) + 1,
+            previousEventHash: head?.eventHash ?? null,
+            eventType: command.eventType,
+            actor: {
+              principal_id: input.identity.principalId,
+              client_id: input.identity.clientId,
+              credential_id: input.identity.credentialId,
+              executor_id: command.executorId ?? null,
+            },
+            occurredAt,
+            payload,
+          });
+          projection = reduceCollaborationEventV3(projection, event, {
+            previousEventInAtomicBatch: previousEvent,
+          });
+          previousEvent = event;
+          return command.materializedFiles
+            ? { event, materializedFiles: command.materializedFiles }
+            : event;
         });
-        reduceCollaborationEventV3(history.projection, event);
-        return input.materializedFiles
-          ? { event, materializedFiles: input.materializedFiles }
-          : event;
       },
     });
   }

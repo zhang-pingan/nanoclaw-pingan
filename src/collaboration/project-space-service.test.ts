@@ -15,6 +15,7 @@ import type { CollaborationEventSigningIdentity } from './project-space-identity
 import { CollaborationProjectSpaceIdentityService } from './project-space-identity.js';
 import {
   CollaborationProjectSpaceService,
+  type CollaborationProjectSpaceAppendEvent,
   type CollaborationProjectSpaceTransport,
   type ValidatedProjectSpaceHistory,
 } from './project-space-service.js';
@@ -117,6 +118,11 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
   readonly histories = new Map<string, ValidatedProjectSpaceHistory>();
   readonly files = new Map<string, Buffer>();
   appendCount = 0;
+  failBatchAtEventIndex: number | null = null;
+  failPush = false;
+  concurrentEventBeforeBuild:
+    | ValidatedProjectSpaceHistory['eventRecords'][number]['event']
+    | null = null;
 
   async inspect(input: {
     remoteUrl: string;
@@ -147,39 +153,72 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
 
   async append(input: {
     remoteUrl: string;
-    buildEvent: (history: ValidatedProjectSpaceHistory) =>
-      | ValidatedProjectSpaceHistory['eventRecords'][number]['event']
-      | {
-          event: ValidatedProjectSpaceHistory['eventRecords'][number]['event'];
-          materializedFiles: readonly {
-            path: string;
-            contents: string | Buffer | null;
-          }[];
-        };
+    buildEvent: (
+      history: ValidatedProjectSpaceHistory,
+    ) =>
+      | CollaborationProjectSpaceAppendEvent
+      | readonly CollaborationProjectSpaceAppendEvent[];
   }): Promise<ValidatedProjectSpaceHistory> {
-    const current = await this.inspect({ remoteUrl: input.remoteUrl });
+    let current = await this.inspect({ remoteUrl: input.remoteUrl });
+    if (this.concurrentEventBeforeBuild) {
+      const event = this.concurrentEventBeforeBuild;
+      this.concurrentEventBeforeBuild = null;
+      const commitOrder = current.eventRecords.length + 1;
+      const head = commitOrder.toString(16).padStart(40, '0');
+      current = {
+        head,
+        projection: reduceCollaborationEventV3(current.projection, event),
+        eventRecords: [
+          ...current.eventRecords,
+          { event, commitHash: head, commitOrder },
+        ],
+      };
+      this.histories.set(input.remoteUrl, current);
+    }
     const built = input.buildEvent(current);
-    const nextEvent = 'event' in built ? built.event : built;
-    if ('event' in built)
-      for (const file of built.materializedFiles) {
-        if (file.contents === null) this.files.delete(file.path);
-        else
-          this.files.set(
-            file.path,
-            Buffer.isBuffer(file.contents)
-              ? Buffer.from(file.contents)
-              : Buffer.from(file.contents, 'utf8'),
-          );
-      }
-    const order = current.eventRecords.length + 1;
-    const head = order.toString(16).padStart(40, '0');
+    const entries = Array.isArray(built) ? built : [built];
+    let projection = current.projection;
+    let previousEvent:
+      | ValidatedProjectSpaceHistory['eventRecords'][number]['event']
+      | undefined;
+    const events = [];
+    const fileChanges: Array<{
+      path: string;
+      contents: string | Buffer | null;
+    }> = [];
+    for (const [index, entry] of entries.entries()) {
+      if (this.failBatchAtEventIndex === index)
+        throw new Error(`simulated event ${String(index + 1)} build failure`);
+      const event = 'event' in entry ? entry.event : entry;
+      projection = reduceCollaborationEventV3(projection, event, {
+        previousEventInAtomicBatch: previousEvent,
+      });
+      previousEvent = event;
+      events.push(event);
+      if ('event' in entry) fileChanges.push(...entry.materializedFiles);
+    }
+    if (this.failPush) throw new Error('simulated atomic push failure');
+    for (const file of fileChanges) {
+      if (file.contents === null) this.files.delete(file.path);
+      else
+        this.files.set(
+          file.path,
+          Buffer.isBuffer(file.contents)
+            ? Buffer.from(file.contents)
+            : Buffer.from(file.contents, 'utf8'),
+        );
+    }
+    const headOrder = current.eventRecords.length + events.length;
+    const head = headOrder.toString(16).padStart(40, '0');
+    const eventRecords = events.map((event, index) => ({
+      event,
+      commitHash: head,
+      commitOrder: current.eventRecords.length + index + 1,
+    }));
     const history: ValidatedProjectSpaceHistory = {
       head,
-      projection: reduceCollaborationEventV3(current.projection, nextEvent),
-      eventRecords: [
-        ...current.eventRecords,
-        { event: nextEvent, commitHash: head, commitOrder: order },
-      ],
+      projection,
+      eventRecords: [...current.eventRecords, ...eventRecords],
     };
     this.appendCount += 1;
     this.histories.set(input.remoteUrl, history);
@@ -449,6 +488,267 @@ describe('Collaboration project space v3 Group and identity service', () => {
       principal_id: BOB.principalId,
       summary: 'Posted immediately after approval',
     });
+    owner.store.close();
+    bob.store.close();
+  });
+
+  it('atomically registers an open member with default permissions across build and push failures', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/atomic-open-project.git',
+      name: 'Atomic open project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_atomic_open',
+    });
+    const bob = service(tempDirectory(), transport, BOB);
+    const baseline = transport.histories.get('/tmp/atomic-open-project.git')!;
+
+    transport.failBatchAtEventIndex = 1;
+    await expect(
+      bob.service.joinGroup({
+        remoteUrl: '/tmp/atomic-open-project.git',
+        gitSshKeyPath: BOB.privateKeyPath,
+        displayName: 'Bob',
+        clientDisplayName: 'Bob MacBook',
+      }),
+    ).rejects.toThrow(/event 2 build failure/u);
+    expect(
+      transport.histories.get('/tmp/atomic-open-project.git')!.projection
+        .members[BOB.principalId],
+    ).toBeUndefined();
+    expect(
+      transport.histories.get('/tmp/atomic-open-project.git')!.eventRecords,
+    ).toHaveLength(baseline.eventRecords.length);
+
+    transport.failBatchAtEventIndex = null;
+    transport.failPush = true;
+    await expect(
+      bob.service.joinGroup({
+        remoteUrl: '/tmp/atomic-open-project.git',
+        gitSshKeyPath: BOB.privateKeyPath,
+        displayName: 'Bob',
+        clientDisplayName: 'Bob MacBook',
+      }),
+    ).rejects.toThrow(/atomic push failure/u);
+    expect(
+      transport.histories.get('/tmp/atomic-open-project.git')!.projection
+        .members[BOB.principalId],
+    ).toBeUndefined();
+
+    transport.failPush = false;
+    const joined = await bob.service.joinGroup({
+      remoteUrl: '/tmp/atomic-open-project.git',
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    expect(joined.projection?.members[BOB.principalId]?.status).toBe('active');
+    expect(
+      joined.projection?.permissionGrants[BOB.principalId]?.grants,
+    ).toContain('work_item:create');
+    const joinedEvents = transport.histories
+      .get('/tmp/atomic-open-project.git')!
+      .eventRecords.filter(
+        (record) => record.event.aggregate_id === BOB.principalId,
+      );
+    expect(joinedEvents.map((record) => record.event.event_type)).toEqual([
+      'member_registered',
+      'permission_granted',
+    ]);
+    expect(new Set(joinedEvents.map((record) => record.commitHash)).size).toBe(
+      1,
+    );
+    owner.store.close();
+    bob.store.close();
+  });
+
+  it('keeps open-join default authorization valid across an unrelated concurrent commit', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/concurrent-open-project.git',
+      name: 'Concurrent open project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_concurrent_open',
+    });
+    const before = transport.histories.get('/tmp/concurrent-open-project.git')!;
+    const groupHead =
+      before.projection.aggregateHeads['group:group_concurrent_open']!;
+    transport.concurrentEventBeforeBuild = buildCollaborationEventV3({
+      groupId: 'group_concurrent_open',
+      eventId: 'evt_concurrent_unrelated',
+      aggregateType: 'group',
+      aggregateId: 'group_concurrent_open',
+      aggregateRevision: groupHead.revision + 1,
+      previousEventHash: groupHead.eventHash,
+      eventType: 'group_settings_updated',
+      actor: {
+        principal_id: ALICE.principalId,
+        client_id: ALICE.clientId,
+        credential_id: ALICE.credentialId,
+        executor_id: null,
+      },
+      occurredAt: '2026-08-06T12:00:01.000Z',
+      payload: { name: 'Concurrent rename' },
+    });
+    const bob = service(tempDirectory(), transport, BOB);
+    const joined = await bob.service.joinGroup({
+      remoteUrl: '/tmp/concurrent-open-project.git',
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    expect(joined.name).toBe('Concurrent rename');
+    expect(joined.projection?.members[BOB.principalId]?.status).toBe('active');
+    expect(
+      joined.projection?.permissionGrants[BOB.principalId]?.grants,
+    ).toContain('discussion:post');
+    owner.store.close();
+    bob.store.close();
+  });
+
+  it('rejects a stale command when the same Aggregate changes inside the append window', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/concurrent-membership-project.git',
+      name: 'Concurrent membership project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_concurrent_membership',
+    });
+    const bob = service(tempDirectory(), transport, BOB);
+    const joined = await bob.service.joinGroup({
+      remoteUrl: '/tmp/concurrent-membership-project.git',
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    const membershipHead =
+      joined.projection!.aggregateHeads[`membership:${BOB.principalId}`]!;
+    transport.concurrentEventBeforeBuild = buildCollaborationEventV3({
+      groupId: 'group_concurrent_membership',
+      eventId: 'evt_concurrent_permission',
+      aggregateType: 'membership',
+      aggregateId: BOB.principalId,
+      aggregateRevision: membershipHead.revision + 1,
+      previousEventHash: membershipHead.eventHash,
+      eventType: 'permission_granted',
+      actor: {
+        principal_id: ALICE.principalId,
+        client_id: ALICE.clientId,
+        credential_id: ALICE.credentialId,
+        executor_id: null,
+      },
+      occurredAt: '2026-08-06T12:00:02.000Z',
+      payload: {
+        grant: {
+          format: 'icarus.collaboration-permission-grant/1',
+          principal_id: BOB.principalId,
+          grants: ['discussion:post'],
+          revision: 2,
+          updated_at_event: 'evt_concurrent_permission',
+        },
+      },
+    });
+    await expect(
+      owner.service.updatePermissions({
+        groupId: 'group_concurrent_membership',
+        principalId: BOB.principalId,
+        expectedRevision: membershipHead.revision,
+        grants: ['work_item:create'],
+      }),
+    ).rejects.toMatchObject({ code: 'EVENT_CONFLICT' });
+    const remote = transport.histories.get(
+      '/tmp/concurrent-membership-project.git',
+    )!;
+    expect(remote.projection.permissionGrants[BOB.principalId]?.grants).toEqual(
+      ['discussion:post'],
+    );
+    expect(
+      remote.eventRecords.filter(
+        (record) => record.event.event_type === 'permission_granted',
+      ),
+    ).toHaveLength(2);
+    owner.store.close();
+    bob.store.close();
+  });
+
+  it('atomically approves a requested member with custom grants and retries without duplicates', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/atomic-approval-project.git',
+      name: 'Atomic approval project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'approval',
+      observerAccess: 'allowed',
+      groupId: 'group_atomic_approval',
+    });
+    const bob = service(tempDirectory(), transport, BOB);
+    await bob.service.joinGroup({
+      remoteUrl: '/tmp/atomic-approval-project.git',
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+
+    transport.failBatchAtEventIndex = 1;
+    await expect(
+      owner.service.approveMembership(
+        'group_atomic_approval',
+        BOB.principalId,
+        1,
+        { grants: ['discussion:post'] },
+      ),
+    ).rejects.toThrow(/event 2 build failure/u);
+    const failed = transport.histories.get('/tmp/atomic-approval-project.git')!;
+    expect(failed.projection.members[BOB.principalId]?.status).toBe(
+      'requested',
+    );
+    expect(failed.projection.permissionGrants[BOB.principalId]).toBeUndefined();
+
+    transport.failBatchAtEventIndex = null;
+    const approved = await owner.service.approveMembership(
+      'group_atomic_approval',
+      BOB.principalId,
+      1,
+      { grants: ['discussion:post'] },
+    );
+    expect(approved.projection?.members[BOB.principalId]?.status).toBe(
+      'active',
+    );
+    expect(
+      approved.projection?.permissionGrants[BOB.principalId]?.grants,
+    ).toEqual(['discussion:post']);
+    const approvalEvents = transport.histories
+      .get('/tmp/atomic-approval-project.git')!
+      .eventRecords.filter(
+        (record) =>
+          record.event.aggregate_id === BOB.principalId &&
+          record.event.event_type !== 'membership_requested',
+      );
+    expect(approvalEvents.map((record) => record.event.event_type)).toEqual([
+      'member_registered',
+      'permission_granted',
+    ]);
+    expect(
+      new Set(approvalEvents.map((record) => record.commitHash)).size,
+    ).toBe(1);
     owner.store.close();
     bob.store.close();
   });

@@ -14,6 +14,7 @@ import type {
   CollaborationActionExecutionV3,
   CollaborationExecutorBindingV3,
 } from './project-space-store.js';
+import { CollaborationProjectSpaceGitConflictError } from './project-space-git.js';
 import type { CollaborationRuntime } from './runtime.js';
 import { strictParseJson } from './protocol/canonical-json.js';
 import { collaborationRecoveryVerificationCodeV3 } from './protocol/v3-reducer.js';
@@ -358,25 +359,46 @@ export class CollaborationWebApi {
       await this.route(req, res, url);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const code =
-        error instanceof CollaborationProtocolError
+      const unavailable = !this.runtime.status().available;
+      const authorizationFallback =
+        /permission|not authorized|cannot contribute|only owner|only the/iu.test(
+          message,
+        );
+      const structuredConflict =
+        error instanceof CollaborationProjectSpaceGitConflictError;
+      const conflictFallback =
+        /revision conflict|stale|CAS|non-fast-forward/iu.test(message);
+      const code = unavailable
+        ? 'COLLABORATION_UNAVAILABLE'
+        : error instanceof CollaborationProtocolError
           ? error.code
           : error instanceof z.ZodError
             ? 'INVALID_REQUEST'
-            : /permission|not authorized|cannot|only owner|only the/iu.test(
-                  message,
-                )
-              ? 'AUTHORIZATION_DENIED'
-              : 'COMMAND_REJECTED';
-      send(
-        res,
-        !this.runtime.status().available
-          ? 503
-          : /revision conflict|stale/iu.test(message)
-            ? 409
-            : 400,
-        { error: message, code, collaboration: this.publicRuntimeStatus() },
-      );
+            : structuredConflict || conflictFallback
+              ? 'EVENT_CONFLICT'
+              : authorizationFallback
+                ? 'AUTHORIZATION_DENIED'
+                : 'COMMAND_REJECTED';
+      const statusCode = unavailable
+        ? 503
+        : error instanceof CollaborationProtocolError
+          ? error.code === 'EVENT_UNAUTHORIZED'
+            ? 403
+            : error.code === 'EVENT_CONFLICT'
+              ? 409
+              : 400
+          : error instanceof z.ZodError
+            ? 400
+            : structuredConflict || conflictFallback
+              ? 409
+              : authorizationFallback
+                ? 403
+                : 400;
+      send(res, statusCode, {
+        error: message,
+        code,
+        collaboration: this.publicRuntimeStatus(),
+      });
     }
     return true;
   }

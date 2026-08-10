@@ -27,6 +27,7 @@ import type { CollaborationEventSigningIdentity } from './project-space-identity
 import { CollaborationProjectSpaceIdentityService } from './project-space-identity.js';
 import {
   CollaborationProjectSpaceService,
+  type CollaborationProjectSpaceAppendEvent,
   type CollaborationProjectSpaceTransport,
   type ValidatedProjectSpaceHistory,
 } from './project-space-service.js';
@@ -116,44 +117,59 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
 
   async append(input: {
     remoteUrl: string;
-    buildEvent: (history: ValidatedProjectSpaceHistory) =>
-      | ValidatedProjectSpaceHistory['eventRecords'][number]['event']
-      | {
-          event: ValidatedProjectSpaceHistory['eventRecords'][number]['event'];
-          materializedFiles: readonly {
-            path: string;
-            contents: string | Buffer | null;
-          }[];
-        };
+    buildEvent: (
+      history: ValidatedProjectSpaceHistory,
+    ) =>
+      | CollaborationProjectSpaceAppendEvent
+      | readonly CollaborationProjectSpaceAppendEvent[];
   }): Promise<ValidatedProjectSpaceHistory> {
     const current = await this.inspect(input);
     const built = input.buildEvent(current);
-    const event = 'event' in built ? built.event : built;
-    if (
-      this.rejectStandaloneDiscussionMessages &&
-      event.event_type === 'message_posted'
-    )
-      throw new Error('simulated standalone Discussion message push failure');
-    if ('event' in built)
-      for (const file of built.materializedFiles) {
-        if (file.contents === null) this.files.delete(file.path);
-        else
-          this.files.set(
-            file.path,
-            Buffer.isBuffer(file.contents)
-              ? Buffer.from(file.contents)
-              : Buffer.from(file.contents, 'utf8'),
-          );
-      }
-    const commitOrder = current.eventRecords.length + 1;
-    const head = commitOrder.toString(16).padStart(40, '0');
+    const entries = Array.isArray(built) ? built : [built];
+    let projection = current.projection;
+    let previousEvent:
+      | ValidatedProjectSpaceHistory['eventRecords'][number]['event']
+      | undefined;
+    const events = [];
+    const fileChanges: Array<{
+      path: string;
+      contents: string | Buffer | null;
+    }> = [];
+    for (const entry of entries) {
+      const event = 'event' in entry ? entry.event : entry;
+      if (
+        this.rejectStandaloneDiscussionMessages &&
+        event.event_type === 'message_posted'
+      )
+        throw new Error('simulated standalone Discussion message push failure');
+      projection = reduceCollaborationEventV3(projection, event, {
+        previousEventInAtomicBatch: previousEvent,
+      });
+      previousEvent = event;
+      events.push(event);
+      if ('event' in entry) fileChanges.push(...entry.materializedFiles);
+    }
+    for (const file of fileChanges) {
+      if (file.contents === null) this.files.delete(file.path);
+      else
+        this.files.set(
+          file.path,
+          Buffer.isBuffer(file.contents)
+            ? Buffer.from(file.contents)
+            : Buffer.from(file.contents, 'utf8'),
+        );
+    }
+    const lastOrder = current.eventRecords.length + events.length;
+    const head = lastOrder.toString(16).padStart(40, '0');
+    const eventRecords = events.map((event, index) => ({
+      event,
+      commitHash: head,
+      commitOrder: current.eventRecords.length + index + 1,
+    }));
     const history: ValidatedProjectSpaceHistory = {
       head,
-      projection: reduceCollaborationEventV3(current.projection, event),
-      eventRecords: [
-        ...current.eventRecords,
-        { event, commitHash: head, commitOrder },
-      ],
+      projection,
+      eventRecords: [...current.eventRecords, ...eventRecords],
     };
     this.histories.set(input.remoteUrl, history);
     return history;

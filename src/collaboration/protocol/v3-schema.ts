@@ -56,6 +56,31 @@ export const collaborationRelativePathSchema = z
       !value.split('/').some((segment) => segment === '' || segment === '..'),
     'must be a normalized repository-relative path',
   );
+
+export const collaborationEventBatchSchema = z
+  .object({
+    format: z.literal('icarus.collaboration-event-batch/1'),
+    batch_id: collaborationIdentifierSchema,
+    event_paths: z
+      .array(collaborationRelativePathSchema)
+      .min(2)
+      .max(32)
+      .refine(
+        (paths) =>
+          new Set(paths).size === paths.length &&
+          paths.every(
+            (value) =>
+              value.startsWith('events/') &&
+              !value.startsWith('events/batches/') &&
+              value.endsWith('.json'),
+          ),
+        'must contain unique v3 event paths',
+      ),
+  })
+  .strict();
+export type CollaborationEventBatch = z.infer<
+  typeof collaborationEventBatchSchema
+>;
 export const collaborationBasenameSchema = z
   .string()
   .min(1)

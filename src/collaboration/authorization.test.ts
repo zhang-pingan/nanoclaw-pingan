@@ -236,12 +236,21 @@ describe('collaboration authorization projection', () => {
       created_by_principal_id: ownerId,
       business_state: 'build',
       resolved_assignments: { build: contributorId },
+      lifecycle: 'draft',
+      active_turn_id: null,
     } as unknown as CollaborationProjectionV3['workflowInstances'][string];
 
     const assignee = actions(value, contributorId);
     expect(assignee.workflowInstances.instance_delivery.manage.allowed).toBe(
       true,
     );
+    expect(assignee.workflowInstances.instance_delivery.start).toMatchObject({
+      allowed: false,
+      code: 'RESOURCE_STATE_BLOCKED',
+    });
+    expect(
+      assignee.workflowInstances.instance_delivery.createTurn,
+    ).toMatchObject({ allowed: false, code: 'RESOURCE_STATE_BLOCKED' });
     expect(
       assignee.workflowInstances.instance_delivery.configureCurrentState
         .allowed,
@@ -259,6 +268,62 @@ describe('collaboration authorization projection', () => {
       itemOwner.workflowDefinitions['delivery@1']!.createGroupInstance.allowed,
     ).toBe(false);
     expect(itemOwner.group.createWorkflowInstance.allowed).toBe(true);
+
+    value.workflowInstances.instance_delivery!.lifecycle = 'ready';
+    expect(
+      actions(value, ownerId).workflowInstances.instance_delivery.start.allowed,
+    ).toBe(true);
+    value.workflowInstances.instance_delivery!.lifecycle = 'running';
+    const running = actions(value, contributorId).workflowInstances
+      .instance_delivery;
+    expect(running.start.code).toBe('RESOURCE_STATE_BLOCKED');
+    expect(running.pause.allowed).toBe(true);
+    expect(running.resume.code).toBe('RESOURCE_STATE_BLOCKED');
+    expect(running.close.allowed).toBe(true);
+    expect(running.createTurn.allowed).toBe(true);
+    value.workflowInstances.instance_delivery!.active_turn_id = 'turn_active';
+    expect(
+      actions(value, contributorId).workflowInstances.instance_delivery
+        .createTurn.code,
+    ).toBe('RESOURCE_STATE_BLOCKED');
+  });
+
+  it('projects exact Work Item and Discussion resource actions', () => {
+    const value = projection();
+    const owned = actions(value, memberId).workItems.work_owner;
+    expect(owned.editDetails.allowed).toBe(true);
+    expect(owned.changeAssignment.allowed).toBe(true);
+    expect(owned.changeRelations.allowed).toBe(true);
+    expect(owned.archive.allowed).toBe(true);
+    expect(owned.changeStatus.in_progress.allowed).toBe(true);
+    expect(owned.changeStatus.done.code).toBe('RESOURCE_STATE_BLOCKED');
+
+    value.discussions.thread_1 = {
+      discussion: {
+        thread_id: 'thread_1',
+        created_by: memberId,
+        status: 'open',
+      },
+      messages: {
+        message_1: {
+          message_id: 'message_1',
+          author_principal_id: memberId,
+          tombstoned: false,
+        },
+      },
+    } as unknown as CollaborationProjectionV3['discussions'][string];
+    const open = actions(value, memberId).discussions.thread_1;
+    expect(open.resolve.allowed).toBe(true);
+    expect(open.reopen.code).toBe('RESOURCE_STATE_BLOCKED');
+    expect(open.messages.message_1?.revise.allowed).toBe(true);
+    expect(open.messages.message_1?.tombstone.allowed).toBe(true);
+    value.discussions.thread_1!.discussion.status = 'resolved';
+    const resolved = actions(value, memberId).discussions.thread_1;
+    expect(resolved.resolve.code).toBe('RESOURCE_STATE_BLOCKED');
+    expect(resolved.reopen.allowed).toBe(true);
+    expect(resolved.messages.message_1?.revise.code).toBe(
+      'RESOURCE_STATE_BLOCKED',
+    );
   });
 
   it('projects revocation only for another owned Client or Credential', () => {

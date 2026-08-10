@@ -183,51 +183,49 @@ function workItem(revision = 1) {
 describe('Collaboration project space v3 contract', () => {
   it('allows only the immediate audited default grant after open registration', () => {
     const initial = reduceCollaborationEventV3(null, genesis());
-    const registered = reduceCollaborationEventV3(
-      initial,
-      event({
-        projection: initial,
-        aggregateType: 'membership',
-        aggregateId: BOB,
-        eventType: 'member_registered',
-        id: 'evt_bob_registered',
-        actor: {
-          principalId: BOB,
-          clientId: BOB_CLIENT,
-          credentialId: BOB_CREDENTIAL,
+    const registrationEvent = event({
+      projection: initial,
+      aggregateType: 'membership',
+      aggregateId: BOB,
+      eventType: 'member_registered',
+      id: 'evt_bob_registered',
+      actor: {
+        principalId: BOB,
+        clientId: BOB_CLIENT,
+        credentialId: BOB_CREDENTIAL,
+      },
+      payload: {
+        member: {
+          format: 'icarus.collaboration-member/3',
+          principal_id: BOB,
+          display_name: 'Bob',
+          status: 'active',
+          joined_at_event: 'evt_bob_registered',
         },
-        payload: {
-          member: {
-            format: 'icarus.collaboration-member/3',
-            principal_id: BOB,
-            display_name: 'Bob',
-            status: 'active',
-            joined_at_event: 'evt_bob_registered',
-          },
-          client: {
-            format: 'icarus.collaboration-client/1',
-            principal_id: BOB,
-            client_id: BOB_CLIENT,
-            display_name: 'Bob MacBook',
-            capabilities: [],
-            status: 'active',
-            registered_at_event: 'evt_bob_registered',
-          },
-          credential: {
-            format: 'icarus.collaboration-credential/1',
-            credential_id: BOB_CREDENTIAL,
-            principal_id: BOB,
-            client_id: BOB_CLIENT,
-            public_key: KEY,
-            fingerprint: FINGERPRINT,
-            purpose: 'event_signing',
-            status: 'active',
-            created_at_event: 'evt_bob_registered',
-            revoked_at_event: null,
-          },
+        client: {
+          format: 'icarus.collaboration-client/1',
+          principal_id: BOB,
+          client_id: BOB_CLIENT,
+          display_name: 'Bob MacBook',
+          capabilities: [],
+          status: 'active',
+          registered_at_event: 'evt_bob_registered',
         },
-      }),
-    );
+        credential: {
+          format: 'icarus.collaboration-credential/1',
+          credential_id: BOB_CREDENTIAL,
+          principal_id: BOB,
+          client_id: BOB_CLIENT,
+          public_key: KEY,
+          fingerprint: FINGERPRINT,
+          purpose: 'event_signing',
+          status: 'active',
+          created_at_event: 'evt_bob_registered',
+          revoked_at_event: null,
+        },
+      },
+    });
+    const registered = reduceCollaborationEventV3(initial, registrationEvent);
     const memberPermissions = [
       'workspace:publish_owned',
       'work_item:create',
@@ -257,9 +255,9 @@ describe('Collaboration project space v3 contract', () => {
       },
     });
     expect(
-      reduceCollaborationEventV3(registered, immediateGrant).permissionGrants[
-        BOB
-      ]?.grants,
+      reduceCollaborationEventV3(registered, immediateGrant, {
+        previousEventInAtomicBatch: registrationEvent,
+      }).permissionGrants[BOB]?.grants,
     ).toEqual(memberPermissions);
 
     const settingsChanged = reduceCollaborationEventV3(

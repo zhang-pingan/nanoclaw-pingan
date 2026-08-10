@@ -11,7 +11,6 @@ import {
 } from './collaboration-definition.js';
 import {
   collaborationRuntimeGraphHighlights,
-  collaborationWorkflowEditable,
   collaborationWorkflowPublishable,
 } from './collaboration-fsm.js';
 import { mountCollaborationFsmEditor } from './collaboration-fsm-editor.js';
@@ -31,6 +30,10 @@ import {
   buildCollaborationAssignmentDecisionRequest,
   buildCollaborationCompleteTurnRequest,
   buildCollaborationDiscussionMessageRequest,
+  buildCollaborationReasonRequest,
+  buildCollaborationWorkItemAssignmentRequest,
+  buildCollaborationWorkItemDetailsRequest,
+  buildCollaborationWorkItemRelationsRequest,
   buildCollaborationExternalResultRequest,
   buildCollaborationFindingDecisionRequest,
   buildCollaborationRecoverTurnRequest,
@@ -45,6 +48,7 @@ import {
   collaborationCanMutate,
   collaborationCurrentTurn,
   collaborationDuration,
+  collaborationDiscussionMessageActionAllowed,
   collaborationEligibleTurnExecutors,
   collaborationElapsed,
   collaborationFindingActionDraft,
@@ -65,6 +69,7 @@ import {
   collaborationVerifiedFileTree,
   collaborationWorkflowLaunchAccess,
   collaborationWorkflowInstanceCommand,
+  collaborationWorkItemStatusActionAccess,
   collaborationWorkItemColumns,
 } from './collaboration-ui.js';
 
@@ -547,15 +552,47 @@ export function createCollaborationWorkspace(options) {
     const group = selectedGroup();
     const updates =
       group.projection?.workItemUpdates?.[item.work_item_id] || [];
-    const canManage = resourceAction('work_item', item.work_item_id, 'manage');
+    const canEdit = resourceAction(
+      'work_item',
+      item.work_item_id,
+      'editDetails',
+    );
+    const canAssign = resourceAction(
+      'work_item',
+      item.work_item_id,
+      'changeAssignment',
+    );
+    const canRelate = resourceAction(
+      'work_item',
+      item.work_item_id,
+      'changeRelations',
+    );
+    const canArchive = resourceAction(
+      'work_item',
+      item.work_item_id,
+      'archive',
+    );
     const canPostProgress = resourceAction(
       'work_item',
       item.work_item_id,
       'postProgress',
     );
     const canAnswer = collaborationCanAnswerWorkItemAssignment(group, item);
-    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-work-item">返回</button>${canPostProgress ? '<button type="button" class="btn-ghost" data-collaboration-action="post-work-progress">发布进展</button>' : ''}</section>
-      <section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(item.title)}</h3>${status(item.status)}</div><p class="collaboration-prose">${html(item.description || '')}</p>${canAnswer ? '<div class="collaboration-command-band"><div><span>等待确认</span><strong>这项工作已分配给你</strong></div><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="decline-assignment">拒绝</button><button type="button" class="btn-primary" data-collaboration-action="acknowledge-assignment">接受</button></div></div>' : ''}<dl class="collaboration-definition-list"><div><dt>负责人</dt><dd>${html(collaborationPrincipalName(group.projection, item.owner_principal_id))}</dd></div><div><dt>优先级</dt><dd>${html(collaborationLabel(item.priority))}</dd></div><div><dt>截止时间</dt><dd>${html(timestamp(item.due_at))}</dd></div><div><dt>分配状态</dt><dd>${html(collaborationLabel(item.assignment_status))}</dd></div><div><dt>标签</dt><dd>${(item.labels || []).map((label) => `<code>${html(collaborationLabel(label))}</code>`).join(' ') || '-'}</dd></div><div><dt>阻塞项</dt><dd>${(item.blocked_by || []).map((id) => `<code>${html(id)}</code>`).join(' ') || '-'}</dd></div></dl>${canManage ? `<div class="collaboration-segmented">${['proposed', 'open', 'in_progress', 'blocked', 'done', 'cancelled'].map((value) => `<button type="button" data-collaboration-action="set-work-status" data-status="${value}" class="${item.status === value ? 'active' : ''}">${html(collaborationStatusLabel(value))}</button>`).join('')}</div>` : ''}</section>
+    const statusActions = [
+      'proposed',
+      'open',
+      'in_progress',
+      'blocked',
+      'done',
+      'cancelled',
+    ].filter(
+      (value) =>
+        value !== item.status &&
+        collaborationWorkItemStatusActionAccess(group, item.work_item_id, value)
+          .allowed,
+    );
+    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-work-item">返回</button><div class="collaboration-record-actions">${canEdit ? '<button type="button" class="btn-ghost" data-collaboration-action="edit-work-item">编辑</button>' : ''}${canAssign ? '<button type="button" class="btn-ghost" data-collaboration-action="assign-work-item">负责人</button>' : ''}${canRelate ? '<button type="button" class="btn-ghost" data-collaboration-action="relate-work-item">关系</button>' : ''}${canPostProgress ? '<button type="button" class="btn-primary" data-collaboration-action="post-work-progress">发布进展</button>' : ''}${canArchive ? '<button type="button" class="btn-danger-soft" data-collaboration-action="archive-work-item">归档</button>' : ''}</div></section>
+      <section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(item.title)}</h3>${status(item.archived ? 'archived' : item.status)}</div><p class="collaboration-prose">${html(item.description || '')}</p>${canAnswer ? '<div class="collaboration-command-band"><div><span>等待确认</span><strong>这项工作已分配给你</strong></div><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="decline-assignment">拒绝</button><button type="button" class="btn-primary" data-collaboration-action="acknowledge-assignment">接受</button></div></div>' : ''}<dl class="collaboration-definition-list"><div><dt>负责人</dt><dd>${html(collaborationPrincipalName(group.projection, item.owner_principal_id))}</dd></div><div><dt>贡献者</dt><dd>${(item.contributors || []).map((id) => html(collaborationPrincipalName(group.projection, id))).join('、') || '-'}</dd></div><div><dt>关注者</dt><dd>${(item.watchers || []).map((id) => html(collaborationPrincipalName(group.projection, id))).join('、') || '-'}</dd></div><div><dt>优先级</dt><dd>${html(collaborationLabel(item.priority))}</dd></div><div><dt>截止时间</dt><dd>${html(timestamp(item.due_at))}</dd></div><div><dt>分配状态</dt><dd>${html(collaborationLabel(item.assignment_status))}</dd></div><div><dt>标签</dt><dd>${(item.labels || []).map((label) => `<code>${html(collaborationLabel(label))}</code>`).join(' ') || '-'}</dd></div><div><dt>父工作项</dt><dd>${item.parent_id ? `<code>${html(item.parent_id)}</code>` : '-'}</dd></div><div><dt>阻塞项</dt><dd>${(item.blocked_by || []).map((id) => `<code>${html(id)}</code>`).join(' ') || '-'}</dd></div><div><dt>关联项</dt><dd>${(item.related_items || []).map((id) => `<code>${html(id)}</code>`).join(' ') || '-'}</dd></div></dl>${statusActions.length ? `<div class="collaboration-segmented">${statusActions.map((value) => `<button type="button" data-collaboration-action="set-work-status" data-status="${value}">${html(collaborationStatusLabel(value))}</button>`).join('')}</div>` : ''}</section>
       <section class="collaboration-section"><div class="collaboration-section-head"><h3>进展</h3><span>${updates.length}</span></div><div class="collaboration-record-list">${
         updates
           .slice()
@@ -595,7 +632,32 @@ export function createCollaborationWorkspace(options) {
         selected.discussion.thread_id,
         'post',
       );
-      return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-discussion">返回</button>${canPost ? '<button type="button" class="btn-primary" data-collaboration-action="new-message">回复</button>' : ''}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(selected.discussion.title)}</h3>${status(selected.discussion.status)}</div><div class="collaboration-discussion-stream">${messages.map((message) => `<article><header><strong>${html(collaborationPrincipalName(group.projection, message.author_principal_id))}</strong><small>${html(timestamp(message.created_at))}</small></header><p>${message.tombstoned ? '<em>消息已移除</em>' : html(message.body)}</p></article>`).join('') || empty('暂无消息')}</div></section>`;
+      const statusAction =
+        selected.discussion.status === 'open' ? 'resolve' : 'reopen';
+      const canChangeStatus = resourceAction(
+        'discussion',
+        selected.discussion.thread_id,
+        statusAction,
+      );
+      return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-discussion">返回</button><div class="collaboration-record-actions">${canChangeStatus ? `<button type="button" class="btn-ghost" data-collaboration-action="${statusAction}-discussion">${statusAction === 'resolve' ? '标记为已解决' : '重新打开'}</button>` : ''}${canPost ? '<button type="button" class="btn-primary" data-collaboration-action="new-message">回复</button>' : ''}</div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(selected.discussion.title)}</h3>${status(selected.discussion.status)}</div><div class="collaboration-discussion-stream">${
+        messages
+          .map((message) => {
+            const canRevise = collaborationDiscussionMessageActionAllowed(
+              group,
+              selected.discussion.thread_id,
+              message.message_id,
+              'revise',
+            );
+            const canTombstone = collaborationDiscussionMessageActionAllowed(
+              group,
+              selected.discussion.thread_id,
+              message.message_id,
+              'tombstone',
+            );
+            return `<article><header><strong>${html(collaborationPrincipalName(group.projection, message.author_principal_id))}</strong><small>${html(timestamp(message.updated_at || message.created_at))}</small></header><p>${message.tombstoned ? '<em>消息已移除</em>' : html(message.body)}</p>${canRevise || canTombstone ? `<div class="collaboration-record-actions">${canRevise ? `<button type="button" class="btn-ghost" data-collaboration-action="revise-message" data-message-id="${attr(message.message_id)}">修改</button>` : ''}${canTombstone ? `<button type="button" class="btn-danger-soft" data-collaboration-action="tombstone-message" data-message-id="${attr(message.message_id)}">移除</button>` : ''}</div>` : ''}</article>`;
+          })
+          .join('') || empty('暂无消息')
+      }</div></section>`;
     }
     return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>讨论</h3>${groupAction('createDiscussion') ? '<button type="button" class="btn-primary" data-collaboration-action="new-discussion">新建</button>' : ''}</div><div class="collaboration-record-list">${threads.map((thread) => `<button type="button" class="collaboration-row-button" data-collaboration-action="open-discussion" data-thread-id="${attr(thread.discussion.thread_id)}"><strong>${html(thread.discussion.title)}</strong><span>${html(Object.keys(thread.messages || {}).length)} 条消息</span>${status(thread.discussion.status)}</button>`).join('') || empty('暂无讨论')}</div></section>`;
   };
@@ -642,15 +704,23 @@ export function createCollaborationWorkspace(options) {
       instance.instance_id,
       'configureCurrentState',
     );
-    const canManageInstance = resourceAction(
-      'workflow_instance',
-      instance.instance_id,
-      instanceCommand?.command === 'start' ? 'start' : 'manage',
+    const canRunCommand = Boolean(
+      instanceCommand &&
+      resourceAction(
+        'workflow_instance',
+        instance.instance_id,
+        instanceCommand.command,
+      ),
     );
     const canReassign = resourceAction(
       'workflow_instance',
       instance.instance_id,
       'reassign',
+    );
+    const canClose = resourceAction(
+      'workflow_instance',
+      instance.instance_id,
+      'close',
     );
     queueMicrotask(() => {
       const host = document.getElementById('collaboration-instance-graph');
@@ -667,7 +737,7 @@ export function createCollaborationWorkspace(options) {
     const currentTurn = turn
       ? `<dl class="collaboration-definition-list"><div><dt>状态</dt><dd>${html(workflowStateLabel(definition, turn.state_id))}</dd></div><div><dt>负责人</dt><dd>${html(collaborationPrincipalName(projection, turn.assignee_principal_id))}</dd></div><div><dt>客户端</dt><dd>${html(turn.claimant_client_id || '-')}</dd></div><div><dt>执行模式</dt><dd>${html(collaborationLabel(turn.execution_mode))}</dd></div><div><dt>尝试次数</dt><dd>${html(turn.attempt)}</dd></div><div><dt>截止时间</dt><dd>${html(collaborationTurnDeadline(turn)?.deadlineAt || '-')}</dd></div>${turn.recovery_reason ? `<div><dt>恢复原因</dt><dd>${html(turn.recovery_reason)}</dd></div>` : ''}</dl><div class="collaboration-record-actions">${canRecoverTurn ? '<button type="button" class="btn-primary" data-collaboration-action="recover-turn">恢复执行轮次</button>' : ''}${access.canStart ? '<button type="button" class="btn-primary" data-collaboration-action="start-turn">开始执行</button>' : ''}${access.canComplete ? '<button type="button" class="btn-primary" data-collaboration-action="complete-turn">完成</button>' : ''}${canConfigure && turn.state !== 'recovery_required' ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">执行配置</button>' : ''}</div><div class="collaboration-outcome-preview">${routes.map((route) => `<span><strong>${html(collaborationLabel(route.label || route.outcome))}</strong> → ${html(workflowStateLabel(definition, route.target_state))}</span>`).join('')}</div>`
       : `<div class="collaboration-section-empty">${instance.lifecycle === 'running' ? `可以开始：${html(workflowStateLabel(definition, instance.business_state))}` : '当前没有执行轮次'}</div><div class="collaboration-record-actions">${canConfigure ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">执行配置</button>' : ''}${canCreateTurn ? `<button type="button" class="btn-primary" data-collaboration-action="create-turn">${turns.length ? '继续执行' : '创建执行轮次'}</button>` : ''}</div>`;
-    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-instance">返回</button>${canReassign ? '<button type="button" class="btn-ghost" data-collaboration-action="reassign-instance">补齐参与者 / 重新分配</button>' : ''}${canManageInstance && instanceCommand ? `<button type="button" class="btn-ghost" data-collaboration-action="instance-command" data-command="${instanceCommand.command}">${instanceCommand.label}</button>` : ''}</section><section class="collaboration-metrics">${metric('生命周期', collaborationStatusLabel(instance.lifecycle))}${metric('当前状态', workflowStateLabel(definition, instance.business_state))}${metric('周期', instance.epoch)}${metric('执行轮次', turns.length)}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(collaborationLabel(definition?.definition?.name || instance.definition_id))} · ${html(instance.instance_id)}</h3>${status(instance.lifecycle)}</div><div id="collaboration-instance-graph"></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>当前执行轮次</h3>${turn ? status(turn.state) : ''}</div>${currentTurn}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>执行历史</h3><span>${turns.length}</span></div>${turns.map((item) => `<article class="collaboration-record"><div><strong>${html(workflowStateLabel(definition, item.state_id))}</strong><small>${html(timestamp(item.created_at))}${item.outcome ? ` · ${html(collaborationLabel(item.outcome))}` : ''}</small>${renderArtifactRefs(projection, item.artifact_refs)}</div>${status(item.state)}</article>`).join('') || empty('暂无执行记录')}</section>`;
+    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-instance">返回</button><div class="collaboration-record-actions">${canReassign ? '<button type="button" class="btn-ghost" data-collaboration-action="reassign-instance">补齐参与者 / 重新分配</button>' : ''}${canRunCommand ? `<button type="button" class="btn-primary" data-collaboration-action="instance-command" data-command="${instanceCommand.command}">${instanceCommand.label}</button>` : ''}${canClose ? '<button type="button" class="btn-danger-soft" data-collaboration-action="close-workflow-instance">关闭实例</button>' : ''}</div></section><section class="collaboration-metrics">${metric('生命周期', collaborationStatusLabel(instance.lifecycle))}${metric('当前状态', workflowStateLabel(definition, instance.business_state))}${metric('周期', instance.epoch)}${metric('执行轮次', turns.length)}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(collaborationLabel(definition?.definition?.name || instance.definition_id))} · ${html(instance.instance_id)}</h3>${status(instance.lifecycle)}</div><div id="collaboration-instance-graph"></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>当前执行轮次</h3>${turn ? status(turn.state) : ''}</div>${currentTurn}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>执行历史</h3><span>${turns.length}</span></div>${turns.map((item) => `<article class="collaboration-record"><div><strong>${html(workflowStateLabel(definition, item.state_id))}</strong><small>${html(timestamp(item.created_at))}${item.outcome ? ` · ${html(collaborationLabel(item.outcome))}` : ''}</small>${renderArtifactRefs(projection, item.artifact_refs)}</div>${status(item.state)}</article>`).join('') || empty('暂无执行记录')}</section>`;
   };
 
   const renderWorkflows = () => {
@@ -678,7 +748,24 @@ export function createCollaborationWorkspace(options) {
     );
     if (selectedInstance) return renderInstanceDetail(selectedInstance);
     const definitions = workflowDefinitionEntries();
-    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>工作流定义</h3>${groupAction('proposeWorkflowDefinition') ? '<button type="button" class="btn-primary" data-collaboration-action="new-workflow">新建</button>' : ''}</div><div class="collaboration-record-list">${definitions.map((entry) => `<article class="collaboration-record"><div><strong>${html(collaborationLabel(entry.definition.name))}</strong><small>${html(entry.definition.definition_id)} · v${html(entry.definition.version)}</small></div>${status(entry.definition.status)}<div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="view-workflow" data-definition-key="${attr(entry.definition.definition_id)}@${attr(entry.definition.version)}">打开</button>${entry.definition.status === 'published' && collaborationWorkflowEditable(group, entry) ? `<button type="button" class="btn-ghost" data-collaboration-action="new-workflow-version" data-definition-key="${attr(entry.definition.definition_id)}@${attr(entry.definition.version)}">新建版本</button>` : ''}${collaborationWorkflowPublishable(group, entry) ? `<button type="button" class="btn-primary" data-collaboration-action="publish-workflow" data-definition-id="${attr(entry.definition.definition_id)}" data-version="${attr(entry.definition.version)}">发布</button>` : ''}</div></article>`).join('') || empty('暂无工作流定义')}</div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>工作流实例</h3>${groupAction('createWorkflowInstance') && definitions.some((entry) => entry.definition.status === 'published') ? '<button type="button" class="btn-primary" data-collaboration-action="new-instance">新建</button>' : ''}</div><div class="collaboration-record-list">${
+    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>工作流定义</h3>${groupAction('proposeWorkflowDefinition') ? '<button type="button" class="btn-primary" data-collaboration-action="new-workflow">新建</button>' : ''}</div><div class="collaboration-record-list">${
+      definitions
+        .map((entry) => {
+          const key = `${entry.definition.definition_id}@${entry.definition.version}`;
+          const canCreateVersion = resourceAction(
+            'workflow_definition',
+            key,
+            'createVersion',
+          );
+          const canRetire = resourceAction(
+            'workflow_definition',
+            key,
+            'retire',
+          );
+          return `<article class="collaboration-record"><div><strong>${html(collaborationLabel(entry.definition.name))}</strong><small>${html(entry.definition.definition_id)} · v${html(entry.definition.version)}</small></div>${status(entry.definition.status)}<div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="view-workflow" data-definition-key="${attr(key)}">打开</button>${canCreateVersion ? `<button type="button" class="btn-ghost" data-collaboration-action="new-workflow-version" data-definition-key="${attr(key)}">新建版本</button>` : ''}${collaborationWorkflowPublishable(group, entry) ? `<button type="button" class="btn-primary" data-collaboration-action="publish-workflow" data-definition-id="${attr(entry.definition.definition_id)}" data-version="${attr(entry.definition.version)}">发布</button>` : ''}${canRetire ? `<button type="button" class="btn-danger-soft" data-collaboration-action="retire-workflow" data-definition-key="${attr(key)}">停用</button>` : ''}</div></article>`;
+        })
+        .join('') || empty('暂无工作流定义')
+    }</div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>工作流实例</h3>${groupAction('createWorkflowInstance') && definitions.some((entry) => entry.definition.status === 'published') ? '<button type="button" class="btn-primary" data-collaboration-action="new-instance">新建</button>' : ''}</div><div class="collaboration-record-list">${
       instances
         .map((instance) => {
           const definition = definitions.find(
@@ -1569,6 +1656,193 @@ export function createCollaborationWorkspace(options) {
     });
   };
 
+  const editWorkItem = () => {
+    const group = selectedGroup();
+    const item = group.projection.workItems[state.selectedWorkItemId];
+    const activeMembers = Object.values(group.projection?.members || {}).filter(
+      (member) => member.status === 'active',
+    );
+    const memberChecks = (name, selected) =>
+      `<fieldset class="collaboration-mention-picker"><legend>${name === 'contributors' ? '贡献者' : '关注者'}</legend>${activeMembers
+        .map(
+          (member) =>
+            `<label><input type="checkbox" name="${name}" value="${attr(member.principal_id)}" ${selected.includes(member.principal_id) ? 'checked' : ''}><span>${html(member.display_name)}</span><small>${html(collaborationShortId(member.principal_id))}</small></label>`,
+        )
+        .join('')}</fieldset>`;
+    openDialog({
+      title: '编辑工作项',
+      wide: true,
+      body: `<div class="collaboration-form-grid">${field(
+        '类型',
+        'type',
+        item.type,
+        {
+          options: [
+            ['task', '任务'],
+            ['issue', '问题'],
+            ['decision', '决策'],
+            ['milestone', '里程碑'],
+          ],
+        },
+      )}${field('标题', 'title', item.title)}${field('描述', 'description', item.description, { multiline: true, required: false })}${field(
+        '优先级',
+        'priority',
+        item.priority,
+        {
+          options: [
+            ['low', '低'],
+            ['normal', '普通'],
+            ['high', '高'],
+            ['urgent', '紧急'],
+          ],
+        },
+      )}${field('首选 Executor ID', 'preferredExecutorId', item.preferred_executor_id || '', { required: false })}${field('截止时间（ISO 8601）', 'dueAt', item.due_at || '', { required: false })}${field('验收标准（每行一项）', 'acceptanceCriteria', (item.acceptance_criteria || []).join('\n'), { multiline: true, required: false })}${field('标签（逗号或换行分隔）', 'labels', (item.labels || []).join('\n'), { multiline: true, required: false })}${memberChecks('contributors', item.contributors || [])}${memberChecks('watchers', item.watchers || [])}</div>`,
+      onSubmit: async (formData) => {
+        const split = (value) =>
+          String(value || '')
+            .split(/[,\r\n]+/u)
+            .map((entry) => entry.trim())
+            .filter(Boolean);
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/work-items/${encodeURIComponent(item.work_item_id)}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(
+              buildCollaborationWorkItemDetailsRequest({
+                expectedRevision: aggregateRevision(
+                  group.projection,
+                  'work_item',
+                  item.work_item_id,
+                ),
+                type: formData.get('type'),
+                title: formData.get('title'),
+                description: formData.get('description'),
+                priority: formData.get('priority'),
+                preferredExecutorId: formData.get('preferredExecutorId'),
+                dueAt: formData.get('dueAt'),
+                acceptanceCriteria: split(formData.get('acceptanceCriteria')),
+                labels: split(formData.get('labels')),
+                contributors: formData.getAll('contributors'),
+                watchers: formData.getAll('watchers'),
+              }),
+            ),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
+  const assignWorkItem = () => {
+    const group = selectedGroup();
+    const item = group.projection.workItems[state.selectedWorkItemId];
+    const activeMembers = Object.values(group.projection?.members || {}).filter(
+      (member) => member.status === 'active',
+    );
+    openDialog({
+      title: '变更工作项负责人',
+      body: `<div class="collaboration-form-grid">${field('负责人', 'ownerPrincipalId', item.owner_principal_id, { options: activeMembers.map((member) => [member.principal_id, `${member.display_name} · ${collaborationShortId(member.principal_id)}`]) })}${field('首选 Executor ID', 'preferredExecutorId', item.preferred_executor_id || '', { required: false })}<label class="collaboration-toggle"><input type="checkbox" name="requireAcknowledgement" ${item.owner_principal_id === group.localPrincipalId ? '' : 'checked'}><span>要求新负责人确认</span></label></div>`,
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/work-items/${encodeURIComponent(item.work_item_id)}/assignment`,
+          {
+            method: 'POST',
+            body: JSON.stringify(
+              buildCollaborationWorkItemAssignmentRequest({
+                expectedRevision: aggregateRevision(
+                  group.projection,
+                  'work_item',
+                  item.work_item_id,
+                ),
+                ownerPrincipalId: formData.get('ownerPrincipalId'),
+                preferredExecutorId: formData.get('preferredExecutorId'),
+                requireAcknowledgement: formData.has('requireAcknowledgement'),
+              }),
+            ),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
+  const relateWorkItem = () => {
+    const group = selectedGroup();
+    const item = group.projection.workItems[state.selectedWorkItemId];
+    const candidates = Object.values(group.projection?.workItems || {}).filter(
+      (candidate) => candidate.work_item_id !== item.work_item_id,
+    );
+    const checks = (name, title, selected) =>
+      `<fieldset class="collaboration-mention-picker"><legend>${title}</legend>${
+        candidates
+          .map(
+            (candidate) =>
+              `<label><input type="checkbox" name="${name}" value="${attr(candidate.work_item_id)}" ${selected.includes(candidate.work_item_id) ? 'checked' : ''}><span>${html(candidate.title)}</span><small>${html(collaborationStatusLabel(candidate.status))}</small></label>`,
+          )
+          .join('') || empty('没有其他工作项')
+      }</fieldset>`;
+    openDialog({
+      title: '变更工作项关系',
+      wide: true,
+      body: `<div class="collaboration-form-grid">${field('父工作项', 'parentId', item.parent_id || '', { options: [['', '无'], ...candidates.map((candidate) => [candidate.work_item_id, `${candidate.title} · ${collaborationStatusLabel(candidate.status)}`])] })}${checks('blockedBy', '被以下工作项阻塞', item.blocked_by || [])}${checks('relatedItems', '关联工作项', item.related_items || [])}</div>`,
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/work-items/${encodeURIComponent(item.work_item_id)}/relations`,
+          {
+            method: 'POST',
+            body: JSON.stringify(
+              buildCollaborationWorkItemRelationsRequest({
+                expectedRevision: aggregateRevision(
+                  group.projection,
+                  'work_item',
+                  item.work_item_id,
+                ),
+                parentId: formData.get('parentId'),
+                blockedBy: formData.getAll('blockedBy'),
+                relatedItems: formData.getAll('relatedItems'),
+              }),
+            ),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
+  const archiveWorkItem = () => {
+    const group = selectedGroup();
+    const item = group.projection.workItems[state.selectedWorkItemId];
+    openDialog({
+      title: '归档工作项',
+      submitText: '确认归档',
+      danger: true,
+      body: field('归档原因', 'reason', '', { multiline: true }),
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/work-items/${encodeURIComponent(item.work_item_id)}/archive`,
+          {
+            method: 'POST',
+            body: JSON.stringify(
+              buildCollaborationReasonRequest({
+                expectedRevision: aggregateRevision(
+                  group.projection,
+                  'work_item',
+                  item.work_item_id,
+                ),
+                reason: formData.get('reason'),
+              }),
+            ),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
   const postWorkProgress = () => {
     const group = selectedGroup();
     const item = group.projection.workItems[state.selectedWorkItemId];
@@ -1678,6 +1952,97 @@ export function createCollaborationWorkspace(options) {
     });
   };
 
+  const reviseMessage = (messageId) => {
+    const group = selectedGroup();
+    const thread = group.projection.discussions[state.selectedDiscussionId];
+    const message = thread.messages[messageId];
+    openDialog({
+      title: '修改消息',
+      body: field('消息内容', 'body', message.body, { multiline: true }),
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/discussions/${encodeURIComponent(thread.discussion.thread_id)}/messages/${encodeURIComponent(messageId)}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(
+              buildCollaborationDiscussionMessageRequest({
+                expectedRevision: aggregateRevision(
+                  group.projection,
+                  'discussion',
+                  thread.discussion.thread_id,
+                ),
+                body: formData.get('body'),
+                mentions: message.mentions || [],
+                refs: message.refs || [],
+              }),
+            ),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
+  const tombstoneMessage = (messageId) => {
+    const group = selectedGroup();
+    const thread = group.projection.discussions[state.selectedDiscussionId];
+    openDialog({
+      title: '移除消息',
+      submitText: '确认移除',
+      danger: true,
+      body: field('原因', 'reason', '', { multiline: true, required: false }),
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/discussions/${encodeURIComponent(thread.discussion.thread_id)}/messages/${encodeURIComponent(messageId)}`,
+          {
+            method: 'DELETE',
+            body: JSON.stringify({
+              expectedRevision: aggregateRevision(
+                group.projection,
+                'discussion',
+                thread.discussion.thread_id,
+              ),
+              reason: String(formData.get('reason') || '').trim(),
+            }),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
+  const changeDiscussionStatus = async (resolved) => {
+    const group = selectedGroup();
+    const thread = group.projection.discussions[state.selectedDiscussionId];
+    await options.request(
+      `/groups/${encodeURIComponent(group.groupId)}/discussions/${encodeURIComponent(thread.discussion.thread_id)}/${resolved ? 'resolve' : 'reopen'}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          resolved
+            ? {
+                expectedRevision: aggregateRevision(
+                  group.projection,
+                  'discussion',
+                  thread.discussion.thread_id,
+                ),
+                resolved: true,
+              }
+            : {
+                expectedRevision: aggregateRevision(
+                  group.projection,
+                  'discussion',
+                  thread.discussion.thread_id,
+                ),
+              },
+        ),
+      },
+    );
+    await loadDetail(group.groupId, false);
+  };
+
   const uploadFile = () => {
     const group = selectedGroup();
     const scopeOptions = [
@@ -1735,52 +2100,130 @@ export function createCollaborationWorkspace(options) {
       draft.version = entry.definition.version + 1;
       draft.layout.revision = 1;
     }
-    const editable =
-      collaborationWorkflowEditable(group, entry) &&
-      (!entry || newVersion || entry.definition.status === 'proposed');
+    const definitionKey = entry
+      ? `${entry.definition.definition_id}@${entry.definition.version}`
+      : '';
+    const editable = !entry
+      ? groupAction('proposeWorkflowDefinition')
+      : newVersion
+        ? resourceAction('workflow_definition', definitionKey, 'createVersion')
+        : resourceAction(
+            'workflow_definition',
+            definitionKey,
+            'editDefinition',
+          );
+    const layoutOnly = Boolean(
+      entry &&
+      !newVersion &&
+      !editable &&
+      resourceAction('workflow_definition', definitionKey, 'editLayout'),
+    );
     openDialog({
       title: entry
         ? `${entry.definition.name} · v${draft.version}`
         : '新建工作流定义',
-      submitText: entry && !newVersion ? '保存草稿' : '创建草稿',
+      submitText: layoutOnly
+        ? '保存布局'
+        : entry && !newVersion
+          ? '保存草稿'
+          : '创建草稿',
       wide: true,
       body: `<div id="collaboration-workflow-editor-host"></div>`,
       onOpen: () => {
         workflowEditor = mountCollaborationFsmEditor(
           document.getElementById('collaboration-workflow-editor-host'),
-          { draft, readonly: !editable },
+          { draft, readonly: !editable && !layoutOnly, layoutOnly },
         );
       },
-      onSubmit: !editable
-        ? null
-        : async () => {
-            const request = buildCollaborationWorkflowRequest({
-              expectedRevision: entry
-                ? aggregateRevision(
-                    group.projection,
-                    'workflow_definition',
-                    entry.definition.definition_id,
-                  )
-                : 0,
-              draft: workflowEditor.getDraft(),
-              launchPolicy: entry?.definition.launch_policy,
-            });
-            const editingDraft = entry && !newVersion;
-            const body = editingDraft
-              ? (({ definitionId: _definitionId, ...rest }) => rest)(request)
-              : request;
-            await options.request(
-              editingDraft
-                ? `/groups/${encodeURIComponent(group.groupId)}/workflow-definitions/${encodeURIComponent(entry.definition.definition_id)}/draft`
-                : `/groups/${encodeURIComponent(group.groupId)}/workflow-definitions`,
-              {
-                method: editingDraft ? 'PUT' : 'POST',
-                body: JSON.stringify(body),
-              },
-            );
-            closeDialog();
-            await loadDetail(group.groupId, false);
+      onSubmit:
+        !editable && !layoutOnly
+          ? null
+          : async () => {
+              if (layoutOnly) {
+                const currentDraft = workflowEditor.getDraft();
+                await options.request(
+                  `/groups/${encodeURIComponent(group.groupId)}/workflow-definitions/${encodeURIComponent(entry.definition.definition_id)}/layout`,
+                  {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                      expectedRevision: aggregateRevision(
+                        group.projection,
+                        'workflow_definition',
+                        entry.definition.definition_id,
+                      ),
+                      version: entry.definition.version,
+                      view: currentDraft.layout.view,
+                      nodes: currentDraft.layout.nodes,
+                    }),
+                  },
+                );
+                closeDialog();
+                await loadDetail(group.groupId, false);
+                return;
+              }
+              const request = buildCollaborationWorkflowRequest({
+                expectedRevision: entry
+                  ? aggregateRevision(
+                      group.projection,
+                      'workflow_definition',
+                      entry.definition.definition_id,
+                    )
+                  : 0,
+                draft: workflowEditor.getDraft(),
+                launchPolicy: entry?.definition.launch_policy,
+              });
+              const editingDraft = entry && !newVersion;
+              const body = editingDraft
+                ? (({ definitionId: _definitionId, ...rest }) => rest)(request)
+                : request;
+              await options.request(
+                editingDraft
+                  ? `/groups/${encodeURIComponent(group.groupId)}/workflow-definitions/${encodeURIComponent(entry.definition.definition_id)}/draft`
+                  : `/groups/${encodeURIComponent(group.groupId)}/workflow-definitions`,
+                {
+                  method: editingDraft ? 'PUT' : 'POST',
+                  body: JSON.stringify(body),
+                },
+              );
+              closeDialog();
+              await loadDetail(group.groupId, false);
+            },
+    });
+  };
+
+  const retireWorkflow = (definitionKey) => {
+    const group = selectedGroup();
+    const entry = workflowDefinitionEntries().find(
+      (candidate) =>
+        `${candidate.definition.definition_id}@${candidate.definition.version}` ===
+        definitionKey,
+    );
+    if (!entry) throw new Error('Workflow Definition 不存在');
+    openDialog({
+      title: '停用工作流定义',
+      submitText: '确认停用',
+      danger: true,
+      body: field('停用原因', 'reason', '', { multiline: true }),
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/workflow-definitions/${encodeURIComponent(entry.definition.definition_id)}/retire`,
+          {
+            method: 'POST',
+            body: JSON.stringify(
+              buildCollaborationReasonRequest({
+                expectedRevision: aggregateRevision(
+                  group.projection,
+                  'workflow_definition',
+                  entry.definition.definition_id,
+                ),
+                reason: formData.get('reason'),
+              }),
+            ),
           },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
     });
   };
 
@@ -1999,6 +2442,38 @@ export function createCollaborationWorkspace(options) {
 
   const selectedInstance = () =>
     selectedGroup().projection?.workflowInstances?.[state.selectedInstanceId];
+
+  const closeWorkflowInstance = () => {
+    const group = selectedGroup();
+    const instance = selectedInstance();
+    openDialog({
+      title: '关闭工作流实例',
+      submitText: '确认关闭',
+      danger: true,
+      body: field('关闭原因', 'reason', '', { multiline: true }),
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/commands`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              ...buildCollaborationReasonRequest({
+                expectedRevision: aggregateRevision(
+                  group.projection,
+                  'workflow_instance',
+                  instance.instance_id,
+                ),
+                reason: formData.get('reason'),
+              }),
+              command: 'close',
+            }),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
 
   const completeTurn = () => {
     const group = selectedGroup();
@@ -2934,8 +3409,19 @@ export function createCollaborationWorkspace(options) {
       return renderContent();
     }
     if (action === 'post-work-progress') return postWorkProgress();
+    if (action === 'edit-work-item') return editWorkItem();
+    if (action === 'assign-work-item') return assignWorkItem();
+    if (action === 'relate-work-item') return relateWorkItem();
+    if (action === 'archive-work-item') return archiveWorkItem();
     if (action === 'set-work-status') {
       const item = group.projection.workItems[state.selectedWorkItemId];
+      const access = collaborationWorkItemStatusActionAccess(
+        group,
+        item.work_item_id,
+        button.dataset.status,
+      );
+      if (!access.allowed)
+        throw new Error(access.reason || '当前状态转换不可用');
       await options.request(
         `/groups/${encodeURIComponent(group.groupId)}/work-items/${encodeURIComponent(item.work_item_id)}/status`,
         {
@@ -2962,6 +3448,12 @@ export function createCollaborationWorkspace(options) {
       return renderContent();
     }
     if (action === 'new-message') return newMessage();
+    if (action === 'resolve-discussion') return changeDiscussionStatus(true);
+    if (action === 'reopen-discussion') return changeDiscussionStatus(false);
+    if (action === 'revise-message')
+      return reviseMessage(button.dataset.messageId);
+    if (action === 'tombstone-message')
+      return tombstoneMessage(button.dataset.messageId);
     if (action === 'upload-file') return uploadFile();
     if (action === 'open-file') {
       const path = button.dataset.repositoryPath;
@@ -3018,6 +3510,8 @@ export function createCollaborationWorkspace(options) {
       );
       return loadDetail(group.groupId, false);
     }
+    if (action === 'retire-workflow')
+      return retireWorkflow(button.dataset.definitionKey);
     if (action === 'new-instance') return newInstance();
     if (action === 'open-instance') {
       state.activeTab = 'workflows';
@@ -3047,6 +3541,7 @@ export function createCollaborationWorkspace(options) {
       );
       return loadDetail(group.groupId, false);
     }
+    if (action === 'close-workflow-instance') return closeWorkflowInstance();
     if (action === 'create-turn') {
       const instance = selectedInstance();
       await options.request(

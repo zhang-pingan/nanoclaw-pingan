@@ -75,10 +75,10 @@ Workflow Instance State
 1. `Member.status=active`、active Client 和 active event-signing Credential 是业务写入的身份前置条件，不是业务权限本身。
 2. Owner 拥有内置管理能力；其他成员的 `permission_granted` / `permission_revoked` 事件形成直接权限事实，`group:admin` 扩展为内置管理能力。
 3. 固定模板 `member.v1`、`contributor.v1`、`project_manager.v1`、`workflow_manager.v1`、`group_manager.v1` 只生成一组已知 permission；投影通过集合精确匹配解释“来源模板”或“自定义差异”，不把模板当作第二套授权事实。
-4. Group 概览 action 与资源 action 分开投影。例如 `createWorkItem` 需要 `work_item:create`，而 `workItems[id].manage` 由该 Work Item owner 或 `work_item:manage_all` 决定；当前 Workflow assignee 只获得对应实例的管理/执行入口。
-5. Web API 返回当前本机 Principal 的 `allowedActions`，Renderer 据此隐藏不适用入口。同步后权限可能变化，因此 command/API/Reducer 仍在提交时重新校验，并以稳定错误码拒绝过期操作。
+4. Group 概览 action 与资源 action 分开投影。例如 `createWorkItem` 需要 `work_item:create`，而 `workItems[id].editDetails/changeAssignment/changeRelations/archive/changeStatus` 分别表达当前资源和目标状态的能力；Discussion 消息、Workflow Definition layout/retire 和 Workflow Instance start/pause/resume/close 同样使用对应资源 action，不能回退到 Active Member 判断。
+5. Web API 返回当前本机 Principal 的 `allowedActions`，Renderer 据此隐藏不适用入口。资源状态也是 decision 的一部分，例如 draft Workflow Instance 的 `start` 返回 `RESOURCE_STATE_BLOCKED`，只提供补齐参与者。同步后权限或状态可能变化，因此 command/API/Reducer 仍在提交时重新校验，并以稳定错误码拒绝过期操作。
 
-群组保存 `default_permission_template_id`。开放加入在 `member_registered` 后提交独立的 `permission_granted` 事件；审批或邀请加入由审批人选择模板或自定义集合后执行相同授权事件。修改默认模板只影响以后加入或批准的成员，不改写既有 permission history。
+群组保存 `default_permission_template_id`。开放加入与审批/邀请批准都在一次远端 CAS 和一个签名 Git commit 中追加有序的 `member_registered` 与 `permission_granted` / `permission_revoked` 事件；batch manifest 固定事件顺序，replay 对每条事件逐一校验 commit signer 与 actor/Credential，并分别记录审计。任一事件构建、提交或 push 失败都不会留下 Active 无权限成员。审批人可在提交前选择模板或自定义集合；修改默认模板只影响以后加入或批准的成员，不改写既有 permission history。
 
 ## 0. 实施结果
 

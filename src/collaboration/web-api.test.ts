@@ -8,8 +8,10 @@ import type {
   CollaborationExecutorBindingV3,
   CollaborationProjectSpaceGroupRecord,
 } from './project-space-store.js';
+import { CollaborationProjectSpaceGitConflictError } from './project-space-git.js';
 import type { CollaborationProjectionV3 } from './protocol/v3-reducer.js';
 import type { CollaborationRuntime } from './runtime.js';
+import { CollaborationProtocolError } from './protocol/version.js';
 import { CollaborationWebApi } from './web-api.js';
 
 const hash = (value: string) => `sha256:${value.repeat(64)}`;
@@ -1850,6 +1852,69 @@ describe('Collaboration project-space v3 Web API', () => {
         });
         expect(updatePermissions).not.toHaveBeenCalled();
         expect(updateGroupSettings).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  it('maps structured authorization, conflict, and validation failures', async () => {
+    const updateWorkItemDetails = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new CollaborationProtocolError(
+          'EVENT_UNAUTHORIZED',
+          'Actor cannot update this Work Item',
+        ),
+      )
+      .mockRejectedValueOnce(
+        new CollaborationProtocolError(
+          'EVENT_CONFLICT',
+          'Work Item revision conflict',
+        ),
+      )
+      .mockRejectedValueOnce(
+        new CollaborationProjectSpaceGitConflictError(
+          'lost the remote fast-forward race',
+        ),
+      );
+    await withApiServer(
+      new CollaborationWebApi(runtime({ groups: { updateWorkItemDetails } })),
+      async (baseUrl) => {
+        const endpoint = `${baseUrl}/api/collaboration/groups/group_test/work-items/work_1`;
+        const request = (body: Record<string, unknown>) =>
+          fetch(endpoint, {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+        const unauthorized = await request({
+          expectedRevision: 2,
+          title: 'Denied',
+        });
+        expect(unauthorized.status).toBe(403);
+        expect(await unauthorized.json()).toMatchObject({
+          code: 'EVENT_UNAUTHORIZED',
+        });
+
+        const conflict = await request({
+          expectedRevision: 2,
+          title: 'Conflict',
+        });
+        expect(conflict.status).toBe(409);
+        expect(await conflict.json()).toMatchObject({ code: 'EVENT_CONFLICT' });
+
+        const gitConflict = await request({
+          expectedRevision: 2,
+          title: 'Git conflict',
+        });
+        expect(gitConflict.status).toBe(409);
+        expect(await gitConflict.json()).toMatchObject({
+          code: 'EVENT_CONFLICT',
+        });
+
+        const invalid = await request({ expectedRevision: -1, title: '' });
+        expect(invalid.status).toBe(400);
+        expect(await invalid.json()).toMatchObject({ code: 'INVALID_REQUEST' });
+        expect(updateWorkItemDetails).toHaveBeenCalledTimes(3);
       },
     );
   });

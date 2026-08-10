@@ -206,6 +206,8 @@ function outcomeDialog(draft, source) {
 export function mountCollaborationFsmEditor(host, options) {
   if (!host) throw new Error('缺少工作流编辑器容器');
   const readonly = Boolean(options.readonly);
+  const layoutOnly = !readonly && Boolean(options.layoutOnly);
+  const structureReadonly = readonly || layoutOnly;
   const history = createCollaborationDraftHistory(options.draft);
   let draft = history.current();
   let selectedStateId = options.selectedStateId || draft.initialState;
@@ -220,13 +222,13 @@ export function mountCollaborationFsmEditor(host, options) {
   };
   const render = () => {
     const issues = validateCollaborationFsmDraft(draft);
-    host.innerHTML = `<div class="collaboration-workflow-editor ${readonly ? 'readonly' : ''}">
+    host.innerHTML = `<div class="collaboration-workflow-editor ${readonly ? 'readonly' : layoutOnly ? 'layout-only' : ''}">
       <header class="collaboration-workflow-toolbar">
-        <div class="collaboration-segmented"><button type="button" data-workflow-view="participants" class="${draft.layout.view === 'participants' ? 'active' : ''}">按参与者</button><button type="button" data-workflow-view="free" class="${draft.layout.view === 'free' ? 'active' : ''}">自由布局</button></div>
-        <div class="collaboration-toolbar-actions">${readonly ? '' : '<button type="button" class="collaboration-icon-button" data-workflow-action="undo" title="撤销" aria-label="撤销">↶</button><button type="button" class="collaboration-icon-button" data-workflow-action="redo" title="重做" aria-label="重做">↷</button><button type="button" class="btn-ghost" data-workflow-action="layout">自动布局</button><button type="button" class="btn-ghost" data-workflow-action="add-state">添加状态</button>'}</div>
+        <div class="collaboration-segmented"><button type="button" data-workflow-view="participants" class="${draft.layout.view === 'participants' ? 'active' : ''}" ${readonly ? 'disabled' : ''}>按参与者</button><button type="button" data-workflow-view="free" class="${draft.layout.view === 'free' ? 'active' : ''}" ${readonly ? 'disabled' : ''}>自由布局</button></div>
+        <div class="collaboration-toolbar-actions">${readonly ? '' : `<button type="button" class="collaboration-icon-button" data-workflow-action="undo" title="撤销" aria-label="撤销">↶</button><button type="button" class="collaboration-icon-button" data-workflow-action="redo" title="重做" aria-label="重做">↷</button><button type="button" class="btn-ghost" data-workflow-action="layout">自动布局</button>${layoutOnly ? '' : '<button type="button" class="btn-ghost" data-workflow-action="add-state">添加状态</button>'}`}</div>
       </header>
-      ${renderParticipants(draft, readonly)}
-      <div class="collaboration-workflow-body">${renderCanvas(draft, selectedStateId, options.runtimeHighlights, readonly)}${renderInspector(draft, selectedStateId, readonly)}</div>
+      ${renderParticipants(draft, structureReadonly)}
+      <div class="collaboration-workflow-body">${renderCanvas(draft, selectedStateId, options.runtimeHighlights, readonly)}${renderInspector(draft, selectedStateId, structureReadonly)}</div>
       <footer class="collaboration-workflow-issues">${issues.length ? issues.map((entry) => `<span class="${entry.severity}">${html(entry.message)}</span>`).join('') : '<span class="ok">工作流配置有效</span>'}</footer>
     </div>`;
   };
@@ -247,6 +249,7 @@ export function mountCollaborationFsmEditor(host, options) {
     const action = event.target.closest('[data-workflow-action]')?.dataset
       .workflowAction;
     if (!action) return;
+    if (layoutOnly && !['undo', 'redo', 'layout'].includes(action)) return;
     if (action === 'undo' || action === 'redo') {
       draft = action === 'undo' ? history.undo() : history.redo();
       selectedStateId = draft.states.some(
@@ -309,7 +312,7 @@ export function mountCollaborationFsmEditor(host, options) {
   });
 
   host.addEventListener('change', (event) => {
-    if (readonly) return;
+    if (structureReadonly) return;
     const participantField = event.target.dataset.participantField;
     if (participantField) {
       const row = event.target.closest('[data-participant-id]');

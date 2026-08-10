@@ -13,6 +13,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 
 import type {
+  CollaborationProjectSpaceAppendEvent,
   CollaborationProjectSpaceTransport,
   ValidatedProjectSpaceHistory,
 } from './project-space-service.js';
@@ -30,6 +31,7 @@ import {
 } from './protocol/canonical-json.js';
 import {
   artifactMetadataV3Schema,
+  collaborationEventBatchSchema,
   credentialDefinitionSchema,
   fileMetadataSchema,
   recoveryRequestSchema,
@@ -254,6 +256,12 @@ export function collaborationProjectSpaceEventPath(
   const aggregate =
     event.aggregate_type === 'group' ? '' : `/${event.aggregate_id}`;
   return `events/${root}${aggregate}/${String(event.aggregate_revision).padStart(8, '0')}-${event.event_id}.json`;
+}
+
+function collaborationProjectSpaceEventBatchPath(
+  events: readonly CollaborationEventV3[],
+): string {
+  return `events/batches/${events[0]!.event_id}.json`;
 }
 
 function aggregateProjectionPath(event: CollaborationEventV3): string {
@@ -967,33 +975,64 @@ async function changedFilesForCommit(
     });
 }
 
-function eventFileFromChanges(
+async function eventFilesFromChanges(
+  repositoryPath: string,
   commit: string,
   changes: readonly { readonly status: string; readonly file: string }[],
-): string {
-  const eventFiles = changes.filter(
-    (change) =>
-      change.status === 'A' &&
-      change.file.startsWith('events/') &&
-      change.file.endsWith('.json'),
-  );
-  if (eventFiles.length !== 1)
-    throw new CollaborationProtocolError(
-      'PROTOCOL_QUARANTINED',
-      `Commit ${commit} must append exactly one v3 event`,
-    );
+): Promise<{
+  readonly eventFiles: readonly string[];
+  readonly batchFile: string | null;
+}> {
+  const eventFiles = changes
+    .filter(
+      (change) =>
+        change.status === 'A' &&
+        change.file.startsWith('events/') &&
+        !change.file.startsWith('events/batches/') &&
+        change.file.endsWith('.json'),
+    )
+    .map((change) => change.file);
+  const batchFiles = changes
+    .filter(
+      (change) =>
+        change.status === 'A' &&
+        change.file.startsWith('events/batches/') &&
+        change.file.endsWith('.json'),
+    )
+    .map((change) => change.file);
   if (
     changes.some(
       (change) =>
         change.file.startsWith('events/') &&
-        change.file !== eventFiles[0]!.file,
+        !eventFiles.includes(change.file) &&
+        !batchFiles.includes(change.file),
     )
   )
     throw new CollaborationProtocolError(
       'PROTOCOL_QUARANTINED',
-      `Commit ${commit} modifies existing or multiple event files`,
+      `Commit ${commit} modifies an existing or invalid event path`,
     );
-  return eventFiles[0]!.file;
+  if (eventFiles.length === 1 && batchFiles.length === 0)
+    return { eventFiles, batchFile: null };
+  if (eventFiles.length < 2 || batchFiles.length !== 1)
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      `Commit ${commit} must append one event or one ordered event batch`,
+    );
+  const batchFile = batchFiles[0]!;
+  const batch = collaborationEventBatchSchema.parse(
+    await showJson(repositoryPath, commit, batchFile),
+  );
+  if (
+    batchFile !== `events/batches/${batch.batch_id}.json` ||
+    batch.event_paths.length !== eventFiles.length ||
+    batch.event_paths.some((eventFile) => !eventFiles.includes(eventFile))
+  )
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      `Commit ${commit} event batch manifest does not match added events`,
+    );
+  return { eventFiles: batch.event_paths, batchFile };
 }
 
 function candidateCredential(
@@ -1188,23 +1227,44 @@ async function assertLinearHistory(
 async function verifyMaterializedCommit(
   repositoryPath: string,
   commit: string,
-  eventFile: string,
-  event: CollaborationEventV3,
-  projection: CollaborationProjectionV3,
+  eventFiles: readonly string[],
+  entries: readonly {
+    readonly event: CollaborationEventV3;
+    readonly projection: CollaborationProjectionV3;
+  }[],
+  batchFile: string | null,
   changes: readonly { readonly status: string; readonly file: string }[],
 ): Promise<void> {
-  const automatic = automaticMaterialization(event, projection);
-  const allowedExtra = allowedExtraMaterializationPaths(event);
+  const automatic = new Map<string, string | Buffer | null>();
+  const allowedExtra = new Set<string>();
+  for (const entry of entries) {
+    for (const [file, contents] of automaticMaterialization(
+      entry.event,
+      entry.projection,
+    ))
+      automatic.set(file, contents);
+    for (const file of allowedExtraMaterializationPaths(entry.event))
+      allowedExtra.add(file);
+  }
   const changed = new Set(changes.map((change) => change.file));
-  const allowed = new Set([eventFile, ...automatic.keys(), ...allowedExtra]);
-  const required = [eventFile, ...allowedExtra];
+  const allowed = new Set([
+    ...eventFiles,
+    ...(batchFile ? [batchFile] : []),
+    ...automatic.keys(),
+    ...allowedExtra,
+  ]);
+  const required = [
+    ...eventFiles,
+    ...(batchFile ? [batchFile] : []),
+    ...allowedExtra,
+  ];
   if (
     required.some((file) => !changed.has(file)) ||
     [...changed].some((file) => !allowed.has(file))
   )
     throw new CollaborationProtocolError(
       'PROTOCOL_QUARANTINED',
-      `Event ${event.event_id} changed unauthorized materialized paths`,
+      `Commit ${commit} changed unauthorized materialized paths`,
     );
   for (const [file, contents] of automatic) {
     const status = changes.find((change) => change.file === file)?.status;
@@ -1212,7 +1272,7 @@ async function verifyMaterializedCommit(
       if (status !== 'D')
         throw new CollaborationProtocolError(
           'PROTOCOL_QUARANTINED',
-          `Event ${event.event_id} must delete ${file}`,
+          `Commit ${commit} must delete ${file}`,
         );
       continue;
     }
@@ -1225,16 +1285,21 @@ async function verifyMaterializedCommit(
         `Materialized JSON does not match replay at ${file}`,
       );
   }
-  const contentFiles = new Map<string, string | Buffer | null>(automatic);
-  for (const file of allowedExtra)
-    contentFiles.set(file, await showBytes(repositoryPath, commit, file));
-  try {
-    validateContentFiles(event, contentFiles);
-  } catch (error) {
-    throw new CollaborationProtocolError(
-      'PROTOCOL_QUARANTINED',
-      error instanceof Error ? error.message : String(error),
+  for (const entry of entries) {
+    const contentFiles = automaticMaterialization(
+      entry.event,
+      entry.projection,
     );
+    for (const file of allowedExtraMaterializationPaths(entry.event))
+      contentFiles.set(file, await showBytes(repositoryPath, commit, file));
+    try {
+      validateContentFiles(entry.event, contentFiles);
+    } catch (error) {
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 }
 
@@ -1269,30 +1334,43 @@ export async function validateCollaborationProjectSpaceHistory(input: {
       commit,
       index === 0,
     );
-    const eventFile = eventFileFromChanges(commit, changes);
-    const event = validateCollaborationEventV3(
-      await showJson(input.repositoryPath, commit, eventFile),
+    const { eventFiles, batchFile } = await eventFilesFromChanges(
+      input.repositoryPath,
+      commit,
+      changes,
     );
-    if (eventFile !== collaborationProjectSpaceEventPath(event))
-      throw new CollaborationProtocolError(
-        'PROTOCOL_QUARANTINED',
-        `Event path does not match Aggregate revision and id: ${eventFile}`,
+    const entries: Array<{
+      event: CollaborationEventV3;
+      projection: CollaborationProjectionV3;
+    }> = [];
+    for (const eventFile of eventFiles) {
+      const event = validateCollaborationEventV3(
+        await showJson(input.repositoryPath, commit, eventFile),
       );
-    await verifyCommitSigner(input.repositoryPath, commit, event, projection);
-    projection = reduceCollaborationEventV3(projection, event);
+      if (eventFile !== collaborationProjectSpaceEventPath(event))
+        throw new CollaborationProtocolError(
+          'PROTOCOL_QUARANTINED',
+          `Event path does not match Aggregate revision and id: ${eventFile}`,
+        );
+      await verifyCommitSigner(input.repositoryPath, commit, event, projection);
+      projection = reduceCollaborationEventV3(projection, event, {
+        previousEventInAtomicBatch: entries.at(-1)?.event,
+      });
+      entries.push({ event, projection });
+      eventRecords.push({
+        event,
+        commitHash: commit,
+        commitOrder: eventRecords.length + 1,
+      });
+    }
     await verifyMaterializedCommit(
       input.repositoryPath,
       commit,
-      eventFile,
-      event,
-      projection,
+      eventFiles,
+      entries,
+      batchFile,
       changes,
     );
-    eventRecords.push({
-      event,
-      commitHash: commit,
-      commitOrder: index + 1,
-    });
   }
   if (!projection)
     throw new CollaborationProtocolError(
@@ -1565,12 +1643,11 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     readonly gitSshKeyPath?: string;
     readonly gitSshKeyPaths?: readonly string[];
     readonly identity: CollaborationEventSigningIdentity;
-    readonly buildEvent: (history: ValidatedProjectSpaceHistory) =>
-      | CollaborationEventV3
-      | {
-          readonly event: CollaborationEventV3;
-          readonly materializedFiles: readonly CollaborationProjectSpaceMaterializedFile[];
-        };
+    readonly buildEvent: (
+      history: ValidatedProjectSpaceHistory,
+    ) =>
+      | CollaborationProjectSpaceAppendEvent
+      | readonly CollaborationProjectSpaceAppendEvent[];
   }): Promise<ValidatedProjectSpaceHistory> {
     const candidates = normalizedGitSshKeyCandidates(input);
     const history = await this.inspect({
@@ -1579,16 +1656,36 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     });
     const gitSshKeyPath = history.transportGitSshKeyPath ?? candidates[0]!;
     const built = input.buildEvent(history);
-    const event = 'event' in built ? built.event : built;
-    const extra = 'event' in built ? built.materializedFiles : [];
-    if (
-      input.identity.principalId !== event.actor.principal_id ||
-      input.identity.clientId !== event.actor.client_id ||
-      input.identity.credentialId !== event.actor.credential_id
-    )
-      throw new Error('Local signing identity does not match event actor');
-    const projection = reduceCollaborationEventV3(history.projection, event);
-    mergeMaterializations(event, projection, extra);
+    const builtEvents = Array.isArray(built) ? built : [built];
+    if (builtEvents.length === 0 || builtEvents.length > 32)
+      throw new Error('Atomic collaboration append requires 1 to 32 events');
+    let projection = history.projection;
+    const entries: Array<{
+      event: CollaborationEventV3;
+      projection: CollaborationProjectionV3;
+      materializedFiles: readonly CollaborationProjectSpaceMaterializedFile[];
+    }> = [];
+    const files = new Map<string, string | Buffer | null>();
+    for (const builtEvent of builtEvents) {
+      const event = 'event' in builtEvent ? builtEvent.event : builtEvent;
+      const extra = 'event' in builtEvent ? builtEvent.materializedFiles : [];
+      if (
+        input.identity.principalId !== event.actor.principal_id ||
+        input.identity.clientId !== event.actor.client_id ||
+        input.identity.credentialId !== event.actor.credential_id
+      )
+        throw new Error('Local signing identity does not match event actor');
+      projection = reduceCollaborationEventV3(projection, event, {
+        previousEventInAtomicBatch: entries.at(-1)?.event,
+      });
+      for (const [file, contents] of mergeMaterializations(
+        event,
+        projection,
+        extra,
+      ))
+        files.set(file, contents);
+      entries.push({ event, projection, materializedFiles: extra });
+    }
     const checkoutPath = await this.temporaryCheckout('append');
     try {
       await execute(checkoutPath, this.gitBinary, ['init', '-q']);
@@ -1612,8 +1709,15 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         'FETCH_HEAD',
       ]);
       await this.configureSigner(checkoutPath, input.identity);
-      this.materialize(checkoutPath, event, projection, extra);
-      await this.commit(checkoutPath, event);
+      this.materializeBatch(
+        checkoutPath,
+        entries.map((entry) => entry.event),
+        files,
+      );
+      await this.commit(
+        checkoutPath,
+        entries.map((entry) => entry.event),
+      );
       const push = await execute(
         checkoutPath,
         this.gitBinary,
@@ -1668,6 +1772,32 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
       else writeRepositoryFile(checkoutPath, file, contents);
   }
 
+  private materializeBatch(
+    checkoutPath: string,
+    events: readonly CollaborationEventV3[],
+    files: ReadonlyMap<string, string | Buffer | null>,
+  ): void {
+    for (const event of events)
+      writeRepositoryFile(
+        checkoutPath,
+        collaborationProjectSpaceEventPath(event),
+        prettyCollaborationJson(event),
+      );
+    if (events.length > 1)
+      writeRepositoryFile(
+        checkoutPath,
+        collaborationProjectSpaceEventBatchPath(events),
+        prettyCollaborationJson({
+          format: 'icarus.collaboration-event-batch/1',
+          batch_id: events[0]!.event_id,
+          event_paths: events.map(collaborationProjectSpaceEventPath),
+        }),
+      );
+    for (const [file, contents] of files)
+      if (contents === null) deleteRepositoryFile(checkoutPath, file);
+      else writeRepositoryFile(checkoutPath, file, contents);
+  }
+
   private async configureSigner(
     checkoutPath: string,
     identity: CollaborationEventSigningIdentity,
@@ -1684,15 +1814,20 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
 
   private async commit(
     checkoutPath: string,
-    event: CollaborationEventV3,
+    eventOrEvents: CollaborationEventV3 | readonly CollaborationEventV3[],
   ): Promise<void> {
+    const events = Array.isArray(eventOrEvents)
+      ? eventOrEvents
+      : [eventOrEvents];
     await execute(checkoutPath, this.gitBinary, ['add', '--all']);
     await execute(checkoutPath, this.gitBinary, [
       'commit',
       '-q',
       '-S',
       '-m',
-      `collaboration: ${event.event_type} ${event.event_id}`,
+      events.length === 1
+        ? `collaboration: ${events[0]!.event_type} ${events[0]!.event_id}`
+        : `collaboration: atomic batch ${events.map((event) => event.event_id).join(' ')}`,
     ]);
   }
 

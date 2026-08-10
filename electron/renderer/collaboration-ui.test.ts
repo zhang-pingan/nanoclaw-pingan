@@ -22,6 +22,8 @@ import {
   collaborationCanMutate,
   collaborationCurrentTurn,
   collaborationDuration,
+  collaborationDiscussionMessageActionAccess,
+  collaborationDiscussionMessageActionAllowed,
   collaborationEligibleTurnExecutors,
   collaborationIsObserver,
   collaborationLocalMembershipStatus,
@@ -37,11 +39,16 @@ import {
   collaborationTurnDeadline,
   collaborationTurnHistory,
   collaborationWorkflowInstanceCommand,
+  collaborationWorkItemStatusActionAccess,
   buildCollaborationStartTurnRequest,
   buildCollaborationRecoverTurnRequest,
   buildCollaborationCompleteTurnRequest,
   buildCollaborationAssignmentDecisionRequest,
   buildCollaborationDiscussionMessageRequest,
+  buildCollaborationReasonRequest,
+  buildCollaborationWorkItemAssignmentRequest,
+  buildCollaborationWorkItemDetailsRequest,
+  buildCollaborationWorkItemRelationsRequest,
   buildCollaborationAnalysisRunRequest,
   buildCollaborationExternalResultRequest,
   buildCollaborationFindingDecisionRequest,
@@ -160,6 +167,105 @@ describe('Collaboration project-space v3 UI helpers', () => {
       collaborationActionAllowed(
         { ...projected, allowedActions: undefined },
         'legacyAction',
+      ),
+    ).toBe(true);
+  });
+
+  it('reads nested message and status decisions without membership fallback', () => {
+    const group = {
+      allowedActions: {
+        discussions: {
+          thread_1: {
+            messages: {
+              message_1: {
+                revise: { allowed: true, code: 'ALLOWED', reason: null },
+                tombstone: {
+                  allowed: false,
+                  code: 'RESOURCE_AUTHORITY_REQUIRED',
+                  reason: '仅作者可移除',
+                },
+              },
+            },
+          },
+        },
+        workItems: {
+          work_1: {
+            changeStatus: {
+              in_progress: { allowed: true, code: 'ALLOWED', reason: null },
+            },
+          },
+        },
+        workflowDefinitions: {
+          'delivery@1': {
+            createVersion: { allowed: true, code: 'ALLOWED', reason: null },
+            editLayout: { allowed: true, code: 'ALLOWED', reason: null },
+            retire: {
+              allowed: false,
+              code: 'RESOURCE_STATE_BLOCKED',
+              reason: '不是最新已发布版本',
+            },
+          },
+        },
+        workflowInstances: {
+          instance_1: {
+            close: { allowed: true, code: 'ALLOWED', reason: null },
+          },
+        },
+      },
+    };
+    expect(
+      collaborationDiscussionMessageActionAllowed(
+        group,
+        'thread_1',
+        'message_1',
+        'revise',
+      ),
+    ).toBe(true);
+    expect(
+      collaborationDiscussionMessageActionAccess(
+        group,
+        'thread_1',
+        'message_missing',
+        'revise',
+      ),
+    ).toMatchObject({ allowed: false, code: 'ACTION_NOT_PROJECTED' });
+    expect(
+      collaborationWorkItemStatusActionAccess(group, 'work_1', 'in_progress')
+        .allowed,
+    ).toBe(true);
+    expect(
+      collaborationWorkItemStatusActionAccess(group, 'work_1', 'done'),
+    ).toMatchObject({ allowed: false, code: 'ACTION_NOT_PROJECTED' });
+    expect(
+      collaborationActionAllowed(
+        group,
+        'createVersion',
+        'workflow_definition',
+        'delivery@1',
+      ),
+    ).toBe(true);
+    expect(
+      collaborationActionAllowed(
+        group,
+        'editLayout',
+        'workflow_definition',
+        'delivery@1',
+      ),
+    ).toBe(true);
+    expect(
+      collaborationActionAllowed(
+        group,
+        'retire',
+        'workflow_definition',
+        'delivery@1',
+      ),
+    ).toBe(false);
+    expect(
+      collaborationActionAllowed(
+        group,
+        'close',
+        'workflow_instance',
+        'instance_1',
       ),
     ).toBe(true);
   });
@@ -388,6 +494,63 @@ describe('Collaboration project-space v3 UI helpers', () => {
         mentions: [],
       }),
     ).toThrow(/不能为空/u);
+  });
+
+  it('builds structured Work Item edit, assignment, relation, and reason requests', () => {
+    expect(
+      buildCollaborationWorkItemDetailsRequest({
+        expectedRevision: 4,
+        type: 'task',
+        title: ' Ship release ',
+        description: ' Verify ',
+        priority: 'high',
+        contributors: ['principal_bob', 'principal_bob'],
+        watchers: ['principal_alice'],
+        acceptanceCriteria: [' Tested ', ''],
+        labels: ['release'],
+      }),
+    ).toMatchObject({
+      expectedRevision: 4,
+      title: 'Ship release',
+      contributors: ['principal_bob'],
+      acceptanceCriteria: ['Tested'],
+      preferredExecutorId: null,
+      dueAt: null,
+    });
+    expect(
+      buildCollaborationWorkItemAssignmentRequest({
+        expectedRevision: 5,
+        ownerPrincipalId: 'principal_bob',
+        requireAcknowledgement: true,
+      }),
+    ).toEqual({
+      expectedRevision: 5,
+      ownerPrincipalId: 'principal_bob',
+      preferredExecutorId: null,
+      requireAcknowledgement: true,
+    });
+    expect(
+      buildCollaborationWorkItemRelationsRequest({
+        expectedRevision: 6,
+        parentId: '',
+        blockedBy: ['work_a', 'work_a'],
+        relatedItems: ['work_b'],
+      }),
+    ).toEqual({
+      expectedRevision: 6,
+      parentId: null,
+      blockedBy: ['work_a'],
+      relatedItems: ['work_b'],
+    });
+    expect(
+      buildCollaborationReasonRequest({
+        expectedRevision: 7,
+        reason: ' Completed elsewhere ',
+      }),
+    ).toEqual({ expectedRevision: 7, reason: 'Completed elsewhere' });
+    expect(() =>
+      buildCollaborationReasonRequest({ expectedRevision: 7, reason: ' ' }),
+    ).toThrow(/原因不能为空/u);
   });
 
   it('builds cross-field-safe Analysis Run requests', () => {
@@ -848,8 +1011,17 @@ describe('Collaboration project-space v3 UI helpers', () => {
       collaborationWorkflowInstanceCommand({ lifecycle: 'running' }),
     ).toEqual({ command: 'pause', label: '暂停' });
     expect(
+      collaborationWorkflowInstanceCommand({ lifecycle: 'pausing' }),
+    ).toEqual({ command: 'pause', label: '暂停' });
+    expect(
       collaborationWorkflowInstanceCommand({ lifecycle: 'paused' }),
     ).toEqual({ command: 'resume', label: '恢复' });
+    expect(
+      collaborationWorkflowInstanceCommand({ lifecycle: 'ready' }),
+    ).toEqual({ command: 'start', label: '启动' });
+    expect(
+      collaborationWorkflowInstanceCommand({ lifecycle: 'draft' }),
+    ).toBeNull();
     expect(
       collaborationWorkflowInstanceCommand({ lifecycle: 'recovery_required' }),
     ).toBeNull();

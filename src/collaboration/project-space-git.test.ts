@@ -444,6 +444,127 @@ process.exit(128);
     }
   }, 30_000);
 
+  it('commits open membership activation and default permissions as one event batch', async () => {
+    const test = fixture();
+    const bobKey = path.join(test.root, 'bob-open-signing-key');
+    run(test.root, [
+      'ssh-keygen',
+      '-q',
+      '-t',
+      'ed25519',
+      '-N',
+      '',
+      '-f',
+      bobKey,
+    ]);
+    const bobPublicKey = readFileSync(`${bobKey}.pub`, 'utf8').trim();
+    const bobFingerprint = run(test.root, [
+      'ssh-keygen',
+      '-lf',
+      `${bobKey}.pub`,
+      '-E',
+      'sha256',
+    ]).match(/SHA256:[^\s]+/u)?.[0];
+    if (!bobFingerprint) throw new Error('Bob SSH fingerprint missing');
+    const bobIdentity: CollaborationEventSigningIdentity = {
+      principalId: 'principal_00000000-0000-4000-8000-000000000002',
+      clientId: 'client_bob',
+      credentialId: 'credential_bob',
+      privateKeyPath: bobKey,
+      publicKey: bobPublicKey,
+      fingerprint: bobFingerprint,
+      purpose: 'event_signing',
+    };
+    const ownerStore = new CollaborationProjectSpaceStore(
+      path.join(test.root, 'open-owner.db'),
+    );
+    const bobStore = new CollaborationProjectSpaceStore(
+      path.join(test.root, 'open-bob.db'),
+    );
+    const owner = new CollaborationProjectSpaceService(
+      ownerStore,
+      new CollaborationProjectSpaceGitTransport(),
+      path.join(test.root, 'open-owner-repositories'),
+      identityService(test.identity),
+      () => Date.parse(NOW),
+    );
+    const bob = new CollaborationProjectSpaceService(
+      bobStore,
+      new CollaborationProjectSpaceGitTransport(),
+      path.join(test.root, 'open-bob-repositories'),
+      identityService(bobIdentity),
+      () => Date.parse(NOW),
+    );
+    try {
+      await owner.createGroup({
+        remoteUrl: test.remote,
+        name: 'Atomic open project',
+        gitSshKeyPath: test.identity.privateKeyPath,
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'open',
+        observerAccess: 'allowed',
+        groupId: 'group_signed',
+      });
+      const joined = await bob.joinGroup({
+        remoteUrl: test.remote,
+        gitSshKeyPath: bobIdentity.privateKeyPath,
+        displayName: 'Bob',
+        clientDisplayName: 'Bob MacBook',
+      });
+      expect(joined.projection?.members[bobIdentity.principalId]?.status).toBe(
+        'active',
+      );
+      expect(
+        joined.projection?.permissionGrants[bobIdentity.principalId]?.grants
+          .length,
+      ).toBeGreaterThan(0);
+
+      const records = bobStore
+        .listEventRecords('group_signed')
+        .filter(
+          (record) =>
+            record.event.actor.principal_id === bobIdentity.principalId,
+        )
+        .sort((left, right) => left.commitOrder - right.commitOrder);
+      expect(records.map((record) => record.event.event_type)).toEqual([
+        'member_registered',
+        'permission_granted',
+      ]);
+      expect(new Set(records.map((record) => record.commitHash)).size).toBe(1);
+
+      const changedFiles = run(joined.repositoryPath, [
+        'git',
+        'diff-tree',
+        '--no-commit-id',
+        '--name-only',
+        '-r',
+        joined.lastVerifiedHead!,
+      ]).split('\n');
+      expect(
+        changedFiles.filter((file) => file.startsWith('events/members/')),
+      ).toHaveLength(2);
+      const batchFiles = changedFiles.filter((file) =>
+        file.startsWith('events/batches/'),
+      );
+      expect(batchFiles).toHaveLength(1);
+      const batch = JSON.parse(
+        run(joined.repositoryPath, [
+          'git',
+          'show',
+          `${joined.lastVerifiedHead!}:${batchFiles[0]}`,
+        ]),
+      ) as { event_paths: string[] };
+      expect(batch.event_paths).toEqual([
+        expect.stringMatching(/^events\/members\/.+\/00000001-/u),
+        expect.stringMatching(/^events\/members\/.+\/00000002-/u),
+      ]);
+    } finally {
+      ownerStore.close();
+      bobStore.close();
+    }
+  }, 30_000);
+
   it('creates and replays a signed JSON-only Aggregate history', async () => {
     const test = fixture();
     const transport = new CollaborationProjectSpaceGitTransport();

@@ -1082,6 +1082,9 @@ function reduceGenesis(event: CollaborationEventV3): CollaborationProjectionV3 {
 export function reduceCollaborationEventV3(
   current: CollaborationProjectionV3 | null,
   input: unknown,
+  options: {
+    readonly previousEventInAtomicBatch?: CollaborationEventV3;
+  } = {},
 ): CollaborationProjectionV3 {
   const event = validateCollaborationEventV3(input);
   assertAggregateChain(current, event);
@@ -1634,8 +1637,15 @@ export function reduceCollaborationEventV3(
         current.aggregateHeads[`membership:${event.actor.principal_id}`]
           ?.eventId ===
           next.members[event.actor.principal_id]?.joined_at_event &&
-        current.activity.at(-1)?.eventId ===
+        options.previousEventInAtomicBatch?.event_type ===
+          'member_registered' &&
+        options.previousEventInAtomicBatch.aggregate_type === 'membership' &&
+        options.previousEventInAtomicBatch.aggregate_id ===
+          event.actor.principal_id &&
+        options.previousEventInAtomicBatch.event_id ===
           next.members[event.actor.principal_id]?.joined_at_event &&
+        options.previousEventInAtomicBatch.actor.principal_id ===
+          event.actor.principal_id &&
         [...grant.grants].sort().join('\0') ===
           [...defaultPermissions].sort().join('\0');
       if (
@@ -1805,6 +1815,8 @@ export function reduceCollaborationEventV3(
       } else {
         const previous = next.workItems[item.work_item_id];
         if (!previous) conflict('Work Item does not exist');
+        if (previous.archived)
+          conflict('Archived Work Items cannot be updated');
         if (!canManageWorkItem(next, event.actor.principal_id, previous))
           unauthorized('Actor cannot update this Work Item');
         if (
@@ -1840,6 +1852,7 @@ export function reduceCollaborationEventV3(
     case 'work_item_assignment_changed': {
       const item = next.workItems[event.aggregate_id];
       if (!item) conflict('Work Item does not exist');
+      if (item.archived) conflict('Archived Work Items cannot be reassigned');
       if (!canManageWorkItem(next, event.actor.principal_id, item))
         unauthorized('Actor cannot reassign this Work Item');
       const parsed = workItemAssignmentPayloadSchema.parse(payload);
@@ -1856,6 +1869,8 @@ export function reduceCollaborationEventV3(
       const item = next.workItems[event.aggregate_id];
       if (!item || item.owner_principal_id !== event.actor.principal_id)
         unauthorized('Only the current Work Item owner may answer assignment');
+      if (item.archived || item.assignment_status !== 'pending')
+        conflict('Work Item has no pending assignment');
       item.assignment_status =
         event.event_type === 'work_item_assignment_acknowledged'
           ? 'accepted'
@@ -1867,6 +1882,7 @@ export function reduceCollaborationEventV3(
     case 'work_item_status_changed': {
       const item = next.workItems[event.aggregate_id];
       if (!item) conflict('Work Item does not exist');
+      if (item.archived) conflict('Archived Work Items cannot change status');
       if (!canManageWorkItem(next, event.actor.principal_id, item))
         unauthorized('Actor cannot change this Work Item status');
       const { status, closed_at: closedAt } =
@@ -1894,6 +1910,8 @@ export function reduceCollaborationEventV3(
       const item = next.workItems[event.aggregate_id];
       if (update.work_item_id !== event.aggregate_id || !item)
         conflict('Work Item progress references a missing or different item');
+      if (item.archived)
+        conflict('Archived Work Items cannot receive progress updates');
       if (
         update.actor_principal_id !== event.actor.principal_id ||
         update.actor_client_id !== event.actor.client_id ||
@@ -1922,6 +1940,8 @@ export function reduceCollaborationEventV3(
     case 'work_item_relation_changed': {
       const item = next.workItems[event.aggregate_id];
       if (!item) conflict('Work Item does not exist');
+      if (item.archived)
+        conflict('Archived Work Items cannot change relations');
       if (!canManageWorkItem(next, event.actor.principal_id, item))
         unauthorized('Actor cannot change this Work Item relations');
       const relations = workItemRelationPayloadSchema.parse(payload);
@@ -1936,6 +1956,7 @@ export function reduceCollaborationEventV3(
     case 'work_item_archived': {
       const item = next.workItems[event.aggregate_id];
       if (!item) conflict('Work Item does not exist');
+      if (item.archived) conflict('Work Item is already archived');
       if (!canManageWorkItem(next, event.actor.principal_id, item))
         unauthorized('Actor cannot archive this Work Item');
       item.archived = true;
@@ -2023,6 +2044,8 @@ export function reduceCollaborationEventV3(
         (!previous || message.revision !== previous.revision + 1)
       )
         conflict('Message revision is stale');
+      if (event.event_type === 'message_revised' && previous?.tombstoned)
+        conflict('Tombstoned messages cannot be revised');
       if (
         event.event_type === 'message_revised' &&
         previous?.author_principal_id !== event.actor.principal_id
@@ -2038,6 +2061,7 @@ export function reduceCollaborationEventV3(
       const { message_id: messageId } = messageIdPayloadSchema.parse(payload);
       const message = thread?.messages[messageId];
       if (!thread || !message) conflict('Message does not exist');
+      if (message.tombstoned) conflict('Message is already tombstoned');
       if (
         message.author_principal_id !== event.actor.principal_id &&
         !hasCollaborationPermissionV3(
@@ -2058,6 +2082,13 @@ export function reduceCollaborationEventV3(
     case 'discussion_reopened': {
       const thread = next.discussions[event.aggregate_id];
       if (!thread) conflict('Discussion does not exist');
+      if (
+        (event.event_type === 'discussion_resolved' &&
+          thread.discussion.status !== 'open') ||
+        (event.event_type === 'discussion_reopened' &&
+          thread.discussion.status !== 'resolved')
+      )
+        conflict('Discussion status transition is invalid');
       if (
         thread.discussion.created_by !== event.actor.principal_id &&
         !hasCollaborationPermissionV3(
@@ -2180,6 +2211,8 @@ export function reduceCollaborationEventV3(
         ];
       if (!definition || parsed.definition_id !== event.aggregate_id)
         conflict('Workflow Definition does not exist');
+      if (definition.definition.status === 'retired')
+        conflict('Retired Workflow Definitions cannot change layout');
       if (
         definition.definition.created_by_principal_id !==
           event.actor.principal_id &&
@@ -2340,6 +2373,8 @@ export function reduceCollaborationEventV3(
       const parsed = assigneePayloadSchema.parse(payload);
       if (!instance || !activeCollaborationMemberV3(next, parsed.principal_id))
         conflict('Workflow Instance or assignee does not exist');
+      if (instance.lifecycle === 'closed')
+        conflict('Closed Workflow Instances cannot be reassigned');
       if (!canManageWorkflowInstance(next, event.actor.principal_id, instance))
         unauthorized('Actor cannot reassign this Workflow Instance');
       const definition = activeDefinition(next, instance);

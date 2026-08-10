@@ -135,6 +135,53 @@ export function collaborationActionAllowed(
     .allowed;
 }
 
+export function collaborationDiscussionMessageActionAccess(
+  group,
+  threadId,
+  messageId,
+  action,
+) {
+  const decision =
+    group?.allowedActions?.discussions?.[threadId]?.messages?.[messageId]?.[
+      action
+    ];
+  if (decision && typeof decision.allowed === 'boolean') return decision;
+  return {
+    allowed: false,
+    code: 'ACTION_NOT_PROJECTED',
+    reason: '当前消息未提供此操作能力',
+  };
+}
+
+export function collaborationDiscussionMessageActionAllowed(
+  group,
+  threadId,
+  messageId,
+  action,
+) {
+  return collaborationDiscussionMessageActionAccess(
+    group,
+    threadId,
+    messageId,
+    action,
+  ).allowed;
+}
+
+export function collaborationWorkItemStatusActionAccess(
+  group,
+  workItemId,
+  status,
+) {
+  const decision =
+    group?.allowedActions?.workItems?.[workItemId]?.changeStatus?.[status];
+  if (decision && typeof decision.allowed === 'boolean') return decision;
+  return {
+    allowed: false,
+    code: 'ACTION_NOT_PROJECTED',
+    reason: '当前工作项未提供此状态转换能力',
+  };
+}
+
 export function collaborationCanApproveMembers(group) {
   if (group?.allowedActions)
     return collaborationActionAllowed(group, 'approveMembers');
@@ -206,6 +253,71 @@ export function buildCollaborationDiscussionMessageRequest(input) {
           refs: collaborationUniqueIdentifiers(input.refs, 100, '引用资源'),
         }
       : {}),
+  };
+}
+
+export function buildCollaborationWorkItemDetailsRequest(input) {
+  const title = String(input.title || '').trim();
+  if (!title) throw new Error('工作项标题不能为空');
+  return {
+    expectedRevision: collaborationExpectedRevision(input.expectedRevision),
+    type: String(input.type),
+    title,
+    description: String(input.description || '').trim(),
+    priority: String(input.priority),
+    preferredExecutorId: String(input.preferredExecutorId || '').trim() || null,
+    contributors: collaborationUniqueIdentifiers(
+      input.contributors || [],
+      1000,
+      '贡献者',
+    ),
+    watchers: collaborationUniqueIdentifiers(
+      input.watchers || [],
+      1000,
+      '关注者',
+    ),
+    acceptanceCriteria: (input.acceptanceCriteria || [])
+      .map((value) => String(value).trim())
+      .filter(Boolean),
+    labels: collaborationUniqueIdentifiers(input.labels || [], 100, '标签'),
+    dueAt: String(input.dueAt || '').trim() || null,
+  };
+}
+
+export function buildCollaborationWorkItemAssignmentRequest(input) {
+  const ownerPrincipalId = String(input.ownerPrincipalId || '').trim();
+  if (!ownerPrincipalId) throw new Error('请选择工作项负责人');
+  return {
+    expectedRevision: collaborationExpectedRevision(input.expectedRevision),
+    ownerPrincipalId,
+    preferredExecutorId: String(input.preferredExecutorId || '').trim() || null,
+    requireAcknowledgement: Boolean(input.requireAcknowledgement),
+  };
+}
+
+export function buildCollaborationWorkItemRelationsRequest(input) {
+  return {
+    expectedRevision: collaborationExpectedRevision(input.expectedRevision),
+    parentId: String(input.parentId || '').trim() || null,
+    blockedBy: collaborationUniqueIdentifiers(
+      input.blockedBy || [],
+      1000,
+      '阻塞项',
+    ),
+    relatedItems: collaborationUniqueIdentifiers(
+      input.relatedItems || [],
+      1000,
+      '关联项',
+    ),
+  };
+}
+
+export function buildCollaborationReasonRequest(input) {
+  const reason = String(input.reason || '').trim();
+  if (!reason) throw new Error('原因不能为空');
+  return {
+    expectedRevision: collaborationExpectedRevision(input.expectedRevision),
+    reason,
   };
 }
 
@@ -540,9 +652,9 @@ export function buildCollaborationRecoverTurnRequest(input) {
 }
 
 export function collaborationWorkflowInstanceCommand(instance) {
-  if (['draft', 'ready'].includes(instance?.lifecycle))
+  if (instance?.lifecycle === 'ready')
     return { command: 'start', label: '启动' };
-  if (instance?.lifecycle === 'running')
+  if (['running', 'pausing'].includes(instance?.lifecycle))
     return { command: 'pause', label: '暂停' };
   if (instance?.lifecycle === 'paused')
     return { command: 'resume', label: '恢复' };

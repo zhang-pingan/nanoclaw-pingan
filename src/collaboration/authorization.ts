@@ -52,7 +52,21 @@ export interface CollaborationAllowedActionsProjection {
   };
   readonly group: Readonly<Record<string, CollaborationActionDecision>>;
   readonly workItems: Readonly<
-    Record<string, Readonly<Record<string, CollaborationActionDecision>>>
+    Record<
+      string,
+      {
+        readonly manage: CollaborationActionDecision;
+        readonly editDetails: CollaborationActionDecision;
+        readonly changeAssignment: CollaborationActionDecision;
+        readonly changeRelations: CollaborationActionDecision;
+        readonly archive: CollaborationActionDecision;
+        readonly postProgress: CollaborationActionDecision;
+        readonly answerAssignment: CollaborationActionDecision;
+        readonly changeStatus: Readonly<
+          Record<string, CollaborationActionDecision>
+        >;
+      }
+    >
   >;
   readonly discussions: Readonly<
     Record<
@@ -60,6 +74,7 @@ export interface CollaborationAllowedActionsProjection {
       {
         readonly post: CollaborationActionDecision;
         readonly resolve: CollaborationActionDecision;
+        readonly reopen: CollaborationActionDecision;
         readonly messages: Readonly<
           Record<
             string,
@@ -77,6 +92,7 @@ export interface CollaborationAllowedActionsProjection {
       string,
       {
         readonly editDefinition: CollaborationActionDecision;
+        readonly createVersion: CollaborationActionDecision;
         readonly editLayout: CollaborationActionDecision;
         readonly publish: CollaborationActionDecision;
         readonly retire: CollaborationActionDecision;
@@ -276,6 +292,15 @@ function withAuthority(
   return authority ? allowed() : denied('RESOURCE_AUTHORITY_REQUIRED', reason);
 }
 
+function withResourceState(
+  boundary: CollaborationActionDecision,
+  valid: boolean,
+  reason: string,
+): CollaborationActionDecision {
+  if (!boundary.allowed) return boundary;
+  return valid ? allowed() : denied('RESOURCE_STATE_BLOCKED', reason);
+}
+
 export function projectCollaborationAllowedActionsV3(input: {
   readonly projection: CollaborationProjectionV3;
   readonly subscriptionMode: 'observer' | 'member';
@@ -299,6 +324,8 @@ export function projectCollaborationAllowedActionsV3(input: {
     withPermission(boundary, projection, principalId, value);
   const authority = (value: boolean, reason: string) =>
     withAuthority(boundary, value, reason);
+  const resourceState = (value: boolean, reason: string) =>
+    withResourceState(boundary, value, reason);
   const can = (value: boolean, reason: string) =>
     boundary.allowed
       ? value
@@ -324,18 +351,72 @@ export function projectCollaborationAllowedActionsV3(input: {
         principalId &&
         canContributeToCollaborationWorkItemV3(projection, principalId, item),
       );
+      const manageDecision = authority(
+        manage,
+        '仅工作项负责人或项目管理员可管理此工作项',
+      );
+      const mutableDecision = item.archived
+        ? denied('RESOURCE_STATE_BLOCKED', '已归档工作项不能再修改')
+        : manageDecision;
+      const transitions: Readonly<Record<string, readonly string[]>> = {
+        proposed: ['open', 'cancelled'],
+        open: ['in_progress', 'cancelled'],
+        in_progress: ['blocked', 'done', 'cancelled'],
+        blocked: ['in_progress', 'cancelled'],
+        done: ['open'],
+        cancelled: [],
+      };
       return [
         item.work_item_id,
         {
-          manage: authority(manage, '仅工作项负责人或项目管理员可管理此工作项'),
-          postProgress: authority(
-            contribute,
-            '仅工作项负责人、贡献者或项目管理员可发布进展',
-          ),
-          answerAssignment: authority(
-            item.assignment_status === 'pending' &&
-              item.owner_principal_id === principalId,
-            '仅待确认指派的负责人可接受或拒绝',
+          manage: mutableDecision,
+          editDetails: mutableDecision,
+          changeAssignment: mutableDecision,
+          changeRelations: mutableDecision,
+          archive: item.archived
+            ? denied('RESOURCE_STATE_BLOCKED', '工作项已经归档')
+            : manageDecision,
+          postProgress: item.archived
+            ? denied('RESOURCE_STATE_BLOCKED', '已归档工作项不能发布进展')
+            : authority(
+                contribute,
+                '仅工作项负责人、贡献者或项目管理员可发布进展',
+              ),
+          answerAssignment:
+            !item.archived && item.assignment_status === 'pending'
+              ? authority(
+                  item.owner_principal_id === principalId,
+                  '仅待确认指派的负责人可接受或拒绝',
+                )
+              : denied('RESOURCE_STATE_BLOCKED', '工作项当前没有待确认指派'),
+          changeStatus: Object.fromEntries(
+            [
+              'proposed',
+              'open',
+              'in_progress',
+              'blocked',
+              'done',
+              'cancelled',
+            ].map((status) => [
+              status,
+              item.archived
+                ? denied('RESOURCE_STATE_BLOCKED', '已归档工作项不能变更状态')
+                : status === 'done' &&
+                    item.primary_workflow_instance_id &&
+                    projection.workflowInstances[
+                      item.primary_workflow_instance_id
+                    ]?.lifecycle !== 'closed'
+                  ? denied(
+                      'RESOURCE_STATE_BLOCKED',
+                      '主 Workflow 关闭前不能完成工作项',
+                    )
+                  : !transitions[item.status]?.includes(status)
+                    ? denied(
+                        'RESOURCE_STATE_BLOCKED',
+                        '工作项当前状态不支持此转换',
+                      )
+                    : manageDecision,
+            ]),
           ),
         },
       ];
@@ -350,38 +431,63 @@ export function projectCollaborationAllowedActionsV3(input: {
           thread.discussion.status === 'open'
             ? permission('discussion:post')
             : denied('RESOURCE_STATE_BLOCKED', '已解决的讨论不能回复'),
-        resolve: authority(
-          Boolean(
-            principalId &&
-            (thread.discussion.created_by === principalId ||
-              hasCollaborationPermissionV3(
-                projection,
-                principalId,
-                'discussion:moderate',
-              )),
-          ),
-          '仅讨论创建者或讨论管理员可变更状态',
-        ),
-        messages: Object.fromEntries(
-          Object.values(thread.messages).map((message: DiscussionMessage) => [
-            message.message_id,
-            {
-              revise: authority(
-                message.author_principal_id === principalId,
-                '仅消息作者可修改消息',
-              ),
-              tombstone: authority(
+        resolve:
+          thread.discussion.status === 'open'
+            ? authority(
                 Boolean(
                   principalId &&
-                  (message.author_principal_id === principalId ||
+                  (thread.discussion.created_by === principalId ||
                     hasCollaborationPermissionV3(
                       projection,
                       principalId,
                       'discussion:moderate',
                     )),
                 ),
-                '仅消息作者或讨论管理员可移除消息',
-              ),
+                '仅讨论创建者或讨论管理员可变更状态',
+              )
+            : denied('RESOURCE_STATE_BLOCKED', '讨论已经解决'),
+        reopen:
+          thread.discussion.status === 'resolved'
+            ? authority(
+                Boolean(
+                  principalId &&
+                  (thread.discussion.created_by === principalId ||
+                    hasCollaborationPermissionV3(
+                      projection,
+                      principalId,
+                      'discussion:moderate',
+                    )),
+                ),
+                '仅讨论创建者或讨论管理员可变更状态',
+              )
+            : denied('RESOURCE_STATE_BLOCKED', '讨论当前处于开放状态'),
+        messages: Object.fromEntries(
+          Object.values(thread.messages).map((message: DiscussionMessage) => [
+            message.message_id,
+            {
+              revise:
+                thread.discussion.status !== 'open'
+                  ? denied('RESOURCE_STATE_BLOCKED', '已解决的讨论不能修改消息')
+                  : message.tombstoned
+                    ? denied('RESOURCE_STATE_BLOCKED', '已移除消息不能修改')
+                    : authority(
+                        message.author_principal_id === principalId,
+                        '仅消息作者可修改消息',
+                      ),
+              tombstone: message.tombstoned
+                ? denied('RESOURCE_STATE_BLOCKED', '消息已经移除')
+                : authority(
+                    Boolean(
+                      principalId &&
+                      (message.author_principal_id === principalId ||
+                        hasCollaborationPermissionV3(
+                          projection,
+                          principalId,
+                          'discussion:moderate',
+                        )),
+                    ),
+                    '仅消息作者或讨论管理员可移除消息',
+                  ),
             },
           ]),
         ),
@@ -391,41 +497,107 @@ export function projectCollaborationAllowedActionsV3(input: {
 
   const workflowDefinitions = Object.fromEntries(
     Object.entries(projection.workflowDefinitions).map(([key, entry]) => {
+      const canEditDefinition = Boolean(
+        principalId &&
+        (entry.definition.created_by_principal_id === principalId ||
+          hasCollaborationPermissionV3(
+            projection,
+            principalId,
+            'workflow_definition:propose',
+          )),
+      );
       const launch = (scope: WorkflowInstance['scope']) =>
         !boundary.allowed
           ? boundary
           : entry.definition.status !== 'published'
             ? denied('RESOURCE_STATE_BLOCKED', 'Workflow Definition 尚未发布')
-            : can(
-                Boolean(
-                  principalId &&
-                  canLaunchCollaborationWorkflowV3(
-                    projection,
-                    principalId,
-                    { scope },
-                    entry.definition,
+            : scope.type === 'work_item' &&
+                (() => {
+                  const item = projection.workItems[scope.work_item_id];
+                  const primary = item?.primary_workflow_instance_id
+                    ? projection.workflowInstances[
+                        item.primary_workflow_instance_id
+                      ]
+                    : null;
+                  return Boolean(primary && primary.lifecycle !== 'closed');
+                })()
+              ? denied(
+                  'RESOURCE_STATE_BLOCKED',
+                  '工作项已经具有未关闭的主 Workflow 实例',
+                )
+              : can(
+                  Boolean(
+                    principalId &&
+                    canLaunchCollaborationWorkflowV3(
+                      projection,
+                      principalId,
+                      { scope },
+                      entry.definition,
+                    ),
                   ),
-                ),
-                'Definition 启动策略不允许当前成员创建此实例',
-              );
+                  'Definition 启动策略不允许当前成员创建此实例',
+                );
       return [
         key,
         {
-          editDefinition: permission('workflow_definition:propose'),
-          editLayout: authority(
-            Boolean(
-              principalId &&
-              (entry.definition.created_by_principal_id === principalId ||
-                hasCollaborationPermissionV3(
-                  projection,
-                  principalId,
-                  'workflow_definition:publish',
-                )),
-            ),
-            '仅 Definition 创建者或 Workflow 发布者可编辑布局',
-          ),
-          publish: permission('workflow_definition:publish'),
-          retire: permission('workflow_definition:publish'),
+          editDefinition:
+            entry.definition.status === 'proposed'
+              ? authority(
+                  canEditDefinition,
+                  '仅 Definition 创建者或 Workflow 设计者可修改草稿',
+                )
+              : denied(
+                  'RESOURCE_STATE_BLOCKED',
+                  '已发布 Definition 业务结构不可修改',
+                ),
+          createVersion:
+            entry.definition.status === 'published' &&
+            projection.latestWorkflowDefinitionVersions[
+              entry.definition.definition_id
+            ] === entry.definition.version
+              ? authority(
+                  canEditDefinition,
+                  '仅 Definition 创建者或 Workflow 设计者可创建新版本',
+                )
+              : denied(
+                  'RESOURCE_STATE_BLOCKED',
+                  '只有已发布 Definition 可以创建新版本',
+                ),
+          editLayout:
+            entry.definition.status === 'retired'
+              ? denied(
+                  'RESOURCE_STATE_BLOCKED',
+                  '已停用 Definition 不能修改布局',
+                )
+              : authority(
+                  Boolean(
+                    principalId &&
+                    (entry.definition.created_by_principal_id === principalId ||
+                      hasCollaborationPermissionV3(
+                        projection,
+                        principalId,
+                        'workflow_definition:publish',
+                      )),
+                  ),
+                  '仅 Definition 创建者或 Workflow 发布者可编辑布局',
+                ),
+          publish:
+            entry.definition.status === 'proposed'
+              ? permission('workflow_definition:publish')
+              : denied(
+                  'RESOURCE_STATE_BLOCKED',
+                  '只有草稿 Definition 可以发布',
+                ),
+          retire:
+            entry.definition.status === 'published' &&
+            projection.latestWorkflowDefinitionVersions[
+              entry.definition.definition_id
+            ] === entry.definition.version
+              ? permission('workflow_definition:publish')
+              : denied(
+                  'RESOURCE_STATE_BLOCKED',
+                  '只有已发布 Definition 可以停用',
+                ),
           createGroupInstance: launch({ type: 'group' }),
           createWorkItemInstances: Object.fromEntries(
             Object.values(projection.workItems).map((item) => [
@@ -452,66 +624,97 @@ export function projectCollaborationAllowedActionsV3(input: {
           instance,
         ),
       );
+      const manageDecision = authority(
+        manage,
+        '仅实例创建者、当前负责人或 Workflow 管理员可管理此实例',
+      );
+      const lifecycleDecision = (valid: readonly string[], reason: string) =>
+        resourceState(valid.includes(instance.lifecycle), reason);
       return [
         instance.instance_id,
         {
-          manage: authority(
-            manage,
-            '仅实例创建者、当前负责人或 Workflow 管理员可管理此实例',
-          ),
-          reassign: authority(
-            manage,
-            '仅实例创建者、当前负责人或 Workflow 管理员可重新分配',
-          ),
-          createTurn: authority(
-            manage,
-            '仅实例创建者、当前负责人或 Workflow 管理员可创建执行轮次',
-          ),
+          manage: manageDecision,
+          reassign:
+            instance.lifecycle === 'closed'
+              ? denied('RESOURCE_STATE_BLOCKED', '已关闭实例不能重新分配')
+              : manageDecision,
+          createTurn: !lifecycleDecision(
+            ['running'],
+            '只有运行中的实例可以创建执行轮次',
+          ).allowed
+            ? lifecycleDecision(['running'], '只有运行中的实例可以创建执行轮次')
+            : instance.active_turn_id
+              ? denied('RESOURCE_STATE_BLOCKED', '当前已有执行轮次')
+              : manageDecision,
           configureCurrentState: authority(
             instance.resolved_assignments[instance.business_state] ===
               principalId,
             '仅当前 State 负责人可配置执行',
           ),
-          start: can(
-            Boolean(
-              principalId &&
-              definition &&
-              canLaunchCollaborationWorkflowV3(
-                projection,
-                principalId,
-                instance,
-                definition,
-              ),
-            ),
-            'Definition 启动策略不允许当前成员启动此实例',
-          ),
+          start: !lifecycleDecision(
+            ['ready'],
+            '只有参与者已补齐的 Ready 实例可以启动',
+          ).allowed
+            ? lifecycleDecision(
+                ['ready'],
+                '只有参与者已补齐的 Ready 实例可以启动',
+              )
+            : instance.scope.type === 'work_item' &&
+                !['open', 'in_progress', 'blocked'].includes(
+                  projection.workItems[instance.scope.work_item_id]?.status ??
+                    '',
+                )
+              ? denied(
+                  'RESOURCE_STATE_BLOCKED',
+                  '关联工作项当前状态不能启动 Workflow',
+                )
+              : can(
+                  Boolean(
+                    principalId &&
+                    definition &&
+                    canLaunchCollaborationWorkflowV3(
+                      projection,
+                      principalId,
+                      instance,
+                      definition,
+                    ),
+                  ),
+                  'Definition 启动策略不允许当前成员启动此实例',
+                ),
+          pause: !lifecycleDecision(
+            ['running', 'pausing'],
+            '只有运行中的实例可以暂停',
+          ).allowed
+            ? lifecycleDecision(
+                ['running', 'pausing'],
+                '只有运行中的实例可以暂停',
+              )
+            : manageDecision,
+          resume: !lifecycleDecision(['paused'], '只有已暂停实例可以恢复')
+            .allowed
+            ? lifecycleDecision(['paused'], '只有已暂停实例可以恢复')
+            : manageDecision,
+          close: !lifecycleDecision(
+            ['running', 'paused', 'closing'],
+            '只有运行中或已暂停实例可以关闭',
+          ).allowed
+            ? lifecycleDecision(
+                ['running', 'paused', 'closing'],
+                '只有运行中或已暂停实例可以关闭',
+              )
+            : manageDecision,
         },
       ];
     }),
   );
 
-  const canCreateWorkflowInstance = Object.values(
-    projection.workflowDefinitions,
-  ).some((entry) => {
-    if (entry.definition.status !== 'published' || !principalId) return false;
-    if (
-      canLaunchCollaborationWorkflowV3(
-        projection,
-        principalId,
-        { scope: { type: 'group' } },
-        entry.definition,
-      )
-    )
-      return true;
-    return Object.values(projection.workItems).some((item) =>
-      canLaunchCollaborationWorkflowV3(
-        projection,
-        principalId,
-        { scope: { type: 'work_item', work_item_id: item.work_item_id } },
-        entry.definition,
+  const canCreateWorkflowInstance = Object.values(workflowDefinitions).some(
+    (entry) =>
+      entry.createGroupInstance.allowed ||
+      Object.values(entry.createWorkItemInstances).some(
+        (decision) => decision.allowed,
       ),
-    );
-  });
+  );
 
   const clients = Object.fromEntries(
     Object.values(projection.clients).flatMap((entries) =>
