@@ -50,6 +50,7 @@ function service(
   adapterReadiness?: () => WorkflowExecutionAdapterReadiness,
   refreshAdapterReadiness?: () => Promise<WorkflowExecutionAdapterReadiness>,
   runtimeEventHub = new RuntimeEventHub(),
+  timelinePollMs?: number,
 ): TaskWorkspaceService {
   return new TaskWorkspaceService({
     store,
@@ -59,6 +60,7 @@ function service(
     coordinatorAgentJid: () => (coordinator ? 'agent:coordinator' : null),
     adapterReadiness,
     refreshAdapterReadiness,
+    timelinePollMs,
     now: () => 100,
     onTimelineDelta,
   });
@@ -965,6 +967,267 @@ describe('TaskWorkspaceService review hardening', () => {
       });
     },
   );
+
+  it('preserves a new Temporary confirmation across get, poll, and an old Workflow hint', async () => {
+    const store = openStore();
+    const old = appendLaunch(store, 'temporary_workflow');
+    const oldLinked = store.updateLaunchStatus({
+      launchIntentId: old.launch.launch_intent_id,
+      expectedRowVersion: old.launch.row_version,
+      status: 'linked',
+      nowMs: 5,
+    });
+    store.addExecutionLink({
+      session_id: old.session.session_id,
+      workflow_id: 'workflow:old-success',
+      intake_id: 'intake:old-success',
+      creation_request_id: 'creation:old-success',
+      launch_intent_id: oldLinked.launch_intent_id,
+      created_at_ms: 6,
+    });
+    const message = store.appendMessage({
+      sessionId: old.session.session_id,
+      role: 'human',
+      bodyText: 'plan a newer temporary task',
+      nowMs: 7,
+    });
+    const launch = store.createLaunchIntent({
+      sessionId: old.session.session_id,
+      sourceMessageId: message.message.message_id,
+      mode: 'temporary_workflow',
+      effectiveInput: { text: 'plan a newer temporary task' },
+      attachmentManifestHash: sha('d'),
+      idempotencyKey: 'launch:newer-awaiting',
+      nowMs: 8,
+    });
+    store.createTemporaryRevision({
+      launchIntentId: launch.launch_intent_id,
+      sourceMessageId: message.message.message_id,
+      source: { format: 'source' },
+      sourceHash: sha('e'),
+      compiledPlan: { format: 'plan' },
+      compiledPlanHash: sha('f'),
+      compilerVersion: 'test',
+      resourceClosureHash: sha('1'),
+      policyCeilingHash: sha('2'),
+      riskSummary: {},
+      nowMs: 9,
+    });
+    const getRuntimeDetail = vi.fn(() => ({
+      format: 'icarus.workspace-runtime-detail/1',
+      freshness: 'ready',
+      workflows: [
+        {
+          id: 'workflow:old-success',
+          availability: 'available',
+          status: 'completed',
+          final_outcome_kind: 'normal',
+          runs: [],
+          pending: [],
+          artifacts: [],
+        },
+      ],
+    }));
+    const runtimeEventHub = new RuntimeEventHub();
+    const workspace = service(
+      store,
+      { getRuntimeDetail },
+      null,
+      undefined,
+      undefined,
+      undefined,
+      runtimeEventHub,
+      1,
+    );
+
+    await workspace.getSession(
+      old.session.session_id,
+      old.session.owner_principal_ref,
+    );
+    expect(store.getSession(old.session.session_id).attention_state).toBe(
+      'waiting_user',
+    );
+
+    await workspace.start();
+    await waitFor(() => getRuntimeDetail.mock.calls.length >= 3);
+    expect(store.getSession(old.session.session_id).attention_state).toBe(
+      'waiting_user',
+    );
+
+    runtimeEventHub.notify({
+      workflow_id: 'workflow:old-success',
+      reason: 'old_workflow_hint',
+    });
+    await waitFor(() => getRuntimeDetail.mock.calls.length >= 4);
+    expect(store.getSession(old.session.session_id).attention_state).toBe(
+      'waiting_user',
+    );
+    await workspace.stop();
+  });
+
+  it.each(['failed', 'unsupported'] as const)(
+    'preserves a new unlinked %s Launch across old successful Workflow catch-up',
+    async (status) => {
+      const store = openStore();
+      const old = appendLaunch(store, 'temporary_workflow');
+      const oldLinked = store.updateLaunchStatus({
+        launchIntentId: old.launch.launch_intent_id,
+        expectedRowVersion: old.launch.row_version,
+        status: 'linked',
+        nowMs: 5,
+      });
+      store.addExecutionLink({
+        session_id: old.session.session_id,
+        workflow_id: 'workflow:old-success',
+        intake_id: 'intake:old-success',
+        creation_request_id: 'creation:old-success',
+        launch_intent_id: oldLinked.launch_intent_id,
+        created_at_ms: 6,
+      });
+      const message = store.appendMessage({
+        sessionId: old.session.session_id,
+        role: 'human',
+        bodyText: 'start a newer launch',
+        nowMs: 7,
+      });
+      const launch = store.createLaunchIntent({
+        sessionId: old.session.session_id,
+        sourceMessageId: message.message.message_id,
+        mode: 'temporary_workflow',
+        effectiveInput: { text: 'start a newer launch' },
+        attachmentManifestHash: sha('3'),
+        idempotencyKey: `launch:newer:${status}`,
+        nowMs: 8,
+      });
+      store.updateLaunchStatus({
+        launchIntentId: launch.launch_intent_id,
+        expectedRowVersion: launch.row_version,
+        status,
+        errorCode: `${status}:test`,
+        nowMs: 9,
+      });
+      const workspace = service(store, {
+        getRuntimeDetail: () => ({
+          format: 'icarus.workspace-runtime-detail/1',
+          freshness: 'ready',
+          workflows: [
+            {
+              id: 'workflow:old-success',
+              availability: 'available',
+              status: 'completed',
+              final_outcome_kind: 'normal',
+              runs: [],
+              pending: [],
+              artifacts: [],
+            },
+          ],
+        }),
+      });
+
+      await workspace.getSession(
+        old.session.session_id,
+        old.session.owner_principal_ref,
+      );
+
+      expect(store.getSession(old.session.session_id).attention_state).toBe(
+        'failed',
+      );
+    },
+  );
+
+  it('downgrades resolved Workspace attention to the remaining Runtime authority', async () => {
+    const store = openStore();
+    const old = appendLaunch(store, 'temporary_workflow');
+    const oldLinked = store.updateLaunchStatus({
+      launchIntentId: old.launch.launch_intent_id,
+      expectedRowVersion: old.launch.row_version,
+      status: 'linked',
+      nowMs: 5,
+    });
+    store.addExecutionLink({
+      session_id: old.session.session_id,
+      workflow_id: 'workflow:action-required',
+      intake_id: 'intake:action-required',
+      creation_request_id: 'creation:action-required',
+      launch_intent_id: oldLinked.launch_intent_id,
+      created_at_ms: 6,
+    });
+    const message = store.appendMessage({
+      sessionId: old.session.session_id,
+      role: 'human',
+      bodyText: 'plan another task',
+      nowMs: 7,
+    });
+    const launch = store.createLaunchIntent({
+      sessionId: old.session.session_id,
+      sourceMessageId: message.message.message_id,
+      mode: 'temporary_workflow',
+      effectiveInput: { text: 'plan another task' },
+      attachmentManifestHash: sha('4'),
+      idempotencyKey: 'launch:attention-downgrade',
+      nowMs: 8,
+    });
+    const revision = store.createTemporaryRevision({
+      launchIntentId: launch.launch_intent_id,
+      sourceMessageId: message.message.message_id,
+      source: { format: 'source' },
+      sourceHash: sha('5'),
+      compiledPlan: { format: 'plan' },
+      compiledPlanHash: sha('6'),
+      compilerVersion: 'test',
+      resourceClosureHash: sha('7'),
+      policyCeilingHash: sha('8'),
+      riskSummary: {},
+      nowMs: 9,
+    });
+    let runtimeStatus = 'active';
+    const workspace = service(store, {
+      getRuntimeDetail: () => ({
+        format: 'icarus.workspace-runtime-detail/1',
+        freshness: 'ready',
+        workflows: [
+          {
+            id: 'workflow:action-required',
+            availability: 'available',
+            status: runtimeStatus,
+            operational_state:
+              runtimeStatus === 'active' ? 'action_required' : 'healthy',
+            final_outcome_kind: runtimeStatus === 'active' ? null : 'normal',
+            runs: [],
+            pending: [],
+            artifacts: [],
+          },
+        ],
+      }),
+    });
+    await workspace.getSession(
+      old.session.session_id,
+      old.session.owner_principal_ref,
+    );
+    expect(store.getSession(old.session.session_id).attention_state).toBe(
+      'waiting_user',
+    );
+
+    const awaiting = store.getLaunchIntent(launch.launch_intent_id);
+    store.confirmCurrentTemporaryRevision({
+      launchIntentId: launch.launch_intent_id,
+      revisionId: revision.revision_id,
+      expectedRowVersion: awaiting.row_version,
+      nowMs: 10,
+    });
+    expect(store.getSession(old.session.session_id).attention_state).toBe(
+      'action_required',
+    );
+
+    runtimeStatus = 'completed';
+    await workspace.getSession(
+      old.session.session_id,
+      old.session.owner_principal_ref,
+    );
+    expect(store.getSession(old.session.session_id).attention_state).toBe(
+      'none',
+    );
+  });
 
   it('aggregates all linked Workflows independently of result order and event hints', async () => {
     const store = openStore();

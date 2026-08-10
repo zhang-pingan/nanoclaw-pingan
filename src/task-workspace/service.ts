@@ -2404,9 +2404,9 @@ export class TaskWorkspaceService {
         }
       }
     }
-    this.options.store.setAttentionState({
+    this.options.store.recomputeAttentionState({
       sessionId: session.session_id,
-      attention: this.aggregateRuntimeAttention(detail),
+      runtimeAttention: this.aggregateRuntimeAttention(detail),
       nowMs: this.now(),
     });
   }

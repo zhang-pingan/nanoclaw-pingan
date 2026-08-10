@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { calculateWorkspaceInteractionPayloadHash } from '../workflow-runtime/gateway/workspace.js';
@@ -302,6 +303,78 @@ describe('TaskWorkspaceStore', () => {
     expect(store.listSessions('human:local-owner')).toEqual([retained]);
   });
 
+  it('migrates v3 attention into separate Workspace and Runtime authority', () => {
+    const store = openStore();
+    const workspaceSession = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Workspace attention migration',
+      nowMs: 1,
+    });
+    const launch = store.createRunLaunchIntent({
+      sessionId: workspaceSession.session_id,
+      messageText: 'Fail before linking',
+      mode: 'temporary_workflow',
+      effectiveInput: { text: 'Fail before linking' },
+      attachmentManifestHash: sha('8'),
+      idempotencyKey: 'migration:workspace-failure',
+      nowMs: 2,
+    }).launch;
+    store.updateLaunchStatus({
+      launchIntentId: launch.launch_intent_id,
+      expectedRowVersion: launch.row_version,
+      status: 'failed',
+      errorCode: 'planning_failed',
+      nowMs: 3,
+    });
+    const runtimeSession = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Runtime attention migration',
+      nowMs: 4,
+    });
+    store.recomputeAttentionState({
+      sessionId: runtimeSession.session_id,
+      runtimeAttention: 'action_required',
+      nowMs: 5,
+    });
+    const databasePath = store.databasePath;
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+
+    const legacy = new Database(databasePath);
+    legacy.exec(
+      'ALTER TABLE task_workspace_sessions DROP COLUMN runtime_attention_state',
+    );
+    legacy.pragma('user_version = 3');
+    legacy.close();
+
+    const migrated = new TaskWorkspaceStore(databasePath);
+    stores.push(migrated);
+    expect(
+      migrated.getSession(workspaceSession.session_id).attention_state,
+    ).toBe('failed');
+    expect(migrated.getSession(runtimeSession.session_id).attention_state).toBe(
+      'action_required',
+    );
+    const failedLaunch = migrated.getLaunchIntent(launch.launch_intent_id);
+    migrated.updateLaunchStatus({
+      launchIntentId: launch.launch_intent_id,
+      expectedRowVersion: failedLaunch.row_version,
+      status: 'cancelled',
+      nowMs: 6,
+    });
+    expect(
+      migrated.getSession(workspaceSession.session_id).attention_state,
+    ).toBe('none');
+    migrated.recomputeAttentionState({
+      sessionId: runtimeSession.session_id,
+      runtimeAttention: 'none',
+      nowMs: 7,
+    });
+    expect(migrated.getSession(runtimeSession.session_id).attention_state).toBe(
+      'none',
+    );
+  });
+
   it('atomically binds Run idempotency before writing the Human message', () => {
     const store = openStore();
     const session = store.createSession({
@@ -552,6 +625,42 @@ describe('TaskWorkspaceStore', () => {
     );
   });
 
+  it('rebuilds Coordinator failure attention from the latest Human message and retry', () => {
+    const store = openStore();
+    const session = store.createSession({
+      ownerPrincipalRef: 'human:local-owner',
+      title: 'Coordinator attention',
+      nowMs: 1,
+    });
+    const message = store.appendMessage({
+      sessionId: session.session_id,
+      role: 'human',
+      bodyText: 'Coordinate this request',
+      createCoordinatorTurn: true,
+      nowMs: 2,
+    });
+    const running = store.claimCoordinatorTurn(message.turn!.turn_id, 3)!;
+    store.finishCoordinatorTurn({
+      turnId: running.turn_id,
+      status: 'failed',
+      queryId: null,
+      errorCode: 'coordinator_unavailable',
+      nowMs: 4,
+    });
+    expect(store.getSession(session.session_id).attention_state).toBe('failed');
+
+    const retry = store.retryCoordinatorTurn(running.turn_id, 5);
+    expect(store.getSession(session.session_id).attention_state).toBe('none');
+    store.claimCoordinatorTurn(retry.turn_id, 6);
+    store.finishCoordinatorTurn({
+      turnId: retry.turn_id,
+      status: 'completed',
+      queryId: 'query:retry',
+      nowMs: 7,
+    });
+    expect(store.getSession(session.session_id).attention_state).toBe('none');
+  });
+
   it('resolves Runtime links only to TaskSessions owned by the principal', () => {
     const store = openStore();
     const target = linkedSession(store);
@@ -646,6 +755,9 @@ describe('TaskWorkspaceStore', () => {
       idempotencyKey: 'command:test',
       nowMs: 10,
     });
+    expect(store.getSession(target.sessionId).attention_state).toBe(
+      'waiting_user',
+    );
     expect(
       store.createCommandProposal({
         sessionId: target.sessionId,
@@ -674,6 +786,7 @@ describe('TaskWorkspaceStore', () => {
       expectedProposalHash: proposal.proposal_hash,
       nowMs: 12,
     });
+    expect(store.getSession(target.sessionId).attention_state).toBe('none');
     expect(applying.canonical_receipt).toMatchObject({ phase: 'applying' });
     expect(store.listApplyingCommandProposals()).toEqual([applying]);
     const resolved = store.resolveCommandProposal({
@@ -711,6 +824,9 @@ describe('TaskWorkspaceStore', () => {
       targetRowVersion: 3,
       nowMs: 20,
     });
+    expect(store.getSession(target.sessionId).attention_state).toBe(
+      'waiting_user',
+    );
     expect(store.listPendingInteractions(target.sessionId)).toEqual([
       interaction,
     ]);
@@ -722,6 +838,7 @@ describe('TaskWorkspaceStore', () => {
       nowMs: 21,
     });
     expect(resolved.status).toBe('accepted');
+    expect(store.getSession(target.sessionId).attention_state).toBe('none');
     expect(resolved.canonical_result_json).toEqual({
       disposition: 'accepted',
       event_sequence: 8,

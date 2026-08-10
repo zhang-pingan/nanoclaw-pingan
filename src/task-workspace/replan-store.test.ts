@@ -112,6 +112,7 @@ describe('TaskWorkspaceStore Temporary Replan', () => {
       canonical_receipt: null,
     });
     expect(created.source_frontier_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(store.getSession(sessionId).attention_state).toBe('waiting_user');
 
     expect(() =>
       createReplan(store, sessionId, {
@@ -150,6 +151,9 @@ describe('TaskWorkspaceStore Temporary Replan', () => {
         nowMs: 4,
       }),
     ).toEqual(applying);
+    expect(store.getSession(String(created.session_id)).attention_state).toBe(
+      'none',
+    );
     expect(() =>
       store.beginReplanApplication({
         replanId: String(created.replan_id),
@@ -268,6 +272,9 @@ describe('TaskWorkspaceStore Temporary Replan', () => {
       canonical_receipt: receipt,
     });
     expect(store.listApplyingReplans()).toEqual([]);
+    expect(store.getSession(String(created.session_id)).attention_state).toBe(
+      'none',
+    );
     expect(
       store.resolveReplanApplication({
         replanId: String(created.replan_id),
@@ -280,6 +287,47 @@ describe('TaskWorkspaceStore Temporary Replan', () => {
         nowMs: 9,
       }),
     ).toEqual(applied);
+  });
+
+  it('rebuilds Replan attention from the latest authority per source Workflow', () => {
+    const store = openStore();
+    const sessionId = session(store);
+    const failedCandidate = createReplan(store, sessionId);
+    expect(store.getSession(sessionId).attention_state).toBe('waiting_user');
+    const applying = store.beginReplanApplication({
+      replanId: String(failedCandidate.replan_id),
+      expectedRowVersion: Number(failedCandidate.row_version),
+      expectedProposalHash: failedCandidate.proposal_hash as Sha256Hash,
+      confirmationRef: 'confirmation:failed',
+      confirmationHash: sha('5'),
+      nowMs: 3,
+    });
+    expect(store.getSession(sessionId).attention_state).toBe('none');
+    store.resolveReplanApplication({
+      replanId: String(failedCandidate.replan_id),
+      expectedRowVersion: Number(applying.row_version),
+      expectedProposalHash: failedCandidate.proposal_hash as Sha256Hash,
+      expectedConfirmationRef: 'confirmation:failed',
+      expectedConfirmationHash: sha('5'),
+      status: 'failed',
+      canonicalReceipt: { disposition: 'denied' },
+      lastErrorCode: 'replan_denied',
+      nowMs: 4,
+    });
+    expect(store.getSession(sessionId).attention_state).toBe('failed');
+
+    const replacement = createReplan(store, sessionId, {
+      proposal: { old_plan_hash: sha('1'), new_plan_hash: sha('6') },
+      idempotencyKey: 'replan:replacement',
+    });
+    expect(store.getSession(sessionId).attention_state).toBe('waiting_user');
+    store.cancelReplanRequest({
+      replanId: String(replacement.replan_id),
+      expectedRowVersion: Number(replacement.row_version),
+      expectedProposalHash: replacement.proposal_hash as Sha256Hash,
+      nowMs: 5,
+    });
+    expect(store.getSession(sessionId).attention_state).toBe('none');
   });
 
   it('migrates v1 replan rows in place without retaining replacement Workflow identity', () => {

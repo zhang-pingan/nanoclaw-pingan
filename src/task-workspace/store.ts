@@ -33,6 +33,23 @@ import type {
   TemporaryWorkflowDraftRevisionV1,
 } from './contracts.js';
 
+const ATTENTION_PRIORITY: Readonly<Record<TaskAttentionState, number>> = {
+  none: 0,
+  failed: 1,
+  action_required: 2,
+  waiting_user: 3,
+};
+
+function aggregateAttention(
+  ...states: readonly TaskAttentionState[]
+): TaskAttentionState {
+  return states.reduce<TaskAttentionState>(
+    (highest, state) =>
+      ATTENTION_PRIORITY[state] > ATTENTION_PRIORITY[highest] ? state : highest,
+    'none',
+  );
+}
+
 function attentionForLaunchStatus(
   status: TaskLaunchStatus,
 ): TaskAttentionState {
@@ -41,7 +58,88 @@ function attentionForLaunchStatus(
   return 'none';
 }
 
-export const CURRENT_TASK_WORKSPACE_SCHEMA_VERSION = 3;
+function workspaceAttentionState(
+  database: Database.Database,
+  sessionId: string,
+): TaskAttentionState {
+  const states: TaskAttentionState[] = [];
+  const launch = database
+    .prepare(
+      `SELECT launch.status AS launch_status, draft.status AS draft_status
+         FROM task_workspace_launch_intents AS launch
+         LEFT JOIN task_workspace_temporary_drafts AS draft
+           ON draft.launch_intent_id = launch.launch_intent_id
+        WHERE launch.session_id = ?
+        ORDER BY launch.created_at_ms DESC, launch.rowid DESC
+        LIMIT 1`,
+    )
+    .get(sessionId) as
+    | { launch_status: TaskLaunchStatus; draft_status: string | null }
+    | undefined;
+  if (launch) {
+    states.push(attentionForLaunchStatus(launch.launch_status));
+    if (launch.draft_status === 'awaiting_confirmation') {
+      states.push('waiting_user');
+    } else if (launch.draft_status === 'failed') {
+      states.push('failed');
+    }
+  }
+
+  const pendingInteraction = database
+    .prepare(
+      `SELECT 1 FROM task_workspace_pending_interaction_links
+        WHERE session_id = ? AND status = 'pending' LIMIT 1`,
+    )
+    .get(sessionId);
+  const pendingCommand = database
+    .prepare(
+      `SELECT 1 FROM task_workspace_runtime_command_proposals
+        WHERE session_id = ? AND status = 'pending' AND receipt_json IS NULL
+        LIMIT 1`,
+    )
+    .get(sessionId);
+  if (pendingInteraction || pendingCommand) states.push('waiting_user');
+
+  const replanRows = database
+    .prepare(
+      `SELECT source_workflow_id, status
+         FROM task_workspace_replan_requests
+        WHERE session_id = ?
+        ORDER BY source_workflow_id COLLATE BINARY, created_at_ms DESC,
+                 rowid DESC`,
+    )
+    .all(sessionId) as Array<{ source_workflow_id: string; status: string }>;
+  const seenReplanSources = new Set<string>();
+  for (const replan of replanRows) {
+    if (seenReplanSources.has(replan.source_workflow_id)) continue;
+    seenReplanSources.add(replan.source_workflow_id);
+    if (replan.status === 'awaiting_confirmation') states.push('waiting_user');
+    if (replan.status === 'failed') states.push('failed');
+  }
+
+  const latestCoordinator = database
+    .prepare(
+      `SELECT turn.status
+         FROM task_workspace_coordinator_turns AS turn
+        WHERE turn.source_message_id = (
+          SELECT message_id FROM task_workspace_messages
+           WHERE session_id = ? AND role = 'human'
+           ORDER BY message_seq DESC LIMIT 1
+        )
+        ORDER BY turn.attempt_no DESC LIMIT 1`,
+    )
+    .get(sessionId) as { status: string } | undefined;
+  if (
+    latestCoordinator?.status === 'failed' ||
+    latestCoordinator?.status === 'interrupted'
+  ) {
+    states.push('failed');
+  }
+
+  return aggregateAttention(...states);
+}
+
+export const CURRENT_TASK_WORKSPACE_SCHEMA_VERSION = 4;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS task_workspace_sessions (
@@ -50,6 +148,7 @@ CREATE TABLE IF NOT EXISTS task_workspace_sessions (
   title TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('open','completed','cancelled','archived')),
   attention_state TEXT NOT NULL CHECK (attention_state IN ('none','waiting_user','action_required','failed')),
+  runtime_attention_state TEXT NOT NULL CHECK (runtime_attention_state IN ('none','waiting_user','action_required','failed')),
   primary_thread_id TEXT NOT NULL UNIQUE,
   coordinator_agent_session_id TEXT,
   current_run_selection_json TEXT NOT NULL,
@@ -629,6 +728,55 @@ function migrateSchemaV2ToV3(database: Database.Database): void {
   })();
 }
 
+function migrateSchemaV3ToV4(database: Database.Database): void {
+  database.transaction(() => {
+    const sessionColumns = database
+      .prepare('PRAGMA table_info(task_workspace_sessions)')
+      .all() as Array<{ name: string }>;
+    if (
+      sessionColumns.some((column) => column.name === 'runtime_attention_state')
+    ) {
+      database.pragma('user_version = 4');
+      return;
+    }
+    database.exec(`
+      ALTER TABLE task_workspace_sessions
+        ADD COLUMN runtime_attention_state TEXT NOT NULL DEFAULT 'none'
+          CHECK (runtime_attention_state IN ('none','waiting_user','action_required','failed'));
+    `);
+    const sessions = database
+      .prepare(
+        `SELECT session_id, attention_state FROM task_workspace_sessions
+          ORDER BY session_id COLLATE BINARY`,
+      )
+      .all() as Array<{
+      session_id: string;
+      attention_state: TaskAttentionState;
+    }>;
+    const update = database.prepare(
+      `UPDATE task_workspace_sessions
+          SET attention_state = ?, runtime_attention_state = ?
+        WHERE session_id = ?`,
+    );
+    for (const session of sessions) {
+      const workspaceAttention = workspaceAttentionState(
+        database,
+        session.session_id,
+      );
+      const runtimeAttention =
+        session.attention_state === workspaceAttention
+          ? 'none'
+          : session.attention_state;
+      update.run(
+        aggregateAttention(workspaceAttention, runtimeAttention),
+        runtimeAttention,
+        session.session_id,
+      );
+    }
+    database.pragma('user_version = 4');
+  })();
+}
+
 function migrateSchema(database: Database.Database): void {
   let version = schemaVersion(database);
   if (version > CURRENT_TASK_WORKSPACE_SCHEMA_VERSION) {
@@ -654,6 +802,10 @@ function migrateSchema(database: Database.Database): void {
   if (version === 2) {
     migrateSchemaV2ToV3(database);
     version = 3;
+  }
+  if (version === 3) {
+    migrateSchemaV3ToV4(database);
+    version = 4;
   }
   if (version !== CURRENT_TASK_WORKSPACE_SCHEMA_VERSION) {
     throw new TaskWorkspaceStoreError(
@@ -782,14 +934,30 @@ export class TaskWorkspaceStore {
       this.database.pragma('foreign_keys = ON');
       this.database.pragma('busy_timeout = 5000');
       migrateSchema(this.database);
-      this.database
-        .prepare(
-          `UPDATE task_workspace_coordinator_turns
-              SET status = 'interrupted', error_code = 'host_restarted',
-                  finished_at_ms = ?, row_version = row_version + 1
-            WHERE status = 'running'`,
-        )
-        .run(Date.now());
+      this.transaction(() => {
+        const nowMs = Date.now();
+        const interruptedSessions = this.database
+          .prepare(
+            `SELECT DISTINCT session_id FROM task_workspace_coordinator_turns
+              WHERE status = 'running' ORDER BY session_id COLLATE BINARY`,
+          )
+          .all() as Array<{ session_id: string }>;
+        this.database
+          .prepare(
+            `UPDATE task_workspace_coordinator_turns
+                SET status = 'interrupted', error_code = 'host_restarted',
+                    finished_at_ms = ?, row_version = row_version + 1
+              WHERE status = 'running'`,
+          )
+          .run(nowMs);
+        for (const session of interruptedSessions) {
+          this.recomputeAttentionStateInTransaction(
+            session.session_id,
+            undefined,
+            nowMs,
+          );
+        }
+      });
     } catch (error) {
       this.database.close();
       throw error;
@@ -802,6 +970,60 @@ export class TaskWorkspaceStore {
 
   private transaction<T>(operation: () => T): T {
     return this.database.transaction(operation).immediate();
+  }
+
+  private recomputeAttentionStateInTransaction(
+    sessionId: string,
+    runtimeAttention: TaskAttentionState | undefined,
+    nowMs: number,
+  ): TaskSessionV1 {
+    const current = this.database
+      .prepare(
+        `SELECT attention_state, runtime_attention_state, row_version
+           FROM task_workspace_sessions WHERE session_id = ?`,
+      )
+      .get(sessionId) as
+      | {
+          attention_state: TaskAttentionState;
+          runtime_attention_state: TaskAttentionState;
+          row_version: number;
+        }
+      | undefined;
+    if (!current) {
+      throw new TaskWorkspaceStoreError('not_found', 'TaskSession not found');
+    }
+    const nextRuntime = runtimeAttention ?? current.runtime_attention_state;
+    const nextAttention = aggregateAttention(
+      workspaceAttentionState(this.database, sessionId),
+      nextRuntime,
+    );
+    if (
+      current.attention_state === nextAttention &&
+      current.runtime_attention_state === nextRuntime
+    ) {
+      return this.getSession(sessionId);
+    }
+    const changed = this.database
+      .prepare(
+        `UPDATE task_workspace_sessions
+            SET attention_state = ?, runtime_attention_state = ?,
+                updated_at_ms = ?, row_version = row_version + 1
+          WHERE session_id = ? AND row_version = ?`,
+      )
+      .run(
+        nextAttention,
+        nextRuntime,
+        nowMs,
+        sessionId,
+        current.row_version,
+      ).changes;
+    if (changed !== 1) {
+      throw new TaskWorkspaceStoreError(
+        'conflict',
+        'TaskSession attention CAS failed',
+      );
+    }
+    return this.getSession(sessionId);
   }
 
   private nextMessageSeq(sessionId: string): number {
@@ -914,10 +1136,10 @@ export class TaskWorkspaceStore {
         .prepare(
           `INSERT INTO task_workspace_sessions (
             session_id, owner_principal_ref, title, status, attention_state,
-            primary_thread_id, coordinator_agent_session_id,
+            runtime_attention_state, primary_thread_id, coordinator_agent_session_id,
             current_run_selection_json, source, created_at_ms, updated_at_ms,
             row_version
-          ) VALUES (?, ?, ?, 'open', 'none', ?, NULL, ?, ?, ?, ?, 1)`,
+          ) VALUES (?, ?, ?, 'open', 'none', 'none', ?, NULL, ?, ?, ?, ?, 1)`,
         )
         .run(
           sessionId,
@@ -1176,33 +1398,18 @@ export class TaskWorkspaceStore {
     return this.getSession(input.sessionId, input.principalRef);
   }
 
-  setAttentionState(input: {
+  recomputeAttentionState(input: {
     sessionId: string;
-    attention: TaskAttentionState;
+    runtimeAttention?: TaskAttentionState;
     nowMs?: number;
   }): TaskSessionV1 {
-    const current = this.getSession(input.sessionId);
-    if (current.attention_state === input.attention) return current;
-    const nowMs = input.nowMs ?? Date.now();
-    const changed = this.database
-      .prepare(
-        `UPDATE task_workspace_sessions
-            SET attention_state = ?, updated_at_ms = ?,
-                row_version = row_version + 1
-          WHERE session_id = ? AND row_version = ?`,
-      )
-      .run(
-        input.attention,
-        nowMs,
+    return this.transaction(() =>
+      this.recomputeAttentionStateInTransaction(
         input.sessionId,
-        current.row_version,
-      ).changes;
-    if (changed !== 1)
-      throw new TaskWorkspaceStoreError(
-        'conflict',
-        'TaskSession attention CAS failed',
-      );
-    return this.getSession(input.sessionId);
+        input.runtimeAttention,
+        input.nowMs ?? Date.now(),
+      ),
+    );
   }
 
   setRunSelection(input: {
@@ -1346,6 +1553,11 @@ export class TaskWorkspaceStore {
             row_version = row_version + 1 WHERE session_id = ?`,
         )
         .run(nowMs, input.sessionId);
+      this.recomputeAttentionStateInTransaction(
+        input.sessionId,
+        undefined,
+        nowMs,
+      );
       return { message, timeline, turn };
     });
   }
@@ -1491,6 +1703,11 @@ export class TaskWorkspaceStore {
           input.sourceMessageId,
           input.nowMs ?? Date.now(),
         );
+      this.recomputeAttentionStateInTransaction(
+        input.sessionId,
+        undefined,
+        input.nowMs ?? Date.now(),
+      );
       return this.getCoordinatorTurn(turnId);
     });
   }
@@ -1588,6 +1805,11 @@ export class TaskWorkspaceStore {
           )
           .run(input.agentSessionId, nowMs, turn.session_id);
       }
+      this.recomputeAttentionStateInTransaction(
+        turn.session_id,
+        undefined,
+        nowMs,
+      );
       return this.getCoordinatorTurn(input.turnId);
     });
   }
@@ -1601,21 +1823,28 @@ export class TaskWorkspaceStore {
       );
     }
     const newId = id('turn');
-    this.database
-      .prepare(
-        `INSERT INTO task_workspace_coordinator_turns (
-          turn_id, session_id, source_message_id, status, attempt_no, query_id,
-          error_code, created_at_ms, started_at_ms, finished_at_ms, row_version
-        ) VALUES (?, ?, ?, 'pending', ?, NULL, NULL, ?, NULL, NULL, 1)`,
-      )
-      .run(
-        newId,
+    return this.transaction(() => {
+      this.database
+        .prepare(
+          `INSERT INTO task_workspace_coordinator_turns (
+            turn_id, session_id, source_message_id, status, attempt_no, query_id,
+            error_code, created_at_ms, started_at_ms, finished_at_ms, row_version
+          ) VALUES (?, ?, ?, 'pending', ?, NULL, NULL, ?, NULL, NULL, 1)`,
+        )
+        .run(
+          newId,
+          prior.session_id,
+          prior.source_message_id,
+          prior.attempt_no + 1,
+          nowMs,
+        );
+      this.recomputeAttentionStateInTransaction(
         prior.session_id,
-        prior.source_message_id,
-        prior.attempt_no + 1,
+        undefined,
         nowMs,
       );
-    return this.getCoordinatorTurn(newId);
+      return this.getCoordinatorTurn(newId);
+    });
   }
 
   createRunLaunchIntent(
@@ -1818,12 +2047,11 @@ export class TaskWorkspaceStore {
         occurredAtMs: nowMs,
         createdAtMs: nowMs,
       });
-      this.database
-        .prepare(
-          `UPDATE task_workspace_sessions SET attention_state = 'none', updated_at_ms = ?,
-            row_version = row_version + 1 WHERE session_id = ?`,
-        )
-        .run(nowMs, input.sessionId);
+      this.recomputeAttentionStateInTransaction(
+        input.sessionId,
+        undefined,
+        nowMs,
+      );
       this.database
         .prepare(
           `INSERT INTO task_workspace_idempotency_records
@@ -1955,6 +2183,11 @@ export class TaskWorkspaceStore {
         occurredAtMs: nowMs,
         createdAtMs: nowMs,
       });
+      this.recomputeAttentionStateInTransaction(
+        input.sessionId,
+        undefined,
+        nowMs,
+      );
     });
     return this.getLaunchIntent(launchIntentId);
   }
@@ -2051,18 +2284,11 @@ export class TaskWorkspaceStore {
           input.expectedRowVersion,
         ).changes;
       if (count === 1) {
-        this.database
-          .prepare(
-            `UPDATE task_workspace_sessions
-                SET attention_state = ?, updated_at_ms = ?,
-                    row_version = row_version + 1
-              WHERE session_id = ?`,
-          )
-          .run(
-            attentionForLaunchStatus(input.status),
-            nowMs,
-            current.session_id,
-          );
+        this.recomputeAttentionStateInTransaction(
+          current.session_id,
+          undefined,
+          nowMs,
+        );
         this.insertTimeline({
           sessionId: current.session_id,
           kind: 'launch_status',
@@ -2163,14 +2389,11 @@ export class TaskWorkspaceStore {
           'Temporary confirmation CAS failed',
         );
       }
-      this.database
-        .prepare(
-          `UPDATE task_workspace_sessions
-              SET attention_state = 'none', updated_at_ms = ?,
-                  row_version = row_version + 1
-            WHERE session_id = ?`,
-        )
-        .run(nowMs, launch.session_id);
+      this.recomputeAttentionStateInTransaction(
+        launch.session_id,
+        undefined,
+        nowMs,
+      );
       this.insertTimeline({
         sessionId: launch.session_id,
         kind: 'launch_status',
@@ -2299,14 +2522,11 @@ export class TaskWorkspaceStore {
                   row_version = row_version + 1 WHERE launch_intent_id = ?`,
         )
         .run(nowMs, input.launchIntentId);
-      this.database
-        .prepare(
-          `UPDATE task_workspace_sessions
-              SET attention_state = 'waiting_user', updated_at_ms = ?,
-                  row_version = row_version + 1
-            WHERE session_id = ?`,
-        )
-        .run(nowMs, launch.session_id);
+      this.recomputeAttentionStateInTransaction(
+        launch.session_id,
+        undefined,
+        nowMs,
+      );
       this.insertTimeline({
         sessionId: launch.session_id,
         kind: 'launch_status',
@@ -2759,6 +2979,11 @@ export class TaskWorkspaceStore {
         occurredAtMs: nowMs,
         createdAtMs: nowMs,
       });
+      this.recomputeAttentionStateInTransaction(
+        input.sessionId,
+        undefined,
+        nowMs,
+      );
     });
     return this.getPendingInteraction(input.interactionId);
   }
@@ -2898,6 +3123,11 @@ export class TaskWorkspaceStore {
           },
           nowMs,
         });
+        this.recomputeAttentionStateInTransaction(
+          current.session_id,
+          undefined,
+          nowMs,
+        );
       }
       return count;
     });
@@ -3022,6 +3252,11 @@ export class TaskWorkspaceStore {
         occurredAtMs: nowMs,
         createdAtMs: nowMs,
       });
+      this.recomputeAttentionStateInTransaction(
+        input.sessionId,
+        undefined,
+        nowMs,
+      );
     });
     return this.getCommandProposal(proposalId);
   }
@@ -3081,31 +3316,39 @@ export class TaskWorkspaceStore {
         'Runtime command confirmation is stale or already claimed',
       );
     }
-    const changed = this.database
-      .prepare(
-        `UPDATE task_workspace_runtime_command_proposals
-            SET receipt_json = ?, updated_at_ms = ?, row_version = row_version + 1
-          WHERE proposal_id = ? AND status = 'pending' AND receipt_json IS NULL
-            AND row_version = ? AND command_hash = ?`,
-      )
-      .run(
-        canonicalJson({
-          format: 'icarus.task-runtime-command-application/1',
-          phase: 'applying',
-          proposal_hash: input.expectedProposalHash,
-        }),
-        input.nowMs ?? Date.now(),
-        input.proposalId,
-        input.expectedRowVersion,
-        input.expectedProposalHash,
-      ).changes;
-    if (changed !== 1) {
-      throw new TaskWorkspaceStoreError(
-        'conflict',
-        'Runtime command confirmation CAS failed',
+    const nowMs = input.nowMs ?? Date.now();
+    return this.transaction(() => {
+      const changed = this.database
+        .prepare(
+          `UPDATE task_workspace_runtime_command_proposals
+              SET receipt_json = ?, updated_at_ms = ?, row_version = row_version + 1
+            WHERE proposal_id = ? AND status = 'pending' AND receipt_json IS NULL
+              AND row_version = ? AND command_hash = ?`,
+        )
+        .run(
+          canonicalJson({
+            format: 'icarus.task-runtime-command-application/1',
+            phase: 'applying',
+            proposal_hash: input.expectedProposalHash,
+          }),
+          nowMs,
+          input.proposalId,
+          input.expectedRowVersion,
+          input.expectedProposalHash,
+        ).changes;
+      if (changed !== 1) {
+        throw new TaskWorkspaceStoreError(
+          'conflict',
+          'Runtime command confirmation CAS failed',
+        );
+      }
+      this.recomputeAttentionStateInTransaction(
+        current.session_id,
+        undefined,
+        nowMs,
       );
-    }
-    return this.getCommandProposal(input.proposalId);
+      return this.getCommandProposal(input.proposalId);
+    });
   }
 
   listApplyingCommandProposals(): TaskRuntimeCommandProposalV1[] {
@@ -3178,6 +3421,11 @@ export class TaskWorkspaceStore {
           },
           nowMs,
         });
+        this.recomputeAttentionStateInTransaction(
+          current.session_id,
+          undefined,
+          nowMs,
+        );
       }
       return count;
     });
@@ -3272,6 +3520,11 @@ export class TaskWorkspaceStore {
           nowMs,
           nowMs,
         );
+      this.recomputeAttentionStateInTransaction(
+        input.sessionId,
+        undefined,
+        nowMs,
+      );
       return this.getReplanRequest(replanId);
     });
   }
@@ -3391,33 +3644,40 @@ export class TaskWorkspaceStore {
       confirmation_ref: input.confirmationRef,
       confirmation_hash: input.confirmationHash,
     };
-    const changed = this.database
-      .prepare(
-        `UPDATE task_workspace_replan_requests
-            SET status = 'applying', confirmation_ref = ?, confirmation_hash = ?,
-                canonical_receipt_json = ?, last_error_code = NULL,
-                updated_at_ms = ?,
-                row_version = row_version + 1
-          WHERE replan_id = ? AND status = 'awaiting_confirmation'
-            AND row_version = ? AND proposal_hash = ?
-            AND confirmation_ref IS NULL AND confirmation_hash IS NULL`,
-      )
-      .run(
-        input.confirmationRef,
-        input.confirmationHash,
-        canonicalJson(canonicalReceipt),
+    return this.transaction(() => {
+      const changed = this.database
+        .prepare(
+          `UPDATE task_workspace_replan_requests
+              SET status = 'applying', confirmation_ref = ?, confirmation_hash = ?,
+                  canonical_receipt_json = ?, last_error_code = NULL,
+                  updated_at_ms = ?,
+                  row_version = row_version + 1
+            WHERE replan_id = ? AND status = 'awaiting_confirmation'
+              AND row_version = ? AND proposal_hash = ?
+              AND confirmation_ref IS NULL AND confirmation_hash IS NULL`,
+        )
+        .run(
+          input.confirmationRef,
+          input.confirmationHash,
+          canonicalJson(canonicalReceipt),
+          nowMs,
+          input.replanId,
+          input.expectedRowVersion,
+          input.expectedProposalHash,
+        ).changes;
+      if (changed !== 1) {
+        throw new TaskWorkspaceStoreError(
+          'conflict',
+          'Replan application confirmation CAS failed',
+        );
+      }
+      this.recomputeAttentionStateInTransaction(
+        String(current.session_id),
+        undefined,
         nowMs,
-        input.replanId,
-        input.expectedRowVersion,
-        input.expectedProposalHash,
-      ).changes;
-    if (changed !== 1) {
-      throw new TaskWorkspaceStoreError(
-        'conflict',
-        'Replan application confirmation CAS failed',
       );
-    }
-    return this.getReplanRequest(input.replanId);
+      return this.getReplanRequest(input.replanId);
+    });
   }
 
   listApplyingReplans(): JsonObject[] {
@@ -3618,33 +3878,41 @@ export class TaskWorkspaceStore {
         'Only an applying replan can resolve its application result',
       );
     }
-    const changed = this.database
-      .prepare(
-        `UPDATE task_workspace_replan_requests
-            SET status = ?, canonical_receipt_json = ?, last_error_code = ?,
-                updated_at_ms = ?, row_version = row_version + 1
-          WHERE replan_id = ? AND status = 'applying' AND row_version = ?
-            AND proposal_hash = ? AND confirmation_ref = ?
-            AND confirmation_hash = ?`,
-      )
-      .run(
-        input.status,
-        receiptJson,
-        lastErrorCode,
-        input.nowMs ?? Date.now(),
-        input.replanId,
-        input.expectedRowVersion,
-        input.expectedProposalHash,
-        input.expectedConfirmationRef,
-        input.expectedConfirmationHash,
-      ).changes;
-    if (changed !== 1) {
-      throw new TaskWorkspaceStoreError(
-        'conflict',
-        'Replan application resolution CAS failed',
+    const nowMs = input.nowMs ?? Date.now();
+    return this.transaction(() => {
+      const changed = this.database
+        .prepare(
+          `UPDATE task_workspace_replan_requests
+              SET status = ?, canonical_receipt_json = ?, last_error_code = ?,
+                  updated_at_ms = ?, row_version = row_version + 1
+            WHERE replan_id = ? AND status = 'applying' AND row_version = ?
+              AND proposal_hash = ? AND confirmation_ref = ?
+              AND confirmation_hash = ?`,
+        )
+        .run(
+          input.status,
+          receiptJson,
+          lastErrorCode,
+          nowMs,
+          input.replanId,
+          input.expectedRowVersion,
+          input.expectedProposalHash,
+          input.expectedConfirmationRef,
+          input.expectedConfirmationHash,
+        ).changes;
+      if (changed !== 1) {
+        throw new TaskWorkspaceStoreError(
+          'conflict',
+          'Replan application resolution CAS failed',
+        );
+      }
+      this.recomputeAttentionStateInTransaction(
+        String(current.session_id),
+        undefined,
+        nowMs,
       );
-    }
-    return this.getReplanRequest(input.replanId);
+      return this.getReplanRequest(input.replanId);
+    });
   }
 
   cancelReplanRequest(input: {
@@ -3661,28 +3929,36 @@ export class TaskWorkspaceStore {
       );
     }
     if (current.status === 'cancelled') return current;
-    const changed = this.database
-      .prepare(
-        `UPDATE task_workspace_replan_requests
-            SET status = 'cancelled', updated_at_ms = ?,
-                row_version = row_version + 1
-          WHERE replan_id = ? AND status = 'awaiting_confirmation'
-            AND row_version = ? AND proposal_hash = ?
-            AND confirmation_ref IS NULL AND confirmation_hash IS NULL`,
-      )
-      .run(
-        input.nowMs ?? Date.now(),
-        input.replanId,
-        input.expectedRowVersion,
-        input.expectedProposalHash,
-      ).changes;
-    if (changed !== 1) {
-      throw new TaskWorkspaceStoreError(
-        'conflict',
-        'Replan cancellation CAS failed',
+    const nowMs = input.nowMs ?? Date.now();
+    return this.transaction(() => {
+      const changed = this.database
+        .prepare(
+          `UPDATE task_workspace_replan_requests
+              SET status = 'cancelled', updated_at_ms = ?,
+                  row_version = row_version + 1
+            WHERE replan_id = ? AND status = 'awaiting_confirmation'
+              AND row_version = ? AND proposal_hash = ?
+              AND confirmation_ref IS NULL AND confirmation_hash IS NULL`,
+        )
+        .run(
+          nowMs,
+          input.replanId,
+          input.expectedRowVersion,
+          input.expectedProposalHash,
+        ).changes;
+      if (changed !== 1) {
+        throw new TaskWorkspaceStoreError(
+          'conflict',
+          'Replan cancellation CAS failed',
+        );
+      }
+      this.recomputeAttentionStateInTransaction(
+        String(current.session_id),
+        undefined,
+        nowMs,
       );
-    }
-    return this.getReplanRequest(input.replanId);
+      return this.getReplanRequest(input.replanId);
+    });
   }
 
   createPersonalWorkflowDraft(input: {
