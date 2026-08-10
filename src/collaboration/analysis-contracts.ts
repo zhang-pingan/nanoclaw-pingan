@@ -186,6 +186,15 @@ export type CollaborationProposedAction = z.infer<
   typeof collaborationProposedActionSchema
 >;
 
+export const COLLABORATION_ANALYSIS_ALLOWED_ACTION_TYPES = [
+  'create_work_item',
+  'open_discussion',
+  'post_progress',
+  'watch_work_item',
+  'request_information',
+  'publish_analysis_report',
+] as const satisfies readonly CollaborationProposedAction['action'][];
+
 export const collaborationAnalysisFindingSchema = z
   .object({
     finding_id: identifierSchema,
@@ -268,6 +277,16 @@ export const collaborationAnalysisInputSchema = z
         ),
       })
       .strict(),
+    change_range: z
+      .object({
+        since_snapshot_head: gitCommitSchema,
+        snapshot_head: gitCommitSchema,
+        event_count: z.number().int().nonnegative(),
+        changed_refs: z.array(resourceRefSchema).max(20_000),
+      })
+      .strict()
+      .nullable()
+      .optional(),
     project_summary: z.record(z.string(), z.unknown()),
     my_items: z.array(z.record(z.string(), z.unknown())).max(1000),
     rule_signals: z.array(z.record(z.string(), z.unknown())).max(1000),
@@ -313,16 +332,16 @@ export const COLLABORATION_ANALYSIS_STATUS_TRANSITIONS: Readonly<
     readonly CollaborationAnalysisRunStatus[]
   >
 > = {
-  prepared: ['running', 'awaiting_external_result', 'cancelled'],
-  running: ['validating', 'failed'],
-  awaiting_external_result: ['validating', 'cancelled'],
-  validating: ['ready_for_review', 'invalid'],
-  invalid: ['awaiting_external_result', 'running'],
+  prepared: ['running', 'awaiting_external_result', 'cancelled', 'stale'],
+  running: ['validating', 'failed', 'stale'],
+  awaiting_external_result: ['validating', 'cancelled', 'stale'],
+  validating: ['ready_for_review', 'invalid', 'stale'],
+  invalid: ['awaiting_external_result', 'running', 'stale'],
   ready_for_review: ['partially_applied', 'completed', 'stale'],
   partially_applied: ['partially_applied', 'completed', 'stale'],
   completed: ['stale'],
   cancelled: [],
-  failed: ['running'],
+  failed: ['running', 'stale'],
   stale: [],
 };
 

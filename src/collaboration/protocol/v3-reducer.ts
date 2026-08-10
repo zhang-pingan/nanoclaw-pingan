@@ -194,7 +194,10 @@ const workItemRelationPayloadSchema = z
   })
   .strict();
 const discussionPayloadSchema = z
-  .object({ discussion: discussionSchema })
+  .object({
+    discussion: discussionSchema,
+    message: discussionMessageSchema.optional(),
+  })
   .strict();
 const messagePayloadSchema = z
   .object({ message: discussionMessageSchema })
@@ -1908,7 +1911,7 @@ export function reduceCollaborationEventV3(
       break;
     }
     case 'discussion_created': {
-      const { discussion } = discussionPayloadSchema.parse(payload);
+      const { discussion, message } = discussionPayloadSchema.parse(payload);
       if (
         discussion.thread_id !== event.aggregate_id ||
         discussion.revision !== 1 ||
@@ -1932,7 +1935,30 @@ export function reduceCollaborationEventV3(
         (discussion.scope.type === 'turn' && !next.turns[discussion.scope.ref])
       )
         conflict('Discussion scope does not exist');
-      next.discussions[discussion.thread_id] = { discussion, messages: {} };
+      if (message) {
+        if (
+          !hasCollaborationPermissionV3(
+            next,
+            event.actor.principal_id,
+            'discussion:post',
+          )
+        )
+          conflict('Actor cannot post to Discussions');
+        if (
+          message.thread_id !== discussion.thread_id ||
+          message.author_principal_id !== event.actor.principal_id ||
+          message.actor_client_id !== event.actor.client_id ||
+          message.executor_id !== event.actor.executor_id
+        )
+          conflict('Initial Discussion message does not match actor or thread');
+        if (message.revision !== 1 || message.tombstoned)
+          conflict('Initial Discussion message genesis is invalid');
+        assertActivePrincipals(next, message.mentions);
+      }
+      next.discussions[discussion.thread_id] = {
+        discussion,
+        messages: message ? { [message.message_id]: message } : {},
+      };
       break;
     }
     case 'message_posted':

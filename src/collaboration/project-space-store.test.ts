@@ -252,8 +252,29 @@ function analysisFinding(
   };
 }
 
+function analysisResult(
+  analysisId: string,
+  findings = [analysisFinding('finding_result', 'medium')],
+) {
+  return {
+    format: 'icarus.collaboration-analysis-result/1' as const,
+    contract_version: 1 as const,
+    analysis_id: analysisId,
+    snapshot_head: ANALYSIS_HEAD,
+    context_hash: ANALYSIS_CONTEXT_HASH,
+    prompt_hash: ANALYSIS_PROMPT_HASH,
+    challenge: 'challenge'.repeat(4),
+    summary: {
+      health: 'needs_attention' as const,
+      headline: 'Project needs attention',
+      details: 'One verified Finding needs review.',
+    },
+    findings,
+  };
+}
+
 describe('Collaboration project space v3 store', () => {
-  it('creates only the fresh v8 schema and rejects stale v7', () => {
+  it('creates only the fresh v9 schema and rejects stale v8', () => {
     const databasePath = temporaryPath('current.db');
     const store = new CollaborationProjectSpaceStore(databasePath);
     expect(
@@ -300,7 +321,7 @@ describe('Collaboration project space v3 store', () => {
 
     const stalePath = temporaryPath('stale.db');
     const stale = new Database(stalePath);
-    stale.pragma('user_version = 7');
+    stale.pragma('user_version = 8');
     stale.close();
     expect(() => new CollaborationProjectSpaceStore(stalePath)).toThrow(
       expect.objectContaining<Partial<CollaborationProjectSpaceStoreError>>({
@@ -1242,17 +1263,98 @@ describe('Collaboration project space v3 store', () => {
         nextStatus: 'ready_for_review',
       }),
     ).toMatchObject({ status: 'ready_for_review' });
-    expect(store.markAnalysisRunsStale('group_test', 'd'.repeat(40))).toBe(1);
-    expect(store.getAnalysisRun('analysis_state')?.status).toBe('stale');
+    createAnalysisRun(store, 'analysis_running', 120);
+    store.transitionAnalysisRun({
+      analysisId: 'analysis_running',
+      expectedStatus: 'prepared',
+      nextStatus: 'running',
+      attempt: 1,
+      nowMs: 121,
+    });
+    createAnalysisRun(store, 'analysis_waiting', 130);
+    store.transitionAnalysisRun({
+      analysisId: 'analysis_waiting',
+      expectedStatus: 'prepared',
+      nextStatus: 'awaiting_external_result',
+      nowMs: 131,
+    });
+    expect(store.markAnalysisRunsStale('group_test', 'd'.repeat(40))).toBe(3);
+    expect(store.getAnalysisRun('analysis_state')).toMatchObject({
+      status: 'stale',
+      staleFromStatus: 'ready_for_review',
+    });
+    expect(store.getAnalysisRun('analysis_running')).toMatchObject({
+      status: 'stale',
+      staleFromStatus: 'running',
+    });
+    expect(store.getAnalysisRun('analysis_waiting')).toMatchObject({
+      status: 'stale',
+      staleFromStatus: 'awaiting_external_result',
+    });
+    store.close();
+  });
+
+  it('keeps every Analysis result submission as immutable attempt history', () => {
+    const store = registerMemberStore('analysis-result-history.db');
+    createAnalysisRun(store, 'analysis_history', 100);
+    for (const attempt of [1, 2])
+      store.saveAnalysisResult({
+        analysisId: 'analysis_history',
+        attempt,
+        rawJson: JSON.stringify({ attempt }),
+        rawHash: `sha256:${String(attempt).repeat(64)}`,
+        validationErrors: [
+          { code: 'invalid', path: '/', message: `attempt ${String(attempt)}` },
+        ],
+        nowMs: 100 + attempt,
+      });
+    expect(store.listAnalysisResults('analysis_history')).toMatchObject([
+      { attempt: 2, rawJson: '{"attempt":2}' },
+      { attempt: 1, rawJson: '{"attempt":1}' },
+    ]);
+    expect(() =>
+      store.saveAnalysisResult({
+        analysisId: 'analysis_history',
+        attempt: 1,
+        rawJson: '{"tampered":true}',
+        rawHash: `sha256:${'9'.repeat(64)}`,
+      }),
+    ).toThrow(/UNIQUE constraint failed/u);
     store.close();
   });
 
   it('evolves Findings across runs and keeps action previews idempotent', () => {
     const store = registerMemberStore('analysis-findings.db');
     createAnalysisRun(store, 'analysis_first', 100);
-    createAnalysisRun(store, 'analysis_second', 200);
     const firstFinding = analysisFinding('finding_first', 'medium');
     const secondFinding = analysisFinding('finding_second', 'high');
+    store.transitionAnalysisRun({
+      analysisId: 'analysis_first',
+      expectedStatus: 'prepared',
+      nextStatus: 'awaiting_external_result',
+      attempt: 1,
+      nowMs: 101,
+    });
+    store.transitionAnalysisRun({
+      analysisId: 'analysis_first',
+      expectedStatus: 'awaiting_external_result',
+      nextStatus: 'validating',
+      nowMs: 102,
+    });
+    store.saveAnalysisResult({
+      analysisId: 'analysis_first',
+      attempt: 1,
+      rawJson: '{}',
+      rawHash: `sha256:${'4'.repeat(64)}`,
+      normalized: analysisResult('analysis_first', [firstFinding]),
+      nowMs: 103,
+    });
+    store.transitionAnalysisRun({
+      analysisId: 'analysis_first',
+      expectedStatus: 'validating',
+      nextStatus: 'ready_for_review',
+      nowMs: 104,
+    });
     store.replaceAnalysisFindings({
       analysisId: 'analysis_first',
       groupId: 'group_test',
@@ -1265,6 +1367,7 @@ describe('Collaboration project space v3 store', () => {
       ],
       nowMs: 110,
     });
+    createAnalysisRun(store, 'analysis_second', 200);
 
     expect(
       store.findPriorAnalysisFinding(
@@ -1309,7 +1412,7 @@ describe('Collaboration project space v3 store', () => {
       operationKey: 'operation_stable',
       analysisId: 'analysis_second',
       findingId: 'finding_second',
-      actionOrdinal: 0,
+      actionOrdinal: null,
       action: proposedAction,
       preview: { title: 'Confirm delivery date' },
       snapshotHead: ANALYSIS_HEAD,
@@ -1334,7 +1437,7 @@ describe('Collaboration project space v3 store', () => {
       operationKey: 'operation_edited',
       analysisId: 'analysis_second',
       findingId: 'finding_second',
-      actionOrdinal: 0,
+      actionOrdinal: null,
       action: proposedAction,
       preview: { title: 'Edited after explicit user review' },
       snapshotHead: ANALYSIS_HEAD,
@@ -1342,6 +1445,7 @@ describe('Collaboration project space v3 store', () => {
       nowMs: 245,
     });
     expect(editedPreview.applicationId).toBe('application_edited');
+    expect(editedPreview.actionOrdinal).toBeNull();
     expect(
       store.listAnalysisActionApplications('analysis_second'),
     ).toHaveLength(2);

@@ -43,9 +43,9 @@ import type {
 } from './analysis-contracts.js';
 import { assertCollaborationAnalysisTransition } from './analysis-contracts.js';
 
-export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 8;
+export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 9;
 export const COLLABORATION_PROJECT_SPACE_STORE_FORMAT =
-  'icarus.collaboration-local-store/8';
+  'icarus.collaboration-local-store/9';
 
 export function deterministicCollaborationPollDelay(
   groupId: string,
@@ -80,7 +80,7 @@ export class CollaborationProjectSpaceStoreError extends Error {
   }
 }
 
-const SCHEMA_V8 = `
+const SCHEMA_V9 = `
 CREATE TABLE collaboration_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -470,6 +470,7 @@ CREATE TABLE collaboration_analysis_runs (
     'ready_for_review', 'invalid', 'partially_applied', 'completed',
     'cancelled', 'failed', 'stale'
   )),
+  stale_from_status TEXT,
   attempt INTEGER NOT NULL DEFAULT 0,
   operation_key TEXT,
   execution_ref TEXT,
@@ -529,7 +530,7 @@ CREATE TABLE collaboration_analysis_action_applications (
   operation_key TEXT NOT NULL UNIQUE,
   analysis_id TEXT NOT NULL REFERENCES collaboration_analysis_runs(analysis_id) ON DELETE CASCADE,
   finding_id TEXT NOT NULL,
-  action_ordinal INTEGER NOT NULL,
+  action_ordinal INTEGER,
   action_json TEXT NOT NULL,
   preview_json TEXT NOT NULL,
   state TEXT NOT NULL CHECK (state IN ('previewed', 'applying', 'applied', 'failed')),
@@ -573,6 +574,8 @@ CREATE INDEX collaboration_analysis_run_group_idx
   ON collaboration_analysis_runs(group_id, created_at_ms DESC);
 CREATE INDEX collaboration_analysis_run_status_idx
   ON collaboration_analysis_runs(status, updated_at_ms);
+CREATE INDEX collaboration_analysis_result_history_idx
+  ON collaboration_analysis_results(analysis_id, attempt DESC, received_at_ms DESC);
 CREATE INDEX collaboration_analysis_finding_dedupe_idx
   ON collaboration_analysis_findings(group_id, dedupe_key, created_at_ms DESC);
 `;
@@ -688,6 +691,7 @@ const REQUIRED_TABLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
     'prompt_hash',
     'challenge',
     'status',
+    'stale_from_status',
   ],
   collaboration_analysis_contexts: [
     'analysis_id',
@@ -747,7 +751,7 @@ function initialize(database: Database.Database): void {
     );
   if (version === 0)
     database.transaction(() => {
-      database.exec(SCHEMA_V8);
+      database.exec(SCHEMA_V9);
       database
         .prepare('INSERT INTO collaboration_meta (key, value) VALUES (?, ?)')
         .run('format', COLLABORATION_PROJECT_SPACE_STORE_FORMAT);
@@ -887,6 +891,7 @@ export interface CollaborationAnalysisRunRecord {
   readonly promptHash: string;
   readonly challenge: string;
   readonly status: CollaborationAnalysisRunStatus;
+  readonly staleFromStatus: CollaborationAnalysisRunStatus | null;
   readonly attempt: number;
   readonly operationKey: string | null;
   readonly executionRef: string | null;
@@ -956,7 +961,7 @@ export interface CollaborationAnalysisActionApplicationRecord {
   readonly operationKey: string;
   readonly analysisId: string;
   readonly findingId: string;
-  readonly actionOrdinal: number;
+  readonly actionOrdinal: number | null;
   readonly action: CollaborationProposedAction;
   readonly preview: Record<string, unknown>;
   readonly state: 'previewed' | 'applying' | 'applied' | 'failed';
@@ -1442,11 +1447,14 @@ export class CollaborationProjectSpaceStore {
       this.database
         .prepare(
           `UPDATE collaboration_analysis_runs
-              SET status = 'stale', updated_at_ms = ?
+              SET stale_from_status = status,
+                  status = 'stale',
+                  finished_at_ms = COALESCE(finished_at_ms, ?),
+                  updated_at_ms = ?
             WHERE group_id = ? AND snapshot_head <> ?
-              AND status IN ('ready_for_review', 'partially_applied', 'completed')`,
+              AND status NOT IN ('cancelled', 'stale')`,
         )
-        .run(nowMs, input.groupId, input.verifiedHead);
+        .run(nowMs, nowMs, input.groupId, input.verifiedHead);
       this.database
         .prepare(
           `UPDATE collaboration_integrity_incidents SET resolved_at_ms = ?
@@ -2943,6 +2951,7 @@ export class CollaborationProjectSpaceStore {
     readonly run: Omit<
       CollaborationAnalysisRunRecord,
       | 'status'
+      | 'staleFromStatus'
       | 'attempt'
       | 'operationKey'
       | 'executionRef'
@@ -3051,6 +3060,32 @@ export class CollaborationProjectSpaceStore {
     ).map((row) => this.analysisRunFromRow(row));
   }
 
+  findPriorValidAnalysisRun(
+    analysisId: string,
+  ): CollaborationAnalysisRunRecord | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT prior.* FROM collaboration_analysis_runs prior
+          JOIN collaboration_analysis_runs current
+            ON current.analysis_id = ?
+          WHERE prior.group_id = current.group_id
+            AND prior.scope_json = current.scope_json
+            AND prior.rowid < current.rowid
+            AND prior.status IN (
+              'ready_for_review', 'partially_applied', 'completed', 'stale'
+            )
+            AND EXISTS (
+              SELECT 1 FROM collaboration_analysis_results result
+               WHERE result.analysis_id = prior.analysis_id
+                 AND result.normalized_json IS NOT NULL
+            )
+          ORDER BY prior.rowid DESC LIMIT 1`,
+      )
+      .get(analysisId) as Record<string, unknown> | undefined;
+    return row ? this.analysisRunFromRow(row) : null;
+  }
+
   getAnalysisContext(
     analysisId: string,
   ): CollaborationAnalysisContextRecord | null {
@@ -3121,6 +3156,9 @@ export class CollaborationProjectSpaceStore {
                   WHEN ? THEN ? ELSE provider_metadata_json END,
                 validation_errors_json = COALESCE(?, validation_errors_json),
                 error = ?,
+                stale_from_status = CASE
+                  WHEN ? = 'stale' THEN status
+                  ELSE stale_from_status END,
                 started_at_ms = CASE
                   WHEN ? = 'running' THEN ?
                   ELSE started_at_ms END,
@@ -3145,6 +3183,7 @@ export class CollaborationProjectSpaceStore {
           ? null
           : JSON.stringify(input.validationErrors),
         input.error ?? null,
+        input.nextStatus,
         input.nextStatus,
         nowMs,
         input.nextStatus,
@@ -3198,11 +3237,66 @@ export class CollaborationProjectSpaceStore {
     return this.database
       .prepare(
         `UPDATE collaboration_analysis_runs
-            SET status = 'stale', updated_at_ms = ?
+            SET stale_from_status = status,
+                status = 'stale',
+                finished_at_ms = COALESCE(finished_at_ms, ?),
+                updated_at_ms = ?
           WHERE group_id = ? AND snapshot_head <> ?
-            AND status IN ('ready_for_review', 'partially_applied', 'completed')`,
+            AND status NOT IN ('cancelled', 'stale')`,
       )
-      .run(nowMs, groupId, currentHead).changes;
+      .run(nowMs, nowMs, groupId, currentHead).changes;
+  }
+
+  beginStaleExternalAnalysisAttempt(input: {
+    readonly analysisId: string;
+    readonly expectedAttempt: number;
+    readonly nowMs?: number;
+  }): CollaborationAnalysisRunRecord {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_analysis_runs
+            SET attempt = attempt + 1,
+                validation_errors_json = '[]', error = NULL,
+                updated_at_ms = ?
+          WHERE analysis_id = ? AND status = 'stale'
+            AND execution_channel = 'external_agent'
+            AND stale_from_status IN ('awaiting_external_result', 'invalid')
+            AND attempt = ?`,
+      )
+      .run(input.nowMs ?? Date.now(), input.analysisId, input.expectedAttempt);
+    if (result.changes !== 1)
+      throw new Error('Stale external Analysis submission conflict');
+    return this.getAnalysisRun(input.analysisId)!;
+  }
+
+  updateStaleAnalysisDiagnostics(input: {
+    readonly analysisId: string;
+    readonly attempt: number;
+    readonly providerMetadata?: Record<string, unknown> | null;
+    readonly validationErrors: readonly CollaborationAnalysisValidationError[];
+    readonly error?: string | null;
+    readonly nowMs?: number;
+  }): CollaborationAnalysisRunRecord {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_analysis_runs
+            SET provider_metadata_json = ?, validation_errors_json = ?,
+                error = ?, updated_at_ms = ?
+          WHERE analysis_id = ? AND status = 'stale' AND attempt = ?`,
+      )
+      .run(
+        input.providerMetadata ? JSON.stringify(input.providerMetadata) : null,
+        JSON.stringify(input.validationErrors),
+        input.error ?? null,
+        input.nowMs ?? Date.now(),
+        input.analysisId,
+        input.attempt,
+      );
+    if (result.changes !== 1)
+      throw new Error('Stale Analysis diagnostics conflict');
+    return this.getAnalysisRun(input.analysisId)!;
   }
 
   saveAnalysisResult(input: {
@@ -3223,14 +3317,7 @@ export class CollaborationProjectSpaceStore {
            result_id, analysis_id, attempt, raw_json, raw_hash,
            normalized_json, validation_errors_json, provider_metadata_json,
            received_at_ms
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(analysis_id, attempt) DO UPDATE SET
-           raw_json = excluded.raw_json,
-           raw_hash = excluded.raw_hash,
-           normalized_json = excluded.normalized_json,
-           validation_errors_json = excluded.validation_errors_json,
-           provider_metadata_json = excluded.provider_metadata_json,
-           received_at_ms = excluded.received_at_ms`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         resultId,
@@ -3257,6 +3344,19 @@ export class CollaborationProjectSpaceStore {
       )
       .get(analysisId) as Record<string, unknown> | undefined;
     return row ? this.analysisResultFromRow(row) : null;
+  }
+
+  listAnalysisResults(analysisId: string): CollaborationAnalysisResultRecord[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_analysis_results
+            WHERE analysis_id = ?
+            ORDER BY attempt DESC, received_at_ms DESC, result_id DESC`,
+        )
+        .all(analysisId) as Record<string, unknown>[]
+    ).map((row) => this.analysisResultFromRow(row));
   }
 
   replaceAnalysisFindings(input: {
@@ -3327,11 +3427,26 @@ export class CollaborationProjectSpaceStore {
     this.assertOpen();
     const row = this.database
       .prepare(
-        `SELECT * FROM collaboration_analysis_findings
-          WHERE group_id = ? AND dedupe_key = ? AND analysis_id <> ?
-          ORDER BY created_at_ms DESC LIMIT 1`,
+        `SELECT finding.* FROM collaboration_analysis_findings finding
+          JOIN collaboration_analysis_runs prior
+            ON prior.analysis_id = finding.analysis_id
+          JOIN collaboration_analysis_runs current
+            ON current.analysis_id = ?
+          WHERE finding.group_id = ? AND finding.dedupe_key = ?
+            AND finding.analysis_id <> current.analysis_id
+            AND prior.scope_json = current.scope_json
+            AND prior.rowid < current.rowid
+            AND prior.status IN (
+              'ready_for_review', 'partially_applied', 'completed', 'stale'
+            )
+            AND EXISTS (
+              SELECT 1 FROM collaboration_analysis_results result
+               WHERE result.analysis_id = prior.analysis_id
+                 AND result.normalized_json IS NOT NULL
+            )
+          ORDER BY prior.created_at_ms DESC, prior.analysis_id DESC LIMIT 1`,
       )
-      .get(groupId, dedupeKey, excludingAnalysisId) as
+      .get(excludingAnalysisId, groupId, dedupeKey) as
       | Record<string, unknown>
       | undefined;
     return row ? this.analysisFindingFromRow(row) : null;
@@ -3375,7 +3490,7 @@ export class CollaborationProjectSpaceStore {
     readonly operationKey: string;
     readonly analysisId: string;
     readonly findingId: string;
-    readonly actionOrdinal: number;
+    readonly actionOrdinal: number | null;
     readonly action: CollaborationProposedAction;
     readonly preview: Record<string, unknown>;
     readonly snapshotHead: string;
@@ -3697,6 +3812,10 @@ export class CollaborationProjectSpaceStore {
       promptHash: String(row.prompt_hash),
       challenge: String(row.challenge),
       status: String(row.status) as CollaborationAnalysisRunStatus,
+      staleFromStatus:
+        row.stale_from_status == null
+          ? null
+          : (String(row.stale_from_status) as CollaborationAnalysisRunStatus),
       attempt: Number(row.attempt),
       operationKey:
         row.operation_key == null ? null : String(row.operation_key),
@@ -3773,7 +3892,8 @@ export class CollaborationProjectSpaceStore {
       operationKey: String(row.operation_key),
       analysisId: String(row.analysis_id),
       findingId: String(row.finding_id),
-      actionOrdinal: Number(row.action_ordinal),
+      actionOrdinal:
+        row.action_ordinal == null ? null : Number(row.action_ordinal),
       action: JSON.parse(
         String(row.action_json),
       ) as CollaborationProposedAction,

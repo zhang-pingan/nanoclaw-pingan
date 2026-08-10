@@ -182,6 +182,7 @@ function analysisDetail(): CollaborationAnalysisRunDetail {
       promptHash: hash('p'),
       challenge: 'challenge-must-not-leak-1234567890',
       status: 'ready_for_review',
+      staleFromStatus: null,
       attempt: 1,
       operationKey: hash('o'),
       executionRef: 'provider:secret-execution-ref',
@@ -206,6 +207,7 @@ function analysisDetail(): CollaborationAnalysisRunDetail {
       providerMetadata: { provider_secret: 'result-provider-secret' },
       receivedAtMs: 3,
     },
+    results: [],
     findings: [
       {
         analysisId: 'analysis_1',
@@ -256,6 +258,14 @@ function analysisDetail(): CollaborationAnalysisRunDetail {
       },
     ],
     exportScope: { scope: { type: 'project' }, file_count: 0 },
+    allowedActionTypes: [
+      'create_work_item',
+      'open_discussion',
+      'post_progress',
+      'watch_work_item',
+      'request_information',
+      'publish_analysis_report',
+    ],
     repairPrompt: null,
   };
 }
@@ -1299,6 +1309,10 @@ describe('Collaboration project-space v3 Web API', () => {
     ]);
     const list = vi.fn(() => [detail]);
     const getDetail = vi.fn(() => detail);
+    const scopeOptions = vi.fn(() => ({
+      currentSnapshotHead: 'c'.repeat(40),
+      deltaBaseSnapshots: [{ snapshotHead: 'b'.repeat(40), commitOrder: 2 }],
+    }));
     const createRun = vi.fn(async () => detail);
     const startManaged = vi.fn(async () => detail);
     const cancel = vi.fn(async () => detail);
@@ -1325,6 +1339,7 @@ describe('Collaboration project-space v3 Web API', () => {
       listManagedExecutors,
       list,
       detail: getDetail,
+      scopeOptions,
       createRun,
       startManaged,
       cancel,
@@ -1346,6 +1361,12 @@ describe('Collaboration project-space v3 Web API', () => {
         expect(await executors.json()).toMatchObject({
           executors: [{ id: 'executor_codex' }],
         });
+        const options = await fetch(`${prefix}/analysis-scope-options`);
+        expect(options.status).toBe(200);
+        expect(await options.json()).toMatchObject({
+          currentSnapshotHead: 'c'.repeat(40),
+          deltaBaseSnapshots: [{ snapshotHead: 'b'.repeat(40) }],
+        });
 
         const created = await fetch(`${prefix}/analysis-runs`, {
           method: 'POST',
@@ -1365,6 +1386,25 @@ describe('Collaboration project-space v3 Web API', () => {
           executorId: null,
           selectedFileIds: ['file_1'],
           includeSelectedFileContents: true,
+        });
+        const delta = await fetch(`${prefix}/analysis-runs`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            scope: {
+              type: 'delta',
+              since_snapshot_head: 'b'.repeat(40),
+            },
+            executionChannel: 'external_agent',
+          }),
+        });
+        expect(delta.status).toBe(201);
+        expect(createRun).toHaveBeenLastCalledWith('group_test', {
+          scope: {
+            type: 'delta',
+            since_snapshot_head: 'b'.repeat(40),
+          },
+          executionChannel: 'external_agent',
         });
 
         const runs = await fetch(`${prefix}/analysis-runs`);
@@ -1490,7 +1530,6 @@ describe('Collaboration project-space v3 Web API', () => {
                 {
                   requestId: 'preview_request_1',
                   findingId: 'finding_1',
-                  actionOrdinal: 0,
                   action,
                 },
               ],
@@ -1505,7 +1544,6 @@ describe('Collaboration project-space v3 Web API', () => {
             {
               requestId: 'preview_request_1',
               findingId: 'finding_1',
-              actionOrdinal: 0,
               action,
             },
           ],
@@ -1615,6 +1653,57 @@ describe('Collaboration project-space v3 Web API', () => {
         expect(await preview.json()).toMatchObject({
           error: 'Observer subscription is read-only',
         });
+      },
+    );
+  });
+
+  it('returns conflict for both stale Action preview and apply requests', async () => {
+    const rejectStale = () => {
+      throw new Error('Analysis Run verified snapshot is stale');
+    };
+    const previewActions = vi.fn(rejectStale);
+    const applyActions = vi.fn(rejectStale);
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({ analysis: { previewActions, applyActions } }),
+      ),
+      async (baseUrl) => {
+        const prefix = `${baseUrl}/api/collaboration/groups/group_test/analysis-runs/analysis_1/actions`;
+        const action = {
+          action: 'watch_work_item',
+          parameters: { work_item_id: 'work_1' },
+        };
+        const preview = await fetch(`${prefix}/preview`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            actions: [
+              {
+                requestId: 'stale_preview',
+                findingId: 'finding_1',
+                action,
+              },
+            ],
+          }),
+        });
+        expect(preview.status).toBe(409);
+
+        const apply = await fetch(`${prefix}/apply`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            actions: [
+              {
+                applicationId: 'application_1',
+                confirmationToken: 'x'.repeat(40),
+                action,
+              },
+            ],
+          }),
+        });
+        expect(apply.status).toBe(409);
+        expect(previewActions).toHaveBeenCalledOnce();
+        expect(applyActions).toHaveBeenCalledOnce();
       },
     );
   });

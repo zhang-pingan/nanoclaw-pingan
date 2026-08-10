@@ -76,6 +76,7 @@ function sha256(value: string): string {
 class MemoryTransport implements CollaborationProjectSpaceTransport {
   readonly histories = new Map<string, ValidatedProjectSpaceHistory>();
   readonly files = new Map<string, Buffer>();
+  rejectStandaloneDiscussionMessages = false;
 
   async inspect(input: {
     remoteUrl: string;
@@ -120,6 +121,11 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
     const current = await this.inspect(input);
     const built = input.buildEvent(current);
     const event = 'event' in built ? built.event : built;
+    if (
+      this.rejectStandaloneDiscussionMessages &&
+      event.event_type === 'message_posted'
+    )
+      throw new Error('simulated standalone Discussion message push failure');
     if ('event' in built)
       for (const file of built.materializedFiles) {
         if (file.contents === null) this.files.delete(file.path);
@@ -193,6 +199,7 @@ class TestManagedExecutor implements ManagedAnalysisExecutor {
   } as const;
   readonly requests = new Map<string, ManagedAnalysisExecutionRequest>();
   readonly failedAttempts = new Set<number>();
+  readonly runningAttempts = new Set<number>();
 
   async prepare(
     request: ManagedAnalysisExecutionRequest,
@@ -244,6 +251,14 @@ class TestManagedExecutor implements ManagedAnalysisExecutor {
           message: 'Provider failed for the test attempt',
           retryable: true,
         },
+      };
+    if (this.runningAttempts.has(request.attempt))
+      return {
+        state: 'running',
+        executionRef,
+        providerMetadata: { provider: 'test' },
+        rawResult: null,
+        error: null,
       };
     return {
       state: 'result_ready',
@@ -483,6 +498,54 @@ describe('CollaborationAnalysisService result boundary', () => {
     expect(completed.result?.normalized?.analysis_id).toBe(run.run.analysisId);
   });
 
+  it('builds delta Context only from verified events after since_snapshot_head', async () => {
+    const harness = await memberHarness();
+    const records = harness.store.listEventRecords(GROUP_ID);
+    const baseline = records.find(
+      (record) => record.event.aggregate_id === 'wi_delivery',
+    )!;
+    const changed = records.find(
+      (record) => record.event.aggregate_id === 'wi_other',
+    )!;
+    const created = await harness.analysis.createRun({
+      groupId: GROUP_ID,
+      scope: {
+        type: 'delta',
+        since_snapshot_head: baseline.commitHash,
+      },
+      executionChannel: 'external_agent',
+    });
+    const context = harness.store.getAnalysisContext(created.run.analysisId)!;
+
+    expect(context.context.change_range).toEqual({
+      since_snapshot_head: baseline.commitHash,
+      snapshot_head: created.run.snapshotHead,
+      event_count: 1,
+      changed_refs: expect.arrayContaining([
+        `event:${changed.event.event_id}`,
+        'work_item:wi_other',
+      ]),
+    });
+    expect(
+      context.context.activity_delta.map((entry) => entry.eventId),
+    ).toEqual([changed.event.event_id]);
+    expect(context.resourceIndex).toContain('work_item:wi_other');
+    expect(context.resourceIndex).not.toContain('work_item:wi_delivery');
+    expect(harness.analysis.scopeOptions(GROUP_ID)).toMatchObject({
+      currentSnapshotHead: created.run.snapshotHead,
+      deltaBaseSnapshots: expect.arrayContaining([
+        expect.objectContaining({ snapshotHead: baseline.commitHash }),
+      ]),
+    });
+    await expect(
+      harness.analysis.createRun({
+        groupId: GROUP_ID,
+        scope: { type: 'delta', since_snapshot_head: 'f'.repeat(40) },
+        executionChannel: 'external_agent',
+      }),
+    ).rejects.toMatchObject({ code: 'analysis_delta_base_invalid' });
+  });
+
   it('preserves binary business files and rejects bytes that violate frozen metadata', async () => {
     const harness = await memberHarness();
     await harness.groups.publishSharedFile({
@@ -524,12 +587,7 @@ describe('CollaborationAnalysisService result boundary', () => {
       Buffer.from('tampered-current-bytes'),
     );
     await expect(
-      harness.analysis.executeReadOnlyTool({
-        groupId: GROUP_ID,
-        analysisId: run.run.analysisId,
-        tool: 'read_verified_file',
-        arguments: { id: 'file_binary_evidence' },
-      }),
+      harness.analysis.externalPackage(GROUP_ID, run.run.analysisId),
     ).rejects.toMatchObject({ code: 'analysis_tool_denied' });
   });
 
@@ -582,6 +640,228 @@ describe('CollaborationAnalysisService result boundary', () => {
     });
     expect(repaired.run.status).toBe('ready_for_review');
     expect(repaired.repairPrompt).toBeNull();
+    expect(repaired.run.attempt).toBe(8);
+    expect(repaired.results.map((result) => result.attempt)).toEqual([
+      8, 7, 6, 5, 4, 3, 2, 1,
+    ]);
+    expect(
+      new Set(repaired.results.map((result) => result.resultId)).size,
+    ).toBe(8);
+  });
+
+  it('compares Finding lifecycle only with a valid predecessor in the same scope', async () => {
+    const harness = await memberHarness();
+    const first = await externalRun(harness);
+    harness.analysis.submitExternalResult({
+      groupId: GROUP_ID,
+      analysisId: first.run.analysisId,
+      rawJson: JSON.stringify(
+        resultFor(first, [
+          finding({ severity: 'medium' }),
+          finding({
+            finding_id: 'finding_project_only',
+            title: 'Project-wide coordination gap',
+            summary: 'The project needs a coordination owner.',
+            affected_refs: [`group:${GROUP_ID}`],
+            evidence_refs: [`group:${GROUP_ID}`],
+            proposed_actions: [],
+          }),
+        ]),
+      ),
+    });
+
+    const scoped = await externalRun(harness, {
+      type: 'work_item',
+      work_item_id: 'wi_delivery',
+    });
+    const scopedReviewed = harness.analysis.submitExternalResult({
+      groupId: GROUP_ID,
+      analysisId: scoped.run.analysisId,
+      rawJson: JSON.stringify(resultFor(scoped)),
+    });
+    expect(scopedReviewed.findings).toHaveLength(1);
+    expect(scopedReviewed.findings[0]).toMatchObject({
+      findingId: 'finding_delivery',
+      lifecycle: 'new',
+    });
+
+    const nextProject = await externalRun(harness);
+    const nextReviewed = harness.analysis.submitExternalResult({
+      groupId: GROUP_ID,
+      analysisId: nextProject.run.analysisId,
+      rawJson: JSON.stringify(resultFor(nextProject)),
+    });
+    expect(nextReviewed.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          findingId: 'finding_delivery',
+          lifecycle: 'worsened',
+        }),
+        expect.objectContaining({
+          findingId: 'finding_project_only',
+          lifecycle: 'resolved',
+        }),
+      ]),
+    );
+  });
+
+  it('previews and applies user-selected Actions without locking the Agent proposal type', async () => {
+    const harness = await memberHarness();
+    const run = await externalRun(harness);
+    const reviewed = harness.analysis.submitExternalResult({
+      groupId: GROUP_ID,
+      analysisId: run.run.analysisId,
+      rawJson: JSON.stringify(
+        resultFor(run, [
+          finding({ proposed_actions: [] }),
+          finding({ finding_id: 'finding_switch_action_type' }),
+        ]),
+      ),
+    });
+    expect(reviewed.allowedActionTypes).toContain('create_work_item');
+    const previews = harness.analysis.previewActions({
+      groupId: GROUP_ID,
+      analysisId: run.run.analysisId,
+      actions: [
+        {
+          requestId: 'user_selected_create',
+          findingId: 'finding_delivery',
+          action: {
+            action: 'create_work_item',
+            parameters: {
+              type: 'issue',
+              title: 'Follow up the reviewed Finding',
+              description: '',
+              priority: 'normal',
+              due_at: null,
+              labels: [],
+              related_work_item_ids: ['wi_delivery'],
+            },
+          },
+        },
+        {
+          requestId: 'user_switched_from_watch_to_create',
+          findingId: 'finding_switch_action_type',
+          actionOrdinal: 0,
+          action: {
+            action: 'create_work_item',
+            parameters: {
+              type: 'task',
+              title: 'Track the switched Finding action',
+              description: '',
+              priority: 'high',
+              due_at: null,
+              labels: [],
+              related_work_item_ids: ['wi_delivery'],
+            },
+          },
+        },
+      ],
+    });
+    expect(previews.map((entry) => entry.application)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          findingId: 'finding_delivery',
+          actionOrdinal: null,
+          action: expect.objectContaining({ action: 'create_work_item' }),
+        }),
+        expect.objectContaining({
+          findingId: 'finding_switch_action_type',
+          actionOrdinal: 0,
+          action: expect.objectContaining({ action: 'create_work_item' }),
+        }),
+      ]),
+    );
+    const applied = await harness.analysis.applyActions({
+      groupId: GROUP_ID,
+      analysisId: run.run.analysisId,
+      actions: previews.map(({ application, confirmationToken }) => ({
+        applicationId: application.applicationId,
+        confirmationToken,
+        action: application.action,
+      })),
+    });
+    expect(applied.applications).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ state: 'applied' }),
+        expect.objectContaining({ state: 'applied' }),
+      ]),
+    );
+    expect(
+      Object.values(
+        harness.store.getGroup(GROUP_ID)!.projection!.workItems,
+      ).map((item) => item.title),
+    ).toEqual(
+      expect.arrayContaining([
+        'Follow up the reviewed Finding',
+        'Track the switched Finding action',
+      ]),
+    );
+  });
+
+  it('keeps late external and managed results as stale audit attempts after HEAD drift', async () => {
+    const external = await memberHarness();
+    const externalWaiting = await externalRun(external);
+    await external.groups.createWorkItem({
+      groupId: GROUP_ID,
+      workItemId: 'wi_external_drift',
+      type: 'task',
+      title: 'Move HEAD during external handoff',
+    });
+    expect(
+      external.analysis.getRun(GROUP_ID, externalWaiting.run.analysisId).run,
+    ).toMatchObject({
+      status: 'stale',
+      staleFromStatus: 'awaiting_external_result',
+    });
+    external.analysis.submitExternalResult({
+      groupId: GROUP_ID,
+      analysisId: externalWaiting.run.analysisId,
+      rawJson: '{}',
+    });
+    const staleExternal = external.analysis.submitExternalResult({
+      groupId: GROUP_ID,
+      analysisId: externalWaiting.run.analysisId,
+      rawJson: JSON.stringify(resultFor(externalWaiting)),
+    });
+    expect(staleExternal.run).toMatchObject({ status: 'stale', attempt: 2 });
+    expect(staleExternal.results.map((result) => result.attempt)).toEqual([
+      2, 1,
+    ]);
+    expect(staleExternal.result?.normalized).not.toBeNull();
+
+    const managed = await memberHarness();
+    managed.executor.runningAttempts.add(1);
+    const created = await managed.analysis.createRun({
+      groupId: GROUP_ID,
+      scope: { type: 'project' },
+      executionChannel: 'managed_executor',
+      executorId: managed.executor.descriptor.executorId,
+    });
+    await managed.analysis.startRun(GROUP_ID, created.run.analysisId);
+    await vi.waitFor(() =>
+      expect(
+        managed.analysis.getRun(GROUP_ID, created.run.analysisId).run.status,
+      ).toBe('running'),
+    );
+    await managed.groups.createWorkItem({
+      groupId: GROUP_ID,
+      workItemId: 'wi_managed_drift',
+      type: 'task',
+      title: 'Move HEAD during managed execution',
+    });
+    managed.executor.runningAttempts.delete(1);
+    await vi.waitFor(() =>
+      expect(
+        managed.analysis.getRun(GROUP_ID, created.run.analysisId).results,
+      ).toHaveLength(1),
+    );
+    expect(
+      managed.analysis.getRun(GROUP_ID, created.run.analysisId),
+    ).toMatchObject({
+      run: { status: 'stale', staleFromStatus: 'running', attempt: 1 },
+      result: { normalized: { analysis_id: created.run.analysisId } },
+    });
   });
 
   it('drops unsafe Findings while preserving valid Findings and diagnostics', async () => {
@@ -754,13 +1034,6 @@ describe('CollaborationAnalysisService result boundary', () => {
 
     expect(reviewed.run.subscriptionMode).toBe('observer');
     expect(reviewed.run.principalId).toBeNull();
-    expect(
-      await observer.analysis.executeReadOnlyTool({
-        groupId: GROUP_ID,
-        analysisId: run.run.analysisId,
-        tool: 'get_project_summary',
-      }),
-    ).toEqual(expect.objectContaining({ group_id: GROUP_ID }));
     expect(() =>
       observer.analysis.previewActions({
         groupId: GROUP_ID,
@@ -867,21 +1140,18 @@ describe('CollaborationAnalysisService confirmation and CAS boundary', () => {
       ]),
     );
 
-    const repeated = await harness.analysis.applyActions({
-      groupId: GROUP_ID,
-      analysisId: run.run.analysisId,
-      actions: [
-        {
-          applicationId: first.application.applicationId,
-          confirmationToken: first.confirmationToken,
-        },
-      ],
-    });
-    expect(
-      repeated.applications.find(
-        (entry) => entry.applicationId === first.application.applicationId,
-      ),
-    ).toMatchObject({ state: 'applied' });
+    await expect(
+      harness.analysis.applyActions({
+        groupId: GROUP_ID,
+        analysisId: run.run.analysisId,
+        actions: [
+          {
+            applicationId: first.application.applicationId,
+            confirmationToken: first.confirmationToken,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'analysis_snapshot_stale' });
   });
 
   it('applies every allowlisted business action through signed Host services', async () => {
@@ -1005,6 +1275,87 @@ describe('CollaborationAnalysisService confirmation and CAS boundary', () => {
     ).toHaveLength(actions.length);
   });
 
+  it('atomically opens analysis Discussions when a follow-up message push is unreachable', async () => {
+    const harness = await memberHarness();
+    const run = await externalRun(harness);
+    const actions: CollaborationAnalysisFinding['proposed_actions'] = [
+      {
+        action: 'open_discussion',
+        parameters: {
+          title: 'Review delivery risk',
+          body: 'Please review the cited delivery evidence.',
+          scope: { type: 'work_item', ref: 'wi_delivery' },
+          mentions: [PRINCIPAL_ID],
+        },
+      },
+      {
+        action: 'request_information',
+        parameters: {
+          title: 'Confirm delivery evidence',
+          question: 'Which acceptance artifact should close this risk?',
+          affected_refs: ['work_item:wi_delivery'],
+          mentions: [PRINCIPAL_ID],
+        },
+      },
+    ];
+    const resultFinding = finding({
+      finding_id: 'finding_atomic_discussions',
+      proposed_actions: actions,
+    });
+    harness.analysis.submitExternalResult({
+      groupId: GROUP_ID,
+      analysisId: run.run.analysisId,
+      rawJson: JSON.stringify(resultFor(run, [resultFinding])),
+    });
+    const previews = harness.analysis.previewActions({
+      groupId: GROUP_ID,
+      analysisId: run.run.analysisId,
+      actions: actions.map((action, actionOrdinal) => ({
+        requestId: `atomic_discussion_${String(actionOrdinal)}`,
+        findingId: resultFinding.finding_id,
+        actionOrdinal,
+        action,
+      })),
+    });
+    const beforeEvents =
+      harness.transport.histories.get(REMOTE_URL)!.eventRecords.length;
+    harness.transport.rejectStandaloneDiscussionMessages = true;
+
+    const applied = await harness.analysis.applyActions({
+      groupId: GROUP_ID,
+      analysisId: run.run.analysisId,
+      actions: previews.map(({ application, confirmationToken }) => ({
+        applicationId: application.applicationId,
+        confirmationToken,
+        action: application.action,
+      })),
+    });
+
+    expect(applied.applications).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ state: 'applied' }),
+        expect.objectContaining({ state: 'applied' }),
+      ]),
+    );
+    const history = harness.transport.histories.get(REMOTE_URL)!;
+    const createdEvents = history.eventRecords.slice(beforeEvents);
+    expect(createdEvents).toHaveLength(2);
+    expect(createdEvents.map((record) => record.event.event_type)).toEqual([
+      'discussion_created',
+      'discussion_created',
+    ]);
+    expect(
+      Object.values(history.projection.discussions).map((thread) =>
+        Object.values(thread.messages).map((message) => message.body),
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        ['Please review the cited delivery evidence.'],
+        ['Which acceptance artifact should close this risk?'],
+      ]),
+    );
+  });
+
   it('allows unrelated head drift but fails closed on target revision drift', async () => {
     const harness = await memberHarness();
     const unrelatedRun = await externalRun(harness);
@@ -1049,7 +1400,7 @@ describe('CollaborationAnalysisService confirmation and CAS boundary', () => {
       }),
     ).toThrow(
       expect.objectContaining<Partial<CollaborationAnalysisServiceError>>({
-        code: 'analysis_state_conflict',
+        code: 'analysis_snapshot_stale',
       }),
     );
     await expect(
@@ -1063,9 +1414,7 @@ describe('CollaborationAnalysisService confirmation and CAS boundary', () => {
           },
         ],
       }),
-    ).resolves.toMatchObject({
-      applications: [expect.objectContaining({ state: 'applied' })],
-    });
+    ).rejects.toMatchObject({ code: 'analysis_snapshot_stale' });
 
     const driftedRun = await externalRun(harness);
     harness.analysis.submitExternalResult({
@@ -1109,6 +1458,6 @@ describe('CollaborationAnalysisService confirmation and CAS boundary', () => {
       harness.store.getAnalysisActionApplication(
         driftedPreview.application.applicationId,
       ),
-    ).toMatchObject({ state: 'failed' });
+    ).toMatchObject({ state: 'previewed' });
   });
 });

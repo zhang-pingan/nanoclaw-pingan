@@ -19177,6 +19177,18 @@ textarea.workflow-wizard-input {
   flex-wrap: wrap;
 }
 
+.collaboration-finding-actions {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.collaboration-finding-actions > span {
+  color: var(--minimal-text-muted, #8a929d);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .collaboration-analysis-recommendations {
   margin: 0;
   padding-left: 20px;

@@ -57,6 +57,7 @@ import {
   type CredentialDefinition,
   type ArtifactMetadataV3,
   type Discussion,
+  type DiscussionMessage,
   type FileMetadata,
   type MachineDefinitionV3,
   type MemberDefinitionV3,
@@ -157,6 +158,35 @@ export const MAX_PROJECT_SPACE_FILE_BYTES = 10 * 1024 * 1024;
 
 function newId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
+}
+
+function buildDiscussionMessage(input: {
+  readonly group: CollaborationProjectSpaceGroupRecord;
+  readonly threadId: string;
+  readonly messageId?: string;
+  readonly body: string;
+  readonly mentions?: readonly string[];
+  readonly refs?: readonly string[];
+  readonly executorId?: string | null;
+  readonly origin?: 'human' | 'agent' | 'workflow';
+  readonly now: string;
+}): DiscussionMessage {
+  return discussionMessageSchema.parse({
+    format: 'icarus.collaboration-message/1',
+    message_id: input.messageId ?? newId('message'),
+    thread_id: input.threadId,
+    author_principal_id: input.group.localPrincipalId,
+    actor_client_id: input.group.localClientId,
+    executor_id: input.executorId ?? null,
+    origin: input.origin ?? 'human',
+    body: input.body,
+    mentions: [...(input.mentions ?? [])],
+    refs: [...(input.refs ?? [])],
+    revision: 1,
+    tombstoned: false,
+    created_at: input.now,
+    updated_at: input.now,
+  });
 }
 
 function sharedCredential(
@@ -1567,6 +1597,54 @@ export class CollaborationProjectSpaceService {
     });
   }
 
+  async createDiscussionWithMessage(input: {
+    readonly groupId: string;
+    readonly expectedRevision?: 0;
+    readonly threadId?: string;
+    readonly title: string;
+    readonly scope: Discussion['scope'];
+    readonly messageId?: string;
+    readonly body: string;
+    readonly mentions?: readonly string[];
+    readonly refs?: readonly string[];
+    readonly executorId?: string | null;
+    readonly origin?: 'human' | 'agent' | 'workflow';
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const now = new Date(this.now()).toISOString();
+    const threadId = input.threadId ?? newId('thread');
+    const discussion = discussionSchema.parse({
+      format: 'icarus.collaboration-discussion/1',
+      thread_id: threadId,
+      title: input.title,
+      created_by: group.localPrincipalId,
+      scope: input.scope,
+      status: 'open',
+      created_at: now,
+      resolved_at: null,
+      revision: 1,
+    });
+    const message = buildDiscussionMessage({
+      group,
+      threadId,
+      messageId: input.messageId,
+      body: input.body,
+      mentions: input.mentions,
+      refs: input.refs,
+      executorId: input.executorId,
+      origin: input.origin,
+      now,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'discussion',
+      aggregateId: threadId,
+      expectedRevision: input.expectedRevision ?? 0,
+      eventType: 'discussion_created',
+      payload: { discussion, message },
+      executorId: input.executorId ?? null,
+    });
+  }
+
   async postDiscussionMessage(input: {
     readonly groupId: string;
     readonly threadId: string;
@@ -1580,21 +1658,16 @@ export class CollaborationProjectSpaceService {
   }): Promise<CollaborationProjectSpaceGroupRecord> {
     const group = this.requireLocalMember(input.groupId);
     const now = new Date(this.now()).toISOString();
-    const message = discussionMessageSchema.parse({
-      format: 'icarus.collaboration-message/1',
-      message_id: input.messageId ?? newId('message'),
-      thread_id: input.threadId,
-      author_principal_id: group.localPrincipalId,
-      actor_client_id: group.localClientId,
-      executor_id: input.executorId ?? null,
-      origin: input.origin ?? 'human',
+    const message = buildDiscussionMessage({
+      group,
+      threadId: input.threadId,
+      messageId: input.messageId,
       body: input.body,
-      mentions: [...(input.mentions ?? [])],
-      refs: [...(input.refs ?? [])],
-      revision: 1,
-      tombstoned: false,
-      created_at: now,
-      updated_at: now,
+      mentions: input.mentions,
+      refs: input.refs,
+      executorId: input.executorId,
+      origin: input.origin,
+      now,
     });
     return this.appendLocal(input.groupId, {
       aggregateType: 'discussion',
@@ -3355,7 +3428,9 @@ export class CollaborationProjectSpaceService {
         continue;
       }
       if (
-        !['message_posted', 'message_revised'].includes(record.event.event_type)
+        !['discussion_created', 'message_posted', 'message_revised'].includes(
+          record.event.event_type,
+        )
       )
         continue;
       const parsed = discussionMessageSchema.safeParse(

@@ -20,6 +20,7 @@ import {
   ManagedAnalysisExecutorRegistry,
   RunOnceManagedAnalysisExecutor,
   type ManagedAnalysisExecutionRequest,
+  type PreparedManagedAnalysisExecution,
 } from './analysis-executor.js';
 import { collaborationCanonicalHashV3 } from './protocol/v3-reducer.js';
 
@@ -115,6 +116,19 @@ function executor(
     agentJid: 'web:main',
     temporaryRoot: root,
   });
+}
+
+function retainedPreparedExecution(
+  selected: RunOnceManagedAnalysisExecutor,
+  executionRef: string,
+): PreparedManagedAnalysisExecution | null | undefined {
+  const internal = selected as unknown as {
+    readonly executions: Map<
+      string,
+      { readonly prepared: PreparedManagedAnalysisExecution | null }
+    >;
+  };
+  return internal.executions.get(executionRef)?.prepared;
 }
 
 describe('ManagedAnalysisExecutorRegistry', () => {
@@ -273,6 +287,9 @@ describe('RunOnceManagedAnalysisExecutor', () => {
       rawResult: null,
       providerMetadata: { run_id: 'run-1', query_id: 'query-1' },
     });
+    expect(retainedPreparedExecution(selected, first.executionRef)).toBe(
+      prepared,
+    );
 
     const rawResult = '  {"analysis_id":"analysis_1"}\n';
     result.resolve({
@@ -290,6 +307,9 @@ describe('RunOnceManagedAnalysisExecutor', () => {
         providerMetadata: { model: 'test-model', output_file_count: 0 },
         error: null,
       });
+      expect(
+        retainedPreparedExecution(selected, first.executionRef),
+      ).toBeNull();
       expect(existsSync(prepared.workspacePath)).toBe(false);
     });
   });
@@ -342,6 +362,9 @@ describe('RunOnceManagedAnalysisExecutor', () => {
     const prepared = await selected.prepare(request());
     const receipt = await selected.dispatch(prepared);
 
+    expect(retainedPreparedExecution(selected, receipt.executionRef)).toBe(
+      prepared,
+    );
     expect(
       await selected.cancel(receipt.executionRef, 'user cancelled'),
     ).toEqual(
@@ -350,6 +373,9 @@ describe('RunOnceManagedAnalysisExecutor', () => {
         reason: 'executor_not_cancellable',
         observation: expect.objectContaining({ state: 'running' }),
       }),
+    );
+    expect(retainedPreparedExecution(selected, receipt.executionRef)).toBe(
+      prepared,
     );
     result.resolve({
       ok: false,
@@ -373,7 +399,54 @@ describe('RunOnceManagedAnalysisExecutor', () => {
           providerFailure: { failureType: 'provider' },
         },
       });
+      expect(
+        retainedPreparedExecution(selected, receipt.executionRef),
+      ).toBeNull();
       expect(existsSync(prepared.workspacePath)).toBe(false);
+    });
+  });
+
+  it('retains prepared data after an unsupported cancel request until eventual success', async () => {
+    const result = deferred<RunOnceResponse>();
+    const runOnce = vi.fn<RunOnceService['runOnce']>(
+      async (_input, lifecycle) => {
+        lifecycle?.onAccepted({
+          runId: 'run-cancel-requested',
+          queryId: 'query-cancel-requested',
+          containerName: 'container-cancel-requested',
+        });
+        return result.promise;
+      },
+    );
+    const selected = executor({ preflightWorkspace: vi.fn(), runOnce });
+    const prepared = await selected.prepare(request());
+    const receipt = await selected.dispatch(prepared);
+
+    expect(
+      await selected.cancel(receipt.executionRef, 'user requested cancel'),
+    ).toMatchObject({
+      cancelled: false,
+      reason: 'executor_not_cancellable',
+      observation: { state: 'running' },
+    });
+    expect(retainedPreparedExecution(selected, receipt.executionRef)).toBe(
+      prepared,
+    );
+
+    result.resolve({
+      ok: true,
+      text: '{}',
+      run_id: 'run-cancel-requested',
+      query_id: 'query-cancel-requested',
+      model: 'test-model',
+    });
+    await vi.waitFor(async () => {
+      expect(await selected.observe(receipt.executionRef)).toMatchObject({
+        state: 'result_ready',
+      });
+      expect(
+        retainedPreparedExecution(selected, receipt.executionRef),
+      ).toBeNull();
     });
   });
 

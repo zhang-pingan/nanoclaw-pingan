@@ -136,20 +136,21 @@ function publicAnalysisDetail(detail: CollaborationAnalysisRunDetail) {
     providerMetadata: _providerMetadata,
     ...run
   } = detail.run;
-  const result = detail.result
-    ? {
-        resultId: detail.result.resultId,
-        analysisId: detail.result.analysisId,
-        attempt: detail.result.attempt,
-        rawHash: detail.result.rawHash,
-        normalized: detail.result.normalized,
-        validationErrors: detail.result.validationErrors.map((error) => ({
-          ...error,
-          message: redactDiagnostic(error.message) ?? 'Validation failed',
-        })),
-        receivedAtMs: detail.result.receivedAtMs,
-      }
-    : null;
+  const publicResult = (
+    result: NonNullable<CollaborationAnalysisRunDetail['result']>,
+  ) => ({
+    resultId: result.resultId,
+    analysisId: result.analysisId,
+    attempt: result.attempt,
+    rawHash: result.rawHash,
+    normalized: result.normalized,
+    validationErrors: result.validationErrors.map((error) => ({
+      ...error,
+      message: redactDiagnostic(error.message) ?? 'Validation failed',
+    })),
+    receivedAtMs: result.receivedAtMs,
+  });
+  const result = detail.result ? publicResult(detail.result) : null;
   return {
     ...detail,
     run: {
@@ -161,6 +162,7 @@ function publicAnalysisDetail(detail: CollaborationAnalysisRunDetail) {
       })),
     },
     result,
+    results: detail.results.map(publicResult),
     applications: detail.applications.map(
       ({
         confirmationTokenHash: _confirmationTokenHash,
@@ -940,6 +942,14 @@ export class CollaborationWebApi {
     }
     found = match(
       url.pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/analysis-scope-options$`, 'u'),
+    );
+    if (found && method === 'GET') {
+      send(res, 200, this.runtime.analysis.scopeOptions(found[1]!));
+      return true;
+    }
+    found = match(
+      url.pathname,
       new RegExp(`^${API_PREFIX}/groups/([^/]+)/my-items$`, 'u'),
     );
     if (found && method === 'GET') {
@@ -1186,7 +1196,7 @@ export class CollaborationWebApi {
                     .object({
                       requestId: identifier,
                       findingId: identifier,
-                      actionOrdinal: z.number().int().nonnegative(),
+                      actionOrdinal: z.number().int().nonnegative().optional(),
                       action: collaborationProposedActionSchema,
                     })
                     .strict(),

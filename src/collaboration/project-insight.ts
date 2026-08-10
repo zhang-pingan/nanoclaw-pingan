@@ -563,11 +563,25 @@ export function buildMyItems(input: {
   }
 
   for (const turn of Object.values(projection.turns)) {
-    if (
-      turn.assignee_principal_id !== principalId ||
-      terminalTurnStates.has(turn.state)
-    )
+    if (turn.assignee_principal_id !== principalId) continue;
+    if (turn.state === 'recovery_required') {
+      add({
+        group: 'needs_action',
+        priority_rank: 540,
+        resource_type: 'turn',
+        resource_id: turn.turn_id,
+        title: `Recover Workflow Turn: ${turn.state_id}`,
+        reason: 'turn_recovery_required',
+        severity: 'critical',
+        due_at: null,
+        navigation: {
+          tab: 'workflows',
+          resource_id: turn.workflow_instance_id,
+        },
+      });
       continue;
+    }
+    if (terminalTurnStates.has(turn.state)) continue;
     const deadline = turnDeadline(turn);
     const overdue = deadline !== null && deadline <= nowMs;
     add({

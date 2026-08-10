@@ -29,10 +29,12 @@ import {
   buildCollaborationDiscussionMessageRequest,
   buildCollaborationExternalResultRequest,
   buildCollaborationFindingDecisionRequest,
+  buildCollaborationRecoverTurnRequest,
   buildCollaborationStartTurnRequest,
   collaborationAnalysisRunAccess,
   collaborationCanApproveMembers,
   collaborationCanAnswerWorkItemAssignment,
+  collaborationCanRecoverTurn,
   collaborationCanDecideRecovery,
   collaborationCanCreateTurn,
   collaborationCanMutate,
@@ -40,6 +42,8 @@ import {
   collaborationDuration,
   collaborationEligibleTurnExecutors,
   collaborationElapsed,
+  collaborationFindingActionDraft,
+  collaborationFindingActionTypes,
   collaborationIsObserver,
   collaborationLocalMembershipStatus,
   collaborationLocalCredential,
@@ -54,6 +58,7 @@ import {
   collaborationTurnHistory,
   collaborationTurnLifecycle,
   collaborationVerifiedFileTree,
+  collaborationWorkflowInstanceCommand,
   collaborationWorkItemColumns,
 } from './collaboration-ui.js';
 
@@ -447,7 +452,11 @@ export function createCollaborationWorkspace(options) {
   const renderFinding = (entry, detail, group) => {
     const finding = entry.finding;
     const access = collaborationAnalysisRunAccess(group, detail);
-    return `<article class="collaboration-finding"><header><div><span class="collaboration-finding-kind">${html(collaborationLabel(finding.kind))} · ${html(collaborationLabel(finding.category))}</span><strong>${html(finding.title)}</strong></div><div>${status(finding.severity)}${status(entry.lifecycle)}</div></header><p>${html(finding.summary)}</p><dl class="collaboration-definition-list"><div><dt>置信度</dt><dd>${html(`${Math.round(Number(finding.confidence || 0) * 100)}%`)}</dd></div><div><dt>影响范围</dt><dd class="collaboration-ref-list">${(finding.affected_refs || []).map(renderEvidenceRef).join(' ')}</dd></div><div><dt>证据</dt><dd class="collaboration-ref-list">${(finding.evidence_refs || []).map(renderEvidenceRef).join(' ')}</dd></div></dl>${finding.recommendations?.length ? `<ul class="collaboration-analysis-recommendations">${finding.recommendations.map((value) => `<li>${html(value)}</li>`).join('')}</ul>` : ''}<div class="collaboration-finding-footer">${access.canDecideFinding ? `<div class="collaboration-record-actions">${['accepted', 'deferred', 'ignored', 'false_positive'].map((decision) => `<button type="button" class="btn-ghost ${entry.decision === decision ? 'active' : ''}" data-collaboration-action="finding-decision" data-finding-id="${attr(entry.findingId)}" data-decision="${decision}">${html(collaborationLabel(decision))}</button>`).join('')}</div>` : ''}${access.canPreviewActions ? `<div class="collaboration-record-actions">${(finding.proposed_actions || []).map((action, index) => `<button type="button" class="btn-primary" data-collaboration-action="preview-analysis-action" data-finding-id="${attr(entry.findingId)}" data-action-ordinal="${index}">${html(collaborationLabel(action.action))}</button>`).join('')}</div>` : ''}</div></article>`;
+    const proposedActions = finding.proposed_actions || [];
+    const actionControls = access.canPreviewActions
+      ? `<div class="collaboration-finding-actions"><span>后续动作</span><div class="collaboration-record-actions">${proposedActions.map((action, index) => `<button type="button" class="btn-ghost" data-collaboration-action="preview-analysis-action" data-finding-id="${attr(entry.findingId)}" data-action-ordinal="${index}" data-action-type="${attr(action.action)}">建议：${html(collaborationLabel(action.action))}</button>`).join('')}<button type="button" class="btn-primary" data-collaboration-action="preview-analysis-action" data-finding-id="${attr(entry.findingId)}">选择转化动作</button></div></div>`
+      : '';
+    return `<article class="collaboration-finding"><header><div><span class="collaboration-finding-kind">${html(collaborationLabel(finding.kind))} · ${html(collaborationLabel(finding.category))}</span><strong>${html(finding.title)}</strong></div><div>${status(finding.severity)}${status(entry.lifecycle)}</div></header><p>${html(finding.summary)}</p><dl class="collaboration-definition-list"><div><dt>置信度</dt><dd>${html(`${Math.round(Number(finding.confidence || 0) * 100)}%`)}</dd></div><div><dt>影响范围</dt><dd class="collaboration-ref-list">${(finding.affected_refs || []).map(renderEvidenceRef).join(' ')}</dd></div><div><dt>证据</dt><dd class="collaboration-ref-list">${(finding.evidence_refs || []).map(renderEvidenceRef).join(' ')}</dd></div></dl>${finding.recommendations?.length ? `<ul class="collaboration-analysis-recommendations">${finding.recommendations.map((value) => `<li>${html(value)}</li>`).join('')}</ul>` : ''}<div class="collaboration-finding-footer">${access.canDecideFinding ? `<div class="collaboration-record-actions">${['accepted', 'deferred', 'ignored', 'false_positive'].map((decision) => `<button type="button" class="btn-ghost ${entry.decision === decision ? 'active' : ''}" data-collaboration-action="finding-decision" data-finding-id="${attr(entry.findingId)}" data-decision="${decision}">${html(collaborationLabel(decision))}</button>`).join('')}</div>` : ''}${actionControls}</div></article>`;
   };
 
   const renderAnalysisDetail = (detail) => {
@@ -465,7 +474,7 @@ export function createCollaborationWorkspace(options) {
       run.executionChannel === 'external_agent'
         ? `<section class="collaboration-section collaboration-export-panel"><div class="collaboration-section-head"><h3>外部 Agent 接力</h3><span>内容不会自动上传</span></div><dl class="collaboration-definition-list"><div><dt>资源数</dt><dd>${html(detail.exportScope?.resource_count || 0)}</dd></div><div><dt>所选文件</dt><dd>${html(detail.exportScope?.file_count || 0)}</dd></div><div><dt>包含文件内容</dt><dd>${detail.exportScope?.include_selected_file_contents ? '是' : '否'}</dd></div></dl><p class="collaboration-muted-note">导出前会展示完整文件清单、大小和脱敏标记。不要向第三方平台提供 Credential、token 或 Provider 配置。</p><div class="collaboration-record-actions">${access.canExportExternal ? '<button type="button" class="btn-ghost" data-collaboration-action="review-analysis-package">复核分析包</button>' : ''}${access.canSubmitExternal ? '<button type="button" class="btn-primary" data-collaboration-action="submit-external-result">回填 JSON</button>' : ''}</div>${detail.repairPrompt ? `<div class="collaboration-repair-prompt"><div class="collaboration-record-actions"><strong>结果修复 Prompt</strong><button type="button" class="btn-ghost" data-collaboration-action="copy-repair-prompt">复制</button></div><pre>${html(detail.repairPrompt)}</pre></div>` : ''}</section>`
         : '';
-    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-analysis">返回分析</button>${controls}</section>${detail.stale ? '<div class="collaboration-inline-alert">该报告绑定的 verified snapshot 已过期，不能再生成新的动作预览。此前已明确确认的预览仍会按当前目标 revision 和 Git CAS 重新校验。</div>' : ''}<section class="collaboration-metrics">${metric('状态', collaborationStatusLabel(run.status), severityTone(run.status))}${metric('渠道', collaborationLabel(run.executionChannel))}${metric('Executor', run.executorId || '外部 Agent')}${metric('Findings', detail.findings?.length || 0)}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Analysis Run</h3>${status(run.status)}</div><dl class="collaboration-definition-list"><div><dt>Analysis ID</dt><dd><code>${html(run.analysisId)}</code></dd></div><div><dt>verified snapshot</dt><dd><code>${html(run.snapshotHead)}</code></dd></div><div><dt>Context hash</dt><dd><code>${html(run.contextHash)}</code></dd></div><div><dt>Prompt hash</dt><dd><code>${html(run.promptHash)}</code></dd></div><div><dt>范围</dt><dd>${html(collaborationLabel(run.scope?.type))}</dd></div><div><dt>开始时间</dt><dd>${html(localDate(run.startedAtMs))}</dd></div></dl>${run.error ? `<div class="collaboration-inline-alert">${html(run.error)}</div>` : ''}${validationErrors.length ? `<div class="collaboration-validation-list">${validationErrors.map((error) => `<p><code>${html(error.code)}</code> ${html(error.path)} · ${html(error.message)}</p>`).join('')}</div>` : ''}</section>${externalPanel}${normalized ? `<section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(normalized.summary?.headline)}</h3>${status(normalized.summary?.health)}</div><p class="collaboration-prose">${html(normalized.summary?.details)}</p></section>` : ''}<section class="collaboration-section"><div class="collaboration-section-head"><h3>Findings</h3><span>${detail.findings?.length || 0}</span></div><div class="collaboration-finding-list">${(detail.findings || []).map((entry) => renderFinding(entry, detail, group)).join('') || empty('没有可复核的 Finding')}</div></section>${detail.applications?.length ? `<section class="collaboration-section"><div class="collaboration-section-head"><h3>动作执行记录</h3><span>${detail.applications.length}</span></div><div class="collaboration-record-list">${detail.applications.map((entry) => `<article class="collaboration-record"><div class="collaboration-record-main"><strong>${html(collaborationLabel(entry.action?.action))}</strong><small>${html(collaborationStatusLabel(entry.state))} · ${html(localDate(entry.updatedAtMs))}</small>${entry.error ? `<p>${html(entry.error)}</p>` : ''}<pre>${html(JSON.stringify(entry.preview, null, 2))}</pre></div>${status(entry.state)}</article>`).join('')}</div></section>` : ''}`;
+    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-analysis">返回分析</button>${controls}</section>${detail.stale ? '<div class="collaboration-inline-alert">该报告绑定的 verified snapshot 已过期，当前仅可查看。请基于当前 verified head 重新分析后再复核或转化 Finding。</div>' : ''}<section class="collaboration-metrics">${metric('状态', collaborationStatusLabel(run.status), severityTone(run.status))}${metric('渠道', collaborationLabel(run.executionChannel))}${metric('Executor', run.executorId || '外部 Agent')}${metric('Findings', detail.findings?.length || 0)}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Analysis Run</h3>${status(run.status)}</div><dl class="collaboration-definition-list"><div><dt>Analysis ID</dt><dd><code>${html(run.analysisId)}</code></dd></div><div><dt>verified snapshot</dt><dd><code>${html(run.snapshotHead)}</code></dd></div>${run.scope?.type === 'delta' ? `<div><dt>基准 snapshot</dt><dd><code>${html(run.scope.since_snapshot_head)}</code></dd></div>` : ''}<div><dt>Context hash</dt><dd><code>${html(run.contextHash)}</code></dd></div><div><dt>Prompt hash</dt><dd><code>${html(run.promptHash)}</code></dd></div><div><dt>范围</dt><dd>${html(collaborationLabel(run.scope?.type))}</dd></div><div><dt>开始时间</dt><dd>${html(localDate(run.startedAtMs))}</dd></div></dl>${run.error ? `<div class="collaboration-inline-alert">${html(run.error)}</div>` : ''}${validationErrors.length ? `<div class="collaboration-validation-list">${validationErrors.map((error) => `<p><code>${html(error.code)}</code> ${html(error.path)} · ${html(error.message)}</p>`).join('')}</div>` : ''}</section>${externalPanel}${normalized ? `<section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(normalized.summary?.headline)}</h3>${status(normalized.summary?.health)}</div><p class="collaboration-prose">${html(normalized.summary?.details)}</p></section>` : ''}<section class="collaboration-section"><div class="collaboration-section-head"><h3>Findings</h3><span>${detail.findings?.length || 0}</span></div><div class="collaboration-finding-list">${(detail.findings || []).map((entry) => renderFinding(entry, detail, group)).join('') || empty('没有可复核的 Finding')}</div></section>${detail.applications?.length ? `<section class="collaboration-section"><div class="collaboration-section-head"><h3>动作执行记录</h3><span>${detail.applications.length}</span></div><div class="collaboration-record-list">${detail.applications.map((entry) => `<article class="collaboration-record"><div class="collaboration-record-main"><strong>${html(collaborationLabel(entry.action?.action))}</strong><small>${html(collaborationStatusLabel(entry.state))} · ${html(localDate(entry.updatedAtMs))}</small>${entry.error ? `<p>${html(entry.error)}</p>` : ''}<pre>${html(JSON.stringify(entry.preview, null, 2))}</pre></div>${status(entry.state)}</article>`).join('')}</div></section>` : ''}`;
   };
 
   const renderAnalysis = () => {
@@ -586,6 +595,8 @@ export function createCollaborationWorkspace(options) {
     const turn = collaborationCurrentTurn(projection, instance.instance_id);
     const turns = collaborationTurnHistory(projection, instance.instance_id);
     const access = collaborationTurnAccess(group, turn);
+    const canRecoverTurn = collaborationCanRecoverTurn(group, instance, turn);
+    const instanceCommand = collaborationWorkflowInstanceCommand(instance);
     const routes = collaborationOutcomeRoutes(definition, turn);
     const canCreateTurn =
       collaborationCanMutate(group) &&
@@ -606,9 +617,9 @@ export function createCollaborationWorkspace(options) {
         });
     });
     const currentTurn = turn
-      ? `<dl class="collaboration-definition-list"><div><dt>状态</dt><dd>${html(workflowStateLabel(definition, turn.state_id))}</dd></div><div><dt>负责人</dt><dd>${html(collaborationPrincipalName(projection, turn.assignee_principal_id))}</dd></div><div><dt>客户端</dt><dd>${html(turn.claimant_client_id || '-')}</dd></div><div><dt>执行模式</dt><dd>${html(collaborationLabel(turn.execution_mode))}</dd></div><div><dt>尝试次数</dt><dd>${html(turn.attempt)}</dd></div><div><dt>截止时间</dt><dd>${html(collaborationTurnDeadline(turn)?.deadlineAt || '-')}</dd></div></dl><div class="collaboration-record-actions">${access.canStart ? '<button type="button" class="btn-primary" data-collaboration-action="start-turn">开始执行</button>' : ''}${access.canComplete ? '<button type="button" class="btn-primary" data-collaboration-action="complete-turn">完成</button>' : ''}${collaborationCanMutate(group) && turn.assignee_principal_id === group.localPrincipalId ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">执行配置</button>' : ''}</div><div class="collaboration-outcome-preview">${routes.map((route) => `<span><strong>${html(collaborationLabel(route.label || route.outcome))}</strong> → ${html(workflowStateLabel(definition, route.target_state))}</span>`).join('')}</div>`
+      ? `<dl class="collaboration-definition-list"><div><dt>状态</dt><dd>${html(workflowStateLabel(definition, turn.state_id))}</dd></div><div><dt>负责人</dt><dd>${html(collaborationPrincipalName(projection, turn.assignee_principal_id))}</dd></div><div><dt>客户端</dt><dd>${html(turn.claimant_client_id || '-')}</dd></div><div><dt>执行模式</dt><dd>${html(collaborationLabel(turn.execution_mode))}</dd></div><div><dt>尝试次数</dt><dd>${html(turn.attempt)}</dd></div><div><dt>截止时间</dt><dd>${html(collaborationTurnDeadline(turn)?.deadlineAt || '-')}</dd></div>${turn.recovery_reason ? `<div><dt>恢复原因</dt><dd>${html(turn.recovery_reason)}</dd></div>` : ''}</dl><div class="collaboration-record-actions">${canRecoverTurn ? '<button type="button" class="btn-primary" data-collaboration-action="recover-turn">恢复执行轮次</button>' : ''}${access.canStart ? '<button type="button" class="btn-primary" data-collaboration-action="start-turn">开始执行</button>' : ''}${access.canComplete ? '<button type="button" class="btn-primary" data-collaboration-action="complete-turn">完成</button>' : ''}${collaborationCanMutate(group) && turn.assignee_principal_id === group.localPrincipalId && turn.state !== 'recovery_required' ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">执行配置</button>' : ''}</div><div class="collaboration-outcome-preview">${routes.map((route) => `<span><strong>${html(collaborationLabel(route.label || route.outcome))}</strong> → ${html(workflowStateLabel(definition, route.target_state))}</span>`).join('')}</div>`
       : `<div class="collaboration-section-empty">${instance.lifecycle === 'running' ? `可以开始：${html(workflowStateLabel(definition, instance.business_state))}` : '当前没有执行轮次'}</div><div class="collaboration-record-actions">${currentAssignedToLocal ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">执行配置</button>' : ''}${canCreateTurn ? `<button type="button" class="btn-primary" data-collaboration-action="create-turn">${turns.length ? '继续执行' : '创建执行轮次'}</button>` : ''}</div>`;
-    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-instance">返回</button>${collaborationCanMutate(group) ? `<button type="button" class="btn-ghost" data-collaboration-action="instance-command" data-command="${instance.lifecycle === 'draft' || instance.lifecycle === 'ready' ? 'start' : instance.lifecycle === 'paused' ? 'resume' : 'pause'}">${instance.lifecycle === 'paused' ? '恢复' : instance.lifecycle === 'running' ? '暂停' : '启动'}</button>` : ''}</section><section class="collaboration-metrics">${metric('生命周期', collaborationStatusLabel(instance.lifecycle))}${metric('当前状态', workflowStateLabel(definition, instance.business_state))}${metric('周期', instance.epoch)}${metric('执行轮次', turns.length)}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(collaborationLabel(definition?.definition?.name || instance.definition_id))} · ${html(instance.instance_id)}</h3>${status(instance.lifecycle)}</div><div id="collaboration-instance-graph"></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>当前执行轮次</h3>${turn ? status(turn.state) : ''}</div>${currentTurn}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>执行历史</h3><span>${turns.length}</span></div>${turns.map((item) => `<article class="collaboration-record"><div><strong>${html(workflowStateLabel(definition, item.state_id))}</strong><small>${html(timestamp(item.created_at))}${item.outcome ? ` · ${html(collaborationLabel(item.outcome))}` : ''}</small>${renderArtifactRefs(projection, item.artifact_refs)}</div>${status(item.state)}</article>`).join('') || empty('暂无执行记录')}</section>`;
+    return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-instance">返回</button>${collaborationCanMutate(group) && instanceCommand ? `<button type="button" class="btn-ghost" data-collaboration-action="instance-command" data-command="${instanceCommand.command}">${instanceCommand.label}</button>` : ''}</section><section class="collaboration-metrics">${metric('生命周期', collaborationStatusLabel(instance.lifecycle))}${metric('当前状态', workflowStateLabel(definition, instance.business_state))}${metric('周期', instance.epoch)}${metric('执行轮次', turns.length)}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(collaborationLabel(definition?.definition?.name || instance.definition_id))} · ${html(instance.instance_id)}</h3>${status(instance.lifecycle)}</div><div id="collaboration-instance-graph"></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>当前执行轮次</h3>${turn ? status(turn.state) : ''}</div>${currentTurn}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>执行历史</h3><span>${turns.length}</span></div>${turns.map((item) => `<article class="collaboration-record"><div><strong>${html(workflowStateLabel(definition, item.state_id))}</strong><small>${html(timestamp(item.created_at))}${item.outcome ? ` · ${html(collaborationLabel(item.outcome))}` : ''}</small>${renderArtifactRefs(projection, item.artifact_refs)}</div>${status(item.state)}</article>`).join('') || empty('暂无执行记录')}</section>`;
   };
 
   const renderWorkflows = () => {
@@ -1702,6 +1713,43 @@ export function createCollaborationWorkspace(options) {
     await loadDetail(group.groupId, false);
   };
 
+  const recoverCurrentTurn = () => {
+    const group = selectedGroup();
+    const instance = selectedInstance();
+    const turn = collaborationCurrentTurn(
+      group.projection,
+      instance.instance_id,
+    );
+    if (!collaborationCanRecoverTurn(group, instance, turn))
+      throw new Error('当前身份无权恢复该执行轮次');
+    openDialog({
+      title: '恢复执行轮次',
+      submitText: '确认恢复',
+      body: `<div class="collaboration-transfer-warning"><strong>创建新的执行尝试</strong><span>Host 将校验当前 attempt、实例 revision 与 Git CAS；原执行结果不会被直接采用。</span></div>${field('恢复原因', 'reason', turn.recovery_reason || '', { multiline: true })}`,
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/turns/${encodeURIComponent(turn.turn_id)}/recover`,
+          {
+            method: 'POST',
+            body: JSON.stringify(
+              buildCollaborationRecoverTurnRequest({
+                expectedRevision: aggregateRevision(
+                  group.projection,
+                  'workflow_instance',
+                  instance.instance_id,
+                ),
+                previousAttempt: turn.attempt,
+                reason: formData.get('reason'),
+              }),
+            ),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
   const selectTurnExecutor = () => {
     const group = selectedGroup();
     const instance = selectedInstance();
@@ -1966,14 +2014,20 @@ export function createCollaborationWorkspace(options) {
   const openAnalysisCreator = async () => {
     const group = selectedGroup();
     const base = `/groups/${encodeURIComponent(group.groupId)}`;
-    const [executorData, fileData] = await Promise.all([
+    const [executorData, fileData, scopeOptionsData] = await Promise.all([
       options.request(`${base}/analysis-executors`),
       options.request(`${base}/files`),
+      options.request(`${base}/analysis-scope-options`),
     ]);
     const executors = executorData.executors || [];
     const files = fileData.files || [];
     const workItems = Object.values(group.projection?.workItems || {});
     const instances = Object.values(group.projection?.workflowInstances || {});
+    const deltaBaseSnapshots = scopeOptionsData.deltaBaseSnapshots || [];
+    const deltaBaseOptions = deltaBaseSnapshots.map((entry) => [
+      entry.snapshotHead,
+      `${String(entry.snapshotHead).slice(0, 12)} · ${timestamp(entry.occurredAt)}`,
+    ]);
     openDialog({
       title: '新建项目分析',
       submitText: '开始分析',
@@ -1983,6 +2037,7 @@ export function createCollaborationWorkspace(options) {
         ['mine', '与我相关'],
         ['work_item', 'Work Item'],
         ['workflow_instance', 'Workflow'],
+        ['delta', '增量变化'],
       ]
         .map(
           ([value, label], index) =>
@@ -1990,7 +2045,7 @@ export function createCollaborationWorkspace(options) {
         )
         .join(
           '',
-        )}</div><div data-analysis-scope="work_item" class="hidden">${field('Work Item', 'workItemId', workItems[0]?.work_item_id || '', { required: false, options: workItems.map((item) => [item.work_item_id, item.title]) })}</div><div data-analysis-scope="workflow_instance" class="hidden">${field('Workflow Instance', 'workflowInstanceId', instances[0]?.instance_id || '', { required: false, options: instances.map((instance) => [instance.instance_id, instance.definition_id]) })}</div></fieldset><fieldset><legend>执行渠道</legend><div class="collaboration-radio-segments">${[
+        )}</div><div data-analysis-scope="work_item" class="hidden">${field('Work Item', 'workItemId', workItems[0]?.work_item_id || '', { required: false, options: workItems.map((item) => [item.work_item_id, item.title]) })}</div><div data-analysis-scope="workflow_instance" class="hidden">${field('Workflow Instance', 'workflowInstanceId', instances[0]?.instance_id || '', { required: false, options: instances.map((instance) => [instance.instance_id, instance.definition_id]) })}</div><div data-analysis-scope="delta" class="hidden">${field('基准 verified head', 'sinceSnapshotHead', deltaBaseSnapshots[0]?.snapshotHead || '', { required: false, options: deltaBaseOptions })}<p class="collaboration-muted-note">${deltaBaseOptions.length ? `仅分析所选 verified snapshot 至当前 ${html(String(scopeOptionsData.currentSnapshotHead || '').slice(0, 12))} 的变化。` : '当前没有可用的历史 verified snapshot。'}</p></div></fieldset><fieldset><legend>执行渠道</legend><div class="collaboration-radio-segments">${[
         ['managed_executor', 'Icarus 托管'],
         ['external_agent', '外部 Agent'],
       ]
@@ -2014,6 +2069,9 @@ export function createCollaborationWorkspace(options) {
                 element.dataset.analysisScope !== scopeType,
               ),
             );
+          const sinceSnapshotInput = form.elements.sinceSnapshotHead;
+          if (sinceSnapshotInput)
+            sinceSnapshotInput.required = scopeType === 'delta';
           form
             .querySelectorAll('[data-analysis-channel]')
             .forEach((element) =>
@@ -2037,6 +2095,7 @@ export function createCollaborationWorkspace(options) {
             scopeType === 'work_item'
               ? formData.get('workItemId')
               : formData.get('workflowInstanceId'),
+          sinceSnapshotHead: formData.get('sinceSnapshotHead'),
           executionChannel,
           executorId:
             executionChannel === 'managed_executor'
@@ -2181,20 +2240,52 @@ export function createCollaborationWorkspace(options) {
     });
   };
 
-  const previewAnalysisAction = (findingId, actionOrdinal) => {
+  const previewAnalysisAction = (
+    findingId,
+    actionOrdinal = null,
+    requestedActionType = '',
+  ) => {
     const group = selectedGroup();
     const entry = state.tabData.analysisDetail.findings.find(
       (candidate) => candidate.findingId === findingId,
     );
-    const proposedAction = entry?.finding?.proposed_actions?.[actionOrdinal];
-    if (!proposedAction) throw new Error('建议动作不存在');
+    if (!entry) throw new Error('Finding 不存在');
+    const proposedAction = Number.isInteger(actionOrdinal)
+      ? entry.finding?.proposed_actions?.[actionOrdinal]
+      : null;
+    if (Number.isInteger(actionOrdinal) && !proposedAction)
+      throw new Error('Agent 建议动作不存在');
+    const initialActionType = proposedAction?.action || requestedActionType;
+    const selectedActionType = collaborationFindingActionTypes.includes(
+      initialActionType,
+    )
+      ? initialActionType
+      : collaborationFindingActionTypes[0];
+    const actionDraft = (actionType) =>
+      proposedAction?.action === actionType
+        ? proposedAction
+        : collaborationFindingActionDraft(entry, actionType);
     const requestId = `analysis_preview_${globalThis.crypto.randomUUID()}`;
     openDialog({
-      title: '编辑建议动作',
+      title: proposedAction ? '编辑建议动作' : '选择 Finding 转化动作',
       submitText: '生成预览',
       wide: true,
-      body: `<dl class="collaboration-definition-list"><div><dt>动作</dt><dd>${html(collaborationLabel(proposedAction.action))}</dd></div><div><dt>Finding</dt><dd>${html(entry.finding.title)}</dd></div></dl>${field('动作参数 JSON', 'parametersJson', JSON.stringify(proposedAction.parameters, null, 2), { multiline: true })}`,
+      body: `<dl class="collaboration-definition-list"><div><dt>Finding</dt><dd>${html(entry.finding.title)}</dd></div><div><dt>来源</dt><dd>${proposedAction ? 'Agent 建议，可修改参数或切换类型' : '用户独立选择'}</dd></div></dl>${field('动作类型', 'actionType', selectedActionType, { options: collaborationFindingActionTypes.map((actionType) => [actionType, collaborationLabel(actionType)]) })}${field('动作参数 JSON', 'parametersJson', JSON.stringify(actionDraft(selectedActionType).parameters, null, 2), { multiline: true })}`,
+      onOpen: () => {
+        const actionTypeControl = elements.dialogForm.elements.actionType;
+        const parametersControl = elements.dialogForm.elements.parametersJson;
+        actionTypeControl?.addEventListener('change', () => {
+          parametersControl.value = JSON.stringify(
+            actionDraft(actionTypeControl.value).parameters,
+            null,
+            2,
+          );
+        });
+      },
       onSubmit: async (formData) => {
+        const actionType = String(formData.get('actionType') || '');
+        if (!collaborationFindingActionTypes.includes(actionType))
+          throw new Error('不支持的 Finding 转化动作');
         let parameters;
         try {
           parameters = JSON.parse(String(formData.get('parametersJson') || ''));
@@ -2207,7 +2298,9 @@ export function createCollaborationWorkspace(options) {
           Array.isArray(parameters)
         )
           throw new Error('动作参数必须是 JSON 对象');
-        const editedAction = { ...proposedAction, parameters };
+        const editedAction = { action: actionType, parameters };
+        const linkedActionOrdinal =
+          proposedAction?.action === actionType ? actionOrdinal : null;
         const response = await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/analysis-runs/${encodeURIComponent(state.selectedAnalysisId)}/actions/preview`,
           {
@@ -2218,7 +2311,9 @@ export function createCollaborationWorkspace(options) {
                   {
                     requestId,
                     findingId,
-                    actionOrdinal,
+                    ...(Number.isInteger(linkedActionOrdinal)
+                      ? { actionOrdinal: linkedActionOrdinal }
+                      : {}),
                     action: editedAction,
                   },
                 ],
@@ -2366,7 +2461,10 @@ export function createCollaborationWorkspace(options) {
     if (action === 'preview-analysis-action')
       return previewAnalysisAction(
         button.dataset.findingId,
-        Number(button.dataset.actionOrdinal),
+        button.dataset.actionOrdinal === undefined
+          ? null
+          : Number(button.dataset.actionOrdinal),
+        button.dataset.actionType || '',
       );
     if (action === 'acknowledge-assignment') {
       const item = group.projection.workItems[state.selectedWorkItemId];
@@ -2602,6 +2700,7 @@ export function createCollaborationWorkspace(options) {
         ? startCurrentTurn()
         : selectTurnExecutor();
     }
+    if (action === 'recover-turn') return recoverCurrentTurn();
     if (action === 'complete-turn') return completeTurn();
     if (action === 'configure-execution') return configureExecution();
     if (action === 'edit-permissions') {

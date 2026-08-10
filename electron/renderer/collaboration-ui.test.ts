@@ -16,6 +16,7 @@ import {
   collaborationAuditEventTimeline,
   collaborationCanApproveMembers,
   collaborationCanAnswerWorkItemAssignment,
+  collaborationCanRecoverTurn,
   collaborationCanDecideRecovery,
   collaborationCanCreateTurn,
   collaborationCanMutate,
@@ -35,7 +36,9 @@ import {
   collaborationTurnAccess,
   collaborationTurnDeadline,
   collaborationTurnHistory,
+  collaborationWorkflowInstanceCommand,
   buildCollaborationStartTurnRequest,
+  buildCollaborationRecoverTurnRequest,
   buildCollaborationCompleteTurnRequest,
   buildCollaborationAssignmentDecisionRequest,
   buildCollaborationDiscussionMessageRequest,
@@ -44,6 +47,8 @@ import {
   buildCollaborationFindingDecisionRequest,
   buildCollaborationActionPreviewRequest,
   buildCollaborationActionApplyRequest,
+  collaborationFindingActionDraft,
+  collaborationFindingActionTypes,
   collaborationTurnCompletionDraft,
   collaborationAnalysisRunAccess,
   parseCollaborationExternalResult,
@@ -337,6 +342,35 @@ describe('Collaboration project-space v3 UI helpers', () => {
       selectedFileIds: [],
       includeSelectedFileContents: false,
     });
+    expect(
+      buildCollaborationAnalysisRunRequest({
+        scopeType: 'delta',
+        sinceSnapshotHead: 'a'.repeat(40),
+        executionChannel: 'external_agent',
+      }),
+    ).toEqual({
+      scope: {
+        type: 'delta',
+        since_snapshot_head: 'a'.repeat(40),
+      },
+      executionChannel: 'external_agent',
+      executorId: null,
+      selectedFileIds: [],
+      includeSelectedFileContents: false,
+    });
+    expect(() =>
+      buildCollaborationAnalysisRunRequest({
+        scopeType: 'delta',
+        executionChannel: 'external_agent',
+      }),
+    ).toThrow(/基准 verified head/u);
+    expect(() =>
+      buildCollaborationAnalysisRunRequest({
+        scopeType: 'delta',
+        sinceSnapshotHead: 'A'.repeat(40),
+        executionChannel: 'external_agent',
+      }),
+    ).toThrow(/小写 Git hash/u);
     expect(() =>
       buildCollaborationAnalysisRunRequest({
         scopeType: 'workflow_instance',
@@ -415,6 +449,62 @@ describe('Collaboration project-space v3 UI helpers', () => {
         },
       ],
     });
+    const independentDiscussion = collaborationFindingActionDraft(
+      {
+        findingId: 'finding_1',
+        finding: {
+          title: 'Release risk',
+          summary: 'The release is blocked.',
+          severity: 'high',
+          category: 'delivery_risk',
+          affected_refs: ['work_item:wi_release'],
+          evidence_refs: ['turn:turn_review'],
+        },
+      },
+      'open_discussion',
+    );
+    expect(independentDiscussion).toMatchObject({
+      action: 'open_discussion',
+      parameters: {
+        title: 'Release risk',
+        scope: { type: 'work_item', ref: 'wi_release' },
+      },
+    });
+    expect(
+      buildCollaborationActionPreviewRequest({
+        actions: [
+          {
+            requestId: 'preview_request_independent',
+            findingId: 'finding_1',
+            action: independentDiscussion,
+          },
+        ],
+      }),
+    ).toEqual({
+      actions: [
+        {
+          requestId: 'preview_request_independent',
+          findingId: 'finding_1',
+          action: independentDiscussion,
+        },
+      ],
+    });
+    expect(
+      collaborationFindingActionTypes.map(
+        (actionType) =>
+          collaborationFindingActionDraft(
+            {
+              findingId: 'finding_1',
+              finding: {
+                title: 'Release risk',
+                summary: 'The release is blocked.',
+                affected_refs: ['work_item:wi_release'],
+              },
+            },
+            actionType,
+          ).action,
+      ),
+    ).toEqual(collaborationFindingActionTypes);
     expect(() =>
       buildCollaborationActionPreviewRequest({ actions: [] }),
     ).toThrow(/明确选择/u);
@@ -483,7 +573,7 @@ describe('Collaboration project-space v3 UI helpers', () => {
     ).toMatchObject({ tab: 'analysis', selectedAnalysisId: 'analysis_1' });
   });
 
-  it('keeps Observer read-only while stale reviews still require Host CAS', () => {
+  it('keeps Observer and stale Analysis reports read-only', () => {
     const activeGroup = {
       subscriptionMode: 'member',
       lifecycle: 'active',
@@ -517,7 +607,21 @@ describe('Collaboration project-space v3 UI helpers', () => {
     });
     expect(
       collaborationAnalysisRunAccess(activeGroup, { ...detail, stale: true }),
-    ).toMatchObject({ canPreviewActions: false, canApplyActions: true });
+    ).toMatchObject({
+      canDecideFinding: false,
+      canPreviewActions: false,
+      canApplyActions: false,
+    });
+    expect(
+      collaborationAnalysisRunAccess(activeGroup, {
+        ...detail,
+        run: { ...detail.run, status: 'stale' },
+      }),
+    ).toMatchObject({
+      canDecideFinding: false,
+      canPreviewActions: false,
+      canApplyActions: false,
+    });
     expect(
       collaborationAnalysisRunAccess(activeGroup, {
         run: {
@@ -645,6 +749,72 @@ describe('Collaboration project-space v3 UI helpers', () => {
         execution_mode: 'assisted',
       }),
     ).toThrow(/执行器/u);
+
+    expect(
+      buildCollaborationRecoverTurnRequest({
+        expectedRevision: 7,
+        previousAttempt: 2,
+        reason: 'Executor process was replaced',
+      }),
+    ).toEqual({
+      expectedRevision: 7,
+      previousAttempt: 2,
+      reason: 'Executor process was replaced',
+    });
+    expect(() =>
+      buildCollaborationRecoverTurnRequest({
+        expectedRevision: 7,
+        previousAttempt: 2,
+        reason: ' ',
+      }),
+    ).toThrow(/恢复原因不能为空/u);
+    expect(
+      collaborationWorkflowInstanceCommand({ lifecycle: 'running' }),
+    ).toEqual({ command: 'pause', label: '暂停' });
+    expect(
+      collaborationWorkflowInstanceCommand({ lifecycle: 'paused' }),
+    ).toEqual({ command: 'resume', label: '恢复' });
+    expect(
+      collaborationWorkflowInstanceCommand({ lifecycle: 'recovery_required' }),
+    ).toBeNull();
+
+    const recoveryInstance = {
+      instance_id: 'instance_recovery',
+      lifecycle: 'recovery_required',
+      business_state: 'build',
+      active_turn_id: 'turn_recovery',
+      created_by_principal_id: 'principal_other',
+      resolved_assignments: { build: 'principal_alice' },
+    };
+    const recoveryTurn = {
+      turn_id: 'turn_recovery',
+      state: 'recovery_required',
+      assignee_principal_id: 'principal_alice',
+    };
+    const recoveryGroup = {
+      subscriptionMode: 'member',
+      lifecycle: 'active',
+      localPrincipalId: 'principal_alice',
+      localClientId: 'client_alice',
+      projection: {
+        members: { principal_alice: { status: 'active' } },
+        permissionGrants: {},
+      },
+    };
+    expect(
+      collaborationCanRecoverTurn(
+        recoveryGroup,
+        recoveryInstance,
+        recoveryTurn,
+      ),
+    ).toBe(true);
+    expect(
+      collaborationCanRecoverTurn(
+        { ...recoveryGroup, subscriptionMode: 'observer' },
+        recoveryInstance,
+        recoveryTurn,
+      ),
+    ).toBe(false);
 
     const group = {
       groupId: 'group_1',

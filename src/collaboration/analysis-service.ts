@@ -11,6 +11,7 @@ import {
   projectAnalystRepairPrompt,
 } from './analysis-capability.js';
 import {
+  COLLABORATION_ANALYSIS_ALLOWED_ACTION_TYPES,
   collaborationAnalysisInputSchema,
   collaborationAnalysisResultSchema,
   collaborationAnalysisScopeSchema,
@@ -30,7 +31,10 @@ import {
   buildCollaborationProjectInsight,
   buildMyItems,
 } from './project-insight.js';
-import type { CollaborationProjectSpaceService } from './project-space-service.js';
+import type {
+  CollaborationProjectSpaceService,
+  ValidatedProjectSpaceHistory,
+} from './project-space-service.js';
 import type {
   CollaborationAnalysisActionApplicationRecord,
   CollaborationAnalysisFindingRecord,
@@ -88,6 +92,7 @@ export class CollaborationAnalysisServiceError extends Error {
       | 'analysis_permission_denied'
       | 'analysis_confirmation_invalid'
       | 'analysis_action_conflict'
+      | 'analysis_delta_base_invalid'
       | 'analysis_tool_denied',
     message: string,
   ) {
@@ -102,9 +107,13 @@ export interface CollaborationAnalysisRunDetail {
   readonly result: ReturnType<
     CollaborationProjectSpaceStore['getLatestAnalysisResult']
   >;
+  readonly results: ReturnType<
+    CollaborationProjectSpaceStore['listAnalysisResults']
+  >;
   readonly findings: readonly CollaborationAnalysisFindingRecord[];
   readonly applications: readonly CollaborationAnalysisActionApplicationRecord[];
   readonly exportScope: Record<string, unknown>;
+  readonly allowedActionTypes: readonly CollaborationProposedAction['action'][];
   readonly repairPrompt: string | null;
 }
 
@@ -135,7 +144,7 @@ export interface CollaborationExternalAnalysisPackage {
 export interface CollaborationAnalysisActionPreviewInput {
   readonly requestId: string;
   readonly findingId: string;
-  readonly actionOrdinal: number;
+  readonly actionOrdinal?: number;
   readonly action: CollaborationProposedAction;
 }
 
@@ -330,6 +339,139 @@ function scopedCatalog(input: {
   return Object.fromEntries(
     Object.entries(input.catalog).filter(([ref]) => selected.has(ref)),
   );
+}
+
+function aggregateResourceRef(
+  aggregateType: string,
+  aggregateId: string,
+  projection: CollaborationProjectionV3,
+): string | null {
+  switch (aggregateType) {
+    case 'group':
+      return `group:${projection.groupId}`;
+    case 'membership':
+      return projection.members[aggregateId]
+        ? `principal:${aggregateId}`
+        : null;
+    case 'recovery':
+      return projection.recoveryRequests[aggregateId]
+        ? `recovery:${aggregateId}`
+        : null;
+    case 'workspace':
+      return projection.members[aggregateId]
+        ? `principal:${aggregateId}`
+        : null;
+    case 'work_item':
+      return projection.workItems[aggregateId]
+        ? `work_item:${aggregateId}`
+        : null;
+    case 'discussion':
+      return projection.discussions[aggregateId]
+        ? `discussion:${aggregateId}`
+        : null;
+    case 'workflow_instance':
+      return projection.workflowInstances[aggregateId]
+        ? `workflow_instance:${aggregateId}`
+        : null;
+    default:
+      return null;
+  }
+}
+
+function deltaContextSelection(input: {
+  readonly scope: Extract<CollaborationAnalysisScope, { type: 'delta' }>;
+  readonly history: ValidatedProjectSpaceHistory;
+  readonly fullCatalog: ResourceCatalog;
+}): {
+  readonly catalog: ResourceCatalog;
+  readonly activity: CollaborationProjectionV3['activity'];
+  readonly changedRefs: readonly string[];
+  readonly eventCount: number;
+} {
+  const { history, fullCatalog } = input;
+  const baseline = history.eventRecords.find(
+    (record) => record.commitHash === input.scope.since_snapshot_head,
+  );
+  if (!baseline)
+    throw new CollaborationAnalysisServiceError(
+      'analysis_delta_base_invalid',
+      'Delta Analysis requires since_snapshot_head to be a verified commit in the current linear history',
+    );
+  const records = history.eventRecords.filter(
+    (record) => record.commitOrder > baseline.commitOrder,
+  );
+  const refsById = new Map<string, Set<string>>();
+  for (const ref of Object.keys(fullCatalog)) {
+    const id = ref.slice(ref.indexOf(':') + 1);
+    const values = refsById.get(id) ?? new Set<string>();
+    values.add(ref);
+    refsById.set(id, values);
+  }
+  const changedRefs = new Set<string>();
+  const selectedRefs = new Set<string>([`group:${history.projection.groupId}`]);
+  const addSelected = (ref: string | null): void => {
+    if (ref && ref in fullCatalog) selectedRefs.add(ref);
+  };
+  for (const record of records) {
+    const eventRef = `event:${record.event.event_id}`;
+    addSelected(eventRef);
+    if (eventRef in fullCatalog) changedRefs.add(eventRef);
+    const aggregateRef = aggregateResourceRef(
+      record.event.aggregate_type,
+      record.event.aggregate_id,
+      history.projection,
+    );
+    addSelected(aggregateRef);
+    if (aggregateRef && aggregateRef in fullCatalog)
+      changedRefs.add(aggregateRef);
+    addSelected(`principal:${record.event.actor.principal_id}`);
+    for (const value of allStrings(record.event.payload))
+      for (const ref of refsById.get(value) ?? []) {
+        selectedRefs.add(ref);
+        changedRefs.add(ref);
+      }
+  }
+  for (const ref of [...selectedRefs]) {
+    const [type, id] = ref.split(':', 2) as [string, string];
+    if (type === 'work_item') {
+      const expanded = scopeRefs({
+        scope: { type: 'work_item', work_item_id: id },
+        projection: history.projection,
+        myItemRefs: [],
+      });
+      for (const related of expanded ?? []) addSelected(related);
+    } else if (type === 'workflow_instance') {
+      const expanded = scopeRefs({
+        scope: { type: 'workflow_instance', workflow_instance_id: id },
+        projection: history.projection,
+        myItemRefs: [],
+      });
+      for (const related of expanded ?? []) addSelected(related);
+    } else if (type === 'discussion') {
+      const discussion = history.projection.discussions[id];
+      if (!discussion) continue;
+      for (const [messageId, message] of Object.entries(discussion.messages)) {
+        addSelected(`message:${messageId}`);
+        addSelected(`principal:${message.author_principal_id}`);
+        for (const principalId of message.mentions)
+          addSelected(`principal:${principalId}`);
+      }
+    }
+  }
+  const activityById = new Map(
+    history.projection.activity.map((entry) => [entry.eventId, entry]),
+  );
+  return {
+    catalog: Object.fromEntries(
+      Object.entries(fullCatalog).filter(([ref]) => selectedRefs.has(ref)),
+    ),
+    activity: records.flatMap((record) => {
+      const value = activityById.get(record.event.event_id);
+      return value ? [value] : [];
+    }),
+    changedRefs: [...changedRefs].sort(),
+    eventCount: records.length,
+  };
 }
 
 function normalizeTitle(value: string): string {
@@ -585,6 +727,25 @@ export class CollaborationAnalysisService {
     };
   }
 
+  scopeOptions(groupId: string) {
+    const group = this.requireGroup(groupId);
+    const snapshotHead = currentHead(group);
+    const records = this.store.listEventRecords(groupId);
+    return {
+      currentSnapshotHead: snapshotHead,
+      deltaBaseSnapshots: records
+        .filter((record) => record.commitHash !== snapshotHead)
+        .sort((left, right) => right.commitOrder - left.commitOrder)
+        .slice(0, 500)
+        .map((record) => ({
+          snapshotHead: record.commitHash,
+          throughEventId: record.event.event_id,
+          occurredAt: record.event.occurred_at,
+          commitOrder: record.commitOrder,
+        })),
+    };
+  }
+
   async createRun(input: {
     readonly groupId: string;
     readonly scope: CollaborationAnalysisScope;
@@ -655,14 +816,20 @@ export class CollaborationAnalysisService {
     const fullCatalog = redactAnalysisValue(
       resourceCatalog(history.projection),
     ) as ResourceCatalog;
-    const catalog = scopedCatalog({
-      catalog: fullCatalog,
-      scope,
-      projection: history.projection,
-      myItemRefs: myItems.map(
-        (item) => `${item.resource_type}:${item.resource_id}`,
-      ),
-    });
+    const delta =
+      scope.type === 'delta'
+        ? deltaContextSelection({ scope, history, fullCatalog })
+        : null;
+    const catalog =
+      delta?.catalog ??
+      scopedCatalog({
+        catalog: fullCatalog,
+        scope,
+        projection: history.projection,
+        myItemRefs: myItems.map(
+          (item) => `${item.resource_type}:${item.resource_id}`,
+        ),
+      });
     const allowedFileIds = new Set(
       Object.keys(catalog)
         .filter((ref) => ref.startsWith('file:'))
@@ -676,7 +843,7 @@ export class CollaborationAnalysisService {
         );
     const resourceIndex = Object.keys(catalog).sort();
     const visibleRefs = new Set(resourceIndex);
-    const priorFindings = this.priorFindingSummary(input.groupId);
+    const priorFindings = this.priorFindingSummary(input.groupId, scope);
     const visibleSignals = insight.signals.filter((item) =>
       [...item.affected_refs, ...item.evidence_refs].every((ref) =>
         visibleRefs.has(ref),
@@ -687,8 +854,8 @@ export class CollaborationAnalysisService {
         scope.type === 'mine' ||
         visibleRefs.has(`${item.resource_type}:${item.resource_id}`),
     );
-    const visibleActivity = insight.activity_delta.filter((item) =>
-      visibleRefs.has(`event:${item.eventId}`),
+    const visibleActivity = (delta?.activity ?? insight.activity_delta).filter(
+      (item) => visibleRefs.has(`event:${item.eventId}`),
     );
     const visiblePriorFindings = priorFindings.filter((item) => {
       const affected = item.affected_refs;
@@ -721,6 +888,15 @@ export class CollaborationAnalysisService {
           read_only_snapshot: true,
           required_result_format: 'icarus.collaboration-analysis-result/1',
         },
+        change_range:
+          delta && scope.type === 'delta'
+            ? {
+                since_snapshot_head: scope.since_snapshot_head,
+                snapshot_head: snapshotHead,
+                event_count: delta.eventCount,
+                changed_refs: delta.changedRefs,
+              }
+            : null,
         project_summary: jsonRecord(projectSummary),
         my_items: visibleMyItems.map((item) => jsonRecord(item)),
         rule_signals: visibleSignals.map((item) => jsonRecord(item)),
@@ -824,7 +1000,7 @@ export class CollaborationAnalysisService {
     groupId: string,
     analysisId: string,
   ): Promise<CollaborationAnalysisRunDetail> {
-    const run = this.requireRun(groupId, analysisId);
+    const run = this.requireFreshRun(groupId, analysisId);
     if (run.executionChannel === 'external_agent') {
       if (run.status === 'awaiting_external_result')
         return this.getRun(groupId, analysisId);
@@ -926,7 +1102,7 @@ export class CollaborationAnalysisService {
     groupId: string,
     analysisId: string,
   ): Promise<CollaborationExternalAnalysisPackage> {
-    const run = this.requireRun(groupId, analysisId);
+    const run = this.requireFreshRun(groupId, analysisId);
     if (
       run.executionChannel !== 'external_agent' ||
       run.status !== 'awaiting_external_result'
@@ -1025,7 +1201,7 @@ export class CollaborationAnalysisService {
   }
 
   externalPrompt(groupId: string, analysisId: string): string {
-    const run = this.requireRun(groupId, analysisId);
+    const run = this.requireFreshRun(groupId, analysisId);
     if (
       run.executionChannel !== 'external_agent' ||
       run.status !== 'awaiting_external_result'
@@ -1099,6 +1275,22 @@ export class CollaborationAnalysisService {
         'analysis_state_conflict',
         'Only an external Analysis Run accepts external JSON',
       );
+    run = this.persistStaleIfHeadMoved(run);
+    if (run.status === 'stale') {
+      if (
+        !['awaiting_external_result', 'invalid'].includes(
+          run.staleFromStatus ?? '',
+        )
+      )
+        throw this.stateConflict(run, 'submit external result');
+      run = this.store.beginStaleExternalAnalysisAttempt({
+        analysisId: run.analysisId,
+        expectedAttempt: run.attempt,
+        nowMs: this.now(),
+      });
+      this.validateAndPersist(run.analysisId, input.rawJson, null);
+      return this.getRun(input.groupId, input.analysisId);
+    }
     if (run.status === 'invalid') {
       run = this.store.transitionAnalysisRun({
         analysisId: run.analysisId,
@@ -1115,6 +1307,7 @@ export class CollaborationAnalysisService {
       analysisId: run.analysisId,
       expectedStatus: 'awaiting_external_result',
       nextStatus: 'validating',
+      attempt: run.attempt + 1,
       nowMs: this.now(),
     });
     this.validateAndPersist(run.analysisId, input.rawJson, null);
@@ -1162,17 +1355,25 @@ export class CollaborationAnalysisService {
     return input.actions.map((entry) => {
       const finding = findings.get(entry.findingId);
       if (!finding) throw new Error(`Finding not found: ${entry.findingId}`);
-      const original = finding.finding.proposed_actions[entry.actionOrdinal];
       const action = collaborationProposedActionSchema.parse(entry.action);
-      if (!original || original.action !== action.action)
-        throw new Error(
-          'Edited Action must retain the selected proposed action type',
+      const context = this.requireContext(input.analysisId);
+      const actionErrors = findingActionErrors({
+        finding: { ...finding.finding, proposed_actions: [action] },
+        resourceRefs: new Set(context.resourceIndex),
+        resultFindingIds: new Set(findings.keys()),
+      });
+      if (actionErrors.length)
+        throw new CollaborationAnalysisServiceError(
+          'analysis_action_conflict',
+          actionErrors[0]!.message,
         );
       const operationKey = sha256Text(
         canonicalJsonStringify({
           analysis_id: input.analysisId,
           finding_id: entry.findingId,
-          action_ordinal: entry.actionOrdinal,
+          ...(entry.actionOrdinal === undefined
+            ? {}
+            : { action_ordinal: entry.actionOrdinal }),
           request_id: entry.requestId,
           action,
         }),
@@ -1186,7 +1387,7 @@ export class CollaborationAnalysisService {
         operationKey,
         analysisId: input.analysisId,
         findingId: entry.findingId,
-        actionOrdinal: entry.actionOrdinal,
+        actionOrdinal: entry.actionOrdinal ?? null,
         action,
         preview,
         snapshotHead: run.snapshotHead,
@@ -1202,11 +1403,7 @@ export class CollaborationAnalysisService {
     readonly analysisId: string;
     readonly actions: readonly CollaborationAnalysisActionApplyInput[];
   }): Promise<CollaborationAnalysisRunDetail> {
-    const run = this.requireRun(input.groupId, input.analysisId);
-    if (
-      !['ready_for_review', 'partially_applied', 'stale'].includes(run.status)
-    )
-      throw this.stateConflict(run, 'apply Actions');
+    const run = this.requireWritableReview(input.groupId, input.analysisId);
     this.requireMember(input.groupId);
     if (!input.actions.length)
       throw new Error('At least one confirmed Action is required');
@@ -1220,95 +1417,6 @@ export class CollaborationAnalysisService {
         nowMs: this.now(),
       });
     return this.getRun(input.groupId, input.analysisId);
-  }
-
-  async executeReadOnlyTool(input: {
-    readonly groupId: string;
-    readonly analysisId: string;
-    readonly tool:
-      | 'get_project_summary'
-      | 'list_project_signals'
-      | 'list_my_items'
-      | 'list_work_items'
-      | 'get_work_item'
-      | 'get_work_item_dependencies'
-      | 'list_workflow_instances'
-      | 'get_workflow_instance'
-      | 'get_turn_history'
-      | 'list_discussions'
-      | 'get_discussion'
-      | 'list_activity_delta'
-      | 'list_verified_files'
-      | 'read_verified_file'
-      | 'get_principal_progress';
-    readonly arguments?: Record<string, unknown>;
-  }): Promise<unknown> {
-    const run = this.requireRun(input.groupId, input.analysisId);
-    const context = this.requireContext(input.analysisId);
-    if (context.context.snapshot_head !== run.snapshotHead)
-      throw new CollaborationAnalysisServiceError(
-        'analysis_tool_denied',
-        'Analysis tool Context no longer matches its frozen snapshot',
-      );
-    const catalog = context.resourceCatalog;
-    const values = (prefix: string) =>
-      Object.entries(catalog)
-        .filter(([ref]) => ref.startsWith(prefix))
-        .map(([, value]) => value);
-    const id = String(input.arguments?.id ?? '');
-    switch (input.tool) {
-      case 'get_project_summary':
-        return context.context.project_summary;
-      case 'list_project_signals':
-        return context.context.rule_signals;
-      case 'list_my_items':
-        return context.context.my_items;
-      case 'list_work_items':
-        return values('work_item:');
-      case 'get_work_item':
-        return this.catalogValue(catalog, `work_item:${id}`);
-      case 'get_work_item_dependencies': {
-        const value = jsonRecord(this.catalogValue(catalog, `work_item:${id}`));
-        const item = jsonRecord(value.item);
-        return {
-          blocked_by: (Array.isArray(item.blocked_by)
-            ? item.blocked_by
-            : []
-          ).map((dependency) =>
-            this.catalogValue(catalog, `work_item:${String(dependency)}`),
-          ),
-        };
-      }
-      case 'list_workflow_instances':
-        return values('workflow_instance:');
-      case 'get_workflow_instance':
-        return this.catalogValue(catalog, `workflow_instance:${id}`);
-      case 'get_turn_history':
-        return Object.entries(catalog)
-          .filter(([ref, value]) => {
-            if (!ref.startsWith('turn:')) return false;
-            return jsonRecord(value).workflow_instance_id === id;
-          })
-          .map(([, value]) => value);
-      case 'list_discussions':
-        return values('discussion:');
-      case 'get_discussion':
-        return this.catalogValue(catalog, `discussion:${id}`);
-      case 'list_activity_delta':
-        return context.context.activity_delta;
-      case 'list_verified_files':
-        return values('file:');
-      case 'read_verified_file':
-        return this.readFrozenFile(run, context.resourceCatalog, id);
-      case 'get_principal_progress': {
-        const principal = jsonRecord(
-          this.catalogValue(catalog, `principal:${id}`),
-        );
-        return Array.isArray(principal.progress_updates)
-          ? principal.progress_updates
-          : [];
-      }
-    }
   }
 
   private async dispatchManaged(
@@ -1406,18 +1514,21 @@ export class CollaborationAnalysisService {
     observation: ManagedAnalysisObservation,
   ): void {
     const run = this.store.getAnalysisRun(analysisId);
-    if (!run || run.status !== 'running') return;
+    if (!run) return;
     if (
       observation.state === 'result_ready' &&
       observation.rawResult !== null
     ) {
-      this.store.transitionAnalysisRun({
-        analysisId,
-        expectedStatus: 'running',
-        nextStatus: 'validating',
-        providerMetadata: observation.providerMetadata,
-        nowMs: this.now(),
-      });
+      if (run.status === 'running')
+        this.store.transitionAnalysisRun({
+          analysisId,
+          expectedStatus: 'running',
+          nextStatus: 'validating',
+          providerMetadata: observation.providerMetadata,
+          nowMs: this.now(),
+        });
+      else if (run.status !== 'stale' || run.staleFromStatus !== 'running')
+        return;
       this.validateAndPersist(
         analysisId,
         observation.rawResult,
@@ -1425,6 +1536,7 @@ export class CollaborationAnalysisService {
       );
       return;
     }
+    if (run.status !== 'running') return;
     const message =
       observation.error?.message ??
       (observation.state === 'recovery_required'
@@ -1443,8 +1555,9 @@ export class CollaborationAnalysisService {
     providerMetadata: Record<string, unknown> | null,
   ): void {
     const run = this.store.getAnalysisRun(analysisId);
-    if (!run || run.status !== 'validating')
+    if (!run || !['validating', 'stale'].includes(run.status))
       throw new Error('Analysis Run is not validating');
+    const remainsStale = run.status === 'stale';
     const rawBuffer = Buffer.from(rawJson, 'utf8');
     const errors: CollaborationAnalysisValidationError[] = [];
     let parsed: unknown = null;
@@ -1592,15 +1705,25 @@ export class CollaborationAnalysisService {
       nowMs: this.now(),
     });
     this.persistFindings(run, normalized);
-    this.store.transitionAnalysisRun({
-      analysisId,
-      expectedStatus: 'validating',
-      nextStatus: 'ready_for_review',
-      providerMetadata,
-      validationErrors: errors,
-      error: null,
-      nowMs: this.now(),
-    });
+    if (remainsStale)
+      this.store.updateStaleAnalysisDiagnostics({
+        analysisId,
+        attempt: run.attempt,
+        providerMetadata,
+        validationErrors: errors,
+        error: null,
+        nowMs: this.now(),
+      });
+    else
+      this.store.transitionAnalysisRun({
+        analysisId,
+        expectedStatus: 'validating',
+        nextStatus: 'ready_for_review',
+        providerMetadata,
+        validationErrors: errors,
+        error: null,
+        nowMs: this.now(),
+      });
     this.store.addLocalAuditEvidence({
       groupId: run.groupId,
       evidenceType: 'analysis_result_validated',
@@ -1635,33 +1758,32 @@ export class CollaborationAnalysisService {
       providerMetadata,
       nowMs: this.now(),
     });
-    this.store.transitionAnalysisRun({
-      analysisId: run.analysisId,
-      expectedStatus: 'validating',
-      nextStatus: 'invalid',
-      providerMetadata,
-      validationErrors: errors,
-      error: 'Analysis result failed Host validation',
-      nowMs: this.now(),
-    });
+    if (run.status === 'stale')
+      this.store.updateStaleAnalysisDiagnostics({
+        analysisId: run.analysisId,
+        attempt: run.attempt,
+        providerMetadata,
+        validationErrors: errors,
+        error: 'Analysis result failed Host validation',
+        nowMs: this.now(),
+      });
+    else
+      this.store.transitionAnalysisRun({
+        analysisId: run.analysisId,
+        expectedStatus: 'validating',
+        nextStatus: 'invalid',
+        providerMetadata,
+        validationErrors: errors,
+        error: 'Analysis result failed Host validation',
+        nowMs: this.now(),
+      });
   }
 
   private persistFindings(
     run: CollaborationAnalysisRunRecord,
     result: CollaborationAnalysisResult,
   ): void {
-    const previousRun = this.store
-      .listAnalysisRuns(run.groupId)
-      .find(
-        (candidate) =>
-          candidate.analysisId !== run.analysisId &&
-          [
-            'ready_for_review',
-            'partially_applied',
-            'completed',
-            'stale',
-          ].includes(candidate.status),
-      );
+    const previousRun = this.store.findPriorValidAnalysisRun(run.analysisId);
     const previous = previousRun
       ? this.store.listAnalysisFindings(previousRun.analysisId)
       : [];
@@ -1883,17 +2005,12 @@ export class CollaborationAnalysisService {
       case 'open_discussion': {
         const threadId = String(preview.thread_id);
         assertRevision('discussion', threadId);
-        await this.groups.createDiscussion({
+        return this.groups.createDiscussionWithMessage({
           groupId: run.groupId,
           expectedRevision: 0,
           threadId,
           title: action.parameters.title,
           scope: action.parameters.scope,
-        });
-        return this.groups.postDiscussionMessage({
-          groupId: run.groupId,
-          threadId,
-          expectedRevision: 1,
           body: action.parameters.body,
           mentions: action.parameters.mentions,
           origin: 'human',
@@ -1902,17 +2019,12 @@ export class CollaborationAnalysisService {
       case 'request_information': {
         const threadId = String(preview.thread_id);
         assertRevision('discussion', threadId);
-        await this.groups.createDiscussion({
+        return this.groups.createDiscussionWithMessage({
           groupId: run.groupId,
           expectedRevision: 0,
           threadId,
           title: action.parameters.title,
           scope: { type: 'group' },
-        });
-        return this.groups.postDiscussionMessage({
-          groupId: run.groupId,
-          threadId,
-          expectedRevision: 1,
           body: action.parameters.question,
           mentions: action.parameters.mentions,
           refs: action.parameters.affected_refs,
@@ -2028,25 +2140,6 @@ export class CollaborationAnalysisService {
     }
   }
 
-  private async readFrozenFile(
-    run: CollaborationAnalysisRunRecord,
-    catalog: ResourceCatalog,
-    fileId: string,
-  ): Promise<Record<string, unknown>> {
-    const file = this.frozenFile(catalog, fileId);
-    const contents = await this.readAndVerifyFrozenFile(run, file);
-    if (contents.byteLength > MAX_EXTERNAL_FILE_BYTES)
-      throw new Error('Verified file exceeds the Analysis read limit');
-    const text = contents.toString('utf8');
-    return Buffer.from(text, 'utf8').equals(contents)
-      ? { file_id: fileId, encoding: 'utf8', content: text }
-      : {
-          file_id: fileId,
-          encoding: 'base64',
-          content: contents.toString('base64'),
-        };
-  }
-
   private frozenFile(
     catalog: ResourceCatalog,
     fileId: string,
@@ -2092,25 +2185,24 @@ export class CollaborationAnalysisService {
     return contents;
   }
 
-  private catalogValue(catalog: ResourceCatalog, ref: string): unknown {
-    if (!(ref in catalog))
-      throw new CollaborationAnalysisServiceError(
-        'analysis_tool_denied',
-        `Resource is outside the frozen Analysis scope: ${ref}`,
-      );
-    return catalog[ref];
-  }
-
-  private priorFindingSummary(groupId: string): Record<string, unknown>[] {
+  private priorFindingSummary(
+    groupId: string,
+    scope: CollaborationAnalysisScope,
+  ): Record<string, unknown>[] {
     const previous = this.store
       .listAnalysisRuns(groupId)
-      .find((run) =>
-        [
-          'ready_for_review',
-          'partially_applied',
-          'completed',
-          'stale',
-        ].includes(run.status),
+      .find(
+        (run) =>
+          canonicalJsonStringify(run.scope) === canonicalJsonStringify(scope) &&
+          [
+            'ready_for_review',
+            'partially_applied',
+            'completed',
+            'stale',
+          ].includes(run.status) &&
+          Boolean(
+            this.store.getLatestAnalysisResult(run.analysisId)?.normalized,
+          ),
       );
     if (!previous) return [];
     return this.store
@@ -2129,19 +2221,25 @@ export class CollaborationAnalysisService {
     group: CollaborationProjectSpaceGroupRecord,
     run: CollaborationAnalysisRunRecord,
   ): CollaborationAnalysisRunDetail {
-    const context = this.store.getAnalysisContext(run.analysisId);
+    const selected = this.persistStaleIfHeadMoved(run, group);
+    const context = this.store.getAnalysisContext(selected.analysisId);
     return {
-      run,
+      run: selected,
       stale:
-        group.lastVerifiedHead !== run.snapshotHead || run.status === 'stale',
-      result: this.store.getLatestAnalysisResult(run.analysisId),
-      findings: this.store.listAnalysisFindings(run.analysisId),
-      applications: this.store.listAnalysisActionApplications(run.analysisId),
+        group.lastVerifiedHead !== selected.snapshotHead ||
+        selected.status === 'stale',
+      result: this.store.getLatestAnalysisResult(selected.analysisId),
+      results: this.store.listAnalysisResults(selected.analysisId),
+      findings: this.store.listAnalysisFindings(selected.analysisId),
+      applications: this.store.listAnalysisActionApplications(
+        selected.analysisId,
+      ),
       exportScope: context?.exportScope ?? {},
+      allowedActionTypes: COLLABORATION_ANALYSIS_ALLOWED_ACTION_TYPES,
       repairPrompt:
-        run.status === 'invalid'
+        selected.status === 'invalid'
           ? projectAnalystRepairPrompt({
-              validationErrors: run.validationErrors,
+              validationErrors: selected.validationErrors,
             })
           : null,
     };
@@ -2212,6 +2310,36 @@ export class CollaborationAnalysisService {
     return run;
   }
 
+  private persistStaleIfHeadMoved(
+    run: CollaborationAnalysisRunRecord,
+    selectedGroup?: CollaborationProjectSpaceGroupRecord,
+  ): CollaborationAnalysisRunRecord {
+    const group = selectedGroup ?? this.requireGroup(run.groupId);
+    if (
+      group.lastVerifiedHead === run.snapshotHead ||
+      run.status === 'stale' ||
+      run.status === 'cancelled'
+    )
+      return run;
+    this.store.markAnalysisRunsStale(run.groupId, currentHead(group));
+    return this.store.getAnalysisRun(run.analysisId) ?? run;
+  }
+
+  private requireFreshRun(
+    groupId: string,
+    analysisId: string,
+  ): CollaborationAnalysisRunRecord {
+    const run = this.persistStaleIfHeadMoved(
+      this.requireRun(groupId, analysisId),
+    );
+    if (run.status === 'stale')
+      throw new CollaborationAnalysisServiceError(
+        'analysis_snapshot_stale',
+        'Analysis Run verified snapshot is stale',
+      );
+    return run;
+  }
+
   private requireContext(analysisId: string) {
     const context = this.store.getAnalysisContext(analysisId);
     if (!context) throw new Error('Frozen Analysis Context is unavailable');
@@ -2222,7 +2350,7 @@ export class CollaborationAnalysisService {
     groupId: string,
     analysisId: string,
   ): CollaborationAnalysisRunRecord {
-    const run = this.requireRun(groupId, analysisId);
+    const run = this.requireFreshRun(groupId, analysisId);
     if (!['ready_for_review', 'partially_applied'].includes(run.status))
       throw this.stateConflict(run, 'preview or apply Actions');
     return run;

@@ -131,6 +131,15 @@ export function buildCollaborationAnalysisRunRequest(input) {
   } else if (scopeType === 'workflow_instance') {
     if (!resourceId) throw new Error('Workflow 分析必须选择工作流实例');
     scope = { type: scopeType, workflow_instance_id: resourceId };
+  } else if (scopeType === 'delta') {
+    const sinceSnapshotHead = String(
+      input.sinceSnapshotHead || input.scope?.since_snapshot_head || '',
+    ).trim();
+    if (!sinceSnapshotHead)
+      throw new Error('增量分析必须填写基准 verified head');
+    if (!/^[a-f0-9]{40,64}$/u.test(sinceSnapshotHead))
+      throw new Error('基准 verified head 必须是 40 至 64 位小写 Git hash');
+    scope = { type: scopeType, since_snapshot_head: sinceSnapshotHead };
   } else throw new Error('不支持的分析范围');
 
   const executionChannel = String(input.executionChannel || '').trim();
@@ -183,28 +192,141 @@ export function buildCollaborationFindingDecisionRequest(input) {
   return { decision, ...(reason ? { reason } : {}) };
 }
 
+export const collaborationFindingActionTypes = Object.freeze([
+  'create_work_item',
+  'open_discussion',
+  'post_progress',
+  'watch_work_item',
+  'request_information',
+  'publish_analysis_report',
+]);
+
+function collaborationFindingRefs(finding, type) {
+  return [...(finding?.affected_refs || []), ...(finding?.evidence_refs || [])]
+    .filter((ref) => String(ref).startsWith(`${type}:`))
+    .map((ref) => String(ref).slice(type.length + 1));
+}
+
+export function collaborationFindingActionDraft(entry, actionType) {
+  if (!collaborationFindingActionTypes.includes(actionType))
+    throw new Error('不支持的 Finding 转化动作');
+  const finding = entry?.finding || entry || {};
+  const findingId = String(entry?.findingId || finding.finding_id || '').trim();
+  const title = String(finding.title || 'Analysis Finding').slice(0, 240);
+  const summary = String(finding.summary || title);
+  const workItemIds = collaborationFindingRefs(finding, 'work_item');
+  const workflowInstanceIds = collaborationFindingRefs(
+    finding,
+    'workflow_instance',
+  );
+  const firstScopedRef = [
+    ['work_item', workItemIds[0]],
+    ['workflow_instance', workflowInstanceIds[0]],
+    ['turn', collaborationFindingRefs(finding, 'turn')[0]],
+  ].find(([, ref]) => ref);
+
+  if (actionType === 'create_work_item')
+    return {
+      action: actionType,
+      parameters: {
+        type: 'issue',
+        title,
+        description: summary,
+        priority: ['critical', 'high'].includes(finding.severity)
+          ? 'high'
+          : 'normal',
+        due_at: null,
+        labels: finding.category ? [String(finding.category)] : [],
+        related_work_item_ids: workItemIds,
+      },
+    };
+  if (actionType === 'open_discussion')
+    return {
+      action: actionType,
+      parameters: {
+        title,
+        body: summary,
+        scope: firstScopedRef
+          ? { type: firstScopedRef[0], ref: firstScopedRef[1] }
+          : { type: 'group' },
+        mentions: [],
+      },
+    };
+  if (actionType === 'post_progress')
+    return {
+      action: actionType,
+      parameters: {
+        summary,
+        completed: [],
+        next_steps: [],
+        blockers: [],
+        work_item_refs: workItemIds,
+        workflow_instance_refs: workflowInstanceIds,
+      },
+    };
+  if (actionType === 'watch_work_item')
+    return {
+      action: actionType,
+      parameters: { work_item_id: workItemIds[0] || '' },
+    };
+  if (actionType === 'request_information')
+    return {
+      action: actionType,
+      parameters: {
+        title,
+        question: summary,
+        affected_refs: [
+          ...new Set([
+            ...(finding.affected_refs || []),
+            ...(finding.evidence_refs || []),
+          ]),
+        ],
+        mentions: [],
+      },
+    };
+  return {
+    action: actionType,
+    parameters: {
+      title,
+      include_finding_ids: findingId ? [findingId] : [],
+      destination: 'principal_workspace',
+    },
+  };
+}
+
 export function buildCollaborationActionPreviewRequest(input) {
   const actions = (input.actions || []).map((entry) => {
     const requestId = String(entry.requestId || '').trim();
     const findingId = String(entry.findingId || '').trim();
-    const actionOrdinal = Number(entry.actionOrdinal);
+    const hasActionOrdinal =
+      entry.actionOrdinal !== undefined && entry.actionOrdinal !== null;
+    const actionOrdinal = hasActionOrdinal
+      ? Number(entry.actionOrdinal)
+      : undefined;
+    if (!requestId || !findingId)
+      throw new Error('转化动作缺少 request ID 或 Finding');
     if (
-      !requestId ||
-      !findingId ||
-      !Number.isInteger(actionOrdinal) ||
-      actionOrdinal < 0
+      hasActionOrdinal &&
+      (!Number.isInteger(actionOrdinal) || actionOrdinal < 0)
     )
-      throw new Error('建议动作缺少 Finding 或序号');
+      throw new Error('Agent 建议动作序号无效');
     if (
       !entry.action ||
       typeof entry.action !== 'object' ||
       Array.isArray(entry.action)
     )
-      throw new Error('建议动作必须是对象');
-    return { requestId, findingId, actionOrdinal, action: entry.action };
+      throw new Error('转化动作必须是对象');
+    if (!collaborationFindingActionTypes.includes(entry.action.action))
+      throw new Error('不支持的 Finding 转化动作');
+    return {
+      requestId,
+      findingId,
+      ...(hasActionOrdinal ? { actionOrdinal } : {}),
+      action: entry.action,
+    };
   });
-  if (!actions.length) throw new Error('请明确选择至少一个建议动作');
-  if (actions.length > 100) throw new Error('一次最多预览 100 个建议动作');
+  if (!actions.length) throw new Error('请明确选择至少一个转化动作');
+  if (actions.length > 100) throw new Error('一次最多预览 100 个转化动作');
   return { actions };
 }
 
@@ -242,18 +364,16 @@ export function collaborationAnalysisRunAccess(group, detail) {
     canSubmitExternal:
       external && ['awaiting_external_result', 'invalid'].includes(status),
     canExportExternal: external && status === 'awaiting_external_result',
-    canDecideFinding: [
-      'ready_for_review',
-      'partially_applied',
-      'stale',
-    ].includes(status),
+    canDecideFinding:
+      !stale && ['ready_for_review', 'partially_applied'].includes(status),
     canPreviewActions:
       mutable &&
       !stale &&
       ['ready_for_review', 'partially_applied'].includes(status),
     canApplyActions:
       mutable &&
-      ['ready_for_review', 'partially_applied', 'stale'].includes(status),
+      !stale &&
+      ['ready_for_review', 'partially_applied'].includes(status),
   };
 }
 
@@ -306,6 +426,50 @@ export function buildCollaborationStartTurnRequest(
   const selected = String(executorId || '').trim();
   if (!selected) throw new Error('辅助执行轮次必须选择执行器');
   return { expectedRevision, executorId: selected };
+}
+
+export function buildCollaborationRecoverTurnRequest(input) {
+  const previousAttempt = Number(input.previousAttempt);
+  if (!Number.isInteger(previousAttempt) || previousAttempt < 1)
+    throw new Error('恢复的 Turn attempt 必须是正整数');
+  const reason = String(input.reason || '').trim();
+  if (!reason) throw new Error('恢复原因不能为空');
+  if (reason.length > 4000) throw new Error('恢复原因最多 4000 个字符');
+  return {
+    expectedRevision: collaborationExpectedRevision(input.expectedRevision),
+    previousAttempt,
+    reason,
+  };
+}
+
+export function collaborationWorkflowInstanceCommand(instance) {
+  if (['draft', 'ready'].includes(instance?.lifecycle))
+    return { command: 'start', label: '启动' };
+  if (instance?.lifecycle === 'running')
+    return { command: 'pause', label: '暂停' };
+  if (instance?.lifecycle === 'paused')
+    return { command: 'resume', label: '恢复' };
+  return null;
+}
+
+export function collaborationCanRecoverTurn(group, instance, turn) {
+  if (
+    !collaborationCanMutate(group) ||
+    !instance ||
+    !turn ||
+    turn.state !== 'recovery_required' ||
+    instance.active_turn_id !== turn.turn_id
+  )
+    return false;
+  const principalId = group.localPrincipalId;
+  const grants =
+    group.projection?.permissionGrants?.[principalId]?.grants || [];
+  return Boolean(
+    instance.created_by_principal_id === principalId ||
+    instance.resolved_assignments?.[instance.business_state] === principalId ||
+    grants.includes('workflow_instance:manage_all') ||
+    grants.includes('group:admin'),
+  );
 }
 
 const collaborationMarkerPattern = /^[A-Za-z0-9][A-Za-z0-9._:@-]*$/u;

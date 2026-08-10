@@ -197,9 +197,27 @@ function projection(): CollaborationProjectionV3 {
         resolved_assignments: { review: ALICE },
         created_by_principal_id: BOB,
       },
+      workflow_recovery: {
+        instance_id: 'workflow_recovery',
+        definition_id: 'delivery',
+        lifecycle: 'recovery_required',
+        business_state: 'review',
+        active_turn_id: 'turn_recovery',
+        resolved_assignments: { review: ALICE },
+        created_by_principal_id: BOB,
+      },
     },
     stateExecutions: {},
-    turns: { turn_due: turn() },
+    turns: {
+      turn_due: turn(),
+      turn_recovery: turn({
+        turn_id: 'turn_recovery',
+        workflow_instance_id: 'workflow_recovery',
+        state: 'recovery_required',
+        start_deadline_at: null,
+        recovery_reason: 'Managed executor lost its process',
+      }),
+    },
     timeoutObservations: {},
     seenEventIds: ['event_old', 'event_new'],
     activity: [
@@ -317,6 +335,13 @@ describe('deterministic Collaboration Project Insight', () => {
           group: 'needs_action',
           resource_id: 'workflow_assigned',
           reason: 'workflow_state_assignment_ready',
+        }),
+        expect.objectContaining({
+          group: 'needs_action',
+          resource_type: 'turn',
+          resource_id: 'turn_recovery',
+          reason: 'turn_recovery_required',
+          severity: 'critical',
         }),
       ]),
     );

@@ -162,7 +162,7 @@ export class ManagedAnalysisExecutorRegistry {
 }
 
 interface ActiveRunOnceAnalysisExecution {
-  readonly prepared: PreparedManagedAnalysisExecution;
+  prepared: PreparedManagedAnalysisExecution | null;
   readonly executionRef: string;
   observation: ManagedAnalysisObservation;
 }
@@ -701,6 +701,7 @@ export class RunOnceManagedAnalysisExecutor implements ManagedAnalysisExecutor {
                   : {}),
               },
             };
+        active.prepared = null;
       })
       .catch((error) => {
         if (!active) {
@@ -719,8 +720,12 @@ export class RunOnceManagedAnalysisExecutor implements ManagedAnalysisExecutor {
             retryable: false,
           },
         };
+        active.prepared = null;
       })
-      .finally(() => removeWorkspace(prepared.workspacePath));
+      .finally(() => {
+        if (active) active.prepared = null;
+        removeWorkspace(prepared.workspacePath);
+      });
     void completion;
     return receipt;
   }

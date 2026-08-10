@@ -605,7 +605,27 @@ function automaticMaterialization(
         );
       break;
     }
-    case 'discussion_created':
+    case 'discussion_created': {
+      files.set(
+        `discussions/${event.aggregate_id}/thread.json`,
+        prettyCollaborationJson(
+          projection.discussions[event.aggregate_id]?.discussion,
+        ),
+      );
+      const message = event.payload.message as
+        | { message_id?: unknown }
+        | undefined;
+      if (typeof message?.message_id === 'string')
+        files.set(
+          `discussions/${event.aggregate_id}/messages/${message.message_id}.json`,
+          prettyCollaborationJson(
+            projection.discussions[event.aggregate_id]?.messages[
+              message.message_id
+            ],
+          ),
+        );
+      break;
+    }
     case 'discussion_resolved':
     case 'discussion_reopened':
       files.set(
