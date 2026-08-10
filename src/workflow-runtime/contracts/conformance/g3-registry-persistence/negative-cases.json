@@ -22,8 +22,8 @@
                 "version": "1.0.0"
               },
               "owner": {
-                "kind": "feature",
-                "feature_id": "fixture.feature"
+                "kind": "pack",
+                "pack_id": "fixture.pack"
               },
               "schema_ref": {
                 "id": "fixture.registry.schema",
@@ -54,8 +54,8 @@
                 "version": "1.0.0"
               },
               "owner": {
-                "kind": "feature",
-                "feature_id": "fixture.feature"
+                "kind": "pack",
+                "pack_id": "fixture.pack"
               },
               "schema_ref": {
                 "id": "fixture.registry.schema",
@@ -135,8 +135,8 @@
                 "version": "1.0.0"
               },
               "owner": {
-                "kind": "feature",
-                "feature_id": "fixture.feature"
+                "kind": "pack",
+                "pack_id": "fixture.pack"
               },
               "schema_ref": {
                 "id": "fixture.registry.schema",
@@ -167,8 +167,8 @@
                 "version": "1.0.0"
               },
               "owner": {
-                "kind": "feature",
-                "feature_id": "fixture.feature"
+                "kind": "pack",
+                "pack_id": "fixture.pack"
               },
               "schema_ref": {
                 "id": "fixture.registry.schema",
@@ -256,8 +256,8 @@
                 "version": "1.0.0"
               },
               "owner": {
-                "kind": "feature",
-                "feature_id": "fixture.feature"
+                "kind": "pack",
+                "pack_id": "fixture.pack"
               },
               "schema_ref": {
                 "id": "fixture.registry.schema",
@@ -288,8 +288,8 @@
                 "version": "1.0.0"
               },
               "owner": {
-                "kind": "feature",
-                "feature_id": "fixture.feature"
+                "kind": "pack",
+                "pack_id": "fixture.pack"
               },
               "schema_ref": {
                 "id": "fixture.registry.schema",
@@ -369,8 +369,8 @@
                 "version": "1.0.0"
               },
               "owner": {
-                "kind": "feature",
-                "feature_id": "fixture.feature"
+                "kind": "pack",
+                "pack_id": "fixture.pack"
               },
               "schema_ref": {
                 "id": "fixture.registry.schema",
@@ -401,8 +401,8 @@
                 "version": "1.0.0"
               },
               "owner": {
-                "kind": "feature",
-                "feature_id": "fixture.feature"
+                "kind": "pack",
+                "pack_id": "fixture.pack"
               },
               "schema_ref": {
                 "id": "fixture.registry.schema",
@@ -471,5 +471,5 @@
       }
     ]
   },
-  "hash": "sha256:d57c0d04ec25cdef49c593ad6a6a05dc6df17d04227e45d8783a7279123b3c46"
+  "hash": "sha256:b935249705dd5f56146cf3907d139c83572e49881419fe41b6abb7bb39037b7d"
 }

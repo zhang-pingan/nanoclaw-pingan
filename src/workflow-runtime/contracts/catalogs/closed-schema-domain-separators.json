@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-closed-schema-domain-separators:1\n",
-  "hash": "sha256:a30a17e0fe62f8de42c6689ffd7d38f2cfb5d2cc56b180b113c18683ea63c635",
+  "hash": "sha256:3d3edbf713ddf5bfa0db6ca2ac00fcb422ded3fb92df95e6e90b1bb872a299ef",
   "payload": {
     "entries": [
       {
@@ -38,12 +38,12 @@
         "domain_separator": "icarus:workflow-definition-schema:1\n"
       },
       {
-        "format": "icarus.workflow-feature-manifest-v2-schema/1",
-        "domain_separator": "icarus:workflow-feature-manifest-v2-schema:1\n"
-      },
-      {
         "format": "icarus.workflow-graph-scope-source-schema/1",
         "domain_separator": "icarus:workflow-graph-scope-source-schema:1\n"
+      },
+      {
+        "format": "icarus.workflow-pack-manifest-schema/1",
+        "domain_separator": "icarus:workflow-pack-manifest-schema:1\n"
       },
       {
         "format": "icarus.workflow-recipe-schema/1",

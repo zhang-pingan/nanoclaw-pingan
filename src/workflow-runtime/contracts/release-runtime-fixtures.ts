@@ -50,7 +50,7 @@ function resource(
     format: 'icarus.workflow-registry-resource/1',
     resource_type: resourceType,
     ref,
-    owner: { kind: 'feature', feature_id: 'fixture.feature' },
+    owner: { kind: 'pack', pack_id: 'fixture.pack' },
     schema_ref: schema.ref,
     schema_hash: schema.content_hash,
     content,
@@ -68,8 +68,8 @@ function resource(
 
 export interface ReleaseRuntimeFixture {
   batch: G3RegistryPersistenceBatch;
-  feature_release_ref: VersionedRef;
-  feature_release_hash: Sha256Hash;
+  pack_release_ref: VersionedRef;
+  pack_release_hash: Sha256Hash;
   execution_artifact: { ref: VersionedRef; hash: Sha256Hash };
 }
 
@@ -80,22 +80,22 @@ export function releaseRuntimeFixtureForTest(): ReleaseRuntimeFixture {
   );
   if (!schema) throw new Error('Release runtime fixture schema missing');
 
-  const featureReleaseRef = {
-    id: 'fixture.feature-release',
+  const packReleaseRef = {
+    id: 'fixture.pack-release',
     version: '1.0.0',
   };
-  const featureReleaseHash =
+  const packReleaseHash =
     'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' as Sha256Hash;
   const artifactRef = {
     id: 'fixture.execution-artifact',
     version: '1.0.0',
   };
   const artifact = resource(
-    'feature_execution_artifact',
+    'pack_execution_artifact',
     artifactRef,
     {
       ref: artifactRef,
-      feature_release_ref: featureReleaseRef,
+      pack_release_ref: packReleaseRef,
       runtime_kind: 'node_bundle',
       artifact_ref: 'blob:fixture-node-bundle',
       artifact_hash:
@@ -115,7 +115,7 @@ export function releaseRuntimeFixtureForTest(): ReleaseRuntimeFixture {
     executorRef,
     {
       ref: executorRef,
-      provider_feature_ref: featureReleaseRef,
+      provider_pack_ref: packReleaseRef,
       execution_artifact_ref: artifactRef,
       execution_artifact_hash: artifact.content_hash,
       entry_symbol: 'execute',
@@ -162,8 +162,8 @@ export function releaseRuntimeFixtureForTest(): ReleaseRuntimeFixture {
       snapshot,
       created_at_ms: 1784604172000,
     },
-    feature_release_ref: featureReleaseRef,
-    feature_release_hash: featureReleaseHash,
+    pack_release_ref: packReleaseRef,
+    pack_release_hash: packReleaseHash,
     execution_artifact: {
       ref: artifactRef,
       hash: artifact.content_hash,

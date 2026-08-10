@@ -27,6 +27,10 @@ import {
   SyncHookJSONOutput,
 } from '@anthropic-ai/claude-agent-sdk';
 import { fileURLToPath } from 'url';
+import {
+  resolveWorkflowPackRuntimeOptions,
+  type ContainerWorkflowPackExecutionResources,
+} from './workflow-pack-resources.js';
 
 interface ContainerInput {
   prompt: string;
@@ -48,6 +52,7 @@ interface ContainerInput {
   executionContext?: {
     delegationId?: string;
   };
+  workflowPackExecutionResources?: ContainerWorkflowPackExecutionResources;
 }
 
 interface ContainerOutput {
@@ -1425,6 +1430,11 @@ function buildQueryOptions(
 ) {
   const isExternalSystemOnce =
     containerInput.executionMode === 'external_system_once';
+  const workflowPackRuntime = containerInput.workflowPackExecutionResources
+    ? resolveWorkflowPackRuntimeOptions(
+        containerInput.workflowPackExecutionResources,
+      )
+    : null;
   // Load global CLAUDE.md as additional system context (shared across all agents)
   const globalClaudeMdPath = '/workspace/global/CLAUDE.md';
   let globalClaudeMd: string | undefined;
@@ -1453,47 +1463,50 @@ function buildQueryOptions(
   const sdkQueryEnv = isExternalSystemOnce
     ? {
         ...sdkEnv,
+        ...workflowPackRuntime?.environment,
         CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '0',
         CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
       }
     : sdkEnv;
-  const allowedTools = isExternalSystemOnce
-    ? [
-        'Bash',
-        'Read',
-        'Write',
-        'Edit',
-        'Glob',
-        'Grep',
-        'WebSearch',
-        'WebFetch',
-        'Task',
-        'TaskOutput',
-        'TaskStop',
-        'TodoWrite',
-        'NotebookEdit',
-      ]
-    : [
-        'Bash',
-        'Read',
-        'Write',
-        'Edit',
-        'Glob',
-        'Grep',
-        'WebSearch',
-        'WebFetch',
-        'Task',
-        'TaskOutput',
-        'TaskStop',
-        'TeamCreate',
-        'TeamDelete',
-        'SendMessage',
-        'TodoWrite',
-        'ToolSearch',
-        'Skill',
-        'NotebookEdit',
-        'mcp__icarus__*',
-      ];
+  const allowedTools = workflowPackRuntime
+    ? workflowPackRuntime.allowedTools
+    : isExternalSystemOnce
+      ? [
+          'Bash',
+          'Read',
+          'Write',
+          'Edit',
+          'Glob',
+          'Grep',
+          'WebSearch',
+          'WebFetch',
+          'Task',
+          'TaskOutput',
+          'TaskStop',
+          'TodoWrite',
+          'NotebookEdit',
+        ]
+      : [
+          'Bash',
+          'Read',
+          'Write',
+          'Edit',
+          'Glob',
+          'Grep',
+          'WebSearch',
+          'WebFetch',
+          'Task',
+          'TaskOutput',
+          'TaskStop',
+          'TeamCreate',
+          'TeamDelete',
+          'SendMessage',
+          'TodoWrite',
+          'ToolSearch',
+          'Skill',
+          'NotebookEdit',
+          'mcp__icarus__*',
+        ];
 
   const resolvedModel = selectedModel || MODEL_DEFAULT;
   log(`Model from host: model=${resolvedModel}`);
@@ -1538,7 +1551,9 @@ function buildQueryOptions(
     resumeSessionAt: useIsolatedSession ? undefined : overrides.resumeAt,
     persistSession: useIsolatedSession ? false : undefined,
     systemPrompt: isExternalSystemOnce
-      ? containerInput.system || ''
+      ? [containerInput.system, workflowPackRuntime?.systemPromptAppend]
+          .filter((value): value is string => Boolean(value && value.trim()))
+          .join('\n\n')
       : nonExternalSystemAppend
         ? {
             type: 'preset' as const,
@@ -1552,26 +1567,55 @@ function buildQueryOptions(
       const text = data.trim();
       if (text) log(`[sdk stderr] ${text}`);
     },
-    permissionMode: 'bypassPermissions' as const,
-    allowDangerouslySkipPermissions: true,
-    settingSources: isExternalSystemOnce
-      ? []
-      : (['project', 'user'] as Array<'project' | 'user'>),
-    mcpServers: isExternalSystemOnce
-      ? undefined
-      : {
-          icarus: {
-            command: 'node',
-            args: [mcpServerPath],
-            env: {
-              ICARUS_CHAT_JID: containerInput.chatJid,
-              ICARUS_AGENT_FOLDER: containerInput.agentFolder,
-              ICARUS_IS_MAIN: containerInput.isMain ? '1' : '0',
-              ICARUS_DELEGATION_ID:
-                containerInput.executionContext?.delegationId || '',
+    permissionMode:
+      workflowPackRuntime?.permissionMode ?? ('bypassPermissions' as const),
+    allowDangerouslySkipPermissions: workflowPackRuntime ? false : true,
+    settingSources: workflowPackRuntime
+      ? workflowPackRuntime.settingSources
+      : isExternalSystemOnce
+        ? []
+        : (['project', 'user'] as Array<'project' | 'user'>),
+    mcpServers: workflowPackRuntime
+      ? {
+          ...workflowPackRuntime.mcpServers,
+          ...(containerInput.workflowPackExecutionResources?.permissions
+            .host_actions.length
+            ? {
+                icarus: {
+                  command: 'node',
+                  args: [mcpServerPath],
+                  env: {
+                    ICARUS_CHAT_JID: containerInput.chatJid,
+                    ICARUS_AGENT_FOLDER: containerInput.agentFolder,
+                    ICARUS_IS_MAIN: containerInput.isMain ? '1' : '0',
+                    ICARUS_DELEGATION_ID:
+                      containerInput.executionContext?.delegationId || '',
+                    ICARUS_HOST_ACTION_RECEIPTS:
+                      containerInput.workflowPackExecutionResources?.permissions
+                        .effect_ceiling === 'read_only'
+                        ? '1'
+                        : '0',
+                  },
+                },
+              }
+            : {}),
+        }
+      : isExternalSystemOnce
+        ? undefined
+        : {
+            icarus: {
+              command: 'node',
+              args: [mcpServerPath],
+              env: {
+                ICARUS_CHAT_JID: containerInput.chatJid,
+                ICARUS_AGENT_FOLDER: containerInput.agentFolder,
+                ICARUS_IS_MAIN: containerInput.isMain ? '1' : '0',
+                ICARUS_DELEGATION_ID:
+                  containerInput.executionContext?.delegationId || '',
+                ICARUS_HOST_ACTION_RECEIPTS: '0',
+              },
             },
           },
-        },
     hooks: {
       PreCompact: [
         { hooks: [createPreCompactHook(containerInput.assistantName)] },

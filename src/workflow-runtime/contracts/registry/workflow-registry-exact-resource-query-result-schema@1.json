@@ -60,7 +60,7 @@
               "evaluator",
               "execution_policy",
               "executor_implementation",
-              "feature_execution_artifact",
+              "pack_execution_artifact",
               "graph_policy",
               "graph_template",
               "notification_contract",
@@ -72,8 +72,10 @@
               "root_finalization_policy",
               "routing_capability",
               "routing_scope",
+              "runtime_supported_limits",
               "schema",
               "scope_interface",
+              "sqlite_execution_profile",
               "tool_binding",
               "wait_contract"
             ]
@@ -144,7 +146,7 @@
                 "evaluator",
                 "execution_policy",
                 "executor_implementation",
-                "feature_execution_artifact",
+                "pack_execution_artifact",
                 "graph_policy",
                 "graph_template",
                 "notification_contract",
@@ -156,8 +158,10 @@
                 "root_finalization_policy",
                 "routing_capability",
                 "routing_scope",
+                "runtime_supported_limits",
                 "schema",
                 "scope_interface",
+                "sqlite_execution_profile",
                 "tool_binding",
                 "wait_contract"
               ]
@@ -242,13 +246,13 @@
             "additionalProperties": false,
             "required": [
               "kind",
-              "feature_id"
+              "pack_id"
             ],
             "properties": {
               "kind": {
-                "const": "feature"
+                "const": "pack"
               },
-              "feature_id": {
+              "pack_id": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 255,
@@ -299,7 +303,7 @@
               "evaluator",
               "execution_policy",
               "executor_implementation",
-              "feature_execution_artifact",
+              "pack_execution_artifact",
               "graph_policy",
               "graph_template",
               "notification_contract",
@@ -311,8 +315,10 @@
               "root_finalization_policy",
               "routing_capability",
               "routing_scope",
+              "runtime_supported_limits",
               "schema",
               "scope_interface",
+              "sqlite_execution_profile",
               "tool_binding",
               "wait_contract"
             ]
@@ -356,7 +362,7 @@
               "evaluator",
               "execution_policy",
               "executor_implementation",
-              "feature_execution_artifact",
+              "pack_execution_artifact",
               "graph_policy",
               "graph_template",
               "notification_contract",
@@ -368,8 +374,10 @@
               "root_finalization_policy",
               "routing_capability",
               "routing_scope",
+              "runtime_supported_limits",
               "schema",
               "scope_interface",
+              "sqlite_execution_profile",
               "tool_binding",
               "wait_contract"
             ]
@@ -412,5 +420,5 @@
       }
     }
   },
-  "hash": "sha256:8f4e31e804b9498c7f0eff223321367f48fb3b98baba1e36ba223142a2fd8f63"
+  "hash": "sha256:46d0db26f387d87bedc2d671986878320d2f1c329f9a72bed32e5376cd37c3c7"
 }

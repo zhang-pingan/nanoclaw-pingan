@@ -27,7 +27,7 @@ function contract(): CardPresentationDocument {
   return {
     format: 'icarus.card-presentation/1',
     ref: { id: 'g7.card', version: '1.0.0' },
-    owner_feature_id: 'g7-feature',
+    owner_pack_id: 'g7-pack',
     template_ref: { id: 'g7.card-template', version: '1.0.0' },
     template_hash: g7Hash('card-template'),
     variable_schema_ref: { id: 'g7.card-variables', version: '1.0.0' },

@@ -37,8 +37,8 @@
         "domain_separator": "icarus:workflow-publisher-invocation:1\n"
       },
       {
-        "format": "icarus.workflow-staged-feature-release/1",
-        "domain_separator": "icarus:workflow-staged-feature-release:1\n"
+        "format": "icarus.workflow-staged-pack-release/1",
+        "domain_separator": "icarus:workflow-staged-pack-release:1\n"
       },
       {
         "format": "icarus.workflow-staged-publish-domain-separators/1",
@@ -74,5 +74,5 @@
       }
     ]
   },
-  "hash": "sha256:06b60d50c0e6aaddca763b24e24d23f20a3474869d8cb2d8e0c1b9843251b3ea"
+  "hash": "sha256:e80fed85177fafef886250c70f9d391580072dda5a7d5cea601e293a4057d562"
 }

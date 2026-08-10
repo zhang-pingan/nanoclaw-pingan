@@ -7,11 +7,11 @@
 
 ## 概述
 
-该设计方案描述 `startup-opportunity` Feature 提供的一组创业机会调研 Recipe。首版明确包含两种不同任务：面向宽泛方向发现并排名多个机会的 `opportunity_discovery`，以及面向一个已有产品/功能概念验证市场假设的 `concept_market_validation`。两者共享 Research Kernel、证据模型和受限 capability catalog，但使用不同 Workflow Definition、输入输出合同、Policy、完成条件与报告结构。
+该设计方案描述 `startup-opportunity` Workflow Pack 提供的一组创业机会调研 Recipe。首版明确包含两种不同任务：面向宽泛方向发现并排名多个机会的 `opportunity_discovery`，以及面向一个已有产品/功能概念验证市场假设的 `concept_market_validation`。两者共享 Research Kernel、证据模型和受限 capability catalog，但使用不同 Workflow Definition、输入输出合同、Policy、完成条件与报告结构。
 
 `opportunity_discovery` 不再只等同于“行业发现”。它通过 `discovery_profile` 和 `research_axes` 支持一般机会发现、行业优先、AI 能力优先和行业需求 × AI 能力混合发现。AI 能力变化是需求、任务和替代方案研究中的解决方案证据来源；它可以提高 capability seed 和方案候选的优先级，但不再作为独立业务子图产出另一套机会本体。
 
-本文不再承载 Icarus core workflow runtime 的框架改造设计；fan-in、外层 State、运行时动态 DAG、graph compiler、graph execution、checkpoint、Task Intake/Macro Router、Recipe Catalog、Feature lifecycle 和 Workbench/Trace 展示等通用能力统一由以下框架方案定义：
+本文不再承载 Icarus core workflow runtime 的框架改造设计；fan-in、外层 State、运行时动态 DAG、graph compiler、graph execution、checkpoint、Task Intake/Macro Router、Recipe Catalog、Pack lifecycle 和 Workbench/Trace 展示等通用能力统一由以下框架方案定义：
 
 ```text
 docs/dynamic-workflow-runtime.md
@@ -22,7 +22,7 @@ docs/dynamic-workflow-runtime.md
 - domain Recipe Descriptor、capability、role/skill source、artifact contract 和 evaluator。
 - 调研 lane catalog 和默认策略。
 - opportunity thesis、判断层模型、评分、反证和报告结构。
-- Macro Router 如何在 Feature routing scope 内选择 exact Recipe，以及 Micro Planner 如何为已选 Recipe 的特定 graph state 生成本次 Scope Spec。
+- Macro Router 如何在 Pack routing scope 内选择 exact Recipe，以及 Micro Planner 如何为已选 Recipe 的特定 graph state 生成本次 Scope Spec。
 - graph 执行后的业务 fan-in、gap analysis、follow-up graph、解决方案比较、综合排序和最终决策建议。
 
 方案同时涉及 GPT Researcher 与 Icarus 两个项目，但不以任一仓库作为唯一叙述主体。
@@ -110,8 +110,8 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 
 ## 目标
 
-- 作为 `features/startup-opportunity` Feature 发布多个 versioned Recipe，而不是新增业务专用 workflow engine 或把领域代码静态写入 core。
-- 通过 Feature routing scope 把 Macro Router 限制在 `opportunity_discovery` 与 `concept_market_validation` 等本领域 Recipe；产品设计、PM Pipeline 等无关 Definition 天然不进入候选集。
+- 作为 `workflow-packs/startup-opportunity` Workflow Pack 发布多个 versioned Recipe，而不是新增业务专用 workflow engine 或把用户可选业务 Workflow 静态写入 Core。
+- 通过 Pack routing scope 把 Macro Router 限制在 `opportunity_discovery` 与 `concept_market_validation` 等本领域 Recipe；产品设计、PM Pipeline 等无关 Definition 天然不进入候选集。
 - 让各 Recipe 的 Micro Planner 只为指定 graph state 生成本次 Scope Spec；实际启用哪些 lane、节点依赖、并行关系、补充验证和 follow-up 由 Planner 决定，但不能修改外层 State、Capability 合同、Policy 或 output schema。
 - 明确 workflow action 只负责确定性系统操作；调研、检索控制、抽取、综合等非确定性任务由 agent delegation 节点完成。
 - 参考 GPT Researcher deep 的流程设计，抽象为可被 Icarus lane 复用的 Research Kernel。
@@ -145,7 +145,7 @@ Icarus 项目（`/Users/chelaile/IdeaProjects/icarus`）已有 workflow、delega
 - 不把成品服务降级成一次性报告生成；需要保留结构化判断层、评分、反证和可追踪审计产物。
 - 不在本方案中重新定义 core workflow runtime；并行/fan-in、Task Intake、Recipe routing 和动态 DAG 是 `docs/dynamic-workflow-runtime.md` 索引的通用能力。
 - 不让一个全局 Planner 同时选择 Recipe、Workflow Definition 和图内能力；Macro Router 只选本 routing scope 内 exact Recipe，Micro Planner 只规划已选 Recipe 的 graph state。
-- 当前 Feature 以消费者产品为主体；不默认原生 App 一定是首发形态，而是在 `native_app`、`mini_program`、`mobile_web`、`hybrid_app` 和必要时的人工辅助验证之间比较交付形态。SaaS、企业销售和 API/基础设施不是本版本的目标交付形态。
+- 当前 Pack 以消费者产品为主体；不默认原生 App 一定是首发形态，而是在 `native_app`、`mini_program`、`mobile_web`、`hybrid_app` 和必要时的人工辅助验证之间比较交付形态。SaaS、企业销售和 API/基础设施不是本版本的目标交付形态。
 - 不把 AI 作为独立业务 Recipe 或机会本体；AI 是解决方案候选的一类能力证据，也是相关概念验证中的条件性评估维度。
 - 不把模型发布、Benchmark 提升、融资热度、Demo 或 Prompt 技巧直接当作创业机会；AI 机会必须回连真实任务、买单方、可部署工作流和可验证结果。
 - 不把 `AI Tutor`、`智能助手`、`错题本`、`社区`、`SaaS` 这类功能词或品类词直接当作机会定位；它们必须回到用户自然语言和入口场景中验证。
@@ -441,7 +441,7 @@ marketing bridge: 如何把用户痛点翻译成买单方认可的结果、风�
 - `market_motion=consumer` 作为当前默认市场动作；`acquisition_motion` 使用 `direct|community|channel|marketplace`，`buyer_model` 使用 `self_payer|household_payer|sponsor_payer|provider_channel`。
 - discovery profile，例如 `general`、`industry_first`、`ai_first` 或 `hybrid`。
 - research axes，例如 `industry_demand`、`cross_industry_demand`、`solution_evidence`、`buyer_market`；`ai_capability` 只表示解决方案证据检索 lens，不表示独立机会分支。
-- AI 解决方案偏好和部署边界，例如应用内 AI、工作流辅助、云端、端侧或开源优先；不将 AI 基础设施作为本 Feature 的默认交付形态。
+- AI 解决方案偏好和部署边界，例如应用内 AI、工作流辅助、云端、端侧或开源优先；不将 AI 基础设施作为本 Pack 的默认交付形态。
 
 如果用户没有显式提供这些约束，workflow 应生成默认假设，并在最终报告和 JSON artifact 中明确记录。
 
@@ -564,7 +564,7 @@ hard gates
 
 ### 16.3 人工控制边界与 Agent 输出质量
 
-本 Feature 负责提供决策建议，不负责替用户执行创业验证。人工控制只在以下边界介入：
+本 Pack 负责提供决策建议，不负责替用户执行创业验证。人工控制只在以下边界介入：
 
 - scope assumptions 或高影响约束缺失时请求澄清。
 - 用户主动要求高成本 follow-up 时确认范围和预算。
@@ -653,7 +653,7 @@ startup opportunity recipe
 
 ### 19. Macro Router 选择 Recipe，Micro Planner 只规划 graph state
 
-Task Intake 先冻结 raw query、显式 `analysis_mode`、结构化约束、附件引用和 principal。Feature 使用 pinned routing scope：
+Task Intake 先冻结 raw query、显式 `analysis_mode`、结构化约束、附件引用和 principal。Pack 使用 pinned routing scope：
 
 ```text
 startup-opportunity.market-research@1.0.0
@@ -668,7 +668,7 @@ Macro Router 只输出 exact RecipeRef。Recipe Descriptor 不可变绑定 Defin
 
 ### 20. Planner 只能实例化受信任 capability
 
-Planner 可以选择 node、edge、condition、input binding、subgraph/map/expand 和 completion policy，但每个 delegation/system node 只能引用 Feature 发布且 Recipe policy allowlist 允许的 exact `capability_ref`。Planner 不能在 node 内声明 role、skill、prompt、tool、artifact contract、evaluator 或 quality gate。
+Planner 可以选择 node、edge、condition、input binding、subgraph/map/expand 和 completion policy，但每个 delegation/system node 只能引用 Pack 发布且 Recipe policy allowlist 允许的 exact `capability_ref`。Planner 不能在 node 内声明 role、skill、prompt、tool、artifact contract、evaluator 或 quality gate。
 
 行业特定维度不能通过“任意 Agent”逃逸。需要开放式行业扩展时使用受限 capability `startup-opportunity.bounded-domain-research-lane`：它固定 executor、role/skill、Research Kernel、工具、文件范围、artifact/evaluator 和输出 schema，只把 `lane_kind`、`research_goal`、query/source preference 等作为 typed data input。新增真正不同的工具或执行合同必须先发布新 capability version 并更新 Recipe allowlist。
 
@@ -1771,7 +1771,7 @@ AI profile 还必须输出以下详细指标；它们由独立 score input 生�
 | `capability_half_life` | 当前能力窗口预计能维持多久，模型升级对机会是增强还是替代 |
 | `ai_adoption_trust` | 安全、隐私、可解释性、家庭责任和消费者信任是否允许进入目标工作流 |
 
-这里的 `data_feedback_moat` 指候选产品自身是否能从用户授权数据、纠错和工作流状态中形成持续改进条件，不表示本 Feature 要追踪创业结果或建立跨 Run Business Outcome 反馈闭环。
+这里的 `data_feedback_moat` 指候选产品自身是否能从用户授权数据、纠错和工作流状态中形成持续改进条件，不表示本 Pack 要追踪创业结果或建立跨 Run Business Outcome 反馈闭环。
 
 AI hard gate 在加权排序前执行：
 
@@ -2270,7 +2270,7 @@ class OpportunityReporter:
 - graph run/node/edge 持久化。
 - node-level delegation、artifact contract、evaluator、quality gate。
 - join policy、fan-in context、branch/node retry、checkpoint。
-- Workflow lifetime budget、RuntimeSafetyCeilings、Feature draining/version retention。
+- Workflow lifetime budget、RuntimeSafetyCeilings、Pack disable/version retention。
 - Workbench/Trace 对 ready-node concurrency 和 dynamic DAG 的可观测性。
 
 统一由 `docs/dynamic-workflow-runtime.md` 索引的machine Contracts与Runtime实现定义。
@@ -2337,17 +2337,7 @@ Research Kernel 可以参考 GPT Researcher 的以下流程，但不直接成为
 
 ### 不单独做 Opportunity Service
 
-术语上，`Opportunity service` 应改名为 `opportunity-recon host toolkit` 或 `opportunity-recon domain module`，避免误解。
-
-它不应该是第二个线程服务或第二个编排器，而是 `startup-opportunity` Feature 内的 host 侧领域工具模块：
-
-```text
-features/startup-opportunity/host/opportunity-recon/types.ts
-features/startup-opportunity/host/opportunity-recon/evidence-store.ts
-features/startup-opportunity/host/opportunity-recon/report-writer.ts
-features/startup-opportunity/host/opportunity-recon/request-dispatcher.ts
-features/startup-opportunity/host/opportunity-recon/research-kernel.ts
-```
+`startup-opportunity` Pack 不加载 Host service，也不拥有 API route、后台服务或第二个编排器。需要联网检索、evidence 持久化或确定性计算时，Pack 只发布 declarative Capability/Tool binding，并引用 Core allowlist 中 exact、静态注册的 Host Capability/Adapter。即使某个受信任 Adapter 只服务这个 Pack，其实现也属于 Core build-time Host 模块，不位于 Pack 目录，不由 `pack.json` 动态加载。
 
 职责只包括：
 
@@ -2367,63 +2357,76 @@ features/startup-opportunity/host/opportunity-recon/research-kernel.ts
 - 隐藏 LLM 调用。
 - 直接生成最终创业结论。
 
-### Feature Package 与 Workflow 定义
+### Workflow Pack 与 Workflow 定义
 
-Startup Opportunity 必须像 PM Pipeline 一样作为 Feature Package 接入，不能把领域 host、workflow、skill 或 contract 静态写进 core：
+Startup Opportunity 必须像 PM Pipeline 一样作为声明式 Workflow Pack 接入。Core 不包含它的用户可选业务 Recipe；Pack 也不包含 Host、API、renderer 或 migration lifecycle：
 
 ```text
-features/startup-opportunity/
-  feature.json
-  host/
-    index.ts
-    api.ts
-    opportunity-recon/
-  renderer/
-  container/
-    workflow-definitions/
-      startup_opportunity_opportunity_discovery.json
-      startup_opportunity_concept_validation.json
-    workflow-recipes/
-    workflow-routing-scopes/
-    workflow-routing-capabilities/
-    workflow-execution-policies/
-    workflow-capabilities/
-    workflow-schemas/
-    workflow-graph-interfaces/
-    workflow-graph-templates/
-    workflow-graph-policies/
-    workflow-wait-contracts/
+workflow-packs/startup-opportunity/
+  pack.json
+  workflow-src/
+    recipes/
+    definitions/
+    routing-scopes/
+    execution-policies/
+    command-policies/
+    capabilities/
+    schemas/
+    graph-interfaces/
+    graph-templates/
+    graph-policies/
+    wait-contracts/
     artifact-contracts/
-    workflow-evaluators/
+    evaluators/
+    prompts/
+    tool-bindings/
+  resources/
     agents/
     skills/
     mcp/
+    scripts/
+    templates/
 ```
 
-两个 Definition 分别固定机会发现和概念验证的外层 State、named exit、error/cancel route 和 report contract。机会发现 Definition 内允许通过 typed `discovery_profile` / `research_axes` 选择需求、市场和解决方案证据 lane，但不能改变决策建议的宏观目标；概念验证始终输出单 thesis verdict。它们可以共享 exact capability refs，但不能让 Planner 在运行时把一种宏观流程改成另一种。Feature manifest 必须声明上述 Graph resource 目录；这依赖 Dynamic Framework 对 `FeatureResources` parser/registry 的同步扩展。
+两个 Definition 分别固定机会发现和概念验证的外层 State、named exit、error/cancel route 和 report contract。机会发现 Definition 内允许通过 typed `discovery_profile` / `research_axes` 选择需求、市场和解决方案证据 lane，但不能改变决策建议的宏观目标；概念验证始终输出单 thesis verdict。它们可以共享 exact capability refs，但不能让 Planner 在运行时把一种宏观流程改成另一种。`icarus.workflow-pack/1` 的 `workflow_resources` 必须逐项声明 kind、exact ref、portable source path 和 source byte hash；Capability 只能引用 allowlisted Core Executor/Adapter binding。
 
 ```json
 {
-  "id": "startup-opportunity",
-  "version": "1.0.0",
-  "resources": {
-    "workflowDefinitions": "./container/workflow-definitions",
-    "workflowRecipes": "./container/workflow-recipes",
-    "workflowRoutingScopes": "./container/workflow-routing-scopes",
-    "workflowRoutingCapabilities": "./container/workflow-routing-capabilities",
-    "workflowExecutionPolicies": "./container/workflow-execution-policies",
-    "workflowCapabilities": "./container/workflow-capabilities",
-    "workflowSchemas": "./container/workflow-schemas",
-    "workflowGraphInterfaces": "./container/workflow-graph-interfaces",
-    "workflowGraphTemplates": "./container/workflow-graph-templates",
-    "workflowGraphPolicies": "./container/workflow-graph-policies",
-    "workflowWaitContracts": "./container/workflow-wait-contracts",
-    "artifactContracts": "./container/artifact-contracts",
-    "workflowEvaluators": "./container/workflow-evaluators",
-    "agents": "./container/agents",
-    "skills": "./container/skills",
-    "mcp": "./container/mcp"
-  }
+  "format": "icarus.workflow-pack/1",
+  "pack_ref": { "id": "startup-opportunity", "version": "1.0.0" },
+  "display_name": "Startup Opportunity",
+  "description": "Evidence-grounded opportunity workflows",
+  "namespace": "startup_opportunity",
+  "owner_principal_ref": "human:local-owner",
+  "dependencies": [],
+  "workflow_resources": [
+    {
+      "kind": "recipe",
+      "ref": { "id": "startup-opportunity.opportunity-discovery", "version": "1.0.0" },
+      "source_path": "workflow-src/recipes/opportunity-discovery.json",
+      "expected_source_hash": "sha256:..."
+    },
+    {
+      "kind": "recipe",
+      "ref": { "id": "startup-opportunity.concept-validation", "version": "1.0.0" },
+      "source_path": "workflow-src/recipes/concept-validation.json",
+      "expected_source_hash": "sha256:..."
+    }
+  ],
+  "execution_resources": {
+    "agents": "resources/agents",
+    "skills": "resources/skills",
+    "mcp": "resources/mcp",
+    "scripts": "resources/scripts",
+    "templates": "resources/templates"
+  },
+  "permissions": {
+    "host_actions": [],
+    "file_scopes": [],
+    "mcp_servers": [],
+    "effect_ceiling": "workspace_write"
+  },
+  "manifest_hash": "sha256:..."
 }
 ```
 
@@ -2646,14 +2649,14 @@ startup-opportunity.followup-graph@1
 
 Definition 必须完整覆盖 named exits：opportunity discovery `completed -> lane_result_validate -> solution_hypothesis_evaluate/opportunity_thesis`、`partial -> discovery_gap_analysis`、`insufficient_evidence -> manual_review/report limitation`；概念 validation `completed -> hypothesis_reduce`、`partial -> validation_gap_analysis`、`insufficient_evidence -> concept_verdict`。Engine error、local cancel 和 global cancel 使用框架独立可信路径，不能伪装成业务 `insufficient_evidence`。
 
-Feature 发布的每个 capability 固定 exact executor/role/skills/prompt skeleton、typed ports、artifact/evaluator/quality gate、tool/MCP/file scope、retry/timeout、effect/cancellation contract。Research capability 原则上 `pure` 或只通过幂等 evidence MCP 写入 session；evidence record operation key 由 `session_id + canonical source/query/content hash` 生成。Graph source 示例只能写 `capability_ref`、typed bindings 和更严格 retry/timeout。
+Pack 发布的每个 capability 固定 exact Core executor binding、role/skills/prompt skeleton、typed ports、artifact/evaluator/quality gate、tool/MCP/file scope、retry/timeout、effect/cancellation contract。Research capability 原则上 `pure` 或只通过 allowlisted、幂等 evidence MCP 写入 session；evidence record operation key 由 `session_id + canonical source/query/content hash` 生成。Graph source 示例只能写 `capability_ref`、typed bindings 和更严格 retry/timeout。
 
 ### Skill 设计
 
 新增 skills：
 
 ```text
-features/startup-opportunity/container/skills/
+workflow-packs/startup-opportunity/resources/skills/
   opportunity-scope-framing/SKILL.md
   opportunity-concept-framing/SKILL.md
   opportunity-research-plan/SKILL.md
@@ -2701,7 +2704,7 @@ features/startup-opportunity/container/skills/
   opportunity-report-writer/SKILL.md
 ```
 
-并在 Feature 自己的 agent/skill resource 中新增 role 映射；这些 role/skill 仅供 capability publisher 解析，Workflow Definition 和 Graph Spec 不直接组合它们。例如：
+并在 Pack 自己的 agent/skill execution resource 中新增 role 映射；这些 role/skill 仅供 capability publisher 解析，Workflow Definition 和 Graph Spec 不直接组合它们。例如：
 
 ```json
 {
@@ -2855,7 +2858,7 @@ host MCP tool 负责：
 
 host MCP tool 可以执行联网 search/fetch/API 调用，但它的职责是按 agent 给出的 query、URL、source type 和 research goal 执行可审计数据获取，并把结果写成 evidence record。它不负责决定创业机会、选择 Solution Hypothesis、比较业务 baseline、筛选候选方向或生成最终结论。
 
-这些工具由 Feature 的 MCP resource/host adapter 注册，经 core IPC/MCP extension point 分发到 `features/startup-opportunity/host/opportunity-recon/request-dispatcher.ts`，不能在 `src/ipc.ts` 静态增加 Startup Opportunity 业务分支。通用 `WebSearch`/`WebFetch` 仍可用于探索性补充，但原始来源进入正式判断前必须经 host MCP tool 记录到 evidence store。正式 artifact 中只保留 evidence refs、source manifest、provenance、limitations 和判断层产物，不携带原始证据正文作为下游生成语料。
+这些工具由 Pack 的 declarative MCP/tool binding 引用 Core allowlist 中的 exact Host Capability/Adapter；Pack 不能携带或动态注册 adapter implementation，也不能在 `src/ipc.ts` 增加 Startup Opportunity 业务分支。通用 `WebSearch`/`WebFetch` 仍可用于探索性补充，但原始来源进入正式判断前必须经受信任的 host MCP capability 记录到 evidence store。正式 artifact 中只保留 evidence refs、source manifest、provenance、limitations 和判断层产物，不携带原始证据正文作为下游生成语料。
 
 适合 workflow action 的：
 
@@ -2931,13 +2934,13 @@ startup_opportunity.concept_report.v1
 放在：
 
 ```text
-features/startup-opportunity/container/artifact-contracts/startup-opportunity.json
+workflow-packs/startup-opportunity/workflow-src/artifact-contracts/startup-opportunity.json
 ```
 
 新增 evaluator：
 
 ```text
-features/startup-opportunity/container/workflow-evaluators/startup-opportunity.json
+workflow-packs/startup-opportunity/workflow-src/evaluators/startup-opportunity.json
 ```
 
 branch-level contract 用于约束单个并行分支的输出；fan-in contract 用于约束 join 后给下游 state 的聚合上下文。
@@ -3554,7 +3557,7 @@ Planner 生成的 Graph Node 只允许：
 
 ### Task Intake、Discovery Profile 与两类输入合同
 
-Feature create form 提供 `analysis_mode = auto | opportunity_discovery | concept_validation`。显式模式直接选择对应 Recipe；`auto` 才在 Feature routing scope 内调用 Macro Router。机会发现输入使用方向字段，并通过 `discovery_profile` / `research_axes` 选择调研维度，而不是新增 Recipe：
+Task Workspace 的通用 Recipe 输入表单提供 `analysis_mode = auto | opportunity_discovery | concept_validation`。显式模式直接选择对应 Recipe；`auto` 才在 Pack routing scope 内调用 Macro Router。机会发现输入使用方向字段，并通过 `discovery_profile` / `research_axes` 选择调研维度，而不是新增 Recipe；Core Renderer 不包含 Pack-specific 页面或路由。
 
 三层标识使用以下固定映射，不能靠字符串变形隐式推导：
 
@@ -3563,7 +3566,7 @@ Feature create form 提供 `analysis_mode = auto | opportunity_discovery | conce
 | `opportunity_discovery` | `startup-opportunity.opportunity-discovery@1.0.0` | `opportunity_discovery` |
 | `concept_market_validation` | `startup-opportunity.concept-validation@1.0.0` | `concept_validation` |
 
-`Task kind` 是 Macro Router 的分类输出，RecipeRef 是 deterministic resolver 唯一接受的创建目标，`analysis_mode` 只是 Feature 表单/API 的稳定判别字段。版本升级由 routing scope 发布新的 exact RecipeRef，不修改上述 task kind 或表单枚举的业务语义。
+`Task kind` 是 Macro Router 的分类输出，RecipeRef 是 deterministic resolver 唯一接受的创建目标，`analysis_mode` 只是 Pack Recipe input schema 的稳定判别字段。版本升级由 routing scope 发布新的 exact RecipeRef，不修改上述 task kind 或输入枚举的业务语义。
 
 `discovery_profile` 的固定语义：
 
@@ -3667,7 +3670,7 @@ Feature create form 提供 `analysis_mode = auto | opportunity_discovery | conce
 
 AI 具体方向仍进入同一个概念验证 Recipe，但设置 `validation_profile=ai|regulated_ai`。例如“面向自由行用户的 AI 行程冲突检查是否可行”应使用 `ai`；医疗诊断、金融决策等高错误成本消费者方向使用 `regulated_ai`。
 
-`auto` 输入同时保留 `raw_request` 与可选结构字段。Router 只输出 exact RecipeRef；deterministic resolver 校验 routing scope、Feature status、Recipe input schema、launch policy 和 creation key。Workflow 创建后由 `scope_framing` 在 Recipe 内解析/确认 profile 和 axes。`AI 教育 App` 这类既可能表示“教育行业、AI 优先”，也可能表示“从 AI 能力变化反推教育场景”的输入，如果 profile 会显著改变成本和方法，应返回 `needs_clarification`。Workflow 创建后冻结 validated input snapshot，后续 State 通过 typed bindings 读取；不再依赖任意 `WorkflowContext` merge 或 live template context 作为 contract。
+`auto` 输入同时保留 `raw_request` 与可选结构字段。Router 只输出 exact RecipeRef；deterministic resolver 校验 routing scope、active Pack Release、Recipe input schema、launch policy 和 creation key。Workflow 创建后由 `scope_framing` 在 Recipe 内解析/确认 profile 和 axes。`AI 教育 App` 这类既可能表示“教育行业、AI 优先”，也可能表示“从 AI 能力变化反推教育场景”的输入，如果 profile 会显著改变成本和方法，应返回 `needs_clarification`。Workflow 创建后冻结 validated input snapshot，后续 State 通过 typed bindings 读取；不再依赖任意 `WorkflowContext` merge 或 live template context 作为 contract。
 
 ### 最终推荐结构
 
@@ -3756,7 +3759,7 @@ Startup Opportunity Recipe Family 自己控制领域判断：机会发现负责�
 
 架构层范围：
 
-- 通用 Task Intake/Recipe routing、State-to-Graph lowering、ready-node concurrency、graph compiler/execution、join/fan-in、checkpoint、lifetime budget、Feature lifecycle 和 Workbench/Trace 由 `docs/dynamic-workflow-runtime.md` 索引的current authority定义。
+- 通用 Task Intake/Recipe routing、State-to-Graph lowering、ready-node concurrency、graph compiler/execution、join/fan-in、checkpoint、lifetime budget、Pack lifecycle 和 Workbench/Trace 由 `docs/dynamic-workflow-runtime.md` 索引的 current authority 定义。
 - 本方案只声明创业机会调研对该框架的使用方式和业务契约。
 
 机会发现 workflow 范围：
@@ -3889,7 +3892,7 @@ Task Intake -> concept-validation Recipe
 - 支持 `general`、`industry_first`、`ai_first`、`hybrid` discovery profile，以及 `general`、`ai`、`regulated_ai` validation profile。
 - 支持输出结构化 JSON + Markdown 双格式。
 - 支持用户在报告后追问某个机会，进入二次深挖。
-- 支持用户在报告后追问轻量验证建议的具体做法；本 Recipe 不创建真实验证 child Workflow，也不追踪验证结果。未来若另行建设验证执行 Feature，应使用独立 Recipe 和明确授权边界。
+- 支持用户在报告后追问轻量验证建议的具体做法；本 Recipe 不创建真实验证 child Workflow，也不追踪验证结果。未来若另行建设验证执行 Pack，应使用独立 Recipe 和明确授权边界。
 
 ## 示例：宠物行业 App
 
@@ -3986,19 +3989,19 @@ global_score / confidence / rank_stability
 
 路由到 `concept_market_validation`，设置 `validation_profile=ai`。除需求、替代、竞品、付费、获客、合规和反证外，强制执行目标任务 benchmark、评测可靠性、推理与人工审核单位经济、数据权利/可监控性、provider/platform 依赖。最终只输出一个 `go | conditional_go | no_go | insufficient_evidence` verdict、dimension decisions、decisive evidence/gaps、kill criteria、决策建议和可选轻量验证建议，不生成无关 TopN，也不执行验证动作。
 
-## Feature 生命周期、预算与恢复
+## Workflow Pack 生命周期、预算与恢复
 
 - `opportunity-discovery` 使用较大的但 finite Workflow execution policy；`ai_first`/`hybrid` profile 可在同一 Recipe policy 的受限 resource claim 内申请额外能力检索、benchmark 和 follow-up 预算，但不能改变部署级 ceiling。`concept-validation` 使用更小的 nodes/scopes/attempts/tool/token/cost ceiling，AI validation bundle 也必须受其 lifetime budget 约束。
 - Workflow 级 budget 跨 discovery/follow-up/enrichment 多个 State Activation 累计；进入新 graph state 不重置 token、cost、transition 或 child-workflow 数量。
-- API/UI 对同一提交生成稳定 `creation_key`；重复点击、网络重试和 Router outbox 重投返回同一个 Workflow。
-- Feature `draining` 时禁止新 intake/Workflow，但已创建 run 继续使用 pinned Recipe/Definition/capability/executor 收敛。Prompt/skill/Research Kernel 更新发布新 capability/Recipe version，旧 run 不读取 live/latest 文件。
+- Task Workspace 对同一提交生成稳定 `creation_key`；重复点击、网络重试和 Router outbox 重投返回同一个 Workflow。
+- Pack disable 后 active pointer 立即阻止新 intake/Workflow；已创建 Run 继续使用 pinned Recipe/Definition/capability/Core binding 和 staged execution bytes 收敛。Prompt/skill/Research Kernel 更新发布新 capability/Recipe/Pack version，旧 Run 不读取 live/latest 文件。
 - Evidence store 写入必须接受稳定业务 operation key并可对账；node success artifact、source manifest 和 report 必须复制为 immutable snapshot/hash，host live database/path 不能成为 Graph recovery 唯一事实。
-- 用户可以基于报告自行采纳或忽略验证建议；本 Feature 不创建验证 child Workflow、不追踪 Business Outcome，也不修改历史决策 artifact。
+- 用户可以基于报告自行采纳或忽略验证建议；本 Pack 不创建验证 child Workflow、不追踪 Business Outcome，也不修改历史决策 artifact。
 
 ## 验收标准
 
 - 显式 `analysis_mode` 不被 Router 改写；`auto` 对宽泛机会发现、具体概念、歧义输入和不支持输入分别稳定产生正确 Recipe、clarification 或 unsupported decision。
-- Startup Opportunity routing scope 不能选择产品设计、PM Pipeline 或其他 Feature Recipe；伪造 RecipeRef 由 deterministic resolver 拒绝。
+- Startup Opportunity routing scope 不能选择产品设计、PM Pipeline 或其他 Pack Recipe；伪造 RecipeRef 由 deterministic resolver 拒绝。
 - 两个 Recipe 的 Definition/entrypoint/policy/input-output schema/named exits 独立固定；概念验证不会进入 TopN candidate generation，机会发现不会输出单 thesis verdict。`discovery_profile` 只能改变 Recipe 内调研子图、必填 artifact、score profile 和 quality gate，不能改变宏观输出合同。
 - Planner 只能引用 allowlisted exact capability；node-local role/skill/tool/artifact/evaluator、任意行业 Agent 和超预算 Scope Spec 均编译失败。
 - Planner dry-run 与 graph state 正式 compile 使用同一 source bytes/hash；不存在独立 compile state 或 plan 漂移。
@@ -4009,7 +4012,7 @@ global_score / confidence / rank_stability
 - concept fixture 覆盖 go/conditional/no-go/insufficient、强替代方案、反证翻转，以及 `ai`/`regulated_ai` 缺少强制 validation bundle 时只能输出 `insufficient_evidence`。
 - evaluator fixture 必须覆盖 schema、引用、反证、freshness、evidence status、decision sufficiency 和 limitation；不以用户后续采纳、付费或创业成功作为 Runtime 验收标准。
 - Evidence MCP duplicate delivery、Agent retry、process crash 和 report snapshot recovery 不会重复 evidence、丢失引用或改写已发布 node output。
-- Feature upgrade/draining fixture 证明旧 active run 使用旧 executable snapshot，新 Workflow 使用新 Recipe version，disable 不制造不可恢复的只读 run。
+- Pack upgrade/disable fixture 证明旧 active Run 使用旧 executable snapshot，新 Workflow 使用新 Recipe version，disable 不制造不可恢复的只读 Run。
 
 ## 风险与注意事项
 
@@ -4034,13 +4037,13 @@ global_score / confidence / rank_stability
 - 原生 App 不一定是最佳首发形态；小程序、Web/PWA 或人工辅助验证可能更合理。SaaS、企业销售和 API/基础设施不属于本版本默认目标空间。
 - 当前方案或维持现状不是一个可排名的创业机会，而是必须显式建模的 Baseline Option；新方案无法证明足够增量时应输出 `watchlist` 或 `reject`。
 - Top 机会必须包含 kill criteria、决策建议和必要时的轻量验证建议，否则容易把方向包装成不可执行的商业建议。
-- 本 Feature 不执行验证动作、不追踪后续创业成败，也不自动修改历史报告或 scoring profile。
+- 本 Pack 不执行验证动作、不追踪后续创业成败，也不自动修改历史报告或 scoring profile。
 - 不同行业的权重应允许配置，例如医疗健康类应提高合规风险权重。
 - 最终报告应明确不确定性，避免把研究结论包装成确定性商业建议。
 
 ## 结论
 
-Startup Opportunity Feature 应定位为受限 Macro Routing 下的 Recipe Family：
+Startup Opportunity Workflow Pack 应定位为受限 Macro Routing 下的 Recipe Family：
 
 ```text
 opportunity_discovery
@@ -4074,4 +4077,4 @@ concept_market_validation
   + optional lightweight validation suggestions
 ```
 
-Feature 应借鉴 GPT Researcher 的初始探测、query goal、并发子研究、递归追问、上下文压缩、来源筛选和证据不足时 abstain，并在 Feature 内沉淀为共享 Research Kernel。Macro Router 只在 `opportunity_discovery` 与 `concept_market_validation` 两个宏观目标之间选择 exact Recipe；`discovery_profile` 和 `research_axes` 只控制机会发现 Recipe 内的 lane 优先级、合同和质量门。执行统一落在 Icarus Graph Runtime、versioned capability、MCP、artifact/evaluator 和 immutable trace 体系内。机会发现从 Demand Thesis、Solution Hypothesis、Baseline Option、Capability Evidence 和市场判断层生成决策建议；概念验证始终围绕用户给定 hypothesis 形成可推翻 verdict。两者不执行外部验证或业务结果反馈，也不得在运行时互相变形。
+Pack 应借鉴 GPT Researcher 的初始探测、query goal、并发子研究、递归追问、上下文压缩、来源筛选和证据不足时 abstain，并在 Pack resources 内沉淀为共享 Research Kernel。Macro Router 只在 `opportunity_discovery` 与 `concept_market_validation` 两个宏观目标之间选择 exact Recipe；`discovery_profile` 和 `research_axes` 只控制机会发现 Recipe 内的 lane 优先级、合同和质量门。执行统一落在 Icarus Graph Runtime、versioned capability、MCP、artifact/evaluator 和 immutable trace 体系内。机会发现从 Demand Thesis、Solution Hypothesis、Baseline Option、Capability Evidence 和市场判断层生成决策建议；概念验证始终围绕用户给定 hypothesis 形成可推翻 verdict。两者不执行外部验证或业务结果反馈，也不得在运行时互相变形。

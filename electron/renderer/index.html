@@ -1547,8 +1547,8 @@
                 <button
                   type="button"
                   class="configuration-nav-item"
-                  id="configuration-features-toggle"
-                  data-config-section="features"
+                  id="configuration-workflow-packs-toggle"
+                  data-config-section="workflow-packs"
                   aria-expanded="true"
                 >
                   <span class="configuration-nav-icon" aria-hidden="true">
@@ -1560,15 +1560,15 @@
                     </svg>
                   </span>
                   <span class="configuration-nav-copy">
-                    <strong>功能包</strong>
-                    <small>local/features.json</small>
+                    <strong>Workflow Packs</strong>
+                    <small>local/workflow-packs.json</small>
                   </span>
                   <span class="configuration-nav-chevron" aria-hidden="true"
                     >▾</span
                   >
                 </button>
                 <div
-                  id="configuration-feature-list"
+                  id="configuration-workflow-pack-list"
                   class="management-list configuration-service-list"
                 ></div>
               </section>
@@ -1599,7 +1599,7 @@
             </div>
 
             <div
-              id="configuration-feature-empty"
+              id="configuration-workflow-pack-empty"
               class="management-empty configuration-empty doraemon-tertiary-empty hidden"
             >
               <div class="tertiary-empty-content">
@@ -1607,8 +1607,8 @@
                   src="/assets/avatar-assistant.png"
                   alt="Assistant avatar"
                 />
-                <h3>功能包</h3>
-                <p>左侧选择一个功能包，查看启用状态、资源和删除摘要。</p>
+                <h3>Workflow Packs</h3>
+                <p>暂无已安装或保留的 Workflow Pack。</p>
               </div>
             </div>
 
@@ -1949,27 +1949,27 @@
             </div>
 
             <div
-              id="configuration-feature-detail"
-              class="configuration-feature-detail hidden"
+              id="configuration-workflow-pack-detail"
+              class="configuration-workflow-pack-detail hidden"
             >
               <section class="configuration-service-hero">
                 <div class="configuration-service-hero-main">
                   <div class="management-kicker configuration-kicker">
-                    Feature Package
+                    Workflow Pack
                   </div>
-                  <h2 id="configuration-feature-title">--</h2>
+                  <h2 id="configuration-workflow-pack-title">--</h2>
                   <p
-                    id="configuration-feature-summary"
+                    id="configuration-workflow-pack-summary"
                     class="management-summary"
                   ></p>
                   <div
-                    id="configuration-feature-meta"
+                    id="configuration-workflow-pack-meta"
                     class="management-meta"
                   ></div>
                 </div>
                 <div class="configuration-service-hero-side">
                   <span
-                    id="configuration-feature-status"
+                    id="configuration-workflow-pack-status"
                     class="management-pill configuration-save-status"
                     >--</span
                   >
@@ -1977,13 +1977,19 @@
                     class="management-hero-actions configuration-service-actions"
                   >
                     <button
-                      id="configuration-feature-delete-data-btn"
+                      id="configuration-workflow-pack-purge-btn"
                       class="btn-ghost danger"
                     >
-                      停用并删除
+                      Purge
                     </button>
                     <button
-                      id="configuration-feature-toggle-btn"
+                      id="configuration-workflow-pack-uninstall-btn"
+                      class="btn-ghost danger"
+                    >
+                      Uninstall
+                    </button>
+                    <button
+                      id="configuration-workflow-pack-toggle-btn"
                       class="btn-primary"
                     >
                       启用
@@ -1993,35 +1999,37 @@
               </section>
 
               <section
-                class="configuration-overview-grid configuration-feature-grid"
+                class="configuration-overview-grid configuration-workflow-pack-grid"
               >
                 <section class="configuration-panel">
                   <div class="management-panel-head">
                     <div>
-                      <div class="management-panel-title">删除摘要</div>
+                      <div class="management-panel-title">Purge Preview</div>
                       <div class="management-panel-note">
-                        Agent、chat、trace、projection 与运行目录
+                        Pack-owned targets and active pins
                       </div>
                     </div>
                   </div>
                   <div
-                    id="configuration-feature-delete-summary"
-                    class="configuration-feature-summary-grid"
+                    id="configuration-workflow-pack-purge-summary"
+                    class="configuration-workflow-pack-summary-grid"
                   ></div>
                 </section>
 
                 <section class="configuration-panel">
                   <div class="management-panel-head">
                     <div>
-                      <div class="management-panel-title">声明资源</div>
+                      <div class="management-panel-title">
+                        Recipes and Permissions
+                      </div>
                       <div class="management-panel-note">
-                        manifest 中声明并由 runtime 加载的资源
+                        Active release authority
                       </div>
                     </div>
                   </div>
                   <div
-                    id="configuration-feature-resources"
-                    class="configuration-feature-resource-list"
+                    id="configuration-workflow-pack-resources"
+                    class="configuration-workflow-pack-resource-list"
                   ></div>
                 </section>
               </section>
@@ -2325,9 +2333,7 @@
             <div id="collaboration-detail" class="collaboration-detail hidden">
               <header class="collaboration-detail-header">
                 <div class="collaboration-detail-copy">
-                  <div class="collaboration-kicker">
-                    群组协作空间
-                  </div>
+                  <div class="collaboration-kicker">群组协作空间</div>
                   <div class="collaboration-title-row">
                     <h2 id="collaboration-title">群组空间</h2>
                     <span
@@ -2428,13 +2434,6 @@
               </footer>
             </form>
           </dialog>
-        </section>
-
-        <section id="feature-runtime-screen">
-          <main
-            id="feature-runtime-outlet"
-            class="feature-runtime-outlet"
-          ></main>
         </section>
 
         <!-- Schedulers panel -->

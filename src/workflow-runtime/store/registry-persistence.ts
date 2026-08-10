@@ -119,7 +119,7 @@ interface ImmutableResourceRow extends Record<string, unknown> {
   resource_id: string;
   resource_version: string;
   owner_core_ref: string | null;
-  owner_feature_id: string | null;
+  owner_pack_id: string | null;
   owner_principal_ref: string | null;
   canonical_value_id: string;
   content_hash: string;
@@ -229,7 +229,7 @@ function resourceNeedsInsert(
   const id = registryResourceId(resource);
   const rows = transaction.queryAll<ImmutableResourceRow>(
     `SELECT id, resource_type, resource_id, resource_version, owner_core_ref,
-            owner_feature_id, owner_principal_ref, canonical_value_id, content_hash, publication_state,
+            owner_pack_id, owner_principal_ref, canonical_value_id, content_hash, publication_state,
             published_at_ms, retired_at_ms, row_version
        FROM workflow_registry_resources
       WHERE id = ? OR (resource_type = ? AND resource_id = ? AND resource_version = ?)`,
@@ -240,10 +240,17 @@ function resourceNeedsInsert(
     resource.owner.kind === 'core'
       ? `${resource.owner.ref.id}@${resource.owner.ref.version}`
       : null;
-  const ownerFeatureId =
-    resource.owner.kind === 'feature' ? resource.owner.feature_id : null;
+  const ownerPackId =
+    resource.owner.kind === 'pack' ? resource.owner.pack_id : null;
   const ownerPrincipalRef =
     resource.owner.kind === 'principal' ? resource.owner.principal_ref : null;
+  const lifecycleMatches =
+    (rows[0]?.publication_state === 'staged' &&
+      rows[0].published_at_ms === null &&
+      rows[0].row_version === 1) ||
+    (rows[0]?.publication_state === 'published' &&
+      rows[0].published_at_ms !== null &&
+      rows[0].row_version === 2);
   if (
     rows.length !== 1 ||
     rows[0].id !== id ||
@@ -251,14 +258,13 @@ function resourceNeedsInsert(
     rows[0].resource_id !== resource.ref.id ||
     rows[0].resource_version !== resource.ref.version ||
     rows[0].owner_core_ref !== ownerCoreRef ||
-    rows[0].owner_feature_id !== ownerFeatureId ||
+    rows[0].owner_pack_id !== ownerPackId ||
     rows[0].owner_principal_ref !== ownerPrincipalRef ||
     rows[0].canonical_value_id !== registryValueId(resource) ||
     rows[0].content_hash !== resource.content_hash ||
-    rows[0].publication_state !== 'staged' ||
-    rows[0].published_at_ms !== null ||
+    !lifecycleMatches ||
     rows[0].retired_at_ms !== null ||
-    rows[0].row_version !== 1
+    (rows[0].row_version !== 1 && rows[0].row_version !== 2)
   ) {
     return immutableCollision('registry_resource_identity_collision', id);
   }
@@ -482,13 +488,13 @@ function insertResource(
     resource.owner.kind === 'core'
       ? `${resource.owner.ref.id}@${resource.owner.ref.version}`
       : null;
-  const ownerFeatureId =
-    resource.owner.kind === 'feature' ? resource.owner.feature_id : null;
+  const ownerPackId =
+    resource.owner.kind === 'pack' ? resource.owner.pack_id : null;
   const ownerPrincipalRef =
     resource.owner.kind === 'principal' ? resource.owner.principal_ref : null;
   transaction.execute(
     `INSERT INTO workflow_registry_resources (
-      id, resource_type, resource_id, resource_version, owner_core_ref, owner_feature_id, owner_principal_ref,
+      id, resource_type, resource_id, resource_version, owner_core_ref, owner_pack_id, owner_principal_ref,
       canonical_value_id, content_hash, publication_state, created_at_ms,
       published_at_ms, retired_at_ms, row_version
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'staged', ?, NULL, NULL, 1)`,
@@ -498,7 +504,7 @@ function insertResource(
       resource.ref.id,
       resource.ref.version,
       ownerCoreRef,
-      ownerFeatureId,
+      ownerPackId,
       ownerPrincipalRef,
       registryValueId(resource),
       resource.content_hash,

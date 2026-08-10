@@ -5384,7 +5384,7 @@ body {
   gap: 18px;
 }
 
-.configuration-feature-detail {
+.configuration-workflow-pack-detail {
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -5447,7 +5447,7 @@ body {
   align-items: start;
 }
 
-.configuration-feature-grid {
+.configuration-workflow-pack-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -5523,14 +5523,14 @@ body {
   -webkit-line-clamp: 1;
 }
 
-.configuration-feature-summary-grid {
+.configuration-workflow-pack-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   padding-top: 14px;
 }
 
-.configuration-feature-metric {
+.configuration-workflow-pack-metric {
   min-width: 0;
   border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
   border-radius: 8px;
@@ -5538,14 +5538,14 @@ body {
   background: #fbfbfc;
 }
 
-.configuration-feature-metric span {
+.configuration-workflow-pack-metric span {
   display: block;
   color: var(--minimal-text-muted, #667085);
   font-size: 11px;
   font-weight: 650;
 }
 
-.configuration-feature-metric strong {
+.configuration-workflow-pack-metric strong {
   display: block;
   margin-top: 4px;
   color: var(--minimal-text, #202327);
@@ -5553,14 +5553,14 @@ body {
   font-weight: 720;
 }
 
-.configuration-feature-resource-list {
+.configuration-workflow-pack-resource-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   padding-top: 14px;
 }
 
-.configuration-feature-resource-list .management-pill {
+.configuration-workflow-pack-resource-list .management-pill {
   max-width: 100%;
 }
 
@@ -5575,17 +5575,6 @@ body {
 }
 
 #trace-monitor-screen.active {
-  display: flex;
-}
-
-#feature-runtime-screen {
-  flex: 1;
-  min-width: 0;
-  display: none;
-  background: var(--bg-primary);
-}
-
-#feature-runtime-screen.active {
   display: flex;
 }
 
@@ -7691,22 +7680,6 @@ body {
     min-width: 42px;
     padding-inline: 8px;
   }
-}
-
-.feature-runtime-outlet {
-  flex: 1;
-  min-width: 0;
-  overflow: auto;
-  background: var(--bg-primary);
-}
-
-.feature-runtime-status {
-  width: 100%;
-  min-height: 100%;
-  display: grid;
-  place-items: center;
-  color: var(--text-muted);
-  font-size: 13px;
 }
 
 .trace-monitor-sidebar {
@@ -15549,8 +15522,7 @@ body::after,
 #memory-management-screen.active,
 #knowledge-management-screen.active,
 #configuration-screen.active,
-#trace-monitor-screen.active,
-#feature-runtime-screen.active {
+#trace-monitor-screen.active {
   background: var(--minimal-bg);
 }
 
@@ -19840,7 +19812,6 @@ textarea.workflow-wizard-input {
   .collaboration-content {
     padding: 20px 20px 32px;
   }
-
 }
 
 @media (max-width: 720px) {
@@ -19948,5 +19919,4 @@ textarea.workflow-wizard-input {
     max-height: 100vh;
     border-radius: 0;
   }
-
 }

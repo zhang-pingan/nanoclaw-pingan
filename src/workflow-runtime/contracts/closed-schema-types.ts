@@ -60,34 +60,21 @@ export const WORKFLOW_COMMAND_REASON_CODES = [
 export type WorkflowCommandReasonCode =
   (typeof WORKFLOW_COMMAND_REASON_CODES)[number];
 
-export const FEATURE_WORKFLOW_RESOURCE_KINDS = [
+export const PACK_WORKFLOW_RESOURCE_KINDS = [
   'recipe',
   'routing_scope',
-  'routing_capability',
-  'clarification_contract',
   'execution_policy',
   'definition',
   'command_policy',
-  'operational_remediation_policy',
   'context_contract',
   'schema',
   'scope_interface',
   'graph_template',
   'graph_policy',
-  'capability',
-  'executor_implementation',
-  'prompt',
-  'tool_binding',
-  'wait_contract',
-  'notification_contract',
   'card_presentation',
-  'artifact_contract',
-  'evaluator',
-  'root_finalization_policy',
-  'outbox_policy',
 ] as const;
-export type FeatureWorkflowResourceKind =
-  (typeof FEATURE_WORKFLOW_RESOURCE_KINDS)[number];
+export type PackWorkflowResourceKind =
+  (typeof PACK_WORKFLOW_RESOURCE_KINDS)[number];
 
 export const WORKFLOW_VALUE_BINDING_SOURCES = [
   'workflow_input',
@@ -210,7 +197,7 @@ export type WorkflowDefinitionState = WorkflowDefinitionStateBase &
 export interface WorkflowDefinitionDocument {
   format: 'icarus.workflow-definition/1';
   ref: VersionedRef;
-  owner_feature_id: string | null;
+  owner_pack_id: string | null;
   name: string;
   context_contract_ref: VersionedRef;
   entry_points: Record<string, { state_key: string }>;
@@ -219,35 +206,43 @@ export interface WorkflowDefinitionDocument {
 }
 
 export interface WorkflowRecipeDocument {
+  format: 'icarus.workflow-recipe/1';
   ref: VersionedRef;
-  owner_feature_id: string | null;
-  recipe_family: string;
-  task_kinds: string[];
+  owner_pack_id?: string | null;
+  catalog_visibility: 'system_only' | 'selectable';
+  system_purposes?: Array<'temporary_workflow' | 'personal_workflow'>;
+  name: string;
+  description?: string | null;
+  recipe_family?: string;
+  task_kinds?: string[];
   workflow_definition_ref: VersionedRef;
   entry_point: string;
+  initial_state_key?: string;
   workflow_execution_policy_ref: VersionedRef;
   context_contract_ref: VersionedRef;
   workflow_command_policy_ref: VersionedRef;
   input_schema_ref: VersionedRef;
   output_schema_ref: VersionedRef;
+  routing_scope_ref: VersionedRef;
   launch_policy: 'auto' | 'confirm' | 'manual_only';
   effect_ceiling: 'read_only' | 'mutable_effects' | 'irreversible';
-  derived_effect_summary: {
+  input_summary: JsonObject;
+  derived_effect_summary?: {
     max_impact: 'read_only' | 'mutable_effects' | 'irreversible';
     recovery_kinds: Array<'pure' | 'idempotent' | 'compensatable'>;
     permission_refs: string[];
     dependency_closure_hash: string;
   };
-  required_permissions: string[];
-  allowed_child_recipe_refs: VersionedRef[];
-  resource_claims: Array<{
+  required_permissions?: string[];
+  allowed_child_recipe_refs?: VersionedRef[];
+  resource_claims?: Array<{
     id: string;
     namespace: string;
     mode: 'shared' | 'exclusive';
     key_json_pointers: string[];
     hold_until: 'workflow_terminal';
   }>;
-  recipe_hash: string;
+  recipe_hash?: string;
 }
 
 interface WorkflowRuntimeCommandBase {
@@ -311,31 +306,31 @@ export interface WorkflowTransitionDocument {
   effects?: { operations: WorkflowTransitionEffect[] };
 }
 
-export interface FeatureWorkflowResourceEntry {
-  kind: FeatureWorkflowResourceKind;
+export interface PackWorkflowResourceEntry {
+  kind: PackWorkflowResourceKind;
   ref: VersionedRef;
   source_path: string;
   expected_source_hash: string;
 }
 
-export interface FeatureManifestVNextDocument {
-  format: 'icarus.feature-manifest/2';
-  feature_ref: VersionedRef;
+export interface WorkflowPackManifestDocument {
+  format: 'icarus.workflow-pack/1';
+  pack_ref: VersionedRef;
+  display_name: string;
+  description: string | null;
   namespace: string;
   owner_principal_ref: string;
   dependencies: JsonObject[];
-  package_resources: JsonObject;
-  extension_surfaces: JsonObject;
-  dynamic_workflow_resources: FeatureWorkflowResourceEntry[];
-  ownership: JsonObject;
-  lifecycle: JsonObject;
+  workflow_resources: PackWorkflowResourceEntry[];
+  execution_resources: JsonObject;
+  permissions: JsonObject;
   manifest_hash: string;
 }
 
 export interface CardPresentationDocument {
   format: 'icarus.card-presentation/1';
   ref: VersionedRef;
-  owner_feature_id: string | null;
+  owner_pack_id: string | null;
   template_ref: VersionedRef;
   template_hash: string;
   variable_schema_ref: VersionedRef;
@@ -449,7 +444,7 @@ type _WorkflowTransitionEffectInputSources = Assert<
 export const WORKFLOW_DEFINITION_KEYS = [
   'format',
   'ref',
-  'owner_feature_id',
+  'owner_pack_id',
   'name',
   'context_contract_ref',
   'entry_points',
@@ -465,7 +460,7 @@ type _WorkflowDefinitionKeys = Assert<
 export const WORKFLOW_DEFINITION_REQUIRED_KEYS = [
   'format',
   'ref',
-  'owner_feature_id',
+  'owner_pack_id',
   'name',
   'context_contract_ref',
   'entry_points',
@@ -474,19 +469,27 @@ export const WORKFLOW_DEFINITION_REQUIRED_KEYS = [
 ] as const satisfies readonly RequiredKeys<WorkflowDefinitionDocument>[];
 
 export const WORKFLOW_RECIPE_KEYS = [
+  'format',
   'ref',
-  'owner_feature_id',
+  'owner_pack_id',
+  'catalog_visibility',
+  'system_purposes',
+  'name',
+  'description',
   'recipe_family',
   'task_kinds',
   'workflow_definition_ref',
   'entry_point',
+  'initial_state_key',
   'workflow_execution_policy_ref',
   'context_contract_ref',
   'workflow_command_policy_ref',
   'input_schema_ref',
   'output_schema_ref',
+  'routing_scope_ref',
   'launch_policy',
   'effect_ceiling',
+  'input_summary',
   'derived_effect_summary',
   'required_permissions',
   'allowed_child_recipe_refs',
@@ -497,10 +500,10 @@ type _WorkflowRecipeKeys = Assert<
   Equal<keyof WorkflowRecipeDocument, (typeof WORKFLOW_RECIPE_KEYS)[number]>
 >;
 export const WORKFLOW_RECIPE_REQUIRED_KEYS = [
+  'format',
   'ref',
-  'owner_feature_id',
-  'recipe_family',
-  'task_kinds',
+  'catalog_visibility',
+  'name',
   'workflow_definition_ref',
   'entry_point',
   'workflow_execution_policy_ref',
@@ -508,13 +511,10 @@ export const WORKFLOW_RECIPE_REQUIRED_KEYS = [
   'workflow_command_policy_ref',
   'input_schema_ref',
   'output_schema_ref',
+  'routing_scope_ref',
   'launch_policy',
   'effect_ceiling',
-  'derived_effect_summary',
-  'required_permissions',
-  'allowed_child_recipe_refs',
-  'resource_claims',
-  'recipe_hash',
+  'input_summary',
 ] as const satisfies readonly RequiredKeys<WorkflowRecipeDocument>[];
 
 export const WORKFLOW_RUNTIME_COMMAND_KEYS = [
@@ -560,43 +560,40 @@ export const WORKFLOW_TRANSITION_REQUIRED_KEYS = [
   'target',
 ] as const satisfies readonly RequiredKeys<WorkflowTransitionDocument>[];
 
-export const FEATURE_MANIFEST_KEYS = [
+export const PACK_MANIFEST_KEYS = [
   'format',
-  'feature_ref',
+  'pack_ref',
+  'display_name',
+  'description',
   'namespace',
   'owner_principal_ref',
   'dependencies',
-  'package_resources',
-  'extension_surfaces',
-  'dynamic_workflow_resources',
-  'ownership',
-  'lifecycle',
+  'workflow_resources',
+  'execution_resources',
+  'permissions',
   'manifest_hash',
-] as const satisfies readonly (keyof FeatureManifestVNextDocument)[];
-type _FeatureManifestKeys = Assert<
-  Equal<
-    keyof FeatureManifestVNextDocument,
-    (typeof FEATURE_MANIFEST_KEYS)[number]
-  >
+] as const satisfies readonly (keyof WorkflowPackManifestDocument)[];
+type _WorkflowPackManifestKeys = Assert<
+  Equal<keyof WorkflowPackManifestDocument, (typeof PACK_MANIFEST_KEYS)[number]>
 >;
-export const FEATURE_MANIFEST_REQUIRED_KEYS = [
+export const PACK_MANIFEST_REQUIRED_KEYS = [
   'format',
-  'feature_ref',
+  'pack_ref',
+  'display_name',
+  'description',
   'namespace',
   'owner_principal_ref',
   'dependencies',
-  'package_resources',
-  'extension_surfaces',
-  'dynamic_workflow_resources',
-  'ownership',
-  'lifecycle',
+  'workflow_resources',
+  'execution_resources',
+  'permissions',
   'manifest_hash',
-] as const satisfies readonly RequiredKeys<FeatureManifestVNextDocument>[];
+] as const satisfies readonly RequiredKeys<WorkflowPackManifestDocument>[];
 
 export const CARD_PRESENTATION_KEYS = [
   'format',
   'ref',
-  'owner_feature_id',
+  'owner_pack_id',
   'template_ref',
   'template_hash',
   'variable_schema_ref',
@@ -616,7 +613,7 @@ type _CardPresentationKeys = Assert<
 export const CARD_PRESENTATION_REQUIRED_KEYS = [
   'format',
   'ref',
-  'owner_feature_id',
+  'owner_pack_id',
   'template_ref',
   'template_hash',
   'variable_schema_ref',
@@ -722,7 +719,7 @@ export type ClosedSchemaTypeConformance =
   | _WorkflowRecipeKeys
   | _WorkflowRuntimeCommandKeys
   | _WorkflowTransitionKeys
-  | _FeatureManifestKeys
+  | _WorkflowPackManifestKeys
   | _CardPresentationKeys
   | _GraphScopeSourceKeys
   | _CompiledScopePlanKeys;

@@ -423,8 +423,8 @@ export type RuntimePermissionCode = (typeof RUNTIME_PERMISSION_CODES)[number];
 export interface RuntimePermissionCatalogEntry {
   permission: RuntimePermissionCode;
   human_local_owner: boolean;
-  feature_human_ceiling_allowed: boolean;
-  feature_service_or_automation_grantable: boolean;
+  pack_human_ceiling_allowed: boolean;
+  pack_service_or_automation_grantable: boolean;
   ownership_required: boolean;
 }
 
@@ -432,71 +432,71 @@ export const RUNTIME_PERMISSION_CATALOG_ENTRIES = [
   {
     permission: 'workflow.operate',
     human_local_owner: true,
-    feature_human_ceiling_allowed: true,
-    feature_service_or_automation_grantable: false,
+    pack_human_ceiling_allowed: true,
+    pack_service_or_automation_grantable: false,
     ownership_required: false,
   },
   {
     permission: 'workflow.cancel.own',
     human_local_owner: true,
-    feature_human_ceiling_allowed: true,
-    feature_service_or_automation_grantable: true,
+    pack_human_ceiling_allowed: true,
+    pack_service_or_automation_grantable: true,
     ownership_required: true,
   },
   {
     permission: 'workflow.cancel.any',
     human_local_owner: true,
-    feature_human_ceiling_allowed: false,
-    feature_service_or_automation_grantable: false,
+    pack_human_ceiling_allowed: false,
+    pack_service_or_automation_grantable: false,
     ownership_required: false,
   },
   {
     permission: 'workflow.node.skip',
     human_local_owner: true,
-    feature_human_ceiling_allowed: true,
-    feature_service_or_automation_grantable: false,
+    pack_human_ceiling_allowed: true,
+    pack_service_or_automation_grantable: false,
     ownership_required: false,
   },
   {
     permission: 'workflow.retry.advance',
     human_local_owner: true,
-    feature_human_ceiling_allowed: true,
-    feature_service_or_automation_grantable: false,
+    pack_human_ceiling_allowed: true,
+    pack_service_or_automation_grantable: false,
     ownership_required: false,
   },
   {
     permission: 'workflow.effect.remediate',
     human_local_owner: true,
-    feature_human_ceiling_allowed: true,
-    feature_service_or_automation_grantable: false,
+    pack_human_ceiling_allowed: true,
+    pack_service_or_automation_grantable: false,
     ownership_required: false,
   },
   {
     permission: 'workflow.blocker.remediate',
     human_local_owner: true,
-    feature_human_ceiling_allowed: true,
-    feature_service_or_automation_grantable: false,
+    pack_human_ceiling_allowed: true,
+    pack_service_or_automation_grantable: false,
     ownership_required: false,
   },
   {
     permission: 'workflow.integrity.restore',
     human_local_owner: true,
-    feature_human_ceiling_allowed: false,
-    feature_service_or_automation_grantable: false,
+    pack_human_ceiling_allowed: false,
+    pack_service_or_automation_grantable: false,
     ownership_required: false,
   },
   {
     permission: 'workflow.administrative_abandon',
     human_local_owner: true,
-    feature_human_ceiling_allowed: false,
-    feature_service_or_automation_grantable: false,
+    pack_human_ceiling_allowed: false,
+    pack_service_or_automation_grantable: false,
     ownership_required: false,
   },
 ] as const satisfies readonly RuntimePermissionCatalogEntry[];
 
 export const RUNTIME_COMMAND_DENIAL_CODES = [
   'permission_denied',
-  'feature_ceiling_denied',
+  'pack_ceiling_denied',
   'command_policy_denied',
   'state_guard_failed',
   'target_not_found',
@@ -512,7 +512,7 @@ export type RuntimeCommandDenialCode =
 
 export const COMMAND_ACTOR_KINDS = [
   'human',
-  'feature_service',
+  'pack_service',
   'automation',
   'system',
 ] as const;
@@ -547,19 +547,19 @@ export const RUNTIME_COMMAND_REASON_CATALOG_ENTRIES = [
   {
     reason_code: 'superseded',
     reason_class: 'business',
-    allowed_actor_kinds: ['human', 'feature_service', 'automation'],
+    allowed_actor_kinds: ['human', 'pack_service', 'automation'],
     evidence_required: false,
   },
   {
     reason_code: 'invalid_input',
     reason_class: 'business',
-    allowed_actor_kinds: ['human', 'feature_service', 'automation'],
+    allowed_actor_kinds: ['human', 'pack_service', 'automation'],
     evidence_required: false,
   },
   {
     reason_code: 'no_longer_needed',
     reason_class: 'business',
-    allowed_actor_kinds: ['human', 'feature_service', 'automation'],
+    allowed_actor_kinds: ['human', 'pack_service', 'automation'],
     evidence_required: false,
   },
   {
@@ -657,7 +657,7 @@ export const RUNTIME_COMMAND_DENIAL_CATALOG_ENTRIES = [
     target_mutated: false,
   },
   {
-    denial_code: 'feature_ceiling_denied',
+    denial_code: 'pack_ceiling_denied',
     execution_result: 'denied',
     retry_disposition: 'authorization_change',
     target_mutated: false,

@@ -783,10 +783,10 @@ describe('G7 command, recovery, and resolution', () => {
           idempotency_key: 'auth:ceiling',
         },
         201,
-        { actor: { ...target.actor, featurePermissionCeiling: new Set() } },
+        { actor: { ...target.actor, packPermissionCeiling: new Set() } },
       ),
     );
-    expect(ceiling.denialCode).toBe('feature_ceiling_denied');
+    expect(ceiling.denialCode).toBe('pack_ceiling_denied');
     const stale = submitRuntimeCommand(
       target.instance.store,
       commandInput(
@@ -2621,7 +2621,7 @@ describe('G7 command, recovery, and resolution', () => {
     ['actor identity', 'actor_ref = ?', ['human:forged']],
     ['authentication session', 'auth_session_ref = ?', ['session:forged']],
     ['entrypoint', 'entrypoint = ?', ['deadline_watchdog']],
-    ['source feature', 'source_feature_id = ?', ['feature:forged']],
+    ['source pack', 'source_pack_id = ?', ['pack:forged']],
     ['delegation chain', 'delegation_chain_ref = ?', ['delegation:forged']],
     [
       'terminal disposition',
@@ -2687,7 +2687,7 @@ describe('G7 command, recovery, and resolution', () => {
         .prepare(
           `INSERT INTO workflow_runtime_command_invocations (
              id, command_id, invocation_no, submitted_request_hash, actor_ref,
-             actor_kind, auth_session_ref, entrypoint, source_feature_id,
+             actor_kind, auth_session_ref, entrypoint, source_pack_id,
              delegation_chain_ref, required_permission,
              command_policy_resource_id, command_policy_resource_hash,
              authorization_result, execution_result, target_before_hash,
@@ -2696,7 +2696,7 @@ describe('G7 command, recovery, and resolution', () => {
            )
            SELECT 'command-invocation:integrity-splice', command_id,
                   invocation_no + 1, submitted_request_hash, actor_ref,
-                  actor_kind, auth_session_ref, entrypoint, source_feature_id,
+                  actor_kind, auth_session_ref, entrypoint, source_pack_id,
                   delegation_chain_ref, required_permission,
                   command_policy_resource_id, command_policy_resource_hash,
                   authorization_result, execution_result, target_before_hash,

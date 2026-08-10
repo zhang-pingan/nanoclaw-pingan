@@ -1,0 +1,117 @@
+{
+  "format": "icarus.workflow-g3-pack-release-activation-fault-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g3-pack-release-activation-fault-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g3-pack-release-activation-fault-cases:1\n",
+  "payload": {
+    "fixture_scope": "test_only_real_file_sqlite",
+    "cases": [
+      {
+        "case_id": "rollback.after_request_value",
+        "fault_class": "pre_commit",
+        "fault_point": "after_request_value",
+        "expected_outcome": "rollback"
+      },
+      {
+        "case_id": "rollback.after_command_pending",
+        "fault_class": "pre_commit",
+        "fault_point": "after_command_pending",
+        "expected_outcome": "rollback"
+      },
+      {
+        "case_id": "rollback.after_verified_preflight",
+        "fault_class": "pre_commit",
+        "fault_point": "after_verified_preflight",
+        "expected_outcome": "rollback"
+      },
+      {
+        "case_id": "rollback.after_previous_draining",
+        "fault_class": "pre_commit",
+        "fault_point": "after_previous_draining",
+        "expected_outcome": "rollback"
+      },
+      {
+        "case_id": "rollback.after_target_active",
+        "fault_class": "pre_commit",
+        "fault_point": "after_target_active",
+        "expected_outcome": "rollback"
+      },
+      {
+        "case_id": "rollback.after_pointer_cas",
+        "fault_class": "pre_commit",
+        "fault_point": "after_pointer_cas",
+        "expected_outcome": "rollback"
+      },
+      {
+        "case_id": "rollback.after_receipt",
+        "fault_class": "pre_commit",
+        "fault_point": "after_receipt",
+        "expected_outcome": "rollback"
+      },
+      {
+        "case_id": "rollback.after_terminal_invocation",
+        "fault_class": "pre_commit",
+        "fault_point": "after_terminal_invocation",
+        "expected_outcome": "rollback"
+      },
+      {
+        "case_id": "rollback.after_terminal_events",
+        "fault_class": "pre_commit",
+        "fault_point": "after_terminal_events",
+        "expected_outcome": "rollback"
+      },
+      {
+        "case_id": "post-commit-response-lost",
+        "fault_class": "post_commit_recovery",
+        "fault_point": "after_commit_before_response",
+        "expected_outcome": "duplicate_without_pointer_dml"
+      },
+      {
+        "case_id": "reopen-terminal-recovery",
+        "fault_class": "post_commit_recovery",
+        "fault_point": "reopen_after_commit",
+        "expected_outcome": "duplicate_without_pointer_dml"
+      },
+      {
+        "case_id": "tamper.command_result_binding",
+        "fault_class": "tamper",
+        "fault_point": "command_result_binding",
+        "expected_outcome": "fail_closed"
+      },
+      {
+        "case_id": "tamper.receipt",
+        "fault_class": "tamper",
+        "fault_point": "receipt",
+        "expected_outcome": "fail_closed"
+      },
+      {
+        "case_id": "tamper.invocation_chain",
+        "fault_class": "tamper",
+        "fault_point": "invocation_chain",
+        "expected_outcome": "fail_closed"
+      },
+      {
+        "case_id": "tamper.event_chain",
+        "fault_class": "tamper",
+        "fault_point": "event_chain",
+        "expected_outcome": "fail_closed"
+      },
+      {
+        "case_id": "tamper.result_value",
+        "fault_class": "tamper",
+        "fault_point": "result_value",
+        "expected_outcome": "fail_closed"
+      },
+      {
+        "case_id": "tamper.pending_transition_evidence",
+        "fault_class": "tamper",
+        "fault_point": "pending_transition_evidence",
+        "expected_outcome": "fail_closed"
+      }
+    ]
+  },
+  "hash": "sha256:d0b8af01b8a14ae95dd72be1135adeaa64f2b8ce507d0dff68f20bdd94359e29"
+}

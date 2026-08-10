@@ -196,7 +196,7 @@ function createAuthorityDatabase(databasePath: string): Database.Database {
       owner_workflow_id TEXT,
       owner_graph_run_id TEXT,
       owner_registry_resource_id TEXT,
-      owner_feature_release_id TEXT,
+      owner_pack_release_id TEXT,
       system_owner_ref TEXT,
       created_at_ms INTEGER NOT NULL
     );

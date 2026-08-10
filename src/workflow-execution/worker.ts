@@ -34,6 +34,7 @@ import {
   type WorkflowAgentDispatchRequest,
   type WorkflowAgentResult,
 } from './types.js';
+import { resolveWorkflowPackExecutionResourcePin } from '../workflow-packs/execution-resources.js';
 
 interface DueOutboxRow extends Record<string, unknown> {
   id: string;
@@ -386,6 +387,10 @@ export class WorkflowExecutionWorker {
         delegationId: row.delegation_id,
         runWorkFenceEpoch: row.run_work_fence_epoch,
         scopeWorkFenceEpoch: row.scope_work_fence_epoch,
+        workflowPackExecutionResources: resolveWorkflowPackExecutionResourcePin(
+          this.options.runtimeStore,
+          row.graph_run_id,
+        ),
       },
     };
   }

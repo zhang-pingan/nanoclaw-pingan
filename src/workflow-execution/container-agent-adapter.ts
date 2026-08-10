@@ -16,11 +16,15 @@ import {
   type WorkflowAgentResult,
   type WorkflowExecutionAdapter,
 } from './types.js';
+import type { WorkflowPackExecutionResourcePin } from '../workflow-packs/execution-resources.js';
 
 export interface ContainerRunOnceExecutor {
   runOnce(
     input: RunOnceRequestInput,
     lifecycle?: RunOnceLifecycle,
+    internal?: {
+      readonly workflowPackExecutionResources?: WorkflowPackExecutionResourcePin;
+    },
   ): Promise<RunOnceResponse>;
 }
 
@@ -212,6 +216,10 @@ export class ContainerAgentAdapter implements WorkflowExecutionAdapter {
           },
         },
         { onAccepted },
+        {
+          workflowPackExecutionResources:
+            context.workflowPackExecutionResources ?? undefined,
+        },
       );
       const result = resultFromRunOnce(context, response);
       return {

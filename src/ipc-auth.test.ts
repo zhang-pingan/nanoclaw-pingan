@@ -307,13 +307,38 @@ describe('pause_task authorization', () => {
   });
 
   it("non-main agent cannot pause another Agent's task", async () => {
-    await processTaskIpc(
+    const outcome = await processTaskIpc(
       { type: 'pause_task', taskId: 'task-main' },
       'other-agent',
       false,
       deps,
     );
     expect(getTaskById('task-main')!.status).toBe('active');
+    expect(outcome).toMatchObject({
+      status: 'rejected',
+      error: expect.stringContaining('Unauthorized'),
+    });
+  });
+
+  it('returns a typed rejection when a task is already paused', async () => {
+    await processTaskIpc(
+      { type: 'pause_task', taskId: 'task-other' },
+      'other-agent',
+      false,
+      deps,
+    );
+
+    const outcome = await processTaskIpc(
+      { type: 'pause_task', taskId: 'task-other' },
+      'other-agent',
+      false,
+      deps,
+    );
+
+    expect(outcome).toEqual({
+      status: 'rejected',
+      error: 'Scheduled task task-other is not active',
+    });
   });
 });
 

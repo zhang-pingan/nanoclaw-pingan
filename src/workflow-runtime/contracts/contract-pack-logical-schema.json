@@ -80,7 +80,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-runtime-logical-schema-source:1\n",
-        "hash": "sha256:e904eb77eda048c6594da0cdf138e0e10a7dd035669e574a3613600643a600bf"
+        "hash": "sha256:ca2235b92343d0084ff82f76850491c45b552bbc45dd6c596e42d409e9fb0019"
       },
       {
         "path": "sqlite/workflow-runtime-query-catalog-schema.json",
@@ -124,7 +124,7 @@
         },
         "version": 1,
         "domain_separator": "icarus:workflow-runtime-typed-relation-catalog:1\n",
-        "hash": "sha256:28bd7086d8d359ab82c31f4dc08f2f4ecdee42a632baee7e7458a8927874502d"
+        "hash": "sha256:e0356364f87093f46630798a0fc2332208e63637a0870d1454bd7843a582642c"
       }
     ],
     "next_reserved_directories": [
@@ -143,5 +143,5 @@
       "runtime_center_or_ui"
     ]
   },
-  "hash": "sha256:0c5327d33d6ef4a2be4e31011ec07d35d5a66a3a1f350e4d19605dc8fd0b8193"
+  "hash": "sha256:f2d9f21e30aa207b6a812203781b11825c1dafb19d2f1099195bb5d75639924d"
 }

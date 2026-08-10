@@ -6,24 +6,24 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capability-outbox-contract-pack:1\n",
-  "hash": "sha256:6004caa12bcc93dc376b74162e27db66f42886a28cdc63b5ef822821c7b0d495",
+  "hash": "sha256:c2e2efbb959333366c2b9ce8622bde94cc443bdb929ed574e8680d148eb2319a",
   "payload": {
     "plan_format": "icarus.workflow-graph-scope-plan/2",
     "artifacts": [
       {
         "path": "conformance/capability-outbox-execution-binding/schemas/compiled-scope-plan-v2-execution-binding-schema@1.json",
         "format": "icarus.workflow-compiled-scope-plan-v2-execution-binding-schema/1",
-        "hash": "sha256:79719788af197243e5172a7d495a172f3746720fe5fa41b681e454e6defc62ed"
+        "hash": "sha256:ca97a0103c1a2105a7fed21e9717e3278f137393da757be65b5e023f745326e4"
       },
       {
         "path": "conformance/capability-outbox-execution-binding/schemas/capability-outbox-snapshot-schema@1.json",
         "format": "icarus.workflow-capability-outbox-snapshot-schema/1",
-        "hash": "sha256:727082726ca74fc88adf1a95f8505246c6e51976dc8c5a2e6d56271b3259e9b8"
+        "hash": "sha256:3397a5daebcaf716e540bb3e3453c4ccaa30e49f52e5e8d644f3189615a07a69"
       },
       {
         "path": "conformance/capability-outbox-execution-binding/schemas/compiler-conformance-case-result-execution-binding-schema@1.json",
         "format": "icarus.workflow-compiler-conformance-case-result-execution-binding-schema/1",
-        "hash": "sha256:4760130a40827f695b0820c176783b69f66d29cd411f2eeaaebe582c19e2a78b"
+        "hash": "sha256:f873f2027f9817ce4842ee4b2192baaa9e77cd556fc984aa727a56485edfa31d"
       },
       {
         "path": "conformance/capability-outbox-execution-binding/schemas/schema5-outbox-handoff-schema@1.json",

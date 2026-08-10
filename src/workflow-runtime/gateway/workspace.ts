@@ -55,11 +55,21 @@ import type { T6cWaitResolutionReceipt } from '../runtime/waits.js';
 import { resolveWaitT6c } from '../runtime/waits.js';
 import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
 
-export type WorkspaceRecipeKind = 'core' | 'feature' | 'personal';
+export {
+  cloneJson,
+  TASK_WORKSPACE_TEMPORARY_REFS,
+  TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE,
+  TEMPORARY_WORKFLOW_COORDINATOR_RESPONSE_SCHEMA,
+  temporaryWorkflowCoordinatorContract,
+  WORKFLOW_AGENT_RESULT_SCHEMA_HASH,
+} from '../bootstrap/task-workspace-temporary-contract.js';
+
+export type WorkflowDistributionKind = 'pack' | 'personal';
 export type WorkspaceLaunchPolicy = 'auto' | 'confirm' | 'manual_only';
 
 export interface WorkspaceRecipeCatalogItemV1 {
-  readonly recipe_kind: WorkspaceRecipeKind;
+  readonly distribution_kind: WorkflowDistributionKind;
+  readonly distribution_ref: VersionedRef;
   readonly recipe_ref: VersionedRef;
   readonly recipe_hash: Sha256Hash;
   readonly display_name: string;
@@ -124,7 +134,10 @@ export interface WorkspaceResolvedLaunchRequest {
   readonly now_ms: number;
 }
 
-export interface WorkspaceResolvedTemporaryLaunchRequest extends WorkspaceResolvedLaunchRequest {
+export interface WorkspaceResolvedTemporaryLaunchRequest extends Omit<
+  WorkspaceResolvedLaunchRequest,
+  'selection_token'
+> {
   readonly confirmed_revision_id: string;
   readonly confirmed_source_json: JsonObject;
   readonly confirmed_source_hash: Sha256Hash;
@@ -135,7 +148,6 @@ export interface WorkspaceResolvedTemporaryLaunchRequest extends WorkspaceResolv
 
 export interface WorkspaceTemporaryDraftRequest {
   readonly principal_ref: string;
-  readonly selection_token: string;
   readonly source_json: JsonObject;
   readonly now_ms: number;
 }
@@ -151,12 +163,32 @@ export interface WorkspaceTemporaryDraftCompilation {
   readonly risk_summary_json: JsonObject;
 }
 
-export interface WorkspaceTemporaryCreationRequest extends WorkspacePublishedCreationRequest {
+export interface WorkspaceTemporaryCreationRequest extends Omit<
+  WorkspacePublishedCreationRequest,
+  'selection_token'
+> {
   readonly confirmed_revision_id: string;
   readonly confirmed_source_hash: Sha256Hash;
   readonly confirmed_plan_hash: Sha256Hash;
   readonly resource_closure_hash: Sha256Hash;
   readonly policy_ceiling_hash: Sha256Hash;
+}
+
+export type SystemRecipePurpose = 'temporary_workflow' | 'personal_workflow';
+
+export interface SystemRecipeResolution {
+  readonly format: 'icarus.system-recipe-resolution/1';
+  readonly purpose: SystemRecipePurpose;
+  readonly principal_ref: string;
+  readonly recipe_ref: VersionedRef;
+  readonly recipe_hash: Sha256Hash;
+  readonly registry_snapshot_id: string;
+  readonly registry_snapshot_hash: Sha256Hash;
+  readonly closure_manifest_id: string;
+  readonly closure_hash: Sha256Hash;
+  readonly core_release_ref: string;
+  readonly expires_at_ms: number;
+  readonly internal_launch_credential: string;
 }
 
 export interface WorkspaceCreationLookup {
@@ -417,6 +449,11 @@ interface SelectionTokenPayload extends JsonObject {
   readonly recipe_hash: Sha256Hash;
   readonly entry_point: string;
   readonly launch_policy: WorkspaceLaunchPolicy;
+  readonly pack_release_id: string | null;
+  readonly pack_release_hash: Sha256Hash | null;
+  readonly pack_pointer_row_version: number | null;
+  readonly pack_registry_snapshot_id: string | null;
+  readonly pack_registry_snapshot_hash: Sha256Hash | null;
   readonly personal_release_id: string | null;
   readonly personal_release_hash: Sha256Hash | null;
   readonly personal_pointer_row_version: number | null;
@@ -427,16 +464,41 @@ interface SelectionTokenPayload extends JsonObject {
   readonly expires_at_ms: number;
 }
 
+interface SystemRecipeCredentialPayload extends JsonObject {
+  readonly format: 'icarus.system-recipe-credential/1';
+  readonly purpose: SystemRecipePurpose;
+  readonly principal_ref: string;
+  readonly recipe_row_id: string;
+  readonly recipe_ref: VersionedRef;
+  readonly recipe_hash: Sha256Hash;
+  readonly entry_point: string;
+  readonly launch_policy: WorkspaceLaunchPolicy;
+  readonly registry_snapshot_id: string;
+  readonly registry_snapshot_hash: Sha256Hash;
+  readonly closure_manifest_id: string;
+  readonly closure_hash: Sha256Hash;
+  readonly core_release_ref: string;
+  readonly issued_at_ms: number;
+  readonly expires_at_ms: number;
+}
+
 interface RecipeRow extends Record<string, unknown> {
   id: string;
   resource_id: string;
   resource_version: string;
   owner_core_ref: string | null;
-  owner_feature_id: string | null;
+  owner_pack_id: string | null;
   owner_principal_ref: string | null;
   content_hash: Sha256Hash;
   publication_state: string;
   inline_canonical_json: string;
+}
+
+interface RegistrySnapshotAuthority {
+  readonly id: string;
+  readonly hash: Sha256Hash;
+  readonly closure_id: string;
+  readonly closure_hash: Sha256Hash;
 }
 
 export interface RuntimeWorkspaceGatewayOptions {
@@ -897,13 +959,17 @@ function workspaceArtifactHash(input: {
   );
 }
 
-function recipeKind(row: RecipeRow, content: JsonObject): WorkspaceRecipeKind {
-  return row.owner_principal_ref ||
+function distributionKind(
+  row: RecipeRow,
+  content: JsonObject,
+): WorkflowDistributionKind | null {
+  if (
+    row.owner_principal_ref ||
     typeof content.owner_principal_ref === 'string'
-    ? 'personal'
-    : row.owner_feature_id
-      ? 'feature'
-      : 'core';
+  ) {
+    return 'personal';
+  }
+  return row.owner_pack_id ? 'pack' : null;
 }
 
 export class RuntimeWorkspaceGateway {
@@ -923,7 +989,9 @@ export class RuntimeWorkspaceGateway {
     this.tokenTtlMs = options.token_ttl_ms ?? 5 * 60_000;
   }
 
-  private sign(payload: SelectionTokenPayload): string {
+  private sign(
+    payload: SelectionTokenPayload | SystemRecipeCredentialPayload,
+  ): string {
     const body = Buffer.from(canonicalJson(payload), 'utf8').toString(
       'base64url',
     );
@@ -932,6 +1000,242 @@ export class RuntimeWorkspaceGateway {
       .update(body, 'ascii')
       .digest('base64url');
     return `${body}.${signature}`;
+  }
+
+  private activePackRelease(row: RecipeRow): {
+    readonly release_id: string;
+    readonly release_hash: Sha256Hash;
+    readonly release_ref: VersionedRef;
+    readonly pointer_row_version: number;
+    readonly registry_snapshot_id: string;
+    readonly registry_snapshot_hash: Sha256Hash;
+  } | null {
+    if (!row.owner_pack_id) return null;
+    const active = this.store.queryOne<{
+      release_id: string;
+      release_hash: Sha256Hash;
+      release_ref: string;
+      release_version: string;
+      pointer_row_version: number;
+    }>(
+      `SELECT active.release_id, active.release_hash, release.release_ref,
+              release.release_version, active.row_version AS pointer_row_version
+         FROM workflow_pack_active_releases active
+         JOIN workflow_pack_releases release
+           ON release.id = active.release_id
+          AND release.release_hash = active.release_hash
+          AND release.status = 'active'
+         JOIN workflow_pack_release_resources resource
+           ON resource.release_id = release.id
+        WHERE active.pack_id = ? AND resource.resource_id = ?
+          AND resource.content_hash = ?`,
+      [row.owner_pack_id, row.id, row.content_hash],
+    );
+    if (!active) return null;
+    const snapshot = this.snapshotForPackRelease(
+      row,
+      active.release_id,
+      active.release_hash,
+    );
+    return {
+      ...active,
+      release_ref: {
+        id: active.release_ref,
+        version: active.release_version,
+      },
+      registry_snapshot_id: snapshot.id,
+      registry_snapshot_hash: snapshot.hash,
+    };
+  }
+
+  resolveSystemRecipe(request: {
+    readonly purpose: SystemRecipePurpose;
+    readonly principal_ref: string;
+    readonly now_ms: number;
+  }): SystemRecipeResolution {
+    assertPrincipal(request.principal_ref);
+    if (
+      !['temporary_workflow', 'personal_workflow'].includes(request.purpose) ||
+      !Number.isSafeInteger(request.now_ms) ||
+      request.now_ms < 0
+    ) {
+      throw new RuntimeWorkspaceGatewayError(
+        'invalid_request',
+        'System Recipe resolution request is invalid',
+      );
+    }
+    const match = this.recipeRows().find((row) => {
+      if (!row.owner_core_ref || row.owner_pack_id || row.owner_principal_ref) {
+        return false;
+      }
+      const content = JSON.parse(row.inline_canonical_json) as JsonObject;
+      return (
+        content.catalog_visibility === 'system_only' &&
+        Array.isArray(content.system_purposes) &&
+        content.system_purposes.includes(request.purpose)
+      );
+    });
+    if (!match) {
+      throw new RuntimeWorkspaceGatewayError(
+        'target_not_found',
+        `Core System Recipe for ${request.purpose} is unavailable`,
+      );
+    }
+    const coreReleaseRef = match.owner_core_ref;
+    if (!coreReleaseRef) {
+      throw new RuntimeWorkspaceGatewayError(
+        'lineage_mismatch',
+        'Core System Recipe owner is unavailable',
+      );
+    }
+    const content = JSON.parse(match.inline_canonical_json) as JsonObject;
+    const entryPoint = content.entry_point;
+    const launchPolicy = content.launch_policy;
+    if (
+      typeof entryPoint !== 'string' ||
+      !['auto', 'confirm', 'manual_only'].includes(String(launchPolicy))
+    ) {
+      throw new RuntimeWorkspaceGatewayError(
+        'lineage_mismatch',
+        'Core System Recipe launch contract is invalid',
+      );
+    }
+    const snapshot = this.snapshotForCoreRecipe(match);
+    const expiresAt = request.now_ms + this.tokenTtlMs;
+    const credential: SystemRecipeCredentialPayload = {
+      format: 'icarus.system-recipe-credential/1',
+      purpose: request.purpose,
+      principal_ref: request.principal_ref,
+      recipe_row_id: match.id,
+      recipe_ref: {
+        id: match.resource_id,
+        version: match.resource_version,
+      },
+      recipe_hash: match.content_hash,
+      entry_point: entryPoint,
+      launch_policy: launchPolicy as WorkspaceLaunchPolicy,
+      registry_snapshot_id: snapshot.id,
+      registry_snapshot_hash: snapshot.hash,
+      closure_manifest_id: snapshot.closure_id,
+      closure_hash: snapshot.closure_hash,
+      core_release_ref: coreReleaseRef,
+      issued_at_ms: request.now_ms,
+      expires_at_ms: expiresAt,
+    };
+    return {
+      format: 'icarus.system-recipe-resolution/1',
+      purpose: request.purpose,
+      principal_ref: request.principal_ref,
+      recipe_ref: credential.recipe_ref,
+      recipe_hash: credential.recipe_hash,
+      registry_snapshot_id: snapshot.id,
+      registry_snapshot_hash: snapshot.hash,
+      closure_manifest_id: snapshot.closure_id,
+      closure_hash: snapshot.closure_hash,
+      core_release_ref: coreReleaseRef,
+      expires_at_ms: expiresAt,
+      internal_launch_credential: this.sign(credential),
+    };
+  }
+
+  private verifySystemRecipe(
+    resolution: SystemRecipeResolution,
+    purpose: SystemRecipePurpose,
+    principalRef: string,
+    nowMs: number,
+  ): { readonly row: RecipeRow; readonly selection: SelectionTokenPayload } {
+    const [body, suppliedSignature, extra] =
+      resolution.internal_launch_credential.split('.');
+    if (!body || !suppliedSignature || extra !== undefined) {
+      throw new RuntimeWorkspaceGatewayError(
+        'lineage_mismatch',
+        'System Recipe credential is malformed',
+      );
+    }
+    const expected = crypto
+      .createHmac('sha256', this.tokenSecret)
+      .update(body, 'ascii')
+      .digest();
+    const supplied = Buffer.from(suppliedSignature, 'base64url');
+    if (
+      supplied.byteLength !== expected.byteLength ||
+      !crypto.timingSafeEqual(supplied, expected)
+    ) {
+      throw new RuntimeWorkspaceGatewayError(
+        'lineage_mismatch',
+        'System Recipe credential signature is invalid',
+      );
+    }
+    let payload: SystemRecipeCredentialPayload;
+    try {
+      payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    } catch {
+      throw new RuntimeWorkspaceGatewayError(
+        'lineage_mismatch',
+        'System Recipe credential payload is invalid',
+      );
+    }
+    const row = this.recipeRows().find(
+      (candidate) => candidate.id === payload.recipe_row_id,
+    );
+    const content = row
+      ? (JSON.parse(row.inline_canonical_json) as JsonObject)
+      : null;
+    const snapshot = row?.owner_core_ref
+      ? this.snapshotForCoreRecipe(row)
+      : null;
+    if (
+      payload.format !== 'icarus.system-recipe-credential/1' ||
+      payload.purpose !== purpose ||
+      payload.principal_ref !== principalRef ||
+      payload.expires_at_ms <= nowMs ||
+      payload.issued_at_ms > nowMs ||
+      !row ||
+      !row.owner_core_ref ||
+      row.owner_core_ref !== payload.core_release_ref ||
+      row.resource_id !== payload.recipe_ref.id ||
+      row.resource_version !== payload.recipe_ref.version ||
+      row.content_hash !== payload.recipe_hash ||
+      content?.catalog_visibility !== 'system_only' ||
+      !Array.isArray(content.system_purposes) ||
+      !content.system_purposes.includes(purpose) ||
+      content.entry_point !== payload.entry_point ||
+      content.launch_policy !== payload.launch_policy ||
+      snapshot?.id !== payload.registry_snapshot_id ||
+      snapshot.hash !== payload.registry_snapshot_hash ||
+      snapshot.closure_id !== payload.closure_manifest_id ||
+      snapshot.closure_hash !== payload.closure_hash
+    ) {
+      throw new RuntimeWorkspaceGatewayError(
+        'lineage_mismatch',
+        'Core System Recipe authority is stale or drifted',
+      );
+    }
+    return {
+      row,
+      selection: {
+        format: 'icarus.workspace-recipe-selection/1',
+        principal_ref: principalRef,
+        recipe_row_id: row.id,
+        recipe_ref: payload.recipe_ref,
+        recipe_hash: payload.recipe_hash,
+        entry_point: payload.entry_point,
+        launch_policy: payload.launch_policy,
+        pack_release_id: null,
+        pack_release_hash: null,
+        pack_pointer_row_version: null,
+        pack_registry_snapshot_id: null,
+        pack_registry_snapshot_hash: null,
+        personal_release_id: null,
+        personal_release_hash: null,
+        personal_pointer_row_version: null,
+        personal_registry_snapshot_id: null,
+        personal_registry_snapshot_hash: null,
+        personal_compiled_plan_hash: null,
+        issued_at_ms: payload.issued_at_ms,
+        expires_at_ms: payload.expires_at_ms,
+      },
+    };
   }
 
   private verify(
@@ -989,7 +1293,7 @@ export class RuntimeWorkspaceGateway {
   private recipeRows(): RecipeRow[] {
     return this.store.queryAll<RecipeRow>(
       `SELECT rr.id, rr.resource_id, rr.resource_version, rr.owner_core_ref,
-              rr.owner_feature_id, rr.owner_principal_ref, rr.content_hash,
+              rr.owner_pack_id, rr.owner_principal_ref, rr.content_hash,
               rr.publication_state,
               v.inline_canonical_json
          FROM workflow_registry_resources rr
@@ -1031,19 +1335,19 @@ export class RuntimeWorkspaceGateway {
         'Recipe selection identity drifted',
       );
     }
-    if (row.owner_feature_id) {
-      const active = this.store.queryOne<{ found: number }>(
-        `SELECT 1 AS found
-           FROM workflow_feature_active_releases ar
-           JOIN workflow_feature_release_resources r ON r.release_id = ar.release_id
-          WHERE ar.feature_id = ? AND r.resource_id = ? AND r.content_hash = ?
-          LIMIT 1`,
-        [row.owner_feature_id, row.id, row.content_hash],
-      );
-      if (!active) {
+    if (row.owner_pack_id) {
+      const active = this.activePackRelease(row);
+      if (
+        !active ||
+        active.release_id !== payload.pack_release_id ||
+        active.release_hash !== payload.pack_release_hash ||
+        active.pointer_row_version !== payload.pack_pointer_row_version ||
+        active.registry_snapshot_id !== payload.pack_registry_snapshot_id ||
+        active.registry_snapshot_hash !== payload.pack_registry_snapshot_hash
+      ) {
         throw new RuntimeWorkspaceGatewayError(
           'selection_stale',
-          'Feature Recipe is disabled or no longer active',
+          'Pack Recipe Release is disabled or no longer active',
         );
       }
     }
@@ -2068,7 +2372,9 @@ export class RuntimeWorkspaceGateway {
     for (const row of this.recipeRows()) {
       if (seen.has(row.resource_id)) continue;
       const content = JSON.parse(row.inline_canonical_json) as JsonObject;
-      const kind = recipeKind(row, content);
+      if (content.catalog_visibility !== 'selectable') continue;
+      const kind = distributionKind(row, content);
+      if (!kind) continue;
       if (
         kind === 'personal' &&
         row.owner_principal_ref !== request.principal_ref
@@ -2096,6 +2402,8 @@ export class RuntimeWorkspaceGateway {
             )
           : null;
       if (kind === 'personal' && !personalRelease) continue;
+      const packRelease = kind === 'pack' ? this.activePackRelease(row) : null;
+      if (kind === 'pack' && !packRelease) continue;
       const payload: SelectionTokenPayload = {
         format: 'icarus.workspace-recipe-selection/1',
         principal_ref: request.principal_ref,
@@ -2104,6 +2412,12 @@ export class RuntimeWorkspaceGateway {
         recipe_hash: row.content_hash,
         entry_point: entryPoint,
         launch_policy: launchPolicy as WorkspaceLaunchPolicy,
+        pack_release_id: packRelease?.release_id ?? null,
+        pack_release_hash: packRelease?.release_hash ?? null,
+        pack_pointer_row_version: packRelease?.pointer_row_version ?? null,
+        pack_registry_snapshot_id: packRelease?.registry_snapshot_id ?? null,
+        pack_registry_snapshot_hash:
+          packRelease?.registry_snapshot_hash ?? null,
         personal_release_id: personalRelease?.release_id ?? null,
         personal_release_hash: personalRelease?.release_hash ?? null,
         personal_pointer_row_version:
@@ -2130,7 +2444,9 @@ export class RuntimeWorkspaceGateway {
       }
       seen.add(row.resource_id);
       items.push({
-        recipe_kind: kind,
+        distribution_kind: kind,
+        distribution_ref:
+          packRelease?.release_ref ?? personalRelease!.release_ref,
         recipe_ref: payload.recipe_ref,
         recipe_hash: row.content_hash,
         display_name:
@@ -2258,17 +2574,17 @@ export class RuntimeWorkspaceGateway {
         'Personal Workflow publication differs from its reviewed compile',
       );
     }
-    const coreRow = this.recipeRows().find(
-      (row) =>
-        row.owner_core_ref !== null &&
-        row.resource_id === 'ad_hoc_personal_task',
+    const coreResolution = this.resolveSystemRecipe({
+      purpose: 'personal_workflow',
+      principal_ref: request.principal_ref,
+      now_ms: request.now_ms,
+    });
+    const { row: coreRow } = this.verifySystemRecipe(
+      coreResolution,
+      'personal_workflow',
+      request.principal_ref,
+      request.now_ms,
     );
-    if (!coreRow) {
-      throw new RuntimeWorkspaceGatewayError(
-        'target_not_found',
-        'Core Ad Hoc Recipe is unavailable',
-      );
-    }
     const coreRecipe = JSON.parse(coreRow.inline_canonical_json) as JsonObject;
     const owner = {
       kind: 'principal' as const,
@@ -2343,6 +2659,8 @@ export class RuntimeWorkspaceGateway {
       { id: `${namespace}.recipe`, version },
       {
         ...coreRecipe,
+        catalog_visibility: 'selectable',
+        system_purposes: [],
         owner_principal_ref: request.principal_ref,
         personal_workflow_id: request.personal_workflow_id,
         graph_template_ref: graphTemplate.ref,
@@ -2448,18 +2766,17 @@ export class RuntimeWorkspaceGateway {
     request: WorkspaceTemporaryDraftRequest,
   ): WorkspaceTemporaryDraftCompilation {
     assertPrincipal(request.principal_ref);
-    const selection = this.verify(
-      request.selection_token,
+    const resolution = this.resolveSystemRecipe({
+      purpose: 'temporary_workflow',
+      principal_ref: request.principal_ref,
+      now_ms: request.now_ms,
+    });
+    const { row: recipeRow, selection } = this.verifySystemRecipe(
+      resolution,
+      'temporary_workflow',
       request.principal_ref,
       request.now_ms,
     );
-    const recipeRow = this.assertActiveRecipe(selection);
-    if (selection.recipe_ref.id !== 'ad_hoc_personal_task') {
-      throw new RuntimeWorkspaceGatewayError(
-        'unsupported_by_temporary_workflow',
-        'Temporary drafts require the active Core Ad Hoc Recipe',
-      );
-    }
     const recipe = JSON.parse(recipeRow.inline_canonical_json) as JsonObject;
     const compilerInput = isObject(recipe.compiler_input_snapshot)
       ? recipe.compiler_input_snapshot
@@ -2508,7 +2825,7 @@ export class RuntimeWorkspaceGateway {
         `Temporary Workflow source is outside the published envelope: ${canonicalJson(diagnostics)}`,
       );
     }
-    const snapshot = this.snapshotForRecipe(recipeRow.id);
+    const snapshot = this.snapshotForCoreRecipe(recipeRow);
     const executionPolicy = this.resourceByRef(
       'execution_policy',
       recipe.workflow_execution_policy_ref as VersionedRef,
@@ -2625,17 +2942,31 @@ export class RuntimeWorkspaceGateway {
   launchTemporary(
     request: WorkspaceResolvedTemporaryLaunchRequest,
   ): T0CreationReceipt {
-    const resolved = this.resolveLaunch(request, {
-      revision_id: request.confirmed_revision_id,
-      source_json: request.confirmed_source_json,
-      source_hash: request.confirmed_source_hash,
-      plan_hash: request.confirmed_plan_hash,
-      resource_closure_hash: request.resource_closure_hash,
-      policy_ceiling_hash: request.policy_ceiling_hash,
+    const resolution = this.resolveSystemRecipe({
+      purpose: 'temporary_workflow',
+      principal_ref: request.principal_ref,
+      now_ms: request.now_ms,
     });
+    const { selection } = this.verifySystemRecipe(
+      resolution,
+      'temporary_workflow',
+      request.principal_ref,
+      request.now_ms,
+    );
+    const resolved = this.resolveLaunch(
+      request,
+      {
+        revision_id: request.confirmed_revision_id,
+        source_json: request.confirmed_source_json,
+        source_hash: request.confirmed_source_hash,
+        plan_hash: request.confirmed_plan_hash,
+        resource_closure_hash: request.resource_closure_hash,
+        policy_ceiling_hash: request.policy_ceiling_hash,
+      },
+      selection,
+    );
     return this.createTemporary({
       principal_ref: request.principal_ref,
-      selection_token: request.selection_token,
       authorization_ref: request.authorization_ref,
       creation: resolved,
       now_ms: request.now_ms,
@@ -2662,11 +2993,46 @@ export class RuntimeWorkspaceGateway {
         'Temporary creation requires an exact confirmed revision and hashes',
       );
     }
-    return this.createPublished(request);
+    const resolution = this.resolveSystemRecipe({
+      purpose: 'temporary_workflow',
+      principal_ref: request.principal_ref,
+      now_ms: request.now_ms,
+    });
+    const { row, selection } = this.verifySystemRecipe(
+      resolution,
+      'temporary_workflow',
+      request.principal_ref,
+      request.now_ms,
+    );
+    const receipt = createWorkflowT0(this.store, {
+      ...request.creation,
+      source: 'task_workspace',
+      actor: 'human',
+      recipe: {
+        rowId: row.id,
+        resourceType: 'recipe',
+        ref: selection.recipe_ref,
+        hash: selection.recipe_hash,
+      },
+      entryPoint: selection.entry_point,
+      launchPolicy: selection.launch_policy,
+      launchAuthorization: {
+        kind: 'human_explicit',
+        principalRef: request.principal_ref,
+        authorizationRef: request.authorization_ref,
+      },
+    });
+    this.options.on_runtime_commit?.({
+      workflow_id: receipt.workflowId,
+      run_id: receipt.activation.graphRunId,
+    });
+    return receipt;
   }
 
   private resolveLaunch(
-    request: WorkspaceResolvedLaunchRequest,
+    request: Omit<WorkspaceResolvedLaunchRequest, 'selection_token'> & {
+      readonly selection_token?: string;
+    },
     temporary?: {
       readonly revision_id: string;
       readonly source_json: JsonObject;
@@ -2675,18 +3041,41 @@ export class RuntimeWorkspaceGateway {
       readonly resource_closure_hash: Sha256Hash;
       readonly policy_ceiling_hash: Sha256Hash;
     },
+    systemSelection?: SelectionTokenPayload,
   ): WorkspacePublishedCreationInput {
     assertPrincipal(request.principal_ref);
-    const selection = this.verify(
-      request.selection_token,
-      request.principal_ref,
-      request.now_ms,
-    );
+    const selection =
+      systemSelection ??
+      this.verify(
+        request.selection_token ?? '',
+        request.principal_ref,
+        request.now_ms,
+      );
     const recipeRow = this.assertActiveRecipe(selection);
     const recipe = JSON.parse(recipeRow.inline_canonical_json) as JsonObject;
     const personalRelease = recipeRow.owner_principal_ref
       ? this.activePersonalRelease(selection, recipeRow)
       : null;
+    const packRelease = recipeRow.owner_pack_id
+      ? this.activePackRelease(recipeRow)
+      : null;
+    const packSnapshot = packRelease
+      ? this.snapshotForPackRelease(
+          recipeRow,
+          packRelease.release_id,
+          packRelease.release_hash,
+        )
+      : null;
+    const snapshot = personalRelease
+      ? {
+          id: personalRelease.registry_snapshot_id,
+          hash: personalRelease.registry_snapshot_hash,
+          closure_id: personalRelease.closure_id,
+          closure_hash: personalRelease.closure_hash,
+        }
+      : packSnapshot
+        ? packSnapshot
+        : this.snapshotForCoreRecipe(recipeRow);
     const exact = (field: string, resourceType: string): RuntimeRegistryRef => {
       const ref = recipe[field];
       if (!isObject(ref)) {
@@ -2695,7 +3084,13 @@ export class RuntimeWorkspaceGateway {
           `Selected Recipe has no exact ${field}`,
         );
       }
-      return this.resourceByRef(resourceType, ref as VersionedRef);
+      return packSnapshot
+        ? this.resourceByRefInSnapshot(
+            packSnapshot,
+            resourceType,
+            ref as VersionedRef,
+          )
+        : this.resourceByRef(resourceType, ref as VersionedRef);
     };
     const definition = exact('workflow_definition_ref', 'definition');
     const executionPolicy = exact(
@@ -2743,15 +3138,11 @@ export class RuntimeWorkspaceGateway {
         'Recipe entrypoint does not resolve an exact Definition state',
       );
     }
-    const snapshot = personalRelease
-      ? {
-          id: personalRelease.registry_snapshot_id,
-          hash: personalRelease.registry_snapshot_hash,
-          closure_id: personalRelease.closure_id,
-          closure_hash: personalRelease.closure_hash,
-        }
-      : this.snapshotForRecipe(recipeRow.id);
-    const precompiled = this.precompiledPlan(recipeRow.id, definitionContent);
+    const precompiled = this.precompiledPlan(
+      recipeRow.id,
+      definitionContent,
+      packRelease?.release_id,
+    );
     const compilerInput = isObject(recipe.compiler_input_snapshot)
       ? recipe.compiler_input_snapshot
       : null;
@@ -3009,6 +3400,51 @@ export class RuntimeWorkspaceGateway {
     return { rowId: row.id, resourceType, ref, hash: row.content_hash };
   }
 
+  private resourceByRefInSnapshot(
+    snapshot: RegistrySnapshotAuthority,
+    resourceType: string,
+    ref: VersionedRef,
+  ): RuntimeRegistryRef {
+    const rows = this.store.queryAll<{
+      id: string;
+      content_hash: Sha256Hash;
+    }>(
+      `SELECT resource.id, resource.content_hash
+         FROM workflow_registry_snapshots snapshot
+         JOIN workflow_registry_closure_members member
+           ON member.closure_manifest_id = snapshot.closure_manifest_id
+         JOIN workflow_registry_resources resource
+           ON resource.id = member.resource_id
+          AND resource.content_hash = member.content_hash
+        WHERE snapshot.id = ? AND snapshot.snapshot_hash = ?
+          AND snapshot.closure_manifest_id = ? AND snapshot.closure_hash = ?
+          AND resource.resource_type = ? AND resource.resource_id = ?
+          AND resource.resource_version = ?
+          AND resource.publication_state = 'published'`,
+      [
+        snapshot.id,
+        snapshot.hash,
+        snapshot.closure_id,
+        snapshot.closure_hash,
+        resourceType,
+        ref.id,
+        ref.version,
+      ],
+    );
+    if (rows.length !== 1) {
+      throw new RuntimeWorkspaceGatewayError(
+        'lineage_mismatch',
+        `Pinned Registry snapshot does not contain exact ${resourceType} ${ref.id}@${ref.version}`,
+      );
+    }
+    return {
+      rowId: rows[0].id,
+      resourceType,
+      ref,
+      hash: rows[0].content_hash,
+    };
+  }
+
   private firstResource(resourceType: string): RuntimeRegistryRef | null {
     const row = this.store.queryOne<{
       id: string;
@@ -3051,13 +3487,18 @@ export class RuntimeWorkspaceGateway {
     return JSON.parse(row.inline_canonical_json) as JsonObject;
   }
 
-  private snapshotForRecipe(recipeRowId: string): {
-    id: string;
-    hash: Sha256Hash;
-    closure_id: string;
-    closure_hash: Sha256Hash;
-  } {
-    const row = this.store.queryOne<{
+  private snapshotForCoreRecipe(recipe: RecipeRow): RegistrySnapshotAuthority {
+    if (
+      !recipe.owner_core_ref ||
+      recipe.owner_pack_id ||
+      recipe.owner_principal_ref
+    ) {
+      throw new RuntimeWorkspaceGatewayError(
+        'lineage_mismatch',
+        'System Recipe is not owned by an exact Core publication',
+      );
+    }
+    const rows = this.store.queryAll<{
       id: string;
       snapshot_hash: Sha256Hash;
       closure_manifest_id: string;
@@ -3066,18 +3507,95 @@ export class RuntimeWorkspaceGateway {
       `SELECT snapshot.id, snapshot.snapshot_hash,
               snapshot.closure_manifest_id, snapshot.closure_hash
          FROM workflow_registry_snapshots snapshot
-         JOIN workflow_registry_closure_members member
-           ON member.closure_manifest_id = snapshot.closure_manifest_id
-        WHERE member.resource_id = ?
-        ORDER BY snapshot.created_at_ms DESC, snapshot.id COLLATE BINARY LIMIT 1`,
-      [recipeRowId],
+         JOIN workflow_registry_closure_manifests closure
+           ON closure.id = snapshot.closure_manifest_id
+          AND closure.closure_hash = snapshot.closure_hash
+         JOIN workflow_values manifest
+           ON manifest.id = closure.manifest_value_id
+          AND manifest.content_hash = closure.manifest_hash
+          AND manifest.storage_kind = 'inline' AND manifest.payload_state = 'live'
+        WHERE json_extract(manifest.inline_canonical_json, '$.root_resource_type') = 'recipe'
+          AND json_extract(manifest.inline_canonical_json, '$.root_ref.id') = ?
+          AND json_extract(manifest.inline_canonical_json, '$.root_ref.version') = ?
+          AND EXISTS (
+            SELECT 1 FROM workflow_registry_resources root
+             WHERE root.id = ? AND root.content_hash = ?
+               AND root.owner_core_ref = ?
+               AND root.resource_type = 'recipe'
+               AND root.publication_state = 'published'
+          )
+        ORDER BY snapshot.id COLLATE BINARY`,
+      [
+        recipe.resource_id,
+        recipe.resource_version,
+        recipe.id,
+        recipe.content_hash,
+        recipe.owner_core_ref,
+      ],
     );
-    if (!row) {
+    if (rows.length !== 1) {
       throw new RuntimeWorkspaceGatewayError(
         'lineage_mismatch',
-        'Selected Recipe has no pinned Registry snapshot',
+        'Core System Recipe has no unique exact Registry snapshot',
       );
     }
+    const row = rows[0];
+    return {
+      id: row.id,
+      hash: row.snapshot_hash,
+      closure_id: row.closure_manifest_id,
+      closure_hash: row.closure_hash,
+    };
+  }
+
+  private snapshotForPackRelease(
+    recipe: RecipeRow,
+    releaseId: string,
+    releaseHash: Sha256Hash,
+  ): RegistrySnapshotAuthority {
+    if (!recipe.owner_pack_id) {
+      throw new RuntimeWorkspaceGatewayError(
+        'lineage_mismatch',
+        'Pack Recipe has no Pack owner',
+      );
+    }
+    const rows = this.store.queryAll<{
+      id: string;
+      snapshot_hash: Sha256Hash;
+      closure_manifest_id: string;
+      closure_hash: Sha256Hash;
+    }>(
+      `SELECT snapshot.id, snapshot.snapshot_hash,
+              snapshot.closure_manifest_id, snapshot.closure_hash
+         FROM workflow_pack_releases release
+         JOIN workflow_pack_release_resources recipe_resource
+           ON recipe_resource.release_id = release.id
+          AND recipe_resource.resource_id = ?
+          AND recipe_resource.content_hash = ?
+         JOIN workflow_registry_retention_handles published
+           ON published.pack_release_id = release.id
+          AND published.handle_kind = 'published' AND published.status = 'held'
+         JOIN workflow_registry_snapshots snapshot
+           ON snapshot.closure_manifest_id = published.closure_manifest_id
+          AND snapshot.closure_hash = published.closure_hash
+        WHERE release.id = ? AND release.release_hash = ?
+          AND release.pack_id = ?
+        ORDER BY snapshot.id COLLATE BINARY`,
+      [
+        recipe.id,
+        recipe.content_hash,
+        releaseId,
+        releaseHash,
+        recipe.owner_pack_id,
+      ],
+    );
+    if (rows.length !== 1) {
+      throw new RuntimeWorkspaceGatewayError(
+        'lineage_mismatch',
+        `Pack Release ${releaseId} has no unique exact Registry snapshot`,
+      );
+    }
+    const row = rows[0];
     return {
       id: row.id,
       hash: row.snapshot_hash,
@@ -3089,20 +3607,22 @@ export class RuntimeWorkspaceGateway {
   private precompiledPlan(
     recipeRowId: string,
     definition: JsonObject,
+    packReleaseId?: string,
   ): JsonObject | null {
     if (isObject(definition.precompiled_plan))
       return definition.precompiled_plan;
     if (isObject(definition.compiled_plan)) return definition.compiled_plan;
     const row = this.store.queryOne<{ inline_canonical_json: string }>(
       `SELECT plan.inline_canonical_json
-         FROM workflow_feature_release_resources release_resource
+         FROM workflow_pack_release_resources release_resource
          JOIN workflow_publisher_commands command
-           ON command.target_feature_release_id = release_resource.release_id
+           ON command.target_pack_release_id = release_resource.release_id
           AND command.lifecycle = 'applied'
          JOIN workflow_values plan ON plan.id = command.compiled_plan_value_id
         WHERE release_resource.resource_id = ?
+          AND (? IS NULL OR release_resource.release_id = ?)
         ORDER BY command.finalized_at_ms DESC LIMIT 1`,
-      [recipeRowId],
+      [recipeRowId, packReleaseId ?? null, packReleaseId ?? null],
     );
     return row ? (JSON.parse(row.inline_canonical_json) as JsonObject) : null;
   }
@@ -3909,10 +4429,10 @@ export class RuntimeWorkspaceGateway {
         actorKind: 'human',
         authSessionRef: `task-workspace:${request.operation_ref}`,
         entrypoint: 'task_workspace',
-        sourceFeatureId: null,
+        sourcePackId: null,
         delegationChainRef: null,
         permissions,
-        featurePermissionCeiling: null,
+        packPermissionCeiling: null,
       },
       auditSchema,
       fenceManifestSchema,
@@ -4490,10 +5010,10 @@ export class RuntimeWorkspaceGateway {
         actorKind: 'human',
         authSessionRef: `task-workspace-replan:${identity.confirmation_ref}`,
         entrypoint: 'task_workspace',
-        sourceFeatureId: null,
+        sourcePackId: null,
         delegationChainRef: null,
         permissions: new Set<RuntimePermissionCode>(['workflow.cancel.own']),
-        featurePermissionCeiling: null,
+        packPermissionCeiling: null,
       },
       auditSchema: valueSchema,
       fenceManifestSchema,

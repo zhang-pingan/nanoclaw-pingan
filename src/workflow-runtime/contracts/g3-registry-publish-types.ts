@@ -11,7 +11,7 @@ export const G3_REGISTRY_RESOURCE_TYPES = [
   'evaluator',
   'execution_policy',
   'executor_implementation',
-  'feature_execution_artifact',
+  'pack_execution_artifact',
   'graph_policy',
   'graph_template',
   'notification_contract',
@@ -23,8 +23,10 @@ export const G3_REGISTRY_RESOURCE_TYPES = [
   'root_finalization_policy',
   'routing_capability',
   'routing_scope',
+  'runtime_supported_limits',
   'schema',
   'scope_interface',
+  'sqlite_execution_profile',
   'tool_binding',
   'wait_contract',
 ] as const;
@@ -37,7 +39,7 @@ export const G3_PUBLISH_PREFLIGHT_ERROR_CODES = [
   'capability_outbox_binding_required',
   'compiled_plan_pin_required',
   'execution_artifact_pin_required',
-  'feature_identity_pair_mismatch',
+  'pack_identity_pair_mismatch',
   'compiler_version_mismatch',
   'preflight_hash_mismatch',
   'production_compiler_actual_oracle_forbidden',
@@ -107,10 +109,10 @@ export interface G3RegistryPublishPreflightInput extends JsonObject {
   operation: 'validate_only';
   target_registry: 'production' | 'test_only';
   fixture_scope: 'none' | 'test_only';
-  feature_manifest_ref: VersionedRef | null;
-  feature_manifest_hash: Sha256Hash | null;
-  feature_release_ref: VersionedRef | null;
-  feature_release_hash: Sha256Hash | null;
+  pack_manifest_ref: VersionedRef | null;
+  pack_manifest_hash: Sha256Hash | null;
+  pack_release_ref: VersionedRef | null;
+  pack_release_hash: Sha256Hash | null;
   resources: G3RegistryResourceCandidate[];
   expected_oracle: 'golden_corpus_expected';
   production_compiler_actual_role: 'comparison_only' | 'expected_oracle';
@@ -149,4 +151,4 @@ export const G3_RETENTION_POLICY_REF = {
 } as const;
 
 export const G3_RETENTION_POLICY_HASH =
-  'sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d' as const;
+  'sha256:1a5c45d14dc1a098d22db305b3f0fea9247607a67a399a10173b0cb37aa9d9da' as const;

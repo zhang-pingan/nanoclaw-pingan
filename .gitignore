@@ -6,6 +6,7 @@ dist-electron/
 dist-assistant/
 electron/renderer/dist/
 assistant/renderer/dist/
+build/native/
 
 # Local data & auth
 store/

@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-registry-publish-preflight-result-schema:1\n",
-  "hash": "sha256:f0cc11b32e8fc6b456691030e2d89b1b7f07a3cfeeae68c53dfde12c63714a0d",
+  "hash": "sha256:ffcf2d89b3ae7c88bc8b423fed2cb8ed50e7608f128efd910649eef8eed9229f",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-registry-publish-preflight-result/1",
@@ -86,7 +86,7 @@
               "capability_outbox_binding_required",
               "compiled_plan_pin_required",
               "execution_artifact_pin_required",
-              "feature_identity_pair_mismatch",
+              "pack_identity_pair_mismatch",
               "compiler_version_mismatch",
               "preflight_hash_mismatch",
               "production_compiler_actual_oracle_forbidden",

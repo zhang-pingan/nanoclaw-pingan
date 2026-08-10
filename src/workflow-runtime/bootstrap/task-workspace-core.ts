@@ -1,6 +1,21 @@
 import { compileWorkflow } from '../compiler/compiler.js';
 import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import { buildClosedSchemaArtifacts } from '../contracts/closed-schema-artifacts.js';
+import {
+  buildDependencyClosure,
+  calculateRegistrySnapshotHash,
+  compareAscii,
+  registryResourceKey,
+} from '../contracts/g3-registry-persistence.js';
+import {
+  G3_REGISTRY_DEPENDENCY_KIND,
+  G3_REGISTRY_PERSISTENCE_FORMATS,
+  type G3RegistryPersistenceBatch,
+  type G3RegistryResourceDependency,
+  type G3RegistryResourceRecord,
+  type G3RegistryResourceType,
+  type G3RegistrySnapshot,
+} from '../contracts/g3-registry-persistence-types.js';
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
 import { buildSafetySqliteSemanticArtifacts } from '../contracts/safety-sqlite-artifacts.js';
 import type {
@@ -9,10 +24,8 @@ import type {
   Sha256Hash,
   VersionedRef,
 } from '../contracts/types.js';
-import type {
-  WorkflowRuntimeStore,
-  WorkflowRuntimeWriteTransaction,
-} from '../store/runtime-store/index.js';
+import type { WorkflowRuntimeStore } from '../store/runtime-store/index.js';
+import { publishWorkflowBundle } from '../authoring/workflow-bundle-publisher.js';
 import {
   TASK_WORKSPACE_CORE_VERSION,
   TASK_WORKSPACE_TEMPORARY_REFS,
@@ -41,24 +54,12 @@ const CORE_COMPILER_REFS = {
   },
 } as const satisfies Record<string, VersionedRef>;
 
-function hash(kind: string, value: JsonValue): Sha256Hash {
-  return domainSeparatedSha256(`icarus:task-workspace-core-${kind}:1\n`, value);
-}
-
 function rowId(
   resourceType: string,
   resourceId: string,
   version = CORE_VERSION,
 ): string {
   return `registry-resource:${resourceType}:${resourceId}@${version}`;
-}
-
-function valueId(
-  resourceType: string,
-  resourceId: string,
-  version = CORE_VERSION,
-): string {
-  return `registry-value:${resourceType}:${resourceId}@${version}`;
 }
 
 function registryResourceContentHash(
@@ -78,11 +79,97 @@ function registryResourceContentHash(
 }
 
 interface CoreResource {
-  readonly type: string;
+  readonly type: G3RegistryResourceType;
   readonly id: string;
   readonly version?: string;
   readonly content: JsonObject;
   readonly contentHash?: Sha256Hash;
+}
+
+function buildCoreRegistryBatch(
+  resources: readonly CoreResource[],
+  schemaHash: Sha256Hash,
+  nowMs: number,
+): G3RegistryPersistenceBatch {
+  const owner = {
+    kind: 'core' as const,
+    ref: { id: 'icarus.core.task-workspace', version: CORE_VERSION },
+  };
+  const schemaRef = {
+    id: 'icarus.task-workspace.generic-json',
+    version: CORE_VERSION,
+  };
+  const identities = resources.map((resource) => ({
+    resource_type: resource.type,
+    ref: { id: resource.id, version: resource.version ?? CORE_VERSION },
+    content_hash: coreResourceContentHash(resource),
+  }));
+  const recipeRef = { id: 'ad_hoc_personal_task', version: CORE_VERSION };
+  const records = resources.map((resource): G3RegistryResourceRecord => {
+    const ref = { id: resource.id, version: resource.version ?? CORE_VERSION };
+    let dependencies: G3RegistryResourceDependency[] = [];
+    if (resource.type === 'recipe') {
+      dependencies = identities
+        .filter(
+          (candidate) =>
+            candidate.resource_type !== 'recipe' ||
+            candidate.ref.id !== recipeRef.id ||
+            candidate.ref.version !== recipeRef.version,
+        )
+        .map((candidate) => ({
+          ...candidate,
+          dependency_kind: G3_REGISTRY_DEPENDENCY_KIND,
+        }));
+    } else if (resource.type !== 'schema' || resource.id !== schemaRef.id) {
+      dependencies = [
+        {
+          resource_type: 'schema',
+          ref: schemaRef,
+          content_hash: schemaHash,
+          dependency_kind: G3_REGISTRY_DEPENDENCY_KIND,
+        },
+      ];
+    }
+    dependencies.sort((left, right) =>
+      compareAscii(registryResourceKey(left), registryResourceKey(right)),
+    );
+    return {
+      format: G3_REGISTRY_PERSISTENCE_FORMATS.resource,
+      resource_type: resource.type,
+      ref,
+      owner,
+      schema_ref: schemaRef,
+      schema_hash: schemaHash,
+      content: resource.content,
+      content_hash: coreResourceContentHash(resource),
+      dependencies,
+    };
+  });
+  records.sort((left, right) =>
+    compareAscii(registryResourceKey(left), registryResourceKey(right)),
+  );
+  const closure = buildDependencyClosure(
+    records,
+    { resource_type: 'recipe', ref: recipeRef },
+    { id: 'icarus.task-workspace-core', version: CORE_VERSION },
+    { ...schemaRef, hash: schemaHash },
+  );
+  const snapshotWithoutHash = {
+    format: G3_REGISTRY_PERSISTENCE_FORMATS.snapshot,
+    ref: { id: 'icarus.task-workspace-core', version: CORE_VERSION },
+    closure_ref: closure.ref,
+    closure_hash: closure.closure_hash,
+    compiler_version: WORKFLOW_COMPILER_VERSION,
+  } satisfies Omit<G3RegistrySnapshot, 'snapshot_hash'>;
+  return {
+    resources: records,
+    closure,
+    snapshot: {
+      ...snapshotWithoutHash,
+      snapshot_hash: calculateRegistrySnapshotHash(snapshotWithoutHash),
+    },
+    created_at_ms: nowMs,
+  };
 }
 
 function coreResourceContentHash(resource: CoreResource): Sha256Hash {
@@ -469,74 +556,6 @@ function buildCoreCompilerBase(): CoreCompilerBase {
   return { source, snapshot, resources };
 }
 
-function insertResource(
-  transaction: WorkflowRuntimeWriteTransaction,
-  resource: CoreResource,
-  schemaRowId: string,
-  schemaHash: Sha256Hash,
-  nowMs: number,
-): void {
-  const version = resource.version ?? CORE_VERSION;
-  const id = rowId(resource.type, resource.id, version);
-  const contentHash = coreResourceContentHash(resource);
-  const existing = transaction.queryOne<{
-    content_hash: string;
-    publication_state: string;
-  }>(
-    `SELECT content_hash, publication_state
-       FROM workflow_registry_resources WHERE id = ?`,
-    [id],
-  );
-  if (existing) {
-    if (
-      existing.content_hash !== contentHash ||
-      existing.publication_state !== 'published'
-    ) {
-      throw new Error(`Task Workspace Core resource collision: ${id}`);
-    }
-    return;
-  }
-  const canonical = canonicalJson(resource.content);
-  transaction.execute(
-    `INSERT INTO workflow_values (
-       id, storage_kind, inline_canonical_json, blob_hash,
-       immutable_external_locator, expected_hash, content_hash, byte_length,
-       media_type, schema_resource_id, schema_resource_hash, provenance_ref,
-       retention_class, payload_state, payload_pruned_at_ms, created_at_ms,
-       row_version
-     ) VALUES (?, 'inline', ?, NULL, NULL, NULL, ?, ?, 'application/json',
-               ?, ?, 'icarus.task-workspace-core/1', 'pinned', 'live', NULL,
-               ?, 1)`,
-    [
-      valueId(resource.type, resource.id, version),
-      canonical,
-      contentHash,
-      Buffer.byteLength(canonical, 'utf8'),
-      schemaRowId,
-      schemaHash,
-      nowMs,
-    ],
-  );
-  transaction.execute(
-    `INSERT INTO workflow_registry_resources (
-       id, resource_type, resource_id, resource_version, owner_core_ref,
-       owner_feature_id, canonical_value_id, content_hash, publication_state,
-       created_at_ms, published_at_ms, retired_at_ms, row_version
-     ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 'published', ?, ?, NULL, 1)`,
-    [
-      id,
-      resource.type,
-      resource.id,
-      version,
-      CORE_OWNER,
-      valueId(resource.type, resource.id, version),
-      contentHash,
-      nowMs,
-      nowMs,
-    ],
-  );
-}
-
 function augmentCompilerSnapshot(input: JsonObject): {
   snapshot: JsonObject;
   resources: CoreResource[];
@@ -744,17 +763,6 @@ export function ensureTaskWorkspaceCore(
   store: WorkflowRuntimeStore,
   nowMs = Date.now(),
 ): EnsureTaskWorkspaceCoreResult {
-  const recipeRowId = rowId('recipe', 'ad_hoc_personal_task');
-  if (
-    store.queryOne<{ id: string }>(
-      `SELECT id FROM workflow_registry_resources
-        WHERE id = ? AND publication_state = 'published'`,
-      [recipeRowId],
-    )
-  ) {
-    return 'preserved';
-  }
-
   const compilerBase = buildCoreCompilerBase();
   const augmented = augmentCompilerSnapshot(compilerBase.snapshot);
   const compiled = compileWorkflow({
@@ -777,11 +785,6 @@ export function ensureTaskWorkspaceCore(
     { id: 'icarus.task-workspace.generic-json', version: CORE_VERSION },
     genericSchema,
   );
-  const genericSchemaRowId = rowId(
-    'schema',
-    'icarus.task-workspace.generic-json',
-  );
-
   const definition: JsonObject = {
     format: 'icarus.workflow-definition/1',
     ref: { id: 'icarus.core.ad-hoc-personal-task', version: CORE_VERSION },
@@ -833,6 +836,8 @@ export function ensureTaskWorkspaceCore(
   const recipe: JsonObject = {
     format: 'icarus.workflow-recipe/1',
     ref: { id: 'ad_hoc_personal_task', version: CORE_VERSION },
+    catalog_visibility: 'system_only',
+    system_purposes: ['temporary_workflow', 'personal_workflow'],
     name: 'Temporary Workflow',
     description: 'Plan and confirm a task-specific Workflow.',
     recipe_family: 'core.task-workspace.ad-hoc',
@@ -919,95 +924,16 @@ export function ensureTaskWorkspaceCore(
     },
   ];
 
-  store.withImmediateTransaction((transaction) => {
-    for (const resource of resources) {
-      insertResource(
-        transaction,
-        resource,
-        genericSchemaRowId,
-        genericSchemaHash,
-        nowMs,
-      );
-    }
-    const closureId = `registry-closure:icarus.task-workspace-core@${CORE_VERSION}`;
-    const snapshotId = `registry-snapshot:icarus.task-workspace-core@${CORE_VERSION}`;
-    const closureMembers = resources.map((resource) => ({
-      resource_id: rowId(
-        resource.type,
-        resource.id,
-        resource.version ?? CORE_VERSION,
-      ),
-      resource_type: resource.type,
-      content_hash: coreResourceContentHash(resource),
-    }));
-    const closureHash = hash('closure', closureMembers);
-    const closureManifest: JsonObject = {
-      format: 'icarus.workflow-registry-dependency-closure/1',
-      ref: { id: 'icarus.task-workspace-core', version: CORE_VERSION },
-      members: closureMembers,
-      closure_hash: closureHash,
-    };
-    const manifestHash = hash('closure-manifest', closureManifest);
-    const manifestValueId = `registry-value:closure:icarus.task-workspace-core@${CORE_VERSION}`;
-    const manifestCanonical = canonicalJson(closureManifest);
-    transaction.execute(
-      `INSERT INTO workflow_values (
-         id, storage_kind, inline_canonical_json, blob_hash,
-         immutable_external_locator, expected_hash, content_hash, byte_length,
-         media_type, schema_resource_id, schema_resource_hash, provenance_ref,
-         retention_class, payload_state, payload_pruned_at_ms, created_at_ms,
-         row_version
-       ) VALUES (?, 'inline', ?, NULL, NULL, NULL, ?, ?, 'application/json',
-                 ?, ?, 'icarus.task-workspace-core/1', 'pinned', 'live', NULL,
-                 ?, 1)`,
-      [
-        manifestValueId,
-        manifestCanonical,
-        manifestHash,
-        Buffer.byteLength(manifestCanonical, 'utf8'),
-        genericSchemaRowId,
-        genericSchemaHash,
-        nowMs,
-      ],
-    );
-    transaction.execute(
-      `INSERT INTO workflow_registry_closure_manifests (
-         id, closure_hash, manifest_value_id, manifest_hash, created_at_ms
-       ) VALUES (?, ?, ?, ?, ?)`,
-      [closureId, closureHash, manifestValueId, manifestHash, nowMs],
-    );
-    closureMembers.forEach((member, index) => {
-      transaction.execute(
-        `INSERT INTO workflow_registry_closure_members (
-           closure_manifest_id, resource_id, resource_type, content_hash,
-           member_index
-         ) VALUES (?, ?, ?, ?, ?)`,
-        [
-          closureId,
-          member.resource_id,
-          member.resource_type,
-          member.content_hash,
-          index,
-        ],
-      );
-    });
-    transaction.execute(
-      `INSERT INTO workflow_registry_snapshots (
-         id, snapshot_hash, closure_manifest_id, closure_hash,
-         compiler_version, created_at_ms
-       ) VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        snapshotId,
-        hash('snapshot', {
-          closure_hash: closureHash,
-          compiler_version: WORKFLOW_COMPILER_VERSION,
-        }),
-        closureId,
-        closureHash,
-        WORKFLOW_COMPILER_VERSION,
-        nowMs,
-      ],
-    );
+  const batch = buildCoreRegistryBatch(resources, genericSchemaHash, nowMs);
+  const publication = publishWorkflowBundle(store, {
+    owner: {
+      kind: 'core',
+      ref: { id: 'icarus.core.task-workspace', version: CORE_VERSION },
+    },
+    resources: batch.resources,
+    registry_batch: batch,
+    published_at_ms: nowMs,
+    publication_ref: `core:icarus.task-workspace@${CORE_VERSION}`,
   });
-  return 'initialized';
+  return publication.disposition === 'published' ? 'initialized' : 'preserved';
 }

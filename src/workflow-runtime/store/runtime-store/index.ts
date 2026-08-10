@@ -4,10 +4,7 @@ import { types as utilTypes } from 'node:util';
 
 import Database from 'better-sqlite3';
 
-import {
-  assertCurrentWorkflowRuntimeStructure,
-  migrateWorkflowRuntimeSchema,
-} from '../schema/compatibility.js';
+import { assertCurrentWorkflowRuntimeStructure } from '../schema/compatibility.js';
 import { ensureCapacityDefaults } from '../../capacity/defaults.js';
 import {
   CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
@@ -234,7 +231,7 @@ function verifyCurrentSchema(database: Database.Database): void {
   }
 }
 
-function upgradeSchemaIfEligible(databasePath: string): void {
+function verifyExistingSchema(databasePath: string): void {
   const database = new Database(databasePath, {
     fileMustExist: true,
     timeout: WORKFLOW_RUNTIME_SQLITE_CONFIG.busyTimeoutMs,
@@ -242,16 +239,18 @@ function upgradeSchemaIfEligible(databasePath: string): void {
   try {
     verifyDatabaseLevelProfile(database);
     const version = Number(scalarPragma(database, 'user_version'));
-    if (version === CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION) {
-      verifyCurrentSchema(database);
-      return;
+    if (version !== CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION) {
+      throw new WorkflowRuntimeStoreError(
+        'database_schema_mismatch',
+        `workflow-runtime.db Schema ${version} is not current Schema ${CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION}; back up any needed development state, then explicitly reset/reinitialize the Store`,
+      );
     }
-    migrateWorkflowRuntimeSchema(database);
+    verifyCurrentSchema(database);
   } catch (error) {
     if (error instanceof WorkflowRuntimeStoreError) throw error;
     throw new WorkflowRuntimeStoreError(
       'database_schema_mismatch',
-      `Schema ${String(Number(scalarPragma(database, 'user_version')))} upgrade failed closed: ${error instanceof Error ? error.message : String(error)}`,
+      `Schema ${String(Number(scalarPragma(database, 'user_version')))} verification failed closed: ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     );
   } finally {
@@ -680,7 +679,7 @@ export class WorkflowRuntimeConnectionFactory {
         fresh = true;
         bootstrapFreshDatabase(databasePath);
       } else {
-        upgradeSchemaIfEligible(databasePath);
+        verifyExistingSchema(databasePath);
       }
       writer = openConfiguredDatabase(databasePath, false);
       configureWriterTransientTables(writer);

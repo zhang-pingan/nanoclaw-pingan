@@ -14,6 +14,7 @@ import {
   WEB_UPLOADS_DIR,
 } from './config.js';
 import { readEnvFile } from './env.js';
+import type { WorkflowPackExecutionFileScopeAuthority } from './workflow-packs/execution-file-scope-authority.js';
 
 const MAX_IMAGES = 4;
 const MAX_GENERATE_INPUT_IMAGES = 16;
@@ -208,6 +209,26 @@ function resolveWorkspaceInputPath(
   return hostPath;
 }
 
+function readWorkspaceInputFile(
+  containerPath: string,
+  sourceAgent: string,
+  fileScopeAuthority?: WorkflowPackExecutionFileScopeAuthority,
+): { bytes: Buffer; filename: string; displayPath: string } {
+  if (fileScopeAuthority) {
+    return {
+      bytes: fileScopeAuthority.readContainerFile(containerPath),
+      filename: path.posix.basename(containerPath),
+      displayPath: containerPath,
+    };
+  }
+  const hostPath = resolveWorkspaceInputPath(containerPath, sourceAgent);
+  return {
+    bytes: fs.readFileSync(hostPath),
+    filename: path.basename(hostPath),
+    displayPath: hostPath,
+  };
+}
+
 function formatAxiosError(err: unknown): { error: string; details?: string } {
   if (err instanceof AxiosError) {
     const status = err.response?.status;
@@ -398,6 +419,7 @@ async function saveResponseImages(
   requestId: string,
   operation: Operation,
   timeoutMs: number,
+  fileScopeAuthority?: WorkflowPackExecutionFileScopeAuthority,
 ): Promise<AiImageSavedImage[]> {
   if (!payload || typeof payload !== 'object') {
     throw new Error('AI_IMAGE returned an unexpected non-object response.');
@@ -411,7 +433,7 @@ async function saveResponseImages(
 
   const safeRequestId = sanitizeRequestId(requestId);
   const hostDir = path.join(AI_IMAGES_DIR, safeRequestId);
-  fs.mkdirSync(hostDir, { recursive: true });
+  if (!fileScopeAuthority) fs.mkdirSync(hostDir, { recursive: true });
 
   const images: AiImageSavedImage[] = [];
   for (const [idx, item] of items.entries()) {
@@ -422,9 +444,16 @@ async function saveResponseImages(
       imageData.mimeType,
     );
     const filename = `${operation === 'edit' ? 'edit' : 'image'}-${String(idx + 1).padStart(2, '0')}${extension}`;
-    const hostPath = path.join(hostDir, filename);
-    fs.writeFileSync(hostPath, imageData.bytes);
     const relativePath = `${safeRequestId}/${filename}`;
+    if (fileScopeAuthority) {
+      await fileScopeAuthority.createScopeFile(
+        'ai_images',
+        relativePath,
+        imageData.bytes,
+      );
+    } else {
+      fs.writeFileSync(path.join(hostDir, filename), imageData.bytes);
+    }
     images.push({
       path: `/workspace/ai-images/${relativePath}`,
       relative_path: relativePath,
@@ -442,11 +471,14 @@ async function saveResponseImages(
   return images;
 }
 
-function encodeInputImageAsDataUri(hostPath: string): string {
-  const bytes = fs.readFileSync(hostPath);
+function encodeInputImageAsDataUri(input: {
+  bytes: Buffer;
+  displayPath: string;
+}): string {
+  const { bytes } = input;
   const { mimeType } = inferMimeAndExtension(bytes);
   if (!mimeType.startsWith('image/')) {
-    throw new Error(`Unsupported image file type: ${hostPath}`);
+    throw new Error(`Unsupported image file type: ${input.displayPath}`);
   }
   return `data:${mimeType};base64,${bytes.toString('base64')}`;
 }
@@ -454,6 +486,7 @@ function encodeInputImageAsDataUri(hostPath: string): string {
 async function resolveGenerateInputImages(
   parsed: z.infer<typeof generateArgsSchema>,
   sourceAgent?: string,
+  fileScopeAuthority?: WorkflowPackExecutionFileScopeAuthority,
 ): Promise<string[] | undefined> {
   const images: string[] = [];
   for (const item of parsed.image_paths || []) {
@@ -461,7 +494,9 @@ async function resolveGenerateInputImages(
       throw new Error('sourceAgent is required for image-to-image requests.');
     }
     images.push(
-      encodeInputImageAsDataUri(resolveWorkspaceInputPath(item, sourceAgent)),
+      encodeInputImageAsDataUri(
+        readWorkspaceInputFile(item, sourceAgent, fileScopeAuthority),
+      ),
     );
   }
   for (const url of parsed.image_urls || []) {
@@ -480,11 +515,16 @@ export async function generateAiImage(
   args: unknown,
   requestId: string,
   sourceAgent?: string,
+  fileScopeAuthority?: WorkflowPackExecutionFileScopeAuthority,
 ): Promise<AiImageResult> {
   try {
     const parsed = generateArgsSchema.parse(args);
     const config = resolveConfig({ size: parsed.size });
-    const inputImages = await resolveGenerateInputImages(parsed, sourceAgent);
+    const inputImages = await resolveGenerateInputImages(
+      parsed,
+      sourceAgent,
+      fileScopeAuthority,
+    );
     const payload = {
       model: config.model,
       prompt: parsed.prompt,
@@ -509,6 +549,7 @@ export async function generateAiImage(
       requestId,
       'generate',
       config.timeoutMs,
+      fileScopeAuthority,
     );
     return {
       status: 'success',
@@ -532,15 +573,20 @@ export async function editAiImage(
   args: unknown,
   requestId: string,
   sourceAgent: string,
+  fileScopeAuthority?: WorkflowPackExecutionFileScopeAuthority,
 ): Promise<AiImageResult> {
   try {
     const parsed = editArgsSchema.parse(args);
     const config = resolveConfig({ size: parsed.size });
-    const imageHostPaths = parsed.image_paths.map((item) =>
-      resolveWorkspaceInputPath(item, sourceAgent),
+    const imageInputs = parsed.image_paths.map((item) =>
+      readWorkspaceInputFile(item, sourceAgent, fileScopeAuthority),
     );
-    const maskHostPath = parsed.mask_path
-      ? resolveWorkspaceInputPath(parsed.mask_path, sourceAgent)
+    const maskInput = parsed.mask_path
+      ? readWorkspaceInputFile(
+          parsed.mask_path,
+          sourceAgent,
+          fileScopeAuthority,
+        )
       : undefined;
 
     const form = new FormData();
@@ -552,14 +598,14 @@ export async function editAiImage(
     if (parsed.background) form.append('background', parsed.background);
     if (parsed.input_fidelity)
       form.append('input_fidelity', parsed.input_fidelity);
-    for (const imageHostPath of imageHostPaths) {
-      form.append('image', fs.createReadStream(imageHostPath), {
-        filename: path.basename(imageHostPath),
+    for (const input of imageInputs) {
+      form.append('image', input.bytes, {
+        filename: input.filename,
       });
     }
-    if (maskHostPath) {
-      form.append('mask', fs.createReadStream(maskHostPath), {
-        filename: path.basename(maskHostPath),
+    if (maskInput) {
+      form.append('mask', maskInput.bytes, {
+        filename: maskInput.filename,
       });
     }
 
@@ -577,6 +623,7 @@ export async function editAiImage(
       requestId,
       'edit',
       config.timeoutMs,
+      fileScopeAuthority,
     );
     return {
       status: 'success',

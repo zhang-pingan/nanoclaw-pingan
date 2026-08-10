@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-definition-schema:1\n",
-  "hash": "sha256:baf4d792429ff5f3a6241e0c4d2fdf80b703bc78da0a0aebaba070cc1e5948a1",
+  "hash": "sha256:b9589bbb902798e8e85e99647852771db59074197b998490d6c168022c612b19",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-definition/1",
@@ -16,7 +16,7 @@
     "required": [
       "format",
       "ref",
-      "owner_feature_id",
+      "owner_pack_id",
       "name",
       "context_contract_ref",
       "entry_points",
@@ -30,7 +30,7 @@
       "ref": {
         "$ref": "#/$defs/versioned_ref"
       },
-      "owner_feature_id": {
+      "owner_pack_id": {
         "anyOf": [
           {
             "type": "string",

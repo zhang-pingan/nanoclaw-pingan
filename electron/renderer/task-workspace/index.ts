@@ -670,7 +670,7 @@ class TaskWorkspaceRenderer {
       ${this.state.recipes
         .map(
           (recipe) =>
-            `<option value="${escapeAttribute(recipe.selection_token)}"${selected?.selection_token === recipe.selection_token ? ' selected' : ''}>${escapeHtml(`${readableLabel(recipe.recipe_kind)} / ${recipe.display_name}`)}</option>`,
+            `<option value="${escapeAttribute(recipe.selection_token)}"${selected?.selection_token === recipe.selection_token ? ' selected' : ''}>${escapeHtml(`${recipe.distribution_kind === 'pack' ? 'Installed' : 'Mine'} / ${recipe.display_name}`)}</option>`,
         )
         .join('')}`;
     selector.disabled =

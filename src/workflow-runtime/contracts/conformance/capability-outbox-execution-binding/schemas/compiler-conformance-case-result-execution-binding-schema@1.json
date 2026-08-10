@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiler-conformance-case-result-execution-binding-schema:1\n",
-  "hash": "sha256:4760130a40827f695b0820c176783b69f66d29cd411f2eeaaebe582c19e2a78b",
+  "hash": "sha256:f873f2027f9817ce4842ee4b2192baaa9e77cd556fc984aa727a56485edfa31d",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/compiler-conformance-case-result-execution-binding-v1",
@@ -5808,15 +5808,6 @@
               }
             }
           },
-          "max_steps": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 9007199254740991
-          },
-          "program_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
           "operand_types": {
             "type": "array",
             "items": {
@@ -5831,6 +5822,15 @@
               ]
             },
             "minItems": 1
+          },
+          "max_steps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "program_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
           }
         }
       },
@@ -6873,13 +6873,13 @@
         "properties": {
           "closure_key": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,510}$"
+            "minLength": 1
           },
           "parent_closure_key": {
             "anyOf": [
               {
                 "type": "string",
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,510}$"
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -6912,26 +6912,7 @@
           "source_ref": {
             "anyOf": [
               {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "id",
-                  "version"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 255,
-                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
-                  },
-                  "version": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
-                  }
-                }
+                "$ref": "#/$defs/versioned_ref"
               },
               {
                 "type": "null"
@@ -7570,6 +7551,9 @@
           "complexity_summary": {
             "$ref": "#/$defs/complexity_summary"
           },
+          "static_child_plan_closure": {
+            "$ref": "#/$defs/static_child_plan_closure"
+          },
           "effective_limits": {
             "$ref": "#/$defs/nullable_graph_limits"
           },
@@ -7582,9 +7566,6 @@
           "runtime_safety_hash": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "static_child_plan_closure": {
-            "$ref": "#/$defs/static_child_plan_closure"
           }
         }
       }

@@ -9,7 +9,7 @@ import {
   TASK_WORKSPACE_TEMPORARY_REFS,
   TEMPORARY_WORKFLOW_COORDINATOR_EXAMPLE,
   WORKFLOW_AGENT_RESULT_SCHEMA_HASH,
-} from '../workflow-runtime/bootstrap/task-workspace-temporary-contract.js';
+} from '../workflow-runtime/gateway/workspace.js';
 import type {
   JsonObject,
   Sha256Hash,
@@ -73,7 +73,8 @@ function appendLaunch(
       principalRef: session.owner_principal_ref,
       selection: {
         kind: 'published_recipe',
-        recipe_kind: 'core',
+        distribution_kind: 'pack',
+        distribution_ref: { id: 'pack.test', version: '1.0.0' },
         recipe_ref: { id: 'recipe:test', version: '1.0.0' },
         recipe_hash: sha('a'),
       },
@@ -226,7 +227,8 @@ describe('TaskWorkspaceService review hardening', () => {
       principalRef: session.owner_principal_ref,
       selection: {
         kind: 'published_recipe',
-        recipe_kind: 'core',
+        distribution_kind: 'pack',
+        distribution_ref: { id: 'pack.test', version: '1.0.0' },
         recipe_ref: { id: 'recipe:test', version: '1.0.0' },
         recipe_hash: sha('a'),
       },

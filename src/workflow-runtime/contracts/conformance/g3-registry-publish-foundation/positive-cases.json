@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-g3-registry-publish-positive-cases:1\n",
-  "hash": "sha256:d3db567df82bb4a40926ac98d2e3beeb849b55bbdbadf6835f7f2d39437a03e5",
+  "hash": "sha256:34b19131b2b32d37525d0823deaee9259df1569a505dad834a78068a4f431016",
   "payload": {
     "fixture_scope": "test_only",
     "cases": [
@@ -18,10 +18,10 @@
           "operation": "validate_only",
           "target_registry": "production",
           "fixture_scope": "none",
-          "feature_manifest_ref": null,
-          "feature_manifest_hash": null,
-          "feature_release_ref": null,
-          "feature_release_hash": null,
+          "pack_manifest_ref": null,
+          "pack_manifest_hash": null,
+          "pack_release_ref": null,
+          "pack_release_hash": null,
           "resources": [],
           "expected_oracle": "golden_corpus_expected",
           "production_compiler_actual_role": "comparison_only",
@@ -29,10 +29,10 @@
             "id": "icarus.local-single-user-retention",
             "version": "1.0.0"
           },
-          "retention_policy_hash": "sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d",
+          "retention_policy_hash": "sha256:1a5c45d14dc1a098d22db305b3f0fea9247607a67a399a10173b0cb37aa9d9da",
           "requested_registry_write": false,
           "requested_activation": false,
-          "preflight_hash": "sha256:5e26bb7a1ea751d55d9d7d09b363c73aceb6cfa6cd2ed7f5e0ae0c5351c798cb"
+          "preflight_hash": "sha256:02fa6935d950d23734b6343c2101b0af1a0664324b296e6e44baf74ea58fb412"
         },
         "expected_result": {
           "format": "icarus.workflow-registry-publish-preflight-result/1",
@@ -53,16 +53,16 @@
           "operation": "validate_only",
           "target_registry": "test_only",
           "fixture_scope": "test_only",
-          "feature_manifest_ref": {
-            "id": "test-only.fixture.feature-manifest",
+          "pack_manifest_ref": {
+            "id": "test-only.fixture.workflow-pack",
             "version": "2.0.0"
           },
-          "feature_manifest_hash": "sha256:39f2af1a1ce0d9c02a07da3dbcc286406211d1f1f29c54ac01d457dd71b93f06",
-          "feature_release_ref": {
-            "id": "test-only.fixture.feature-release",
+          "pack_manifest_hash": "sha256:39f2af1a1ce0d9c02a07da3dbcc286406211d1f1f29c54ac01d457dd71b93f06",
+          "pack_release_ref": {
+            "id": "test-only.fixture.pack-release",
             "version": "1.0.0"
           },
-          "feature_release_hash": "sha256:053c39cbd9ee956b0235e858047aac0154d92ace618cb18aa20b619e70609e2f",
+          "pack_release_hash": "sha256:053c39cbd9ee956b0235e858047aac0154d92ace618cb18aa20b619e70609e2f",
           "resources": [
             {
               "resource_type": "definition",
@@ -113,10 +113,10 @@
             "id": "icarus.local-single-user-retention",
             "version": "1.0.0"
           },
-          "retention_policy_hash": "sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d",
+          "retention_policy_hash": "sha256:1a5c45d14dc1a098d22db305b3f0fea9247607a67a399a10173b0cb37aa9d9da",
           "requested_registry_write": false,
           "requested_activation": false,
-          "preflight_hash": "sha256:1cfa03083a8b9ed0823e165e3b06be246ea3752c1bfa28010a6bc2a745a3f9d6"
+          "preflight_hash": "sha256:22256fef7fba5fba8dd20e0a69de3bc016b0388b6dc2854453d9f8f042838220"
         },
         "expected_result": {
           "format": "icarus.workflow-registry-publish-preflight-result/1",
@@ -137,16 +137,16 @@
           "operation": "validate_only",
           "target_registry": "test_only",
           "fixture_scope": "test_only",
-          "feature_manifest_ref": {
-            "id": "test-only.fixture.feature-manifest",
+          "pack_manifest_ref": {
+            "id": "test-only.fixture.workflow-pack",
             "version": "2.0.0"
           },
-          "feature_manifest_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
-          "feature_release_ref": {
-            "id": "test-only.fixture.feature-release",
+          "pack_manifest_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "pack_release_ref": {
+            "id": "test-only.fixture.pack-release",
             "version": "1.0.0"
           },
-          "feature_release_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+          "pack_release_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
           "resources": [
             {
               "resource_type": "capability",
@@ -237,10 +237,10 @@
             "id": "icarus.local-single-user-retention",
             "version": "1.0.0"
           },
-          "retention_policy_hash": "sha256:3adc19f9a8ee92421faa349ec12e706f2d9862e90c0c74e53eb041794e2b805d",
+          "retention_policy_hash": "sha256:1a5c45d14dc1a098d22db305b3f0fea9247607a67a399a10173b0cb37aa9d9da",
           "requested_registry_write": false,
           "requested_activation": false,
-          "preflight_hash": "sha256:aa17c0d66c30b07ddba5573e889db59fe5462bae160b20cdc5c4ca308f0f5443"
+          "preflight_hash": "sha256:f321586f836408f274130a5f85e3aac06792b5fd51620253194da741ef7b7077"
         },
         "expected_result": {
           "format": "icarus.workflow-registry-publish-preflight-result/1",

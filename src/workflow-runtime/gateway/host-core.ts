@@ -5,7 +5,6 @@ export {
 export {
   CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
   MINIMUM_WORKFLOW_RUNTIME_SCHEMA_VERSION,
-  SCHEMA_3_REQUIRED_EMPTY_RELATIONS,
 } from '../store/runtime-store/config.js';
 export { ensureTaskWorkspaceCore } from '../bootstrap/task-workspace-core.js';
 export {

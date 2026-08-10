@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
 import { parseContractArtifactEnvelope } from './artifact.js';
-import { FEATURE_WORKFLOW_RESOURCE_KINDS } from './closed-schema-types.js';
+import { PACK_WORKFLOW_RESOURCE_KINDS } from './closed-schema-types.js';
 import {
   checkG3RegistryPublishFoundation,
   evaluateG3RegistryPublishPreflight,
@@ -148,8 +148,8 @@ describe('G3.1 Registry publish preflight foundation', () => {
     expect(validateInput(unknown)).toBe(false);
     expect(new Set(G3_REGISTRY_RESOURCE_TYPES)).toEqual(
       new Set([
-        ...FEATURE_WORKFLOW_RESOURCE_KINDS,
-        'feature_execution_artifact',
+        ...PACK_WORKFLOW_RESOURCE_KINDS,
+        'pack_execution_artifact',
         'outbox_adapter',
       ]),
     );
@@ -173,7 +173,7 @@ describe('G3.1 Registry publish preflight foundation', () => {
     expect(source).not.toMatch(/--accept|snapshot update/i);
     for (const forbidden of [
       '../registry/release-publisher',
-      '../registry/feature-manifest',
+      '../registry/workflow-pack',
       '../authoring/workflow-authoring',
       '../runtime/graph-runtime',
       '../projection/runtime-center-api',
@@ -182,7 +182,7 @@ describe('G3.1 Registry publish preflight foundation', () => {
     }
     for (const relativePath of [
       'registry/release-publisher.ts',
-      'registry/feature-manifest.ts',
+      'registry/workflow-pack.ts',
       'registry/core-upgrade.ts',
       'authoring/workflow-authoring.ts',
     ]) {

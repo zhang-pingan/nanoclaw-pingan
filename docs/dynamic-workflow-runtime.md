@@ -37,7 +37,7 @@ Normal development runs current checks through the configured runtime:
 
 Run `scripts/runtime-toolchain.sh configure --node "$(node -p 'process.execPath')"` after moving or upgrading Node. `active-core` is the only runtime selection pointer; there is no `active-node` pointer or stable runtime launcher.
 
-Store compatibility is governed by SQLite `PRAGMA user_version`, supported transactional migrations, and focused required table/column/index smoke checks. Store and Runtime tests use test-owned temporary directories and injected adapters; they never select an identity mode or touch the live Workflow database.
+Store compatibility is governed by SQLite `PRAGMA user_version`, exact schema v16 acceptance, and focused required table/column/index smoke checks. The Store is latest-only: older schemas fail closed and require the explicit backup/reset/reinitialize workflow described in [`host-core-lifecycle.md`](host-core-lifecycle.md); startup never performs an automatic migration. Store and Runtime tests use test-owned temporary directories and injected adapters; they never select an identity mode or touch the live Workflow database.
 
 ## Historical Archive
 

@@ -184,7 +184,7 @@ export function g4NegativeCases(): JsonObject[] {
     ['bootstrap-source-drift', 'bootstrap_source_identity_mismatch'],
     ['bootstrap-undeclared-sibling', 'bootstrap_source_inventory_drift'],
     ['production-entrypoint-import', 'test_bootstrap_reachable'],
-    ['feature-ingress-import', 'test_bootstrap_reachable'],
+    ['pack-ingress-import', 'test_bootstrap_reachable'],
     ['api-ingress-import', 'test_bootstrap_reachable'],
     ['automation-ingress-import', 'test_bootstrap_reachable'],
     ['host-bootstrap-import', 'test_bootstrap_reachable'],

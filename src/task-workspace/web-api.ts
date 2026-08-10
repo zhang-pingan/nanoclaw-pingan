@@ -480,7 +480,8 @@ export class TaskWorkspaceWebApi {
           kind,
           recipe_ref: item.recipe_ref,
           recipe_hash: item.recipe_hash,
-          recipe_kind: item.recipe_kind,
+          distribution_kind: item.distribution_kind,
+          distribution_ref: item.distribution_ref,
         };
       } else {
         throw new TaskWorkspaceApiError(

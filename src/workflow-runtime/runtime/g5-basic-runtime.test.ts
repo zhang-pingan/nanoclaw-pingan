@@ -279,7 +279,7 @@ function seedRuntime(store: WorkflowRuntimeStore): SeededRuntime {
       transaction.execute(
         `INSERT INTO workflow_registry_resources (
          id, resource_type, resource_id, resource_version, owner_core_ref,
-         owner_feature_id, canonical_value_id, content_hash, publication_state,
+         owner_pack_id, canonical_value_id, content_hash, publication_state,
          created_at_ms, published_at_ms, retired_at_ms, row_version
        ) VALUES (?, ?, ?, ?, 'icarus.core@1.0.0', NULL, ?, ?, 'published', 1, 1,
          NULL, 1)`,
@@ -476,7 +476,7 @@ function publishTestSchema(
     transaction.execute(
       `INSERT INTO workflow_registry_resources (
          id, resource_type, resource_id, resource_version, owner_core_ref,
-         owner_feature_id, canonical_value_id, content_hash, publication_state,
+         owner_pack_id, canonical_value_id, content_hash, publication_state,
          created_at_ms, published_at_ms, retired_at_ms, row_version
        ) VALUES (?, 'schema', ?, ?, 'icarus.core@1.0.0', NULL, ?, ?,
          'published', 2, 2, NULL, 1)`,
@@ -2292,7 +2292,7 @@ function buildNodeOutputEnvelopeFixtureTarget(
       transaction.execute(
         `INSERT INTO workflow_value_ownerships (
          value_id, owner_workflow_id, owner_graph_run_id,
-         owner_registry_resource_id, owner_feature_release_id,
+         owner_registry_resource_id, owner_pack_release_id,
          system_owner_ref, created_at_ms
        ) VALUES (?, NULL, ?, NULL, NULL, NULL, ?)`,
         [member.id, run.graphRunId, nowMs],

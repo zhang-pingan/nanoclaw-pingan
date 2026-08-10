@@ -64,6 +64,33 @@ vi.mock('./mount-security.js', () => ({
   validateAdditionalMounts: vi.fn(() => []),
 }));
 
+vi.mock('./workflow-packs/execution-resources.js', () => ({
+  verifyWorkflowPackExecutionResourcePin: vi.fn((pin: unknown) => pin),
+}));
+
+const readOnlyGateMocks = vi.hoisted(() => ({
+  prepare: vi.fn(),
+  verify: vi.fn(),
+  cleanup: vi.fn(),
+  mountPath: vi.fn((scope: string) => `/tmp/read-only-gate/${scope}`),
+}));
+
+const fileScopeAuthorityMocks = vi.hoisted(() => ({
+  createAuthority: vi.fn(),
+  register: vi.fn(),
+  deactivateAndDrain: vi.fn(async () => undefined),
+  cleanup: vi.fn(),
+}));
+
+vi.mock('./workflow-packs/read-only-file-gate.js', () => ({
+  prepareWorkflowPackReadOnlyFileGate: readOnlyGateMocks.prepare,
+}));
+
+vi.mock('./workflow-packs/execution-file-scope-authority.js', () => ({
+  createWorkflowPackExecutionFileScopeAuthority:
+    fileScopeAuthorityMocks.createAuthority,
+}));
+
 // Create a controllable fake ChildProcess
 function createFakeProcess() {
   const proc = new EventEmitter() as EventEmitter & {
@@ -107,6 +134,11 @@ import {
 import { readEnvFile } from './env.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import type { RegisteredAgent } from './types.js';
+import type { WorkflowPackExecutionResourcePin } from './workflow-packs/execution-resources.js';
+
+function sha256(value: string): `sha256:${string}` {
+  return `sha256:${value}`;
+}
 
 const testAgent: RegisteredAgent = {
   name: 'Test Agent',
@@ -198,6 +230,30 @@ describe('container-runner timeout behavior', () => {
       isDirectory: () => false,
       isFile: () => false,
     } as any);
+    readOnlyGateMocks.prepare.mockReset();
+    readOnlyGateMocks.verify.mockReset();
+    readOnlyGateMocks.verify.mockReturnValue({ clean: true, changes: [] });
+    readOnlyGateMocks.cleanup.mockReset();
+    readOnlyGateMocks.mountPath.mockClear();
+    readOnlyGateMocks.prepare.mockReturnValue({
+      rootPath: '/tmp/read-only-gate',
+      verify: readOnlyGateMocks.verify,
+      cleanup: readOnlyGateMocks.cleanup,
+      mountPath: readOnlyGateMocks.mountPath,
+    });
+    fileScopeAuthorityMocks.createAuthority.mockReset();
+    fileScopeAuthorityMocks.createAuthority.mockReturnValue({
+      id: 'authority-test',
+      ipcRootPath: '/tmp/read-only-authority',
+      hostActionResultsPath: '/tmp/read-only-authority/host-action-results',
+      register: fileScopeAuthorityMocks.register,
+      deactivateAndDrain: fileScopeAuthorityMocks.deactivateAndDrain,
+      cleanup: fileScopeAuthorityMocks.cleanup,
+    });
+    fileScopeAuthorityMocks.register.mockReset();
+    fileScopeAuthorityMocks.deactivateAndDrain.mockReset();
+    fileScopeAuthorityMocks.deactivateAndDrain.mockResolvedValue(undefined);
+    fileScopeAuthorityMocks.cleanup.mockReset();
     delete process.env.MAVEN_OPTS;
     delete process.env.MAVEN_SETTINGS_PATH;
     delete process.env.MAVEN_SETTINGS_XML;
@@ -781,5 +837,618 @@ describe('container-runner timeout behavior', () => {
     expect(args).toContain(
       '/host/report-readable:/workspace/extra/report-data:ro',
     );
+  });
+
+  it('mounts only pinned Pack discovery resources and sends a sanitized Run contract', async () => {
+    const pin: WorkflowPackExecutionResourcePin = {
+      pack_id: 'example-pack',
+      pack_version: '1.0.0',
+      manifest_hash: sha256('1'.repeat(64)),
+      execution_artifact_resource_id: 'registry-resource:pack-execution',
+      execution_artifact_hash: sha256('2'.repeat(64)),
+      execution_resource_files: {
+        agents: [
+          {
+            path: 'reviewer.md',
+            content_hash: sha256('3'.repeat(64)),
+            byte_length: 1,
+          },
+        ],
+        skills: [
+          {
+            path: 'pack-skill/SKILL.md',
+            content_hash: sha256('4'.repeat(64)),
+            byte_length: 1,
+          },
+        ],
+        mcp: [
+          {
+            path: 'mcp.json',
+            content_hash: sha256('5'.repeat(64)),
+            byte_length: 1,
+          },
+        ],
+        scripts: [
+          {
+            path: 'server.mjs',
+            content_hash: sha256('6'.repeat(64)),
+            byte_length: 1,
+          },
+        ],
+        templates: [
+          {
+            path: 'report.md',
+            content_hash: sha256('7'.repeat(64)),
+            byte_length: 1,
+          },
+        ],
+      },
+      permissions: {
+        host_actions: [],
+        file_scopes: [],
+        mcp_servers: ['pack-tools'],
+        effect_ceiling: 'read_only' as const,
+      },
+      registry_snapshot_id: 'registry-snapshot:example-pack@1.0.0',
+      registry_snapshot_hash: sha256('8'.repeat(64)),
+      root_path: '/host/pinned/example-pack-v1',
+    };
+    const resultPromise = runContainerAgent(
+      testAgent,
+      {
+        ...testInput,
+        executionMode: 'external_system_once',
+        runId: 'pack-run-resources',
+        queryId: 'pack-query-resources',
+        isolatedSession: true,
+        workflowPackExecutionResources: pin,
+      },
+      () => {},
+    );
+    const containerInput = await readStdinJson(fakeProc);
+    emitOutputMarker(fakeProc, { status: 'success', result: 'ok' });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+
+    const { spawn } = await import('child_process');
+    const args = vi.mocked(spawn).mock.calls.at(-1)?.[1] as string[];
+    expect(args).toContain(
+      '/host/pinned/example-pack-v1:/workspace/workflow-pack-resources:ro',
+    );
+    expect(args).toContain(
+      '/host/pinned/example-pack-v1/skills:/home/node/.claude/skills:ro',
+    );
+    expect(args).toContain(
+      '/host/pinned/example-pack-v1/agents:/home/node/.claude/agents:ro',
+    );
+    expect(args.some((arg) => arg.endsWith(':/workspace/agent'))).toBe(false);
+    expect(args.some((arg) => arg.includes(':/workspace/attachments'))).toBe(
+      false,
+    );
+    expect(args.some((arg) => arg.includes(':/workspace/uploads'))).toBe(false);
+    expect(args.some((arg) => arg.includes(':/app/custom-tools'))).toBe(false);
+    expect(args.some((arg) => arg.includes(':/home/node/.m2'))).toBe(false);
+    expect(args.some((arg) => arg.startsWith('MYSQL_PROXY_URL='))).toBe(false);
+    expect(args.some((arg) => arg.startsWith('MAVEN_OPTS='))).toBe(false);
+    expect(containerInput.workflowPackExecutionResources).toMatchObject({
+      format: 'icarus.workflow-pack-run-resources/1',
+      pack_id: 'example-pack',
+      root_path: '/workspace/workflow-pack-resources',
+      permissions: pin.permissions,
+      resource_paths: {
+        agents: '/workspace/workflow-pack-resources/agents',
+        skills: '/workspace/workflow-pack-resources/skills',
+        mcp: '/workspace/workflow-pack-resources/mcp',
+        scripts: '/workspace/workflow-pack-resources/scripts',
+        templates: '/workspace/workflow-pack-resources/templates',
+      },
+    });
+    expect(
+      JSON.stringify(containerInput.workflowPackExecutionResources),
+    ).not.toContain('/host/pinned');
+  });
+
+  it('rejects a Pack workspace mount without the pinned file scope', async () => {
+    await expect(
+      runContainerAgent(
+        testAgent,
+        {
+          ...testInput,
+          executionMode: 'external_system_once',
+          runId: 'pack-run-rejected-workspace',
+          queryId: 'pack-query-rejected-workspace',
+          workspace: { hostPath: '/host/workspace', readonly: true },
+          workflowPackExecutionResources: {
+            pack_id: 'example-pack',
+            pack_version: '1.0.0',
+            manifest_hash: `sha256:${'1'.repeat(64)}`,
+            execution_artifact_resource_id: 'registry-resource:pack-execution',
+            execution_artifact_hash: `sha256:${'2'.repeat(64)}`,
+            execution_resource_files: {},
+            permissions: {
+              host_actions: [],
+              file_scopes: [],
+              mcp_servers: [],
+              effect_ceiling: 'read_only',
+            },
+            registry_snapshot_id: 'registry-snapshot:example-pack@1.0.0',
+            registry_snapshot_hash: `sha256:${'8'.repeat(64)}`,
+            root_path: '/host/pinned/example-pack-v1',
+          },
+        },
+        () => {},
+      ),
+    ).rejects.toThrow('did not declare the workspace file scope');
+  });
+
+  it('uses writable isolated copies for declared read-only Pack file scopes', async () => {
+    const resultPromise = runContainerAgent(
+      testAgent,
+      {
+        ...testInput,
+        executionMode: 'external_system_once',
+        runId: 'pack-run-shadow-mounts',
+        queryId: 'pack-query-shadow-mounts',
+        workspace: { hostPath: '/host/workspace', readonly: false },
+        workflowPackExecutionResources: {
+          pack_id: 'example-pack',
+          pack_version: '1.0.0',
+          manifest_hash: sha256('1'.repeat(64)),
+          execution_artifact_resource_id: 'registry-resource:pack-execution',
+          execution_artifact_hash: sha256('2'.repeat(64)),
+          execution_resource_files: {},
+          permissions: {
+            host_actions: ['send_file'],
+            file_scopes: ['agent', 'workspace'],
+            mcp_servers: [],
+            effect_ceiling: 'read_only',
+          },
+          registry_snapshot_id: 'registry-snapshot:example-pack@1.0.0',
+          registry_snapshot_hash: sha256('8'.repeat(64)),
+          root_path: '/host/pinned/example-pack-v1',
+        },
+      },
+      () => {},
+    );
+    emitOutputMarker(fakeProc, { status: 'success', result: 'ok' });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+
+    const { spawn } = await import('child_process');
+    const args = vi.mocked(spawn).mock.calls.at(-1)?.[1] as string[];
+    expect(readOnlyGateMocks.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scopes: expect.arrayContaining([
+          { scope: 'workspace', sourcePath: '/host/workspace' },
+          {
+            scope: 'agent',
+            sourcePath: expect.stringContaining('test-agent'),
+          },
+        ]),
+      }),
+    );
+    expect(args).toContain('/tmp/read-only-gate/workspace:/workspace/project');
+    expect(args).toContain('/tmp/read-only-gate/agent:/workspace/agent');
+    expect(args).toContain(
+      '/tmp/read-only-authority/messages:/workspace/ipc/messages',
+    );
+    expect(args).toContain(
+      '/tmp/read-only-authority/tasks:/workspace/ipc/tasks',
+    );
+    expect(args).toContain(
+      '/tmp/read-only-authority/host-action-results:/workspace/ipc/host-action-results:ro',
+    );
+    expect(args.some((arg) => arg.includes('/host/workspace:'))).toBe(false);
+    expect(args.some((arg) => arg.includes(':/workspace/run-once'))).toBe(true);
+    expect(args).toContain(
+      '/host/pinned/example-pack-v1:/workspace/workflow-pack-resources:ro',
+    );
+    expect(readOnlyGateMocks.verify).toHaveBeenCalledOnce();
+    expect(readOnlyGateMocks.cleanup).toHaveBeenCalledOnce();
+    expect(fileScopeAuthorityMocks.createAuthority).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'pack-run-shadow-mounts',
+        queryId: 'pack-query-shadow-mounts',
+        agentFolder: 'test-agent',
+        hostActions: ['send_file'],
+        mappings: expect.arrayContaining([
+          expect.objectContaining({
+            scope: 'workspace',
+            sourcePath: '/host/workspace',
+            shadowHostPath: '/tmp/read-only-gate/workspace',
+          }),
+          expect.objectContaining({
+            scope: 'agent',
+            shadowHostPath: '/tmp/read-only-gate/agent',
+          }),
+        ]),
+      }),
+    );
+    expect(fileScopeAuthorityMocks.register).toHaveBeenCalledOnce();
+    expect(fileScopeAuthorityMocks.deactivateAndDrain).toHaveBeenCalledOnce();
+    expect(fileScopeAuthorityMocks.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('buffers read-only Pack success until the persistent file gate passes', async () => {
+    const onOutput = vi.fn(async () => undefined);
+    const resultPromise = runContainerAgent(
+      testAgent,
+      {
+        ...testInput,
+        executionMode: 'external_system_once',
+        runId: 'pack-run-buffered-success',
+        queryId: 'pack-query-buffered-success',
+        workflowPackExecutionResources: {
+          pack_id: 'example-pack',
+          pack_version: '1.0.0',
+          manifest_hash: sha256('1'.repeat(64)),
+          execution_artifact_resource_id: 'registry-resource:pack-execution',
+          execution_artifact_hash: sha256('2'.repeat(64)),
+          execution_resource_files: {},
+          permissions: {
+            host_actions: [],
+            file_scopes: ['agent'],
+            mcp_servers: [],
+            effect_ceiling: 'read_only',
+          },
+          registry_snapshot_id: 'registry-snapshot:example-pack@1.0.0',
+          registry_snapshot_hash: sha256('8'.repeat(64)),
+          root_path: '/host/pinned/example-pack-v1',
+        },
+      },
+      () => {},
+      onOutput,
+    );
+    emitOutputMarker(fakeProc, { status: 'success', result: 'verified' });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(onOutput).not.toHaveBeenCalledWith(
+      expect.objectContaining({ result: 'verified' }),
+    );
+
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(resultPromise).resolves.toEqual(
+      expect.objectContaining({ status: 'success' }),
+    );
+    expect(onOutput).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'success', result: 'verified' }),
+    );
+    expect(readOnlyGateMocks.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('overrides a streamed success when the read-only Pack file gate is dirty', async () => {
+    readOnlyGateMocks.verify.mockReturnValue({
+      clean: false,
+      changes: ['agent:report.md changed (content)'],
+    });
+    const onOutput = vi.fn(async () => undefined);
+    const resultPromise = runContainerAgent(
+      testAgent,
+      {
+        ...testInput,
+        executionMode: 'external_system_once',
+        runId: 'pack-run-dirty',
+        queryId: 'pack-query-dirty',
+        workflowPackExecutionResources: {
+          pack_id: 'example-pack',
+          pack_version: '1.0.0',
+          manifest_hash: sha256('1'.repeat(64)),
+          execution_artifact_resource_id: 'registry-resource:pack-execution',
+          execution_artifact_hash: sha256('2'.repeat(64)),
+          execution_resource_files: {},
+          permissions: {
+            host_actions: [],
+            file_scopes: ['agent'],
+            mcp_servers: [],
+            effect_ceiling: 'read_only',
+          },
+          registry_snapshot_id: 'registry-snapshot:example-pack@1.0.0',
+          registry_snapshot_hash: sha256('8'.repeat(64)),
+          root_path: '/host/pinned/example-pack-v1',
+        },
+      },
+      () => {},
+      onOutput,
+    );
+    emitOutputMarker(fakeProc, { status: 'success', result: 'do not deliver' });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+
+    const result = await resultPromise;
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'error',
+        failure: expect.objectContaining({
+          failureSubtype: 'workflow_pack_read_only_file_state_changed',
+          retryable: true,
+        }),
+      }),
+    );
+    expect(onOutput).not.toHaveBeenCalledWith(
+      expect.objectContaining({ result: 'do not deliver' }),
+    );
+    expect(onOutput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'error',
+        failure: expect.objectContaining({ retryable: true }),
+      }),
+    );
+    expect(readOnlyGateMocks.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('cleans a read-only Pack file gate when process registration and kill fail', async () => {
+    fakeProc.kill.mockImplementationOnce(() => {
+      throw new Error('kill failed');
+    });
+    const result = await runContainerAgent(
+      testAgent,
+      {
+        ...testInput,
+        executionMode: 'external_system_once',
+        runId: 'pack-run-registration-error',
+        queryId: 'pack-query-registration-error',
+        workflowPackExecutionResources: {
+          pack_id: 'example-pack',
+          pack_version: '1.0.0',
+          manifest_hash: sha256('1'.repeat(64)),
+          execution_artifact_resource_id: 'registry-resource:pack-execution',
+          execution_artifact_hash: sha256('2'.repeat(64)),
+          execution_resource_files: {},
+          permissions: {
+            host_actions: [],
+            file_scopes: ['agent'],
+            mcp_servers: [],
+            effect_ceiling: 'read_only',
+          },
+          registry_snapshot_id: 'registry-snapshot:example-pack@1.0.0',
+          registry_snapshot_hash: sha256('8'.repeat(64)),
+          root_path: '/host/pinned/example-pack-v1',
+        },
+      },
+      () => {
+        throw new Error('registration failed');
+      },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'error',
+        failure: expect.objectContaining({
+          failureSubtype: 'container_process_registration_error',
+        }),
+      }),
+    );
+    expect(fakeProc.kill).toHaveBeenCalledWith('SIGKILL');
+    expect(readOnlyGateMocks.cleanup).toHaveBeenCalledOnce();
+    expect(fileScopeAuthorityMocks.register).not.toHaveBeenCalled();
+    expect(fileScopeAuthorityMocks.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('unregisters the Run file authority after a spawned process error', async () => {
+    const resultPromise = runContainerAgent(
+      testAgent,
+      {
+        ...testInput,
+        executionMode: 'external_system_once',
+        runId: 'pack-run-process-error',
+        queryId: 'pack-query-process-error',
+        workflowPackExecutionResources: {
+          pack_id: 'example-pack',
+          pack_version: '1.0.0',
+          manifest_hash: sha256('1'.repeat(64)),
+          execution_artifact_resource_id: 'registry-resource:pack-execution',
+          execution_artifact_hash: sha256('2'.repeat(64)),
+          execution_resource_files: {},
+          permissions: {
+            host_actions: ['send_file'],
+            file_scopes: ['agent'],
+            mcp_servers: [],
+            effect_ceiling: 'read_only',
+          },
+          registry_snapshot_id: 'registry-snapshot:example-pack@1.0.0',
+          registry_snapshot_hash: sha256('8'.repeat(64)),
+          root_path: '/host/pinned/example-pack-v1',
+        },
+      },
+      () => undefined,
+    );
+    expect(fileScopeAuthorityMocks.register).toHaveBeenCalledOnce();
+
+    fakeProc.emit('error', new Error('spawned process failed'));
+    await vi.advanceTimersByTimeAsync(10);
+    expect(fileScopeAuthorityMocks.deactivateAndDrain).not.toHaveBeenCalled();
+    fakeProc.emit('close', null);
+    await vi.advanceTimersByTimeAsync(10);
+
+    await expect(resultPromise).resolves.toEqual(
+      expect.objectContaining({
+        status: 'error',
+        failure: expect.objectContaining({
+          failureSubtype: 'container_spawn_error',
+        }),
+      }),
+    );
+    expect(fileScopeAuthorityMocks.deactivateAndDrain).toHaveBeenCalledOnce();
+    expect(fileScopeAuthorityMocks.cleanup).toHaveBeenCalledOnce();
+    expect(readOnlyGateMocks.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('does not apply the Pack file gate to an ordinary Agent session', async () => {
+    const resultPromise = runContainerAgent(testAgent, testInput, () => {});
+    emitOutputMarker(fakeProc, { status: 'success', result: 'ordinary-agent' });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(resultPromise).resolves.toEqual(
+      expect.objectContaining({ status: 'success', result: 'ordinary-agent' }),
+    );
+
+    const { spawn } = await import('child_process');
+    const args = vi.mocked(spawn).mock.calls.at(-1)?.[1] as string[];
+    expect(readOnlyGateMocks.prepare).not.toHaveBeenCalled();
+    expect(args.some((arg) => arg.endsWith(':/workspace/agent'))).toBe(true);
+    expect(args.some((arg) => arg.includes('/tmp/read-only-gate'))).toBe(false);
+    expect(fileScopeAuthorityMocks.createAuthority).not.toHaveBeenCalled();
+  });
+
+  it('does not apply the Pack file gate to non-Pack or writable Pack Runs', async () => {
+    const nonPackPromise = runContainerAgent(
+      testAgent,
+      { ...testInput, executionMode: 'external_system_once' },
+      () => {},
+    );
+    emitOutputMarker(fakeProc, { status: 'success', result: 'non-pack' });
+    await vi.advanceTimersByTimeAsync(10);
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await nonPackPromise;
+    expect(readOnlyGateMocks.prepare).not.toHaveBeenCalled();
+
+    for (const effect_ceiling of [
+      'workspace_write',
+      'external_write',
+    ] as const) {
+      fakeProc = createFakeProcess();
+      const writablePackPromise = runContainerAgent(
+        testAgent,
+        {
+          ...testInput,
+          executionMode: 'external_system_once',
+          workflowPackExecutionResources: {
+            pack_id: 'example-pack',
+            pack_version: '1.0.0',
+            manifest_hash: sha256('1'.repeat(64)),
+            execution_artifact_resource_id: 'registry-resource:pack-execution',
+            execution_artifact_hash: sha256('2'.repeat(64)),
+            execution_resource_files: {},
+            permissions: {
+              host_actions: [],
+              file_scopes: ['agent'],
+              mcp_servers: [],
+              effect_ceiling,
+            },
+            registry_snapshot_id: 'registry-snapshot:example-pack@1.0.0',
+            registry_snapshot_hash: sha256('8'.repeat(64)),
+            root_path: '/host/pinned/example-pack-v1',
+          },
+        },
+        () => {},
+      );
+      emitOutputMarker(fakeProc, {
+        status: 'success',
+        result: `${effect_ceiling}-pack`,
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      fakeProc.emit('close', 0);
+      await vi.advanceTimersByTimeAsync(10);
+      await writablePackPromise;
+      expect(readOnlyGateMocks.prepare).not.toHaveBeenCalled();
+      expect(fileScopeAuthorityMocks.createAuthority).not.toHaveBeenCalled();
+    }
+
+    const { spawn } = await import('child_process');
+    const args = vi.mocked(spawn).mock.calls.at(-1)?.[1] as string[];
+    expect(args.some((arg) => arg.endsWith(':/workspace/agent'))).toBe(true);
+    expect(args.some((arg) => arg.includes('/tmp/read-only-gate'))).toBe(false);
+  });
+
+  it('starts ordinary and writable Pack Runs while a read-only Pack Run remains active', async () => {
+    const readOnlyProcess = fakeProc;
+    const readOnlyPromise = runContainerAgent(
+      testAgent,
+      {
+        ...testInput,
+        executionMode: 'external_system_once',
+        runId: 'overlap-read-only-run',
+        queryId: 'overlap-read-only-query',
+        workflowPackExecutionResources: {
+          pack_id: 'read-only-pack',
+          pack_version: '1.0.0',
+          manifest_hash: sha256('1'.repeat(64)),
+          execution_artifact_resource_id: 'registry-resource:read-only',
+          execution_artifact_hash: sha256('2'.repeat(64)),
+          execution_resource_files: {},
+          permissions: {
+            host_actions: [],
+            file_scopes: ['agent'],
+            mcp_servers: [],
+            effect_ceiling: 'read_only',
+          },
+          registry_snapshot_id: 'registry-snapshot:read-only-pack@1.0.0',
+          registry_snapshot_hash: sha256('8'.repeat(64)),
+          root_path: '/host/pinned/read-only-pack-v1',
+        },
+      },
+      () => {},
+    );
+    expect(fileScopeAuthorityMocks.register).toHaveBeenCalledOnce();
+
+    fakeProc = createFakeProcess();
+    const ordinaryProcess = fakeProc;
+    const ordinaryPromise = runContainerAgent(testAgent, testInput, () => {});
+    emitOutputMarker(ordinaryProcess, {
+      status: 'success',
+      result: 'ordinary-overlap',
+    });
+    ordinaryProcess.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(ordinaryPromise).resolves.toMatchObject({
+      status: 'success',
+      result: 'ordinary-overlap',
+    });
+
+    fakeProc = createFakeProcess();
+    const writableProcess = fakeProc;
+    const writablePromise = runContainerAgent(
+      testAgent,
+      {
+        ...testInput,
+        executionMode: 'external_system_once',
+        workflowPackExecutionResources: {
+          pack_id: 'writable-pack',
+          pack_version: '1.0.0',
+          manifest_hash: sha256('3'.repeat(64)),
+          execution_artifact_resource_id: 'registry-resource:writable',
+          execution_artifact_hash: sha256('4'.repeat(64)),
+          execution_resource_files: {},
+          permissions: {
+            host_actions: [],
+            file_scopes: ['agent'],
+            mcp_servers: [],
+            effect_ceiling: 'workspace_write',
+          },
+          registry_snapshot_id: 'registry-snapshot:writable-pack@1.0.0',
+          registry_snapshot_hash: sha256('9'.repeat(64)),
+          root_path: '/host/pinned/writable-pack-v1',
+        },
+      },
+      () => {},
+    );
+    emitOutputMarker(writableProcess, {
+      status: 'success',
+      result: 'writable-overlap',
+    });
+    writableProcess.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(writablePromise).resolves.toMatchObject({
+      status: 'success',
+      result: 'writable-overlap',
+    });
+
+    expect(readOnlyGateMocks.verify).not.toHaveBeenCalled();
+    emitOutputMarker(readOnlyProcess, {
+      status: 'success',
+      result: 'read-only-finished',
+    });
+    readOnlyProcess.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(readOnlyPromise).resolves.toMatchObject({
+      status: 'success',
+    });
   });
 });

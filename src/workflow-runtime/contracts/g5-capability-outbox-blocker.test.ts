@@ -59,7 +59,7 @@ function insertRegistryResource(
     .prepare(
       `INSERT INTO workflow_registry_resources (
         id, resource_type, resource_id, resource_version, owner_core_ref,
-        owner_feature_id, canonical_value_id, content_hash, publication_state,
+        owner_pack_id, canonical_value_id, content_hash, publication_state,
         created_at_ms, published_at_ms, retired_at_ms, row_version
       ) VALUES (?, ?, ?, '1.0.0', 'core:test@1', NULL, ?, ?, 'published',
         1, 1, NULL, 0)`,
@@ -67,12 +67,12 @@ function insertRegistryResource(
     .run(id, resourceType, resourceId, valueId, contentHash);
 }
 
-function schema7Database(): Database.Database {
+function currentSchemaDatabase(): Database.Database {
   const database = new Database(':memory:');
   database.pragma('foreign_keys = ON');
   database.exec(
     read(
-      'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v7.sql',
+      'src/workflow-runtime/store/schema/migration/workflow-runtime-schema-v16.sql',
     ).toString('utf8'),
   );
   database.exec('BEGIN');
@@ -163,8 +163,8 @@ describe('Capability to Outbox execution binding', () => {
     }
   });
 
-  it('persists the exact binding through Schema 7 registry-authority Value FKs', () => {
-    const database = schema7Database();
+  it('persists the exact binding through current registry-authority Value FKs', () => {
+    const database = currentSchemaDatabase();
     try {
       database.exec('BEGIN');
       insertOutbox(database, HASH_B);
@@ -186,8 +186,8 @@ describe('Capability to Outbox execution binding', () => {
     }
   });
 
-  it('rejects an Adapter identity drift at the deferred Schema 7 FK handoff', () => {
-    const database = schema7Database();
+  it('rejects an Adapter identity drift at the deferred current FK handoff', () => {
+    const database = currentSchemaDatabase();
     try {
       database.exec('BEGIN');
       insertOutbox(database, HASH_E);
@@ -198,8 +198,8 @@ describe('Capability to Outbox execution binding', () => {
     }
   });
 
-  it('rejects a Policy snapshot hash drift at the deferred Schema 7 FK handoff', () => {
-    const database = schema7Database();
+  it('rejects a Policy snapshot hash drift at the deferred current FK handoff', () => {
+    const database = currentSchemaDatabase();
     try {
       database.exec('BEGIN');
       insertOutbox(database, HASH_B, HASH_E);

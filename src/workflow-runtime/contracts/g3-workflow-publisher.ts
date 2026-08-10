@@ -1,8 +1,8 @@
 import { Ajv2020, type AnySchema } from 'ajv/dist/2020.js';
 
 import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
+import { buildClosedSchemaArtifacts } from './closed-schema-artifacts.js';
 import { canonicalJson, domainSeparatedSha256 } from './hash.js';
-import { evaluateG32AFeatureManifest } from './g3-2a-feature-manifest-intake.js';
 import { validateRegistryExactResourceQueryInput } from './g3-registry-exact-resource-query.js';
 import type { G3RegistryExactResourceQueryInput } from './g3-registry-exact-resource-query-types.js';
 import {
@@ -40,13 +40,39 @@ import {
   VERSIONED_REF_VERSION_PATTERN,
 } from './versioned-ref.js';
 
+const workflowPackManifestSchema = buildClosedSchemaArtifacts().find(
+  ([artifactPath]) =>
+    artifactPath === 'schemas/workflow-pack-manifest-schema.json',
+)?.[1].payload;
+if (!workflowPackManifestSchema) {
+  throw new Error('Workflow Pack manifest schema is unavailable');
+}
+const validateWorkflowPackManifest = new Ajv2020({
+  allErrors: true,
+  coerceTypes: false,
+  removeAdditional: false,
+  strict: true,
+  useDefaults: false,
+}).compile(workflowPackManifestSchema as AnySchema);
+
+export function calculateWorkflowPackSourceManifestHash(
+  manifest: JsonObject,
+): Sha256Hash {
+  const { manifest_hash: ignored, ...withoutHash } = manifest;
+  void ignored;
+  return domainSeparatedSha256(
+    'icarus:workflow-pack-manifest:1\n',
+    withoutHash,
+  );
+}
+
 export const G37_REQUEST_DOMAIN = 'icarus:workflow-staged-publish-request:1\n';
 export const G37_DOMAIN_REQUEST_DOMAIN =
   'icarus:workflow-staged-publish-domain-request:1\n';
 export const G37_APPROVED_REVIEW_DOMAIN =
   'icarus:workflow-approved-publish-review:1\n';
 export const G37_TARGET_RELEASE_DOMAIN =
-  'icarus:workflow-staged-feature-release:1\n';
+  'icarus:workflow-staged-pack-release:1\n';
 export const G37_RECEIPT_DOMAIN = 'icarus:workflow-staged-publish-receipt:1\n';
 export const G37_RESULT_DOMAIN = 'icarus:workflow-staged-publish-result:1\n';
 export const G37_INVOCATION_DOMAIN = 'icarus:workflow-publisher-invocation:1\n';
@@ -153,8 +179,8 @@ export const G37_REQUEST_SCHEMA: JsonObject = {
         'execution_artifact_hash',
         'closure_ref',
         'closure_hash',
-        'feature_release_ref',
-        'feature_release_hash',
+        'pack_release_ref',
+        'pack_release_hash',
       ],
       properties: {
         format: { const: G3_WORKFLOW_PUBLISHER_FORMATS.approvedReview },
@@ -175,8 +201,8 @@ export const G37_REQUEST_SCHEMA: JsonObject = {
         execution_artifact_hash: hashSchema,
         closure_ref: { $ref: '#/$defs/ref' },
         closure_hash: hashSchema,
-        feature_release_ref: { $ref: '#/$defs/ref' },
-        feature_release_hash: hashSchema,
+        pack_release_ref: { $ref: '#/$defs/ref' },
+        pack_release_hash: hashSchema,
       },
     },
     source_manifest: { $ref: '#/$defs/canonical_value' },
@@ -202,14 +228,14 @@ export const G37_REQUEST_SCHEMA: JsonObject = {
       type: 'object',
       additionalProperties: false,
       required: [
-        'feature_id',
+        'pack_id',
         'release_ref',
         'release_hash',
         'execution_artifact',
         'resources',
       ],
       properties: {
-        feature_id: { type: 'string', minLength: 1, maxLength: 255 },
+        pack_id: { type: 'string', minLength: 1, maxLength: 255 },
         release_ref: { $ref: '#/$defs/ref' },
         release_hash: hashSchema,
         execution_artifact: { $ref: '#/$defs/ref_hash' },
@@ -266,8 +292,8 @@ export const G37_RECEIPT_SCHEMA: JsonObject = {
     'command_id',
     'outcome',
     'domain_request_hash',
-    'feature_release_ref',
-    'feature_release_hash',
+    'pack_release_ref',
+    'pack_release_hash',
     'closure_ref',
     'closure_hash',
     'execution_artifact_ref',
@@ -284,8 +310,8 @@ export const G37_RECEIPT_SCHEMA: JsonObject = {
     command_id: { type: 'string', minLength: 1 },
     outcome: { enum: ['applied', 'failed'] },
     domain_request_hash: hashSchema,
-    feature_release_ref: { $ref: '#/$defs/ref' },
-    feature_release_hash: hashSchema,
+    pack_release_ref: { $ref: '#/$defs/ref' },
+    pack_release_hash: hashSchema,
     closure_ref: { $ref: '#/$defs/ref' },
     closure_hash: hashSchema,
     execution_artifact_ref: { $ref: '#/$defs/ref' },
@@ -582,8 +608,8 @@ export function workflowPublisherCommandId(
   }).slice(7)}`;
 }
 
-export function workflowFeatureReleaseId(ref: VersionedRef): string {
-  return `feature-release:${refText(ref)}`;
+export function workflowPackReleaseId(ref: VersionedRef): string {
+  return `pack-release:${refText(ref)}`;
 }
 
 export function workflowPublishedRetentionHandleId(
@@ -672,7 +698,7 @@ export function validateG37WorkflowPublisherRequest(
   ) {
     throw new G3WorkflowPublisherContractError(
       'publish_identity_mismatch',
-      'Target Feature Release hash mismatch',
+      'Target Pack Release hash mismatch',
     );
   }
 
@@ -706,12 +732,12 @@ export function validateG37WorkflowPublisherRequest(
     'result',
   );
 
-  const manifestResult = evaluateG32AFeatureManifest(
-    request.source_manifest.content,
-  );
   if (
-    manifestResult.outcome !== 'accepted' ||
-    manifestResult.manifest_hash !== request.source_manifest.content_hash
+    !validateWorkflowPackManifest(request.source_manifest.content) ||
+    request.source_manifest.content.manifest_hash !==
+      request.source_manifest.content_hash ||
+    calculateWorkflowPackSourceManifestHash(request.source_manifest.content) !==
+      request.source_manifest.content_hash
   ) {
     throw new G3WorkflowPublisherContractError(
       'publish_identity_mismatch',
@@ -801,13 +827,13 @@ export function validateG37WorkflowPublisherRequest(
   ) {
     throw new G3WorkflowPublisherContractError(
       'publish_identity_mismatch',
-      'Target Feature Release resource set is not the exact Closure root/member set',
+      'Target Pack Release resource set is not the exact Closure root/member set',
     );
   }
 
   const executionArtifact = targetResources.find(
     ({ resource }) =>
-      resource.resource_type === 'feature_execution_artifact' &&
+      resource.resource_type === 'pack_execution_artifact' &&
       sameRef(resource.ref, request.target_release.execution_artifact.ref) &&
       resource.content_hash === request.target_release.execution_artifact.hash,
   );
@@ -815,10 +841,10 @@ export function validateG37WorkflowPublisherRequest(
     !executionArtifact ||
     !sameRef(
       request.target_release.release_ref,
-      request.approved_review.feature_release_ref,
+      request.approved_review.pack_release_ref,
     ) ||
     request.target_release.release_hash !==
-      request.approved_review.feature_release_hash ||
+      request.approved_review.pack_release_hash ||
     !sameRef(
       request.target_release.execution_artifact.ref,
       request.approved_review.execution_artifact_ref,
@@ -828,7 +854,7 @@ export function validateG37WorkflowPublisherRequest(
   ) {
     throw new G3WorkflowPublisherContractError(
       'publish_identity_mismatch',
-      'Target Feature Release differs from its reviewed resource binding',
+      'Target Pack Release differs from its reviewed resource binding',
     );
   }
 
@@ -837,16 +863,13 @@ export function validateG37WorkflowPublisherRequest(
     .map((resource) => resource.compiled_plan_pin)
     .filter((pin) => pin !== null);
   if (
-    preflight.feature_manifest_ref === null ||
-    preflight.feature_manifest_hash !== request.source_manifest.content_hash ||
+    preflight.pack_manifest_ref === null ||
+    preflight.pack_manifest_hash !== request.source_manifest.content_hash ||
     request.source_manifest.semantic_ref !==
-      refText(preflight.feature_manifest_ref) ||
-    preflight.feature_release_ref === null ||
-    !sameRef(
-      preflight.feature_release_ref,
-      request.target_release.release_ref,
-    ) ||
-    preflight.feature_release_hash !== request.target_release.release_hash ||
+      refText(preflight.pack_manifest_ref) ||
+    preflight.pack_release_ref === null ||
+    !sameRef(preflight.pack_release_ref, request.target_release.release_ref) ||
+    preflight.pack_release_hash !== request.target_release.release_hash ||
     planPins.length === 0 ||
     !planPins.some(
       (pin) =>
@@ -856,20 +879,18 @@ export function validateG37WorkflowPublisherRequest(
   ) {
     throw new G3WorkflowPublisherContractError(
       'publish_identity_mismatch',
-      'Source manifest, compiled plan, or Feature Release differs from G3.1',
+      'Source manifest, compiled plan, or Pack Release differs from G3.1',
     );
   }
 
-  const manifestFeatureRef = request.source_manifest.content.feature_ref as
+  const manifestPackRef = request.source_manifest.content.pack_ref as
     | VersionedRef
     | undefined;
-  const featureId = manifestFeatureRef?.id.endsWith('.feature')
-    ? manifestFeatureRef.id.slice(0, -'.feature'.length)
-    : null;
-  if (featureId !== request.target_release.feature_id) {
+  const packId = manifestPackRef?.id ?? null;
+  if (packId !== request.target_release.pack_id) {
     throw new G3WorkflowPublisherContractError(
       'publish_identity_mismatch',
-      'Target feature_id differs from the canonical source manifest owner',
+      'Target pack_id differs from the canonical source manifest owner',
     );
   }
 
@@ -883,8 +904,8 @@ export function validateG37WorkflowPublisherRequest(
     ) ||
     review.execution_artifact_hash !==
       request.target_release.execution_artifact.hash ||
-    !sameRef(review.feature_release_ref, request.target_release.release_ref) ||
-    review.feature_release_hash !== request.target_release.release_hash ||
+    !sameRef(review.pack_release_ref, request.target_release.release_ref) ||
+    review.pack_release_hash !== request.target_release.release_hash ||
     review.approved_at_ms >= review.expires_at_ms
   ) {
     throw new G3WorkflowPublisherContractError(

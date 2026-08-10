@@ -6,7 +6,8 @@ export type TaskRunSelection =
       kind: 'published_recipe';
       recipe_ref: { id: string; version: string };
       recipe_hash: string;
-      recipe_kind: 'core' | 'feature' | 'personal';
+      distribution_kind: 'pack' | 'personal';
+      distribution_ref: { id: string; version: string };
     };
 
 export interface TaskSession {
@@ -33,7 +34,8 @@ export interface TimelineEntry {
 }
 
 export interface RecipeCatalogItem {
-  recipe_kind: 'core' | 'feature' | 'personal';
+  distribution_kind: 'pack' | 'personal';
+  distribution_ref: { id: string; version: string };
   recipe_ref: { id: string; version: string };
   recipe_hash: string;
   display_name: string;
