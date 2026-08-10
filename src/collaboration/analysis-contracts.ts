@@ -258,6 +258,338 @@ export type CollaborationAnalysisResult = z.infer<
   typeof collaborationAnalysisResultSchema
 >;
 
+export const collaborationRepositoryVerificationLevelSchema = z.enum([
+  'verified',
+  'self_consistent',
+  'projection_only',
+  'unverified',
+]);
+export type CollaborationRepositoryVerificationLevel = z.infer<
+  typeof collaborationRepositoryVerificationLevelSchema
+>;
+
+const collaborationRepositoryVerificationCheckSchema = z.enum([
+  'passed',
+  'failed',
+  'not_run',
+]);
+
+export const collaborationRepositoryVerificationSchema = z
+  .object({
+    format: z.literal('icarus.collaboration-repository-verification/1'),
+    level: collaborationRepositoryVerificationLevelSchema,
+    repository_identity: z.enum([
+      'trusted_input_match',
+      'not_externally_anchored',
+      'not_established',
+    ]),
+    requested_ref: z.string().min(1).max(1024),
+    resolved_ref: z.string().min(1).max(1024).nullable(),
+    repository_head: gitCommitSchema.nullable(),
+    genesis_commit: gitCommitSchema.nullable(),
+    trusted_genesis: gitCommitSchema.nullable(),
+    trusted_head: gitCommitSchema.nullable(),
+    event_count: z.number().int().nonnegative(),
+    checks: z
+      .object({
+        git_repository: collaborationRepositoryVerificationCheckSchema,
+        ref_resolution: collaborationRepositoryVerificationCheckSchema,
+        complete_history_validation:
+          collaborationRepositoryVerificationCheckSchema,
+        linear_commit_history: collaborationRepositoryVerificationCheckSchema,
+        strict_protocol_json: collaborationRepositoryVerificationCheckSchema,
+        event_schema_and_payload_hash:
+          collaborationRepositoryVerificationCheckSchema,
+        aggregate_revision_and_previous_hash:
+          collaborationRepositoryVerificationCheckSchema,
+        commit_order: collaborationRepositoryVerificationCheckSchema,
+        commit_signatures_and_actor_credentials:
+          collaborationRepositoryVerificationCheckSchema,
+        reducer_replay: collaborationRepositoryVerificationCheckSchema,
+        materialized_projection: collaborationRepositoryVerificationCheckSchema,
+        projection_json_readable:
+          collaborationRepositoryVerificationCheckSchema,
+        business_file_hashes: collaborationRepositoryVerificationCheckSchema,
+      })
+      .strict(),
+    failure: z
+      .object({
+        code: identifierSchema,
+        message: z.string().min(1).max(16_000),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict()
+  .superRefine((verification, context) => {
+    const checks = Object.values(verification.checks);
+    if (
+      ['verified', 'self_consistent'].includes(verification.level) &&
+      checks.some((check) => check !== 'passed')
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['checks'],
+        message: 'verified and self_consistent require every check to pass',
+      });
+    if (
+      ['verified', 'self_consistent'].includes(verification.level) &&
+      (verification.resolved_ref === null ||
+        verification.repository_head === null ||
+        verification.genesis_commit === null ||
+        verification.failure !== null)
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['repository_head'],
+        message:
+          'verified and self_consistent require resolved Git metadata and no failure',
+      });
+    if (
+      verification.level === 'verified' &&
+      verification.repository_identity !== 'trusted_input_match'
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['repository_identity'],
+        message: 'verified requires a matching trusted genesis or head',
+      });
+    if (
+      verification.level === 'verified' &&
+      verification.trusted_genesis === null &&
+      verification.trusted_head === null
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['trusted_head'],
+        message: 'verified requires a trusted genesis or head input',
+      });
+    if (
+      verification.trusted_head !== null &&
+      verification.repository_head !== null &&
+      verification.trusted_head !== verification.repository_head
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['trusted_head'],
+        message: 'trusted_head must match repository_head',
+      });
+    if (
+      verification.trusted_genesis !== null &&
+      verification.genesis_commit !== null &&
+      verification.trusted_genesis !== verification.genesis_commit
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['trusted_genesis'],
+        message: 'trusted_genesis must match genesis_commit',
+      });
+    if (
+      verification.level === 'self_consistent' &&
+      verification.repository_identity !== 'not_externally_anchored'
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['repository_identity'],
+        message: 'self_consistent cannot claim an external identity anchor',
+      });
+    if (
+      verification.level === 'self_consistent' &&
+      (verification.trusted_genesis !== null ||
+        verification.trusted_head !== null)
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['trusted_head'],
+        message: 'self_consistent cannot include a trusted commit input',
+      });
+    if (
+      ['projection_only', 'unverified'].includes(verification.level) &&
+      verification.repository_identity !== 'not_established'
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['repository_identity'],
+        message: `${verification.level} cannot establish repository identity`,
+      });
+    if (
+      ['projection_only', 'unverified'].includes(verification.level) &&
+      verification.failure === null
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['failure'],
+        message: `${verification.level} requires a verification failure`,
+      });
+    if (
+      verification.level === 'projection_only' &&
+      verification.checks.projection_json_readable !== 'passed'
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['checks', 'projection_json_readable'],
+        message: 'projection_only requires readable Projection JSON',
+      });
+    if (
+      verification.level === 'projection_only' &&
+      (verification.resolved_ref === null ||
+        verification.repository_head === null ||
+        verification.genesis_commit === null ||
+        verification.checks.complete_history_validation !== 'failed')
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['checks', 'complete_history_validation'],
+        message:
+          'projection_only requires resolved Git metadata and a failed complete history validation',
+      });
+    if (
+      verification.level === 'projection_only' &&
+      verification.checks.materialized_projection === 'passed'
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['checks', 'materialized_projection'],
+        message: 'projection_only cannot claim Projection replay verification',
+      });
+  });
+export type CollaborationRepositoryVerification = z.infer<
+  typeof collaborationRepositoryVerificationSchema
+>;
+
+export const collaborationRepositoryAnalysisInputSchema = z
+  .object({
+    format: z.literal('icarus.collaboration-repository-analysis-input/1'),
+    contract_version: z.literal(1),
+    repository: z
+      .object({
+        source_kind: z.enum(['local', 'git_url']),
+        source_label: z.string().min(1).max(1024),
+        requested_ref: z.string().min(1).max(1024),
+        resolved_ref: z.string().min(1).max(1024),
+        repository_head: gitCommitSchema,
+        genesis_commit: gitCommitSchema,
+      })
+      .strict(),
+    scope: collaborationAnalysisScopeSchema,
+    current_principal_id: identifierSchema.nullable(),
+    resource_catalog_hash: sha256Schema,
+    generated_at: isoTimeSchema,
+    security: z
+      .object({
+        repository_content_is_untrusted: z.literal(true),
+        read_only_repository: z.literal(true),
+        required_result_format: z.literal(
+          'icarus.collaboration-repository-analysis-result/1',
+        ),
+        result_is_not_icarus_analysis_run: z.literal(true),
+      })
+      .strict(),
+    verification: collaborationRepositoryVerificationSchema,
+    change_range: z
+      .object({
+        since_snapshot_head: gitCommitSchema,
+        repository_head: gitCommitSchema,
+        event_count: z.number().int().nonnegative(),
+        changed_refs: z.array(resourceRefSchema).max(20_000),
+      })
+      .strict()
+      .nullable(),
+    project_summary: z.record(z.string(), z.unknown()),
+    my_items: z.array(z.record(z.string(), z.unknown())).max(1000),
+    rule_signals: z.array(z.record(z.string(), z.unknown())).max(1000),
+    resource_index: z.array(resourceRefSchema).max(20_000),
+    activity_delta: z.array(z.record(z.string(), z.unknown())).max(2000),
+    prior_findings: z.array(z.record(z.string(), z.unknown())).max(1000),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    for (const [repositoryField, verificationField] of [
+      ['requested_ref', 'requested_ref'],
+      ['resolved_ref', 'resolved_ref'],
+      ['repository_head', 'repository_head'],
+      ['genesis_commit', 'genesis_commit'],
+    ] as const)
+      if (
+        input.repository[repositoryField] !==
+        input.verification[verificationField]
+      )
+        context.addIssue({
+          code: 'custom',
+          path: ['verification', verificationField],
+          message: `${verificationField} must match repository metadata`,
+        });
+    if (input.verification.level === 'unverified')
+      context.addIssue({
+        code: 'custom',
+        path: ['verification', 'level'],
+        message: 'unverified diagnostics cannot produce an analysis context',
+      });
+    if (input.scope.type === 'mine' && input.current_principal_id === null)
+      context.addIssue({
+        code: 'custom',
+        path: ['current_principal_id'],
+        message: 'mine scope requires current_principal_id',
+      });
+    if ((input.scope.type === 'delta') !== (input.change_range !== null))
+      context.addIssue({
+        code: 'custom',
+        path: ['change_range'],
+        message: 'change_range must be present exactly for delta scope',
+      });
+    if (
+      input.scope.type === 'delta' &&
+      input.change_range !== null &&
+      (input.change_range.since_snapshot_head !==
+        input.scope.since_snapshot_head ||
+        input.change_range.repository_head !== input.repository.repository_head)
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['change_range'],
+        message: 'change_range must match the delta scope and repository head',
+      });
+  });
+export type CollaborationRepositoryAnalysisInput = z.infer<
+  typeof collaborationRepositoryAnalysisInputSchema
+>;
+
+export const collaborationRepositoryAnalysisResultSchema = z
+  .object({
+    format: z.literal('icarus.collaboration-repository-analysis-result/1'),
+    contract_version: z.literal(1),
+    repository_head: gitCommitSchema,
+    context_hash: sha256Schema,
+    resource_catalog_hash: sha256Schema,
+    scope: collaborationAnalysisScopeSchema,
+    verification_level: z.enum([
+      'verified',
+      'self_consistent',
+      'projection_only',
+    ]),
+    summary: z
+      .object({
+        health: collaborationAnalysisHealthSchema,
+        headline: z.string().min(1).max(300),
+        details: z.string().max(16_000),
+      })
+      .strict(),
+    findings: z.array(collaborationAnalysisFindingSchema).max(200),
+  })
+  .strict()
+  .superRefine((result, context) => {
+    const ids = result.findings.map((finding) => finding.finding_id);
+    if (new Set(ids).size !== ids.length)
+      context.addIssue({
+        code: 'custom',
+        path: ['findings'],
+        message: 'finding_id must be unique within a result',
+      });
+  });
+export type CollaborationRepositoryAnalysisResult = z.infer<
+  typeof collaborationRepositoryAnalysisResultSchema
+>;
+
 export const collaborationAnalysisInputSchema = z
   .object({
     format: z.literal('icarus.collaboration-analysis-input/1'),
@@ -357,6 +689,9 @@ export function collaborationAnalysisJsonSchemas(): {
   readonly input: Record<string, unknown>;
   readonly result: Record<string, unknown>;
   readonly action: Record<string, unknown>;
+  readonly repositoryInput: Record<string, unknown>;
+  readonly repositoryResult: Record<string, unknown>;
+  readonly repositoryVerification: Record<string, unknown>;
 } {
   return {
     input: z.toJSONSchema(collaborationAnalysisInputSchema) as Record<
@@ -371,5 +706,14 @@ export function collaborationAnalysisJsonSchemas(): {
       string,
       unknown
     >,
+    repositoryInput: z.toJSONSchema(
+      collaborationRepositoryAnalysisInputSchema,
+    ) as Record<string, unknown>,
+    repositoryResult: z.toJSONSchema(
+      collaborationRepositoryAnalysisResultSchema,
+    ) as Record<string, unknown>,
+    repositoryVerification: z.toJSONSchema(
+      collaborationRepositoryVerificationSchema,
+    ) as Record<string, unknown>,
   };
 }

@@ -22,6 +22,12 @@ import {
   type CollaborationAnalysisScope,
   type CollaborationProposedAction,
 } from './analysis-contracts.js';
+import {
+  buildCollaborationAnalysisDeltaSelection,
+  buildCollaborationAnalysisResourceCatalog,
+  scopeCollaborationAnalysisResourceCatalog,
+  type CollaborationAnalysisResourceCatalog,
+} from './analysis-context.js';
 import type {
   ManagedAnalysisExecutor,
   ManagedAnalysisExecutorRegistry,
@@ -31,10 +37,7 @@ import {
   buildCollaborationProjectInsight,
   buildMyItems,
 } from './project-insight.js';
-import type {
-  CollaborationProjectSpaceService,
-  ValidatedProjectSpaceHistory,
-} from './project-space-service.js';
+import type { CollaborationProjectSpaceService } from './project-space-service.js';
 import type {
   CollaborationAnalysisActionApplicationRecord,
   CollaborationAnalysisFindingRecord,
@@ -154,7 +157,7 @@ export interface CollaborationAnalysisActionApplyInput {
   readonly action?: CollaborationProposedAction;
 }
 
-type ResourceCatalog = Record<string, unknown>;
+type ResourceCatalog = CollaborationAnalysisResourceCatalog;
 
 function sha256Text(value: string): string {
   return `sha256:${crypto.createHash('sha256').update(value, 'utf8').digest('hex')}`;
@@ -191,287 +194,6 @@ function zodErrors(error: z.ZodError): CollaborationAnalysisValidationError[] {
 function jsonRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
-}
-
-function resourceCatalog(
-  projection: CollaborationProjectionV3,
-): ResourceCatalog {
-  const catalog: ResourceCatalog = {
-    [`group:${projection.groupId}`]: projection.group,
-  };
-  for (const [id, member] of Object.entries(projection.members))
-    catalog[`principal:${id}`] = {
-      member,
-      progress_updates: Object.values(projection.progressUpdates).filter(
-        (update) => update.principal_id === id,
-      ),
-    };
-  for (const [id, request] of Object.entries(projection.recoveryRequests))
-    catalog[`recovery:${id}`] = request;
-  for (const [id, item] of Object.entries(projection.workItems))
-    catalog[`work_item:${id}`] = {
-      item,
-      updates: projection.workItemUpdates[id] ?? [],
-    };
-  for (const entry of Object.values(projection.discussions)) {
-    catalog[`discussion:${entry.discussion.thread_id}`] = entry;
-    for (const [id, message] of Object.entries(entry.messages))
-      catalog[`message:${id}`] = message;
-  }
-  for (const [id, instance] of Object.entries(projection.workflowInstances))
-    catalog[`workflow_instance:${id}`] = instance;
-  for (const [id, turn] of Object.entries(projection.turns))
-    catalog[`turn:${id}`] = turn;
-  for (const [id, metadata] of Object.entries(projection.files)) {
-    const location = projection.fileLocations[id];
-    catalog[`file:${id}`] = {
-      metadata,
-      location: location ?? null,
-      repository_path:
-        location && metadata.content_ref
-          ? `${location.repositoryDirectory}/${metadata.content_ref}`
-          : null,
-    };
-  }
-  for (const event of projection.activity)
-    catalog[`event:${event.eventId}`] = event;
-  return catalog;
-}
-
-function scopeRefs(input: {
-  readonly scope: CollaborationAnalysisScope;
-  readonly projection: CollaborationProjectionV3;
-  readonly myItemRefs: readonly string[];
-}): Set<string> | null {
-  const { scope, projection } = input;
-  if (scope.type === 'project' || scope.type === 'delta') return null;
-  const refs = new Set<string>([`group:${projection.groupId}`]);
-  const addPrincipal = (id: string | null | undefined): void => {
-    if (id && projection.members[id]) refs.add(`principal:${id}`);
-  };
-  const addWorkItem = (id: string): void => {
-    const item = projection.workItems[id];
-    if (!item) return;
-    refs.add(`work_item:${id}`);
-    for (const principalId of [
-      item.creator_principal_id,
-      item.owner_principal_id,
-      ...item.contributors,
-      ...item.watchers,
-    ])
-      addPrincipal(principalId);
-  };
-  const addWorkflow = (id: string): void => {
-    const instance = projection.workflowInstances[id];
-    if (!instance) return;
-    refs.add(`workflow_instance:${id}`);
-    addPrincipal(instance.created_by_principal_id);
-    for (const turn of Object.values(projection.turns)) {
-      if (turn.workflow_instance_id !== id) continue;
-      refs.add(`turn:${turn.turn_id}`);
-      addPrincipal(turn.assignee_principal_id);
-      addPrincipal(turn.claimant_principal_id);
-    }
-  };
-  const addDiscussion = (id: string): void => {
-    const entry = projection.discussions[id];
-    if (!entry) return;
-    refs.add(`discussion:${id}`);
-    for (const [messageId, message] of Object.entries(entry.messages)) {
-      refs.add(`message:${messageId}`);
-      addPrincipal(message.author_principal_id);
-      for (const principalId of message.mentions) addPrincipal(principalId);
-    }
-  };
-  const addRef = (ref: string): void => {
-    const separator = ref.indexOf(':');
-    const type = separator < 0 ? '' : ref.slice(0, separator);
-    const id = separator < 0 ? '' : ref.slice(separator + 1);
-    if (type === 'work_item') addWorkItem(id);
-    else if (type === 'workflow_instance') addWorkflow(id);
-    else if (type === 'turn') {
-      const turn = projection.turns[id];
-      if (turn) addWorkflow(turn.workflow_instance_id);
-    } else if (type === 'discussion') addDiscussion(id);
-    else if (type === 'recovery') {
-      const request = projection.recoveryRequests[id];
-      if (request) {
-        refs.add(ref);
-        addPrincipal(request.target_principal_id);
-      }
-    } else if (type === 'membership' || type === 'credential') addPrincipal(id);
-    else if (type === 'protocol') refs.add(`group:${projection.groupId}`);
-    else refs.add(ref);
-  };
-  if (scope.type === 'mine') {
-    for (const ref of input.myItemRefs) addRef(ref);
-    return refs;
-  }
-  if (scope.type === 'work_item') {
-    const item = projection.workItems[scope.work_item_id];
-    if (!item) throw new Error(`Work Item not found: ${scope.work_item_id}`);
-    addWorkItem(scope.work_item_id);
-    for (const id of [
-      ...item.blocked_by,
-      ...item.related_items,
-      ...(item.parent_id ? [item.parent_id] : []),
-    ])
-      addWorkItem(id);
-    return refs;
-  }
-  const instance = projection.workflowInstances[scope.workflow_instance_id];
-  if (!instance)
-    throw new Error(
-      `Workflow Instance not found: ${scope.workflow_instance_id}`,
-    );
-  addWorkflow(scope.workflow_instance_id);
-  return refs;
-}
-
-function scopedCatalog(input: {
-  readonly catalog: ResourceCatalog;
-  readonly scope: CollaborationAnalysisScope;
-  readonly projection: CollaborationProjectionV3;
-  readonly myItemRefs: readonly string[];
-}): ResourceCatalog {
-  const selected = scopeRefs(input);
-  if (!selected) return input.catalog;
-  return Object.fromEntries(
-    Object.entries(input.catalog).filter(([ref]) => selected.has(ref)),
-  );
-}
-
-function aggregateResourceRef(
-  aggregateType: string,
-  aggregateId: string,
-  projection: CollaborationProjectionV3,
-): string | null {
-  switch (aggregateType) {
-    case 'group':
-      return `group:${projection.groupId}`;
-    case 'membership':
-      return projection.members[aggregateId]
-        ? `principal:${aggregateId}`
-        : null;
-    case 'recovery':
-      return projection.recoveryRequests[aggregateId]
-        ? `recovery:${aggregateId}`
-        : null;
-    case 'workspace':
-      return projection.members[aggregateId]
-        ? `principal:${aggregateId}`
-        : null;
-    case 'work_item':
-      return projection.workItems[aggregateId]
-        ? `work_item:${aggregateId}`
-        : null;
-    case 'discussion':
-      return projection.discussions[aggregateId]
-        ? `discussion:${aggregateId}`
-        : null;
-    case 'workflow_instance':
-      return projection.workflowInstances[aggregateId]
-        ? `workflow_instance:${aggregateId}`
-        : null;
-    default:
-      return null;
-  }
-}
-
-function deltaContextSelection(input: {
-  readonly scope: Extract<CollaborationAnalysisScope, { type: 'delta' }>;
-  readonly history: ValidatedProjectSpaceHistory;
-  readonly fullCatalog: ResourceCatalog;
-}): {
-  readonly catalog: ResourceCatalog;
-  readonly activity: CollaborationProjectionV3['activity'];
-  readonly changedRefs: readonly string[];
-  readonly eventCount: number;
-} {
-  const { history, fullCatalog } = input;
-  const baseline = history.eventRecords.find(
-    (record) => record.commitHash === input.scope.since_snapshot_head,
-  );
-  if (!baseline)
-    throw new CollaborationAnalysisServiceError(
-      'analysis_delta_base_invalid',
-      'Delta Analysis requires since_snapshot_head to be a verified commit in the current linear history',
-    );
-  const records = history.eventRecords.filter(
-    (record) => record.commitOrder > baseline.commitOrder,
-  );
-  const refsById = new Map<string, Set<string>>();
-  for (const ref of Object.keys(fullCatalog)) {
-    const id = ref.slice(ref.indexOf(':') + 1);
-    const values = refsById.get(id) ?? new Set<string>();
-    values.add(ref);
-    refsById.set(id, values);
-  }
-  const changedRefs = new Set<string>();
-  const selectedRefs = new Set<string>([`group:${history.projection.groupId}`]);
-  const addSelected = (ref: string | null): void => {
-    if (ref && ref in fullCatalog) selectedRefs.add(ref);
-  };
-  for (const record of records) {
-    const eventRef = `event:${record.event.event_id}`;
-    addSelected(eventRef);
-    if (eventRef in fullCatalog) changedRefs.add(eventRef);
-    const aggregateRef = aggregateResourceRef(
-      record.event.aggregate_type,
-      record.event.aggregate_id,
-      history.projection,
-    );
-    addSelected(aggregateRef);
-    if (aggregateRef && aggregateRef in fullCatalog)
-      changedRefs.add(aggregateRef);
-    addSelected(`principal:${record.event.actor.principal_id}`);
-    for (const value of allStrings(record.event.payload))
-      for (const ref of refsById.get(value) ?? []) {
-        selectedRefs.add(ref);
-        changedRefs.add(ref);
-      }
-  }
-  for (const ref of [...selectedRefs]) {
-    const [type, id] = ref.split(':', 2) as [string, string];
-    if (type === 'work_item') {
-      const expanded = scopeRefs({
-        scope: { type: 'work_item', work_item_id: id },
-        projection: history.projection,
-        myItemRefs: [],
-      });
-      for (const related of expanded ?? []) addSelected(related);
-    } else if (type === 'workflow_instance') {
-      const expanded = scopeRefs({
-        scope: { type: 'workflow_instance', workflow_instance_id: id },
-        projection: history.projection,
-        myItemRefs: [],
-      });
-      for (const related of expanded ?? []) addSelected(related);
-    } else if (type === 'discussion') {
-      const discussion = history.projection.discussions[id];
-      if (!discussion) continue;
-      for (const [messageId, message] of Object.entries(discussion.messages)) {
-        addSelected(`message:${messageId}`);
-        addSelected(`principal:${message.author_principal_id}`);
-        for (const principalId of message.mentions)
-          addSelected(`principal:${principalId}`);
-      }
-    }
-  }
-  const activityById = new Map(
-    history.projection.activity.map((entry) => [entry.eventId, entry]),
-  );
-  return {
-    catalog: Object.fromEntries(
-      Object.entries(fullCatalog).filter(([ref]) => selectedRefs.has(ref)),
-    ),
-    activity: records.flatMap((record) => {
-      const value = activityById.get(record.event.event_id);
-      return value ? [value] : [];
-    }),
-    changedRefs: [...changedRefs].sort(),
-    eventCount: records.length,
-  };
 }
 
 function normalizeTitle(value: string): string {
@@ -814,18 +536,28 @@ export class CollaborationAnalysisService {
       nowMs: this.now(),
     });
     const fullCatalog = redactAnalysisValue(
-      resourceCatalog(history.projection),
+      buildCollaborationAnalysisResourceCatalog(history.projection),
     ) as ResourceCatalog;
     const delta =
       scope.type === 'delta'
-        ? deltaContextSelection({ scope, history, fullCatalog })
+        ? buildCollaborationAnalysisDeltaSelection({
+            scope,
+            history,
+            fullCatalog,
+          })
         : null;
+    if (scope.type === 'delta' && !delta)
+      throw new CollaborationAnalysisServiceError(
+        'analysis_delta_base_invalid',
+        'Delta Analysis requires since_snapshot_head to be a verified commit in the current linear history',
+      );
     const catalog =
       delta?.catalog ??
-      scopedCatalog({
+      scopeCollaborationAnalysisResourceCatalog({
         catalog: fullCatalog,
         scope,
         projection: history.projection,
+        currentPrincipalId: group.localPrincipalId,
         myItemRefs: myItems.map(
           (item) => `${item.resource_type}:${item.resource_id}`,
         ),

@@ -1,0 +1,574 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "icarus.collaboration-repository-analysis-input/1"
+    },
+    "contract_version": {
+      "type": "number",
+      "const": 1
+    },
+    "repository": {
+      "type": "object",
+      "properties": {
+        "source_kind": {
+          "type": "string",
+          "enum": [
+            "local",
+            "git_url"
+          ]
+        },
+        "source_label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "requested_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "resolved_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "repository_head": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40,64}$"
+        },
+        "genesis_commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40,64}$"
+        }
+      },
+      "required": [
+        "source_kind",
+        "source_label",
+        "requested_ref",
+        "resolved_ref",
+        "repository_head",
+        "genesis_commit"
+      ],
+      "additionalProperties": false
+    },
+    "scope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "project"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "mine"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "work_item"
+            },
+            "work_item_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            }
+          },
+          "required": [
+            "type",
+            "work_item_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "workflow_instance"
+            },
+            "workflow_instance_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            }
+          },
+          "required": [
+            "type",
+            "workflow_instance_id"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "delta"
+            },
+            "since_snapshot_head": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40,64}$"
+            }
+          },
+          "required": [
+            "type",
+            "since_snapshot_head"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "current_principal_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "resource_catalog_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "security": {
+      "type": "object",
+      "properties": {
+        "repository_content_is_untrusted": {
+          "type": "boolean",
+          "const": true
+        },
+        "read_only_repository": {
+          "type": "boolean",
+          "const": true
+        },
+        "required_result_format": {
+          "type": "string",
+          "const": "icarus.collaboration-repository-analysis-result/1"
+        },
+        "result_is_not_icarus_analysis_run": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "repository_content_is_untrusted",
+        "read_only_repository",
+        "required_result_format",
+        "result_is_not_icarus_analysis_run"
+      ],
+      "additionalProperties": false
+    },
+    "verification": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string",
+          "const": "icarus.collaboration-repository-verification/1"
+        },
+        "level": {
+          "type": "string",
+          "enum": [
+            "verified",
+            "self_consistent",
+            "projection_only",
+            "unverified"
+          ]
+        },
+        "repository_identity": {
+          "type": "string",
+          "enum": [
+            "trusted_input_match",
+            "not_externally_anchored",
+            "not_established"
+          ]
+        },
+        "requested_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "resolved_ref": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "repository_head": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40,64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "genesis_commit": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40,64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trusted_genesis": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40,64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trusted_head": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40,64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "checks": {
+          "type": "object",
+          "properties": {
+            "git_repository": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            },
+            "ref_resolution": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            },
+            "complete_history_validation": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            },
+            "linear_commit_history": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            },
+            "strict_protocol_json": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            },
+            "event_schema_and_payload_hash": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            },
+            "aggregate_revision_and_previous_hash": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            },
+            "commit_order": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            },
+            "commit_signatures_and_actor_credentials": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            },
+            "reducer_replay": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            },
+            "materialized_projection": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            },
+            "projection_json_readable": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            },
+            "business_file_hashes": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "failed",
+                "not_run"
+              ]
+            }
+          },
+          "required": [
+            "git_repository",
+            "ref_resolution",
+            "complete_history_validation",
+            "linear_commit_history",
+            "strict_protocol_json",
+            "event_schema_and_payload_hash",
+            "aggregate_revision_and_previous_hash",
+            "commit_order",
+            "commit_signatures_and_actor_credentials",
+            "reducer_replay",
+            "materialized_projection",
+            "projection_json_readable",
+            "business_file_hashes"
+          ],
+          "additionalProperties": false
+        },
+        "failure": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240
+                },
+                "message": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 16000
+                }
+              },
+              "required": [
+                "code",
+                "message"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "format",
+        "level",
+        "repository_identity",
+        "requested_ref",
+        "resolved_ref",
+        "repository_head",
+        "genesis_commit",
+        "trusted_genesis",
+        "trusted_head",
+        "event_count",
+        "checks",
+        "failure"
+      ],
+      "additionalProperties": false
+    },
+    "change_range": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "since_snapshot_head": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40,64}$"
+            },
+            "repository_head": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40,64}$"
+            },
+            "event_count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "changed_refs": {
+              "maxItems": 20000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 1200,
+                "pattern": "^(?:work_item|workflow_instance|turn|discussion|message|event|file|principal|recovery|group):[^\\s]+$"
+              }
+            }
+          },
+          "required": [
+            "since_snapshot_head",
+            "repository_head",
+            "event_count",
+            "changed_refs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "project_summary": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "my_items": {
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      }
+    },
+    "rule_signals": {
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      }
+    },
+    "resource_index": {
+      "maxItems": 20000,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 1200,
+        "pattern": "^(?:work_item|workflow_instance|turn|discussion|message|event|file|principal|recovery|group):[^\\s]+$"
+      }
+    },
+    "activity_delta": {
+      "maxItems": 2000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      }
+    },
+    "prior_findings": {
+      "maxItems": 1000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "format",
+    "contract_version",
+    "repository",
+    "scope",
+    "current_principal_id",
+    "resource_catalog_hash",
+    "generated_at",
+    "security",
+    "verification",
+    "change_range",
+    "project_summary",
+    "my_items",
+    "rule_signals",
+    "resource_index",
+    "activity_delta",
+    "prior_findings"
+  ],
+  "additionalProperties": false
+}
