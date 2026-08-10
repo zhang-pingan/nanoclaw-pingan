@@ -37,6 +37,7 @@ import {
   collaborationCanRecoverTurn,
   collaborationCanDecideRecovery,
   collaborationCanCreateTurn,
+  collaborationCanInitializeGroup,
   collaborationCanMutate,
   collaborationCurrentTurn,
   collaborationDuration,
@@ -75,6 +76,9 @@ export const collaborationRouteTabs = new Set([
   'settings',
   'diagnostics',
 ]);
+
+export const collaborationInitializeConfirmation =
+  '初始化会清除全部成员、任务、文件、Workflow、事件、审计和 Git 历史，无法恢复。';
 
 export function parseCollaborationRoute(pathname) {
   if (pathname === '/groups' || pathname === '/groups/')
@@ -749,7 +753,7 @@ export function createCollaborationWorkspace(options) {
     const group = selectedGroup();
     const identity = group.icarusIdentity || {};
     const localCredential = collaborationLocalCredential(group);
-    return `${renderObserverBand(group)}<section class="collaboration-section"><div class="collaboration-section-head"><h3>Git Remote Access</h3><button type="button" class="btn-ghost" data-collaboration-action="edit-git-ssh-key">修改 SSH Key</button></div><dl class="collaboration-definition-list"><div><dt>Remote</dt><dd>${html(group.remoteUrl)}</dd></div><div><dt>本地 SSH Key</dt><dd>${html(group.gitRemoteAccess?.sshKeyPath || '-')}</dd></div><div><dt>权限边界</dt><dd>clone / fetch / push</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="clear-git-ssh-key">使用默认路径</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Icarus Group Permission 与身份</h3></div><dl class="collaboration-definition-list"><div><dt>业务身份</dt><dd title="${attr(identity.principalId || '')}">${html(identity.principalId ? collaborationShortId(identity.principalId) : '-')}</dd></div><div><dt>当前 Client</dt><dd title="${attr(identity.clientId || '')}">${html(identity.clientId ? collaborationShortId(identity.clientId) : '-')}</dd></div><div><dt>当前 Credential</dt><dd title="${attr(identity.credentialId || '')}">${html(identity.credentialId ? collaborationShortId(identity.credentialId) : '-')}</dd></div><div><dt>签名状态</dt><dd>${html(collaborationStatusLabel(localCredential?.status || (identity.credentialId ? 'unknown' : 'not_configured')))}</dd></div><div><dt>离线 Group recovery</dt><dd>${identity.recoveryCredentialAvailable ? '本机可用' : '本机未导入'}</dd></div><div><dt>权限边界</dt><dd>Host API / 协议验证 / Reducer</dd></div></dl><div class="collaboration-record-actions">${collaborationCanMutate(group) ? '<button type="button" class="btn-ghost" data-collaboration-action="rotate-credential">轮换 Credential</button>' : ''}${identity.recoveryCredentialAvailable ? '<button type="button" class="btn-ghost" data-collaboration-action="export-recovery-credential">导出离线恢复凭据</button>' : ''}<button type="button" class="btn-ghost" data-collaboration-action="import-recovery-credential">导入离线恢复凭据</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>群组与本地数据</h3></div><dl class="collaboration-definition-list"><div><dt>群组 ID</dt><dd>${html(group.groupId)}</dd></div><div><dt>订阅模式</dt><dd>${html(collaborationLabel(group.subscriptionMode))}</dd></div><div><dt>协议状态</dt><dd>${html(collaborationStatusLabel(group.protocolStatus))}</dd></div><div><dt>已验证版本</dt><dd>${html(group.lastVerifiedHead || '-')}</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="backup">创建备份</button><button type="button" class="btn-ghost" data-collaboration-action="restore">恢复备份</button>${group.localPrincipalId === group.ownerPrincipalId && group.lifecycle === 'active' ? '<button type="button" class="btn-danger-soft" data-collaboration-action="archive-group">归档群组</button>' : ''}</div></section>`;
+    return `${renderObserverBand(group)}<section class="collaboration-section"><div class="collaboration-section-head"><h3>Git Remote Access</h3><button type="button" class="btn-ghost" data-collaboration-action="edit-git-ssh-key">修改 SSH Key</button></div><dl class="collaboration-definition-list"><div><dt>Remote</dt><dd>${html(group.remoteUrl)}</dd></div><div><dt>本地 SSH Key</dt><dd>${html(group.gitRemoteAccess?.sshKeyPath || '-')}</dd></div><div><dt>权限边界</dt><dd>clone / fetch / push</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="clear-git-ssh-key">使用默认路径</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Icarus Group Permission 与身份</h3></div><dl class="collaboration-definition-list"><div><dt>业务身份</dt><dd title="${attr(identity.principalId || '')}">${html(identity.principalId ? collaborationShortId(identity.principalId) : '-')}</dd></div><div><dt>当前 Client</dt><dd title="${attr(identity.clientId || '')}">${html(identity.clientId ? collaborationShortId(identity.clientId) : '-')}</dd></div><div><dt>当前 Credential</dt><dd title="${attr(identity.credentialId || '')}">${html(identity.credentialId ? collaborationShortId(identity.credentialId) : '-')}</dd></div><div><dt>签名状态</dt><dd>${html(collaborationStatusLabel(localCredential?.status || (identity.credentialId ? 'unknown' : 'not_configured')))}</dd></div><div><dt>离线 Group recovery</dt><dd>${identity.recoveryCredentialAvailable ? '本机可用' : '本机未导入'}</dd></div><div><dt>权限边界</dt><dd>Host API / 协议验证 / Reducer</dd></div></dl><div class="collaboration-record-actions">${collaborationCanMutate(group) ? '<button type="button" class="btn-ghost" data-collaboration-action="rotate-credential">轮换 Credential</button>' : ''}${identity.recoveryCredentialAvailable ? '<button type="button" class="btn-ghost" data-collaboration-action="export-recovery-credential">导出离线恢复凭据</button>' : ''}<button type="button" class="btn-ghost" data-collaboration-action="import-recovery-credential">导入离线恢复凭据</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>群组与本地数据</h3></div><dl class="collaboration-definition-list"><div><dt>群组 ID</dt><dd>${html(group.groupId)}</dd></div><div><dt>订阅模式</dt><dd>${html(collaborationLabel(group.subscriptionMode))}</dd></div><div><dt>协议状态</dt><dd>${html(collaborationStatusLabel(group.protocolStatus))}</dd></div><div><dt>已验证版本</dt><dd>${html(group.lastVerifiedHead || '-')}</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="backup">创建备份</button><button type="button" class="btn-ghost" data-collaboration-action="restore">恢复备份</button>${group.localPrincipalId === group.ownerPrincipalId && group.lifecycle === 'active' ? '<button type="button" class="btn-danger-soft" data-collaboration-action="archive-group">归档群组</button>' : ''}${collaborationCanInitializeGroup(group) ? '<button type="button" class="btn-danger-soft" data-collaboration-action="initialize-group">初始化群组</button>' : ''}</div></section>`;
   };
 
   const renderDiagnostics = () => {
@@ -1891,6 +1895,32 @@ export function createCollaborationWorkspace(options) {
       },
     });
 
+  const initializeGroupDialog = () => {
+    const group = selectedGroup();
+    openDialog({
+      title: '初始化群组',
+      submitText: '确认初始化',
+      danger: true,
+      body: `<p class="collaboration-prose">${html(collaborationInitializeConfirmation)}</p>`,
+      onSubmit: async () => {
+        elements.dialogSubmit.textContent = '正在初始化...';
+        try {
+          const data = await options.request(
+            `/groups/${encodeURIComponent(group.groupId)}/initialize`,
+            { method: 'POST', body: '{}' },
+          );
+          closeDialog();
+          await loadGroups();
+          await selectGroup(data.group.groupId, { tab: 'settings' });
+          options.showToast('群组已初始化');
+        } catch (error) {
+          elements.dialogSubmit.textContent = '确认初始化';
+          throw error;
+        }
+      },
+    });
+  };
+
   const updateGitSshKey = (useDefault = false) => {
     const group = selectedGroup();
     const save = async (sshKeyPath) => {
@@ -2735,6 +2765,7 @@ export function createCollaborationWorkspace(options) {
     }
     if (action === 'backup' || action === 'restore')
       return backupDialog(action === 'restore');
+    if (action === 'initialize-group') return initializeGroupDialog();
     if (action === 'archive-group') {
       await options.request(
         `/groups/${encodeURIComponent(group.groupId)}/archive`,

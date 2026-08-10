@@ -167,11 +167,30 @@ export class CollaborationProjectSpaceIdentityService {
     ];
   }
 
-  async createPrincipalIdentity(): Promise<CollaborationEventSigningIdentity> {
+  async createPrincipalIdentity(input?: {
+    readonly freshClient?: boolean;
+  }): Promise<CollaborationEventSigningIdentity> {
     return this.createCredentialIdentity({
       principalId: `principal_${crypto.randomUUID()}`,
+      ...(input?.freshClient
+        ? { clientId: `client_${crypto.randomUUID()}` }
+        : {}),
       purpose: 'event_signing',
     });
+  }
+
+  async deleteCredentialIdentity(credentialId: string): Promise<boolean> {
+    if (!CREDENTIAL_ID_PATTERN.test(credentialId))
+      throw new Error(`Invalid Collaboration Credential id: ${credentialId}`);
+    const directory = path.join(this.credentialDirectory, credentialId);
+    try {
+      await this.loadCredentialIdentity(credentialId);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      throw error;
+    }
+    await rm(directory, { recursive: true, force: false });
+    return true;
   }
 
   async createCredentialIdentity(input: {

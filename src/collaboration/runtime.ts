@@ -64,6 +64,7 @@ export class CollaborationRuntime {
   private analysisExecutorsValue: ManagedAnalysisExecutorRegistry | null = null;
   private errorValue: string | null = null;
   private stopPromise: Promise<void> | null = null;
+  private initializationRecoveryPromise: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: CollaborationRuntimeOptions) {
     this.databasePath = path.join(options.storeDir, 'collaboration.db');
@@ -133,6 +134,21 @@ export class CollaborationRuntime {
       this.schedulerValue = scheduler;
       this.errorValue = null;
       scheduler.start();
+      this.initializationRecoveryPromise = groups
+        .recoverInterruptedInitializations()
+        .then((recovered) => {
+          if (recovered.length)
+            this.options.logger.info(
+              { groupIds: recovered.map((group) => group.groupId) },
+              'Recovered interrupted Collaboration Group initialization',
+            );
+        })
+        .catch((error) => {
+          this.options.logger.error(
+            { error: error instanceof Error ? error.message : String(error) },
+            'Collaboration Group initialization recovery remains pending',
+          );
+        });
       this.options.logger.info(
         {
           protocolVersion: 3,
@@ -166,7 +182,10 @@ export class CollaborationRuntime {
     if (!store) return;
     const scheduler = this.schedulerValue;
     const analysis = this.analysisValue;
+    scheduler?.stop();
+    analysis?.stop();
     const stopping = (async () => {
+      await this.initializationRecoveryPromise;
       await analysis?.stopAndDrain();
       await scheduler?.stopAndDrain();
       store.close();
@@ -184,6 +203,10 @@ export class CollaborationRuntime {
     } finally {
       if (this.stopPromise === stopping) this.stopPromise = null;
     }
+  }
+
+  async waitForInitializationRecovery(): Promise<void> {
+    await this.initializationRecoveryPromise;
   }
 
   status(): CollaborationRuntimeStatus {

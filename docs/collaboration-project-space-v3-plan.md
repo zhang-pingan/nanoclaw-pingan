@@ -7,7 +7,7 @@
 - 实施完成：2026-08-08
 - 当前协议：`icarus.collaboration-group/3`
 - 实施前代码基线：`main@3eff5302`（历史）
-- 当前实现：Collaboration Project Space v3、SQLite v7
+- 当前实现：Collaboration Project Space v3、SQLite v10
 - 适用范围：Group、Principal、Client、Executor、Observer、Workspace、Work Item、Discussion、Workflow Definition、Workflow Instance、图形化 FSM、Git 协议、权限、同步和审计
 - 前提：方案仍处于开发迭代期，没有真实群组、不可丢弃业务数据或旧签名历史；每次迭代发布的新协议直接成为唯一 current version，不实现旧版本迁移、双写、兼容读取或兼容回放
 - 相关文档：
@@ -71,7 +71,7 @@ Workflow Instance State
 v3 已按本文的 current-only 边界端到端落地：
 
 - Git 控制分支只接受 v3 Group/Event/Projection 和 JSON materialization，按 canonical JSON hash、active Credential signature、Credential/Principal/Client actor mapping、aggregate revision、previous hash、commit order、路径、sidecar 和文件 hash/size 完整校验；
-- 本地 SQLite v7 保存 Observer/Member subscription、Principal/Client/Credential、身份恢复请求、直接权限、投影、file index、精确 Action revision/commit 索引、Executor Binding、execution receipt/observation、notification、audit evidence 和 staged Artifact，非 v7 store 启动时 fail closed；
+- 本地 SQLite v10 保存 Observer/Member subscription、Principal/Client/Credential、身份恢复请求、直接权限、投影、file index、精确 Action revision/commit 索引、Executor Binding、execution receipt/observation、notification、audit evidence、staged Artifact 和临时初始化恢复记录，非 v10 store 启动时 fail closed；
 - Group、Credential rotation/revocation、Client revocation、identity/owner/offline recovery、Workspace、Work Item、Discussion、Workflow Definition/Instance、State Execution、Turn、timeout、Artifact、审计、备份/恢复和 verified virtual file tree 已进入 service 与 Web API；
 - Work Item progress 与 Turn completion 通过 staged upload 在一个签名事件和 Git commit 中物化原始业务文件及 `metadata.json`，同时验证 scope、Principal/Client、attempt 和 fence；`/3` 备份联合保护 DB 与尚未提交的 staged bytes；
 - Web/Electron `/groups` 已提供项目空间页面、Observer 受限申请状态、Work Item board/list、Discussion、文件树、Principal/Client/Credential/权限、恢复请求审批、Git Remote SSH 设置、offline recovery Credential 备份/导入、Workflow Definition/Instance、Outcome-first 编辑器、Turn、Artifact、审计和诊断；
@@ -224,7 +224,7 @@ v2 的 `agent_id` 同时接近“本机 Icarus 安装”和“执行 Agent”两
 | --------- | -------------------------------------------- | ------------------------------------------------- |
 | Principal | Group 内稳定成员和权限主体                   | 是                                                |
 | Client    | 持久 `client_<uuid>` 标识的 Icarus 安装实例 | 公开描述进入，私有配置不进入                      |
-| Credential | Client 的 Icarus event-signing 验证材料      | ID、绑定、公钥、fingerprint、purpose/status 进入 |
+| Credential | Client 的 Icarus event-signing 验证材料     | ID、绑定、公钥、fingerprint、purpose/status 进入 |
 | Executor  | Codex、Workflow、Run-once 等可选执行工具     | 仅可选公开 descriptor 进入，Binding/凭据留本地    |
 
 一个 Principal 可以：
@@ -1516,6 +1516,7 @@ events/workflow-instances/wfi_201/000014-evt_xxx.json
 - 同一 Aggregate 必须满足 expected revision 和 previous hash；
 - 不同 Aggregate 可以独立生成 revision；
 - control branch 继续要求 fast-forward 线性 Git ancestry；
+- “初始化群组”是唯一例外：它不追加事件，不使用 expected old head、CAS 或 force-with-lease，而是把一个已完整验证的孤立 Genesis 通过无条件 force refspec 覆盖到同名 control branch；
 - 并发 push 失败方 fetch/revalidate，只重建自己的 commit；
 - 同一 Work Item 的冲突不能无脑自动重放字段覆盖；
 - 不同 Work Item/Discussion 的追加事件可以在验证后自动重试；
@@ -1771,6 +1772,25 @@ READY 条件：
 
 State Execution/Action/Executor 不是 READY 必需项，因为默认 manual/notify-only。
 
+### 18.5 Archive、Dissolve、Local Remove 与 Initialize
+
+四个操作的语义不能互换：
+
+| 操作         | Remote 与历史                                                                                                         | 当前设备                                        | 可恢复性            |
+| ------------ | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------- |
+| Archive      | 保留同一 Group 和完整历史                                                                                             | 保留订阅、投影与身份                            | 可以 reopen         |
+| Dissolve     | 终止原 Group 业务，但保留历史和终止事实                                                                               | 保留可审计只读状态                              | 不恢复为原业务群组  |
+| Local remove | 不修改 Remote                                                                                                         | 仅删除当前设备的订阅、投影、缓存和本地身份绑定  | 可重新 Observe/Join |
+| 初始化群组   | 保留 Remote locator 与 `refs/heads/icarus/control` 名称，但以无条件 force push 改写为新 `group_id` 的单一孤立 Genesis | 删除旧 Group 的全部本地数据，注册新 Owner Group | 不可恢复旧 Group    |
+
+初始化仅允许当前 Owner 执行。Host Service/API 必须重新校验本地 Principal 就是 verified Projection 中的 Owner；UI 隐藏入口不构成授权。初始化默认沿用名称、membership policy、visibility policy 和本机 Git Remote SSH 配置，但创建新的 Group、Owner Principal、Client、event-signing Credential 与 recovery Credential。它不是 `group_reinitialized` 事件，不创建 reset/recovery/cancel 事实，不保留 generation/epoch，也不把旧成员身份迁移到新群组。
+
+新 Genesis 先在隔离临时仓库中签名并通过 current v3 history、reducer 与 materialization 全量验证，然后使用 `+HEAD:refs/heads/icarus/control` 推送。该 push 不使用 lease：确认后其他成员刚写入的提交仍会被覆盖；多个 Owner 设备并发时最后一次成功 push 生效。Git 服务端 branch protection 或 hook 可以拒绝 force push，Icarus 权限不能绕过 transport 限制。远端成功前不替换本地旧状态；远端成功后若本地中断，SQLite 临时操作记录会在下次启动重新读取 Remote 并完成替换，清理成功后删除该记录。
+
+其他设备发现 control history 非 fast-forward 且 `group_id` 改变时，必须隔离旧订阅、停止旧身份写入，并要求用户按新群组重新 Observe/Join；系统不能伪造旧事件链对重写的授权。初始化只更新 Icarus control ref，不删除无关 branch 或 tag。
+
+初始化会让旧提交从 Icarus 可见 refs 和 `git log icarus/control` 中消失，并删除执行设备持有的旧订阅、Projection、事件、审计、通知、分析、staged Artifact、专属 Credential、仓库对象缓存和可确认仅包含旧群组的 Icarus 默认备份。共享备份、Git Remote SSH 私钥、安装级 Client 文件和被其他群组引用的 Credential 不得删除。Icarus 只能使 Git 服务端旧对象不可达；在服务端 GC 或备份过期前不能保证物理擦除，也不能删除其他用户的离线 clone。
+
 ## 19. 通知
 
 ### 19.1 通知类型
@@ -1860,6 +1880,7 @@ POST /api/collaboration/groups
 GET  /api/collaboration/groups/{groupId}
 POST /api/collaboration/groups/{groupId}/sync
 POST /api/collaboration/groups/{groupId}/archive
+POST /api/collaboration/groups/{groupId}/initialize
 
 GET  /api/collaboration/groups/{groupId}/members
 POST /api/collaboration/groups/{groupId}/clients/{clientId}/revoke

@@ -135,11 +135,19 @@ const ANALYSIS_PROMPT_HASH = `sha256:${'c'.repeat(64)}`;
 
 function registerMemberStore(name: string): CollaborationProjectSpaceStore {
   const store = new CollaborationProjectSpaceStore(temporaryPath(name));
+  registerTestGroup(store, 'group_test');
+  return store;
+}
+
+function registerTestGroup(
+  store: CollaborationProjectSpaceStore,
+  groupId: string,
+): void {
   store.registerGroup({
     subscription: {
       format: 'icarus.collaboration-subscription/1',
-      group_id: 'group_test',
-      remote_url: '/tmp/group.git',
+      group_id: groupId,
+      remote_url: `/tmp/${groupId}.git`,
       subscription_mode: 'member',
       poll_interval_ms: 60_000,
       last_verified_head: ANALYSIS_HEAD,
@@ -149,7 +157,7 @@ function registerMemberStore(name: string): CollaborationProjectSpaceStore {
     name: 'Test group',
     lifecycle: 'active',
     ownerPrincipalId: PRINCIPAL,
-    repositoryPath: '/tmp/cache.git',
+    repositoryPath: `/tmp/${groupId}-cache.git`,
     localPrincipalId: PRINCIPAL,
     localClientId: CLIENT,
     gitSshKeyPath: '/tmp/id_ed25519',
@@ -158,7 +166,6 @@ function registerMemberStore(name: string): CollaborationProjectSpaceStore {
     eventPublicKey: PUBLIC_KEY,
     eventFingerprint: FINGERPRINT,
   });
-  return store;
 }
 
 function createAnalysisRun(
@@ -968,6 +975,37 @@ describe('Collaboration project space v3 store', () => {
     expect(store.readStagedArtifact(replacement.artifactId).contents).toEqual(
       Buffer.from('replacement'),
     );
+    store.close();
+  });
+
+  it('deletes only default backups that exclusively contain the old Group', () => {
+    const databasePath = temporaryPath('exclusive-backups.db');
+    const backupRoot = path.join(
+      path.dirname(databasePath),
+      'collaboration-backups',
+    );
+    const exclusive = path.join(backupRoot, 'exclusive');
+    const shared = path.join(backupRoot, 'shared');
+    let store = new CollaborationProjectSpaceStore(databasePath);
+    registerTestGroup(store, 'group_old');
+    store.close();
+    createCollaborationProjectSpaceBackup({
+      databasePath,
+      backupDirectory: exclusive,
+    });
+
+    store = new CollaborationProjectSpaceStore(databasePath);
+    registerTestGroup(store, 'group_shared');
+    store.close();
+    createCollaborationProjectSpaceBackup({
+      databasePath,
+      backupDirectory: shared,
+    });
+
+    store = new CollaborationProjectSpaceStore(databasePath);
+    expect(store.deleteExclusiveBackupsForGroup('group_old')).toBe(1);
+    expect(existsSync(exclusive)).toBe(false);
+    expect(existsSync(shared)).toBe(true);
     store.close();
   });
 

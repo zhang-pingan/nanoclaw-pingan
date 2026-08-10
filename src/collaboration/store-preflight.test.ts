@@ -80,7 +80,7 @@ describe('Collaboration store preflight', () => {
       targetSchemaVersion: CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION,
     });
     expect(result.archiveDirectory).toContain(
-      'collaboration-schema-20260809T123456789Z-v6-to-v9',
+      `collaboration-schema-20260809T123456789Z-v6-to-v${CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION}`,
     );
     expect(fs.existsSync(databasePath)).toBe(false);
     const manifest = JSON.parse(

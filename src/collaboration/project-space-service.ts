@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -8,6 +9,7 @@ import {
 import {
   CollaborationProjectSpaceStore,
   type CollaborationProjectSpaceEventRecord,
+  type CollaborationGroupInitializationOperation,
   type CollaborationProjectSpaceGroupRecord,
 } from './project-space-store.js';
 import {
@@ -95,6 +97,19 @@ export interface CollaborationProjectSpaceTransport {
     readonly identity: CollaborationEventSigningIdentity;
     readonly genesisEvent: CollaborationEventV3;
     readonly genesisProjection: CollaborationProjectionV3;
+  }): Promise<ValidatedProjectSpaceHistory>;
+  reinitialize(input: {
+    readonly remoteUrl: string;
+    readonly repositoryPath: string;
+    readonly gitSshKeyPath: string;
+    readonly identity: CollaborationEventSigningIdentity;
+    readonly genesisEvent: CollaborationEventV3;
+    readonly genesisProjection: CollaborationProjectionV3;
+  }): Promise<ValidatedProjectSpaceHistory>;
+  refreshAfterReinitialize(input: {
+    readonly remoteUrl: string;
+    readonly repositoryPath: string;
+    readonly gitSshKeyPath: string;
   }): Promise<ValidatedProjectSpaceHistory>;
   append(input: {
     readonly remoteUrl: string;
@@ -219,6 +234,84 @@ export function collaborationProjectSpaceRepositoryPath(
   return path.join(repositoryRoot, `${digest}.git`);
 }
 
+function buildGroupGenesis(input: {
+  readonly groupId: string;
+  readonly name: string;
+  readonly displayName: string;
+  readonly clientDisplayName: string;
+  readonly membershipPolicy: 'open' | 'approval' | 'invite_only';
+  readonly observerAccess: 'allowed' | 'members_only';
+  readonly identity: CollaborationEventSigningIdentity;
+  readonly recoveryIdentity: CollaborationEventSigningIdentity;
+  readonly occurredAt: string;
+}): {
+  readonly event: CollaborationEventV3;
+  readonly projection: CollaborationProjectionV3;
+} {
+  const eventId = newId('evt');
+  const member: MemberDefinitionV3 = memberDefinitionV3Schema.parse({
+    format: 'icarus.collaboration-member/3',
+    principal_id: input.identity.principalId,
+    display_name: input.displayName,
+    status: 'active',
+    joined_at_event: eventId,
+  });
+  const client = {
+    format: 'icarus.collaboration-client/1' as const,
+    principal_id: input.identity.principalId,
+    client_id: input.identity.clientId,
+    display_name: input.clientDisplayName,
+    capabilities: [],
+    status: 'active' as const,
+    registered_at_event: eventId,
+  };
+  const ownerPermissions = permissionGrantSchema.parse({
+    format: 'icarus.collaboration-permission-grant/1',
+    principal_id: input.identity.principalId,
+    grants: [],
+    revision: 1,
+    updated_at_event: eventId,
+  });
+  const event = buildCollaborationEventV3({
+    groupId: input.groupId,
+    eventId,
+    aggregateType: 'group',
+    aggregateId: input.groupId,
+    aggregateRevision: 1,
+    previousEventHash: null,
+    eventType: 'group_initialized',
+    actor: {
+      principal_id: input.identity.principalId,
+      client_id: input.identity.clientId,
+      credential_id: input.identity.credentialId,
+      executor_id: null,
+    },
+    occurredAt: input.occurredAt,
+    payload: {
+      group: {
+        format: 'icarus.collaboration-group/3',
+        protocol_version: 3,
+        group_id: input.groupId,
+        name: input.name,
+        creator: { principal_id: input.identity.principalId },
+        owner_principal_id: input.identity.principalId,
+        control_branch: COLLABORATION_CONTROL_BRANCH,
+        lifecycle: 'active',
+        membership_policy: { join: input.membershipPolicy },
+        visibility_policy: { observer_access: input.observerAccess },
+        created_at: input.occurredAt,
+        archived_at: null,
+      },
+      member,
+      client,
+      credential: sharedCredential(input.identity, eventId),
+      recovery_credential: sharedCredential(input.recoveryIdentity, eventId),
+      owner_permissions: ownerPermissions,
+    },
+  });
+  return { event, projection: reduceCollaborationEventV3(null, event) };
+}
+
 export class CollaborationProjectSpaceService {
   private readonly histories = new Map<string, ValidatedProjectSpaceHistory>();
   private readonly repositoryOperations = new Map<string, Promise<void>>();
@@ -257,72 +350,18 @@ export class CollaborationProjectSpaceService {
       input.gitSshKeyPath,
     );
     const groupId = input.groupId ?? newId('group');
-    const eventId = newId('evt');
     const occurredAt = new Date(this.now()).toISOString();
-    const member: MemberDefinitionV3 = memberDefinitionV3Schema.parse({
-      format: 'icarus.collaboration-member/3',
-      principal_id: identity.principalId,
-      display_name: input.displayName,
-      status: 'active',
-      joined_at_event: eventId,
-    });
-    const client = {
-      format: 'icarus.collaboration-client/1' as const,
-      principal_id: identity.principalId,
-      client_id: identity.clientId,
-      display_name: input.clientDisplayName,
-      capabilities: [],
-      status: 'active' as const,
-      registered_at_event: eventId,
-    };
-    const ownerPermissions = permissionGrantSchema.parse({
-      format: 'icarus.collaboration-permission-grant/1',
-      principal_id: identity.principalId,
-      grants: [],
-      revision: 1,
-      updated_at_event: eventId,
-    });
-    const payload = {
-      group: {
-        format: 'icarus.collaboration-group/3' as const,
-        protocol_version: 3 as const,
-        group_id: groupId,
-        name: input.name,
-        creator: {
-          principal_id: identity.principalId,
-        },
-        owner_principal_id: identity.principalId,
-        control_branch: COLLABORATION_CONTROL_BRANCH,
-        lifecycle: 'active' as const,
-        membership_policy: { join: input.membershipPolicy },
-        visibility_policy: { observer_access: input.observerAccess },
-        created_at: occurredAt,
-        archived_at: null,
-      },
-      member,
-      client,
-      credential: sharedCredential(identity, eventId),
-      recovery_credential: sharedCredential(recoveryIdentity, eventId),
-      owner_permissions: ownerPermissions,
-    };
-    const event = buildCollaborationEventV3({
+    const { event, projection } = buildGroupGenesis({
       groupId,
-      eventId,
-      aggregateType: 'group',
-      aggregateId: groupId,
-      aggregateRevision: 1,
-      previousEventHash: null,
-      eventType: 'group_initialized',
-      actor: {
-        principal_id: identity.principalId,
-        client_id: identity.clientId,
-        credential_id: identity.credentialId,
-        executor_id: null,
-      },
+      name: input.name,
+      displayName: input.displayName,
+      clientDisplayName: input.clientDisplayName,
+      membershipPolicy: input.membershipPolicy,
+      observerAccess: input.observerAccess,
+      identity,
+      recoveryIdentity,
       occurredAt,
-      payload,
     });
-    const projection = reduceCollaborationEventV3(null, event);
     const repositoryPath = collaborationProjectSpaceRepositoryPath(
       this.repositoryRoot,
       input.remoteUrl,
@@ -346,6 +385,154 @@ export class CollaborationProjectSpaceService {
       pollIntervalMs: input.pollIntervalMs,
     });
     return this.store.getGroup(groupId)!;
+  }
+
+  async initializeGroup(
+    groupId: string,
+  ): Promise<CollaborationProjectSpaceGroupRecord> {
+    const current = this.store.getGroup(groupId);
+    const projection = current?.projection;
+    if (
+      !current ||
+      !projection ||
+      current.subscriptionMode !== 'member' ||
+      !current.localPrincipalId ||
+      current.localPrincipalId !== projection.group.owner_principal_id ||
+      current.localPrincipalId !== current.ownerPrincipalId ||
+      !current.localClientId ||
+      !current.localCredentialId ||
+      projection.members[current.localPrincipalId]?.status !== 'active' ||
+      projection.clients[current.localPrincipalId]?.[current.localClientId]
+        ?.status !== 'active' ||
+      projection.credentials[current.localPrincipalId]?.[
+        current.localCredentialId
+      ]?.status !== 'active'
+    )
+      throw new Error('Only the current Group Owner may initialize the Group');
+    if (current.lifecycle !== 'active')
+      throw new Error('Only an active Group may be initialized');
+
+    return this.withRepositoryOperation(current.repositoryPath, async () => {
+      const group = this.store.getGroup(groupId);
+      const latest = group?.projection;
+      if (
+        !group ||
+        !latest ||
+        group.subscriptionMode !== 'member' ||
+        group.lifecycle !== 'active' ||
+        !group.localPrincipalId ||
+        group.localPrincipalId !== latest.group.owner_principal_id ||
+        group.localPrincipalId !== group.ownerPrincipalId ||
+        !group.localClientId ||
+        !group.localCredentialId ||
+        latest.members[group.localPrincipalId]?.status !== 'active' ||
+        latest.clients[group.localPrincipalId]?.[group.localClientId]
+          ?.status !== 'active' ||
+        latest.credentials[group.localPrincipalId]?.[group.localCredentialId]
+          ?.status !== 'active'
+      )
+        throw new Error(
+          'Only the current Group Owner may initialize the Group',
+        );
+      if (
+        this.store
+          .listGroupInitializations()
+          .some((operation) => operation.oldGroupId === groupId)
+      )
+        throw new Error(
+          'This Group already has an initialization pending local recovery',
+        );
+      const oldOwner = latest.members[group.localPrincipalId];
+      const oldClient =
+        latest.clients[group.localPrincipalId]?.[group.localClientId!];
+      if (!oldOwner || !oldClient)
+        throw new Error('The current Owner identity is incomplete');
+
+      const identity = await this.identities.createPrincipalIdentity({
+        freshClient: true,
+      });
+      const recoveryIdentity = await this.identities.createCredentialIdentity({
+        principalId: identity.principalId,
+        clientId: identity.clientId,
+        purpose: 'group_recovery',
+      });
+      const newGroupId = newId('group');
+      const genesis = buildGroupGenesis({
+        groupId: newGroupId,
+        name: latest.group.name,
+        displayName: oldOwner.display_name,
+        clientDisplayName: oldClient.display_name,
+        membershipPolicy: latest.group.membership_policy.join,
+        observerAccess: latest.group.visibility_policy.observer_access,
+        identity,
+        recoveryIdentity,
+        occurredAt: new Date(this.now()).toISOString(),
+      });
+      const operation = this.store.beginGroupInitialization({
+        operationId: newId('initialization'),
+        oldGroupId: groupId,
+        newGroupId,
+        identity,
+        recoveryIdentity,
+        nowMs: this.now(),
+      });
+      let pushed = false;
+      try {
+        const history = await this.transport.reinitialize({
+          remoteUrl: group.remoteUrl,
+          repositoryPath: group.repositoryPath,
+          gitSshKeyPath: group.gitSshKeyPath,
+          identity,
+          genesisEvent: genesis.event,
+          genesisProjection: genesis.projection,
+        });
+        pushed = true;
+        this.store.markGroupInitializationPushed(
+          operation.operationId,
+          history.head,
+          this.now(),
+        );
+        return await this.finishGroupInitialization(operation, history);
+      } catch (error) {
+        if (!pushed) {
+          await this.discardPreparedInitialization(operation);
+          throw error;
+        }
+        throw new Error(
+          `The remote Group was initialized, but local replacement is pending and will retry on restart: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    });
+  }
+
+  async recoverInterruptedInitializations(): Promise<
+    readonly CollaborationProjectSpaceGroupRecord[]
+  > {
+    const recovered: CollaborationProjectSpaceGroupRecord[] = [];
+    for (const operation of this.store.listGroupInitializations()) {
+      await this.withRepositoryOperation(operation.repositoryPath, async () => {
+        const history = await this.transport.refreshAfterReinitialize({
+          remoteUrl: operation.remoteUrl,
+          repositoryPath: operation.repositoryPath,
+          gitSshKeyPath: operation.gitSshKeyPath,
+        });
+        if (
+          history.projection.groupId === operation.oldGroupId &&
+          operation.phase === 'prepared'
+        ) {
+          await this.discardPreparedInitialization(operation);
+          return;
+        }
+        if (history.projection.groupId === operation.oldGroupId)
+          throw new Error(
+            `Initialization ${operation.operationId} was pushed but the remote still exposes the old Group`,
+          );
+        recovered.push(
+          await this.finishGroupInitialization(operation, history, true),
+        );
+      });
+    }
+    return recovered;
   }
 
   async observeGroup(input: {
@@ -2784,6 +2971,11 @@ export class CollaborationProjectSpaceService {
       });
       return history;
     } catch (error) {
+      if (
+        error instanceof Error &&
+        error.name === 'CollaborationProjectSpaceHistoryRewrittenError'
+      )
+        this.store.stopWritesAfterHistoryRewrite(groupId, error.message);
       this.store.finishSyncAttempt({
         id: attemptId,
         groupId,
@@ -2846,6 +3038,95 @@ export class CollaborationProjectSpaceService {
       repositoryPath,
       projection,
     };
+  }
+
+  private async finishGroupInitialization(
+    operation: CollaborationGroupInitializationOperation,
+    pushedHistory: ValidatedProjectSpaceHistory,
+    cacheAlreadyRefreshed = false,
+  ): Promise<CollaborationProjectSpaceGroupRecord> {
+    const history = cacheAlreadyRefreshed
+      ? pushedHistory
+      : await this.transport.refreshAfterReinitialize({
+          remoteUrl: operation.remoteUrl,
+          repositoryPath: operation.repositoryPath,
+          gitSshKeyPath: operation.gitSshKeyPath,
+        });
+    if (history.projection.groupId === operation.oldGroupId)
+      throw new Error(
+        'The remote still exposes the old Group after initialization',
+      );
+    const localWon = history.projection.groupId === operation.newGroupId;
+    const group = this.store.replaceGroupAfterInitialization({
+      operationId: operation.operationId,
+      history,
+      identity: localWon ? operation.identity : null,
+      recoveryIdentity: localWon ? operation.recoveryIdentity : null,
+      nowMs: this.now(),
+    });
+    this.histories.delete(operation.oldGroupId);
+    this.histories.set(group.groupId, history);
+    await this.cleanupFinishedInitialization(operation, localWon);
+    return group;
+  }
+
+  private async discardPreparedInitialization(
+    operation: CollaborationGroupInitializationOperation,
+  ): Promise<void> {
+    await this.deleteUnreferencedCredentialIdentities(
+      [
+        operation.identity.credentialId,
+        operation.recoveryIdentity.credentialId,
+      ],
+      operation.operationId,
+    );
+    this.store.deleteGroupInitialization(operation.operationId);
+  }
+
+  private async cleanupFinishedInitialization(
+    operation: CollaborationGroupInitializationOperation,
+    localWon: boolean,
+  ): Promise<void> {
+    const stagingRoot = path.resolve(
+      path.dirname(this.store.databasePath),
+      'collaboration-staged-artifacts',
+    );
+    for (const directory of operation.cleanup.stagedDirectories) {
+      const target = path.resolve(directory);
+      if (!target.startsWith(`${stagingRoot}${path.sep}`))
+        throw new Error(
+          `Initialization refused unsafe staged Artifact cleanup path: ${directory}`,
+        );
+      await rm(target, { recursive: true, force: true });
+    }
+    this.store.deleteExclusiveBackupsForGroup(operation.oldGroupId);
+    await this.deleteUnreferencedCredentialIdentities(
+      [
+        ...operation.cleanup.credentialIds,
+        ...(localWon
+          ? []
+          : [
+              operation.identity.credentialId,
+              operation.recoveryIdentity.credentialId,
+            ]),
+      ],
+      operation.operationId,
+    );
+    this.store.deleteGroupInitialization(operation.operationId);
+  }
+
+  private async deleteUnreferencedCredentialIdentities(
+    credentialIds: readonly string[],
+    excludingOperationId: string,
+  ): Promise<void> {
+    for (const credentialId of new Set(credentialIds))
+      if (
+        !this.store.credentialIdentityIsReferenced(
+          credentialId,
+          excludingOperationId,
+        )
+      )
+        await this.identities.deleteCredentialIdentity(credentialId);
   }
 
   private registerLocalGroup(input: {

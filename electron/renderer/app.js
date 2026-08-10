@@ -790,6 +790,7 @@ function openJoinCollaborationDialog() {
 }
 
 function closeCollaborationDialog() {
+  if (collaborationDialogSubmit?.disabled) return;
   collaborationWorkspace.closeDialog();
 }
 
@@ -13348,6 +13349,8 @@ if (collaborationDialogForm) {
     if (!collaborationState.dialogSubmit) return;
     collaborationDialogError.classList.add('hidden');
     collaborationDialogSubmit.disabled = true;
+    collaborationDialogCancel.disabled = true;
+    collaborationDialogClose.disabled = true;
     try {
       await collaborationState.dialogSubmit(
         new FormData(collaborationDialogForm),
@@ -13358,6 +13361,8 @@ if (collaborationDialogForm) {
       collaborationDialogError.classList.remove('hidden');
     } finally {
       collaborationDialogSubmit.disabled = false;
+      collaborationDialogCancel.disabled = false;
+      collaborationDialogClose.disabled = false;
     }
   });
 }

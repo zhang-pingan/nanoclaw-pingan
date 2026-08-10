@@ -54,6 +54,14 @@ export function collaborationCanMutate(group) {
   );
 }
 
+export function collaborationCanInitializeGroup(group) {
+  return Boolean(
+    collaborationCanMutate(group) &&
+    group.localPrincipalId &&
+    group.localPrincipalId === group.ownerPrincipalId,
+  );
+}
+
 export function collaborationCanApproveMembers(group) {
   if (!collaborationCanMutate(group)) return false;
   if (group.localPrincipalId === group.ownerPrincipalId) return true;

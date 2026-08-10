@@ -5,6 +5,7 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   statSync,
@@ -42,10 +43,11 @@ import type {
   CollaborationProposedAction,
 } from './analysis-contracts.js';
 import { assertCollaborationAnalysisTransition } from './analysis-contracts.js';
+import type { CollaborationEventSigningIdentity } from './project-space-identity.js';
 
-export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 9;
+export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 10;
 export const COLLABORATION_PROJECT_SPACE_STORE_FORMAT =
-  'icarus.collaboration-local-store/9';
+  'icarus.collaboration-local-store/10';
 
 export function deterministicCollaborationPollDelay(
   groupId: string,
@@ -80,7 +82,7 @@ export class CollaborationProjectSpaceStoreError extends Error {
   }
 }
 
-const SCHEMA_V9 = `
+const SCHEMA_V10 = `
 CREATE TABLE collaboration_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -544,6 +546,23 @@ CREATE TABLE collaboration_analysis_action_applications (
   FOREIGN KEY (analysis_id, finding_id)
     REFERENCES collaboration_analysis_findings(analysis_id, finding_id) ON DELETE CASCADE
 );
+CREATE TABLE collaboration_group_initializations (
+  operation_id TEXT PRIMARY KEY,
+  old_group_id TEXT NOT NULL UNIQUE,
+  new_group_id TEXT NOT NULL UNIQUE,
+  remote_url TEXT NOT NULL,
+  repository_path TEXT NOT NULL,
+  git_ssh_key_path TEXT NOT NULL,
+  poll_interval_ms INTEGER NOT NULL,
+  notifications_enabled INTEGER NOT NULL CHECK (notifications_enabled IN (0, 1)),
+  identity_json TEXT NOT NULL,
+  recovery_identity_json TEXT NOT NULL,
+  cleanup_json TEXT NOT NULL,
+  phase TEXT NOT NULL CHECK (phase IN ('prepared', 'pushed', 'local_replaced')),
+  new_head TEXT,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL
+);
 CREATE TABLE collaboration_process_locks (
   group_id TEXT PRIMARY KEY REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
   owner_id TEXT NOT NULL,
@@ -710,6 +729,13 @@ const REQUIRED_TABLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
     'operation_key',
     'analysis_id',
   ],
+  collaboration_group_initializations: [
+    'operation_id',
+    'old_group_id',
+    'new_group_id',
+    'phase',
+    'new_head',
+  ],
   collaboration_process_locks: ['group_id', 'owner_id'],
 };
 
@@ -751,7 +777,7 @@ function initialize(database: Database.Database): void {
     );
   if (version === 0)
     database.transaction(() => {
-      database.exec(SCHEMA_V9);
+      database.exec(SCHEMA_V10);
       database
         .prepare('INSERT INTO collaboration_meta (key, value) VALUES (?, ?)')
         .run('format', COLLABORATION_PROJECT_SPACE_STORE_FORMAT);
@@ -1046,6 +1072,59 @@ export interface CollaborationSyncAttemptV3 {
   readonly errorClass: string | null;
 }
 
+export interface CollaborationGroupInitializationCleanup {
+  readonly credentialIds: readonly string[];
+  readonly stagedDirectories: readonly string[];
+}
+
+export interface CollaborationGroupInitializationOperation {
+  readonly operationId: string;
+  readonly oldGroupId: string;
+  readonly newGroupId: string;
+  readonly remoteUrl: string;
+  readonly repositoryPath: string;
+  readonly gitSshKeyPath: string;
+  readonly pollIntervalMs: number;
+  readonly notificationsEnabled: boolean;
+  readonly identity: CollaborationEventSigningIdentity;
+  readonly recoveryIdentity: CollaborationEventSigningIdentity;
+  readonly cleanup: CollaborationGroupInitializationCleanup;
+  readonly phase: 'prepared' | 'pushed' | 'local_replaced';
+  readonly newHead: string | null;
+  readonly createdAtMs: number;
+  readonly updatedAtMs: number;
+}
+
+function groupInitializationFromRow(
+  row: Record<string, unknown>,
+): CollaborationGroupInitializationOperation {
+  return {
+    operationId: String(row.operation_id),
+    oldGroupId: String(row.old_group_id),
+    newGroupId: String(row.new_group_id),
+    remoteUrl: String(row.remote_url),
+    repositoryPath: String(row.repository_path),
+    gitSshKeyPath: String(row.git_ssh_key_path),
+    pollIntervalMs: Number(row.poll_interval_ms),
+    notificationsEnabled: Number(row.notifications_enabled) === 1,
+    identity: JSON.parse(
+      String(row.identity_json),
+    ) as CollaborationEventSigningIdentity,
+    recoveryIdentity: JSON.parse(
+      String(row.recovery_identity_json),
+    ) as CollaborationEventSigningIdentity,
+    cleanup: JSON.parse(
+      String(row.cleanup_json),
+    ) as CollaborationGroupInitializationCleanup,
+    phase: String(
+      row.phase,
+    ) as CollaborationGroupInitializationOperation['phase'],
+    newHead: row.new_head == null ? null : String(row.new_head),
+    createdAtMs: Number(row.created_at_ms),
+    updatedAtMs: Number(row.updated_at_ms),
+  };
+}
+
 function groupFromRow(
   row: Record<string, unknown>,
 ): CollaborationProjectSpaceGroupRecord {
@@ -1289,6 +1368,285 @@ export class CollaborationProjectSpaceStore {
         .prepare('DELETE FROM collaboration_subscriptions WHERE group_id = ?')
         .run(groupId).changes === 1
     );
+  }
+
+  beginGroupInitialization(input: {
+    readonly operationId: string;
+    readonly oldGroupId: string;
+    readonly newGroupId: string;
+    readonly identity: CollaborationEventSigningIdentity;
+    readonly recoveryIdentity: CollaborationEventSigningIdentity;
+    readonly nowMs?: number;
+  }): CollaborationGroupInitializationOperation {
+    this.assertOpen();
+    const nowMs = input.nowMs ?? Date.now();
+    this.database.transaction(() => {
+      const group = this.database
+        .prepare(
+          `SELECT g.repository_path, g.git_ssh_key_path,
+                  g.local_credential_id, g.recovery_credential_id,
+                  s.remote_url, s.poll_interval_ms, s.notifications_enabled
+             FROM collaboration_groups g
+             JOIN collaboration_subscriptions s ON s.group_id = g.group_id
+            WHERE g.group_id = ?`,
+        )
+        .get(input.oldGroupId) as Record<string, unknown> | undefined;
+      if (!group)
+        throw new Error(`Collaboration Group not found: ${input.oldGroupId}`);
+      const credentialIds = new Set(
+        (
+          this.database
+            .prepare(
+              `SELECT credential_id FROM collaboration_credentials
+                WHERE group_id = ?`,
+            )
+            .all(input.oldGroupId) as Array<{ credential_id: string }>
+        ).map((row) => row.credential_id),
+      );
+      if (group.local_credential_id)
+        credentialIds.add(String(group.local_credential_id));
+      if (group.recovery_credential_id)
+        credentialIds.add(String(group.recovery_credential_id));
+      const stagedDirectories = [
+        ...new Set(
+          (
+            this.database
+              .prepare(
+                `SELECT staged_path FROM collaboration_staged_artifacts
+                  WHERE group_id = ?`,
+              )
+              .all(input.oldGroupId) as Array<{ staged_path: string }>
+          ).map((row) => path.dirname(row.staged_path)),
+        ),
+      ];
+      this.database
+        .prepare(
+          `INSERT INTO collaboration_group_initializations (
+             operation_id, old_group_id, new_group_id, remote_url,
+             repository_path, git_ssh_key_path, poll_interval_ms,
+             notifications_enabled, identity_json, recovery_identity_json,
+             cleanup_json, phase, new_head, created_at_ms, updated_at_ms
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prepared', NULL, ?, ?)`,
+        )
+        .run(
+          input.operationId,
+          input.oldGroupId,
+          input.newGroupId,
+          group.remote_url,
+          group.repository_path,
+          group.git_ssh_key_path,
+          group.poll_interval_ms,
+          group.notifications_enabled,
+          JSON.stringify(input.identity),
+          JSON.stringify(input.recoveryIdentity),
+          JSON.stringify({
+            credentialIds: [...credentialIds],
+            stagedDirectories,
+          } satisfies CollaborationGroupInitializationCleanup),
+          nowMs,
+          nowMs,
+        );
+    })();
+    return this.getGroupInitialization(input.operationId)!;
+  }
+
+  getGroupInitialization(
+    operationId: string,
+  ): CollaborationGroupInitializationOperation | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT * FROM collaboration_group_initializations
+          WHERE operation_id = ?`,
+      )
+      .get(operationId) as Record<string, unknown> | undefined;
+    return row ? groupInitializationFromRow(row) : null;
+  }
+
+  listGroupInitializations(): CollaborationGroupInitializationOperation[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_group_initializations
+            ORDER BY created_at_ms, operation_id`,
+        )
+        .all() as Record<string, unknown>[]
+    ).map(groupInitializationFromRow);
+  }
+
+  markGroupInitializationPushed(
+    operationId: string,
+    newHead: string,
+    nowMs = Date.now(),
+  ): void {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_group_initializations
+            SET phase = 'pushed', new_head = ?, updated_at_ms = ?
+          WHERE operation_id = ? AND phase = 'prepared'`,
+      )
+      .run(newHead, nowMs, operationId);
+    if (result.changes !== 1)
+      throw new Error(
+        `Collaboration initialization not prepared: ${operationId}`,
+      );
+  }
+
+  replaceGroupAfterInitialization(input: {
+    readonly operationId: string;
+    readonly history: {
+      readonly head: string;
+      readonly projection: CollaborationProjectionV3;
+      readonly eventRecords: readonly CollaborationProjectSpaceEventRecord[];
+    };
+    readonly identity: CollaborationEventSigningIdentity | null;
+    readonly recoveryIdentity: CollaborationEventSigningIdentity | null;
+    readonly nowMs?: number;
+  }): CollaborationProjectSpaceGroupRecord {
+    this.assertOpen();
+    const operation = this.getGroupInitialization(input.operationId);
+    if (!operation)
+      throw new Error(
+        `Collaboration initialization not found: ${input.operationId}`,
+      );
+    const groupId = input.history.projection.groupId;
+    const useIdentity =
+      groupId === operation.newGroupId &&
+      input.identity?.principalId ===
+        input.history.projection.group.owner_principal_id;
+    if (useIdentity !== Boolean(input.recoveryIdentity))
+      throw new Error(
+        'Initialization Owner identity and recovery identity disagree',
+      );
+    const nowMs = input.nowMs ?? Date.now();
+    this.database.transaction(() => {
+      if (this.getGroup(operation.oldGroupId)) {
+        this.database
+          .prepare(
+            'DELETE FROM collaboration_action_executions WHERE group_id = ?',
+          )
+          .run(operation.oldGroupId);
+        this.database
+          .prepare('DELETE FROM collaboration_subscriptions WHERE group_id = ?')
+          .run(operation.oldGroupId);
+      }
+      if (!this.getGroup(groupId)) {
+        this.registerGroup({
+          subscription: {
+            format: 'icarus.collaboration-subscription/1',
+            group_id: groupId,
+            remote_url: operation.remoteUrl,
+            subscription_mode: useIdentity ? 'member' : 'observer',
+            poll_interval_ms: operation.pollIntervalMs,
+            last_verified_head: input.history.head,
+            notifications_enabled: operation.notificationsEnabled,
+            created_at: new Date(nowMs).toISOString(),
+          },
+          name: input.history.projection.group.name,
+          lifecycle: input.history.projection.group.lifecycle,
+          ownerPrincipalId: input.history.projection.group.owner_principal_id,
+          repositoryPath: operation.repositoryPath,
+          gitSshKeyPath: operation.gitSshKeyPath,
+          localPrincipalId: useIdentity ? input.identity!.principalId : null,
+          localClientId: useIdentity ? input.identity!.clientId : null,
+          localCredentialId: useIdentity ? input.identity!.credentialId : null,
+          eventPrivateKeyPath: useIdentity
+            ? input.identity!.privateKeyPath
+            : null,
+          eventPublicKey: useIdentity ? input.identity!.publicKey : null,
+          eventFingerprint: useIdentity ? input.identity!.fingerprint : null,
+          recoveryCredentialId: useIdentity
+            ? input.recoveryIdentity!.credentialId
+            : null,
+          recoveryPrivateKeyPath: useIdentity
+            ? input.recoveryIdentity!.privateKeyPath
+            : null,
+          nowMs,
+        });
+        this.saveVerifiedProjection({
+          groupId,
+          verifiedHead: input.history.head,
+          projection: input.history.projection,
+          eventRecords: input.history.eventRecords,
+          nowMs,
+        });
+      }
+      this.database
+        .prepare(
+          `UPDATE collaboration_group_initializations
+              SET phase = 'local_replaced', new_head = ?, updated_at_ms = ?
+            WHERE operation_id = ?`,
+        )
+        .run(input.history.head, nowMs, input.operationId);
+    })();
+    return this.getGroup(groupId)!;
+  }
+
+  deleteGroupInitialization(operationId: string): boolean {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          'DELETE FROM collaboration_group_initializations WHERE operation_id = ?',
+        )
+        .run(operationId).changes === 1
+    );
+  }
+
+  credentialIdentityIsReferenced(
+    credentialId: string,
+    excludingOperationId?: string,
+  ): boolean {
+    this.assertOpen();
+    if (
+      this.database
+        .prepare(
+          `SELECT 1 FROM collaboration_groups
+            WHERE local_credential_id = ? OR recovery_credential_id = ?
+            LIMIT 1`,
+        )
+        .get(credentialId, credentialId) ||
+      this.database
+        .prepare(
+          `SELECT 1 FROM collaboration_credentials
+            WHERE credential_id = ? LIMIT 1`,
+        )
+        .get(credentialId)
+    )
+      return true;
+    return this.listGroupInitializations().some(
+      (operation) =>
+        operation.operationId !== excludingOperationId &&
+        (operation.identity.credentialId === credentialId ||
+          operation.recoveryIdentity.credentialId === credentialId),
+    );
+  }
+
+  stopWritesAfterHistoryRewrite(groupId: string, message: string): void {
+    this.assertOpen();
+    this.database.transaction(() => {
+      this.database
+        .prepare(
+          `UPDATE collaboration_subscriptions SET subscription_mode = 'observer',
+                  last_error = ? WHERE group_id = ?`,
+        )
+        .run(message, groupId);
+      this.database
+        .prepare(
+          `UPDATE collaboration_groups
+              SET local_principal_id = NULL, local_client_id = NULL,
+                  local_credential_id = NULL, event_private_key_path = NULL,
+                  event_public_key = NULL, event_fingerprint = NULL,
+                  recovery_credential_id = NULL,
+                  recovery_private_key_path = NULL,
+                  protocol_status = 'PROTOCOL_QUARANTINED',
+                  protocol_error = ?, updated_at_ms = ?
+            WHERE group_id = ?`,
+        )
+        .run(message, Date.now(), groupId);
+    })();
   }
 
   listGroups(): CollaborationProjectSpaceGroupRecord[] {
@@ -4038,6 +4396,68 @@ export class CollaborationProjectSpaceStore {
           WHERE group_id = ? ORDER BY observed_at_ms, evidence_id`,
       )
       .all(groupId) as Array<Record<string, unknown>>;
+  }
+
+  deleteExclusiveBackupsForGroup(groupId: string): number {
+    this.assertOpen();
+    const backupRoot = path.join(
+      path.dirname(this.databasePath),
+      'collaboration-backups',
+    );
+    if (!existsSync(backupRoot)) return 0;
+    const rootMetadata = lstatSync(backupRoot);
+    if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink())
+      throw new Error('Collaboration backup root is unsafe');
+    const candidates = readdirSync(backupRoot, { withFileTypes: true }).filter(
+      (entry) => entry.isDirectory() && !entry.isSymbolicLink(),
+    );
+    let deleted = 0;
+    for (const entry of candidates) {
+      const directory = path.join(backupRoot, entry.name);
+      const manifestPath = path.join(directory, 'manifest.json');
+      if (!existsSync(manifestPath)) continue;
+      let manifest: CollaborationProjectSpaceBackupManifest;
+      try {
+        requireRegularFile(manifestPath, 'Collaboration backup manifest');
+        manifest = collaborationProjectSpaceBackupManifestSchema.parse(
+          strictParseJson(readFileSync(manifestPath, 'utf8')),
+        );
+      } catch {
+        continue;
+      }
+      const snapshotPath = path.join(directory, manifest.database_basename);
+      let snapshotMetadata: ReturnType<typeof lstatSync>;
+      try {
+        snapshotMetadata = requireRegularFile(
+          snapshotPath,
+          'Collaboration backup database',
+        );
+      } catch {
+        continue;
+      }
+      if (
+        snapshotMetadata.size !== manifest.file.size ||
+        fileSha256(snapshotPath) !== manifest.file.sha256
+      )
+        continue;
+      const snapshot = new Database(snapshotPath, {
+        readonly: true,
+        fileMustExist: true,
+      });
+      try {
+        const rows = snapshot
+          .prepare('SELECT group_id FROM collaboration_subscriptions')
+          .all() as Array<{ group_id: string }>;
+        if (rows.length !== 1 || rows[0]?.group_id !== groupId) continue;
+      } catch {
+        continue;
+      } finally {
+        snapshot.close();
+      }
+      rmSync(directory, { recursive: true, force: true });
+      deleted += 1;
+    }
+    return deleted;
   }
 
   rawDatabaseForTests(): Database.Database {

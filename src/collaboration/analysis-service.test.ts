@@ -114,6 +114,29 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
     return history;
   }
 
+  async reinitialize(input: {
+    remoteUrl: string;
+    genesisEvent: ValidatedProjectSpaceHistory['eventRecords'][number]['event'];
+    genesisProjection: ValidatedProjectSpaceHistory['projection'];
+  }): Promise<ValidatedProjectSpaceHistory> {
+    const head = '9'.repeat(40);
+    const history: ValidatedProjectSpaceHistory = {
+      head,
+      projection: input.genesisProjection,
+      eventRecords: [
+        { event: input.genesisEvent, commitHash: head, commitOrder: 1 },
+      ],
+    };
+    this.histories.set(input.remoteUrl, history);
+    return history;
+  }
+
+  async refreshAfterReinitialize(input: {
+    remoteUrl: string;
+  }): Promise<ValidatedProjectSpaceHistory> {
+    return this.inspect(input);
+  }
+
   async append(input: {
     remoteUrl: string;
     buildEvent: (history: ValidatedProjectSpaceHistory) =>
