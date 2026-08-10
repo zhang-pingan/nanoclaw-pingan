@@ -93,6 +93,11 @@ describe('Core service launch compatibility', () => {
     expect(common).toContain(
       'HOST_CORE_RELEASE_CLI="$ROOT_DIR/src/host-core/host-core-release-cli.ts"',
     );
+    expect(common).toContain('preflight_collaboration_store()');
+    expect(common).toContain('dist/collaboration/store-preflight-cli.js');
+    const launcher = fs.readFileSync(hostLauncher, 'utf8');
+    expect(launcher).toContain('preflight_collaboration_store current');
+    expect(launcher).toContain('preflight_collaboration_store active');
     expect(common).not.toContain('bind-core');
     const activePreparation = common.match(
       /\n    active\)\n([\s\S]*?)\n      ;;/,

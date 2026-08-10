@@ -14,6 +14,7 @@ RUNTIME_HOME="${ICARUS_RUNTIME_HOME:-$HOME/Library/Application Support/Icarus}"
 HOST_LAUNCHER="$ROOT_DIR/local/shell/launch-host.sh"
 WORKFLOW_STATE_CLI="$ROOT_DIR/src/host-core/workflow-state-cli.ts"
 HOST_CORE_RELEASE_CLI="$ROOT_DIR/src/host-core/host-core-release-cli.ts"
+COLLABORATION_STORE_PREFLIGHT_CURRENT="$ROOT_DIR/dist/collaboration/store-preflight-cli.js"
 
 ensure_logs_dir() {
   mkdir -p "$ROOT_DIR/logs"
@@ -75,6 +76,32 @@ inspect_workflow_state() {
     inspect \
     --mode "$mode" \
     --runtime-home "$RUNTIME_HOME"
+}
+
+preflight_collaboration_store() {
+  local mode="$1"
+  local entry
+
+  case "$mode" in
+    current)
+      entry="$COLLABORATION_STORE_PREFLIGHT_CURRENT"
+      ;;
+    active)
+      entry="$RUNTIME_HOME/active-core/dist/collaboration/store-preflight-cli.js"
+      if [ ! -f "$entry" ]; then
+        echo "collaboration store preflight unavailable in active Host Core; skipping"
+        return 0
+      fi
+      ;;
+    *) return 64 ;;
+  esac
+
+  [ -f "$entry" ] || {
+    echo "Collaboration store preflight is missing: $entry" >&2
+    return 1
+  }
+  "$RUNTIME_TOOLCHAIN" --runtime-home "$RUNTIME_HOME" exec -- node "$entry" \
+    --store-dir "$ROOT_DIR/store"
 }
 
 ensure_core_runtime() {
