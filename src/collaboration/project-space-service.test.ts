@@ -26,6 +26,7 @@ import { CollaborationWebApi } from './web-api.js';
 import {
   buildCollaborationEventV3,
   collaborationCanonicalHashV3,
+  collaborationDeadlineSnapshotHashV3,
   reduceCollaborationEventV3,
 } from './protocol/v3-reducer.js';
 import { collaborationCredentialFingerprintV3 } from './protocol/v3-schema.js';
@@ -796,8 +797,10 @@ describe('Collaboration project space v3 Group and identity service', () => {
 
   it('marks a leaving member Workflow Turn for recovery and notifies the Owner', async () => {
     const transport = new MemoryTransport();
-    const owner = service(tempDirectory(), transport, ALICE);
-    const bob = service(tempDirectory(), transport, BOB);
+    let nowMs = Date.parse('2026-08-06T12:00:00.000Z');
+    const advancingNow = () => nowMs++;
+    const owner = service(tempDirectory(), transport, ALICE, advancingNow);
+    const bob = service(tempDirectory(), transport, BOB, advancingNow);
     await owner.service.createGroup({
       remoteUrl: '/tmp/member-left-workflow.git',
       name: 'Workflow recovery project',
@@ -877,6 +880,196 @@ describe('Collaboration project space v3 Group and identity service', () => {
         severity: 'critical',
       }),
     ]);
+    await withServiceApi(owner, async (baseUrl) => {
+      const prefix = `${baseUrl}/api/collaboration/groups/group_member_left_workflow`;
+      const notifications = await fetch(`${prefix}/notifications`);
+      expect(notifications.status).toBe(200);
+      expect(await notifications.json()).toMatchObject({
+        notifications: [
+          {
+            kind: 'member_left_workflow_recovery',
+            resourceType: 'turn',
+            resourceId: 'turn_member_left',
+          },
+        ],
+      });
+      const recovered = await fetch(
+        `${prefix}/workflow-instances/instance_member_left/turns/turn_member_left/recover`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 3,
+            previousAttempt: 1,
+            assigneePrincipalId: ALICE.principalId,
+            reason: 'Owner reassigned work after Bob left',
+          }),
+        },
+      );
+      expect(recovered.status).toBe(200);
+      const started = await fetch(
+        `${prefix}/workflow-instances/instance_member_left/turns/turn_member_left/start`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ expectedRevision: 4, executorId: null }),
+        },
+      );
+      expect(started.status).toBe(200);
+    });
+    expect(
+      owner.store.getGroup('group_member_left_workflow')?.projection?.turns
+        .turn_member_left,
+    ).toMatchObject({
+      state: 'running',
+      attempt: 2,
+      assignee_principal_id: ALICE.principalId,
+      claimant_principal_id: ALICE.principalId,
+    });
+    expect(
+      owner.store.getGroup('group_member_left_workflow')?.projection
+        ?.workflowInstances.instance_member_left,
+    ).toMatchObject({
+      lifecycle: 'running',
+      resolved_assignments: { implementation: ALICE.principalId },
+    });
+    owner.store.close();
+    bob.store.close();
+  });
+
+  it('binds a batched member-left notification to event-time affected Turns', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const bob = service(tempDirectory(), transport, BOB);
+    const groupId = 'group_member_left_batch';
+    const remoteUrl = '/tmp/member-left-batch.git';
+    await owner.service.createGroup({
+      remoteUrl,
+      name: 'Batched workflow recovery',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId,
+    });
+    await bob.service.joinGroup({
+      remoteUrl,
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    await owner.service.sync(groupId);
+    await owner.service.proposeWorkflowDefinition({
+      groupId,
+      definitionId: 'delivery',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Delivery',
+      machine: DELIVERY_MACHINE,
+      layout: DELIVERY_LAYOUT,
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId,
+      definitionId: 'delivery',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkflowInstance({
+      groupId,
+      definitionId: 'delivery',
+      definitionVersion: 1,
+      instanceId: 'instance_batch',
+      scope: { type: 'group' },
+      participantBindings: { implementer: BOB.principalId },
+    });
+    await owner.service.startWorkflowInstance({
+      groupId,
+      instanceId: 'instance_batch',
+      expectedRevision: 1,
+    });
+    await owner.service.createTurn({
+      groupId,
+      instanceId: 'instance_batch',
+      expectedRevision: 2,
+      turnId: 'turn_batch',
+    });
+
+    await bob.service.leaveGroup(groupId, 'Leaving before batched sync', 1);
+    await transport.append({
+      remoteUrl,
+      buildEvent: (current) => {
+        const head =
+          current.projection.aggregateHeads[
+            'workflow_instance:instance_batch'
+          ]!;
+        return buildCollaborationEventV3({
+          groupId,
+          eventId: 'evt_batch_recovered',
+          aggregateType: 'workflow_instance',
+          aggregateId: 'instance_batch',
+          aggregateRevision: head.revision + 1,
+          previousEventHash: head.eventHash,
+          eventType: 'turn_recovered',
+          actor: {
+            principal_id: ALICE.principalId,
+            client_id: ALICE.clientId,
+            credential_id: ALICE.credentialId,
+            executor_id: null,
+          },
+          occurredAt: '2026-08-06T12:01:00.000Z',
+          payload: {
+            turn_id: 'turn_batch',
+            assignee_principal_id: ALICE.principalId,
+            previous_attempt: 1,
+            next_attempt: 2,
+            reason: 'Recovered before Owner batch sync',
+            start_deadline_at: '2026-08-06T12:02:00.000Z',
+            deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+              turnId: 'turn_batch',
+              attempt: 2,
+              timeoutPolicy:
+                current.projection.turns.turn_batch!.timeout_policy_snapshot,
+              startDeadlineAt: '2026-08-06T12:02:00.000Z',
+              startedAt: null,
+              executionDeadlineAt: null,
+            }),
+          },
+        });
+      },
+    });
+
+    const synced = await owner.service.sync(groupId);
+    expect(synced.projection.turns.turn_batch).toMatchObject({
+      state: 'pending',
+      assignee_principal_id: ALICE.principalId,
+      recovery_reason: null,
+    });
+    const notifications = owner.store.listPendingNotifications({
+      principalId: ALICE.principalId,
+      clientId: ALICE.clientId,
+      groupId,
+    });
+    expect(notifications).toEqual([
+      expect.objectContaining({
+        kind: 'member_left_workflow_recovery',
+        resourceType: 'turn',
+        resourceId: 'turn_batch',
+        severity: 'critical',
+        payload: {
+          principal_id: BOB.principalId,
+          turn_id: 'turn_batch',
+        },
+      }),
+    ]);
+    await owner.service.sync(groupId);
+    expect(
+      owner.store.listPendingNotifications({
+        principalId: ALICE.principalId,
+        clientId: ALICE.clientId,
+        groupId,
+      }),
+    ).toHaveLength(1);
     owner.store.close();
     bob.store.close();
   });

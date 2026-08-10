@@ -2450,6 +2450,7 @@ export class CollaborationWebApi {
             .object({
               expectedRevision,
               previousAttempt: z.number().int().positive(),
+              assigneePrincipalId: identifier,
               reason: z.string().min(1),
             })
             .strict(),

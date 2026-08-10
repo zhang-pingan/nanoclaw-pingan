@@ -580,6 +580,22 @@ describe('Collaboration v3 reducer invariants', () => {
     let projection = withBob();
     expect(() =>
       apply(projection, {
+        aggregateType: 'membership',
+        aggregateId: ALICE,
+        eventType: 'group_dissolved',
+        payload: { reason: 'Wrong Aggregate type' },
+      }),
+    ).toThrow(/Group Aggregate/iu);
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'group',
+        aggregateId: 'group_other',
+        eventType: 'group_dissolved',
+        payload: { reason: 'Wrong Aggregate id' },
+      }),
+    ).toThrow(/Group Aggregate/iu);
+    expect(() =>
+      apply(projection, {
         aggregateType: 'group',
         aggregateId: 'group_test',
         eventType: 'group_dissolved',
@@ -647,7 +663,7 @@ describe('Collaboration v3 reducer invariants', () => {
         aggregateType: 'membership',
         aggregateId: ALICE,
         eventType: 'member_left',
-        payload: { reason: 'Owner cannot leave' },
+        payload: { reason: 'Owner cannot leave', affected_turn_ids: [] },
       }),
     ).toThrow(/Owner/iu);
 
@@ -657,7 +673,10 @@ describe('Collaboration v3 reducer invariants', () => {
       eventType: 'member_left',
       actor: BOB,
       id: 'evt_bob_left',
-      payload: { reason: 'Leaving the project' },
+      payload: {
+        reason: 'Leaving the project',
+        affected_turn_ids: ['turn_1'],
+      },
     });
     expect(projection.members[BOB]?.status).toBe('left');
     expect(
@@ -687,6 +706,18 @@ describe('Collaboration v3 reducer invariants', () => {
       'recovery_required',
     );
     expect(() =>
+      apply(workflowFixture({ startTurn: true }).projection, {
+        aggregateType: 'membership',
+        aggregateId: BOB,
+        eventType: 'member_left',
+        actor: BOB,
+        payload: {
+          reason: 'Omit active work',
+          affected_turn_ids: [],
+        },
+      }),
+    ).toThrow(/affected Turn ids/iu);
+    expect(() =>
       apply(projection, {
         aggregateType: 'group',
         aggregateId: 'group_test',
@@ -695,6 +726,124 @@ describe('Collaboration v3 reducer invariants', () => {
         payload: { name: 'Unauthorized rename' },
       }),
     ).toThrow(/active Group member/iu);
+
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'workflow_instance',
+        aggregateId: 'instance_1',
+        eventType: 'turn_recovered',
+        payload: {
+          turn_id: 'turn_1',
+          assignee_principal_id: BOB,
+          previous_attempt: 1,
+          next_attempt: 2,
+          reason: 'Cannot assign recovery to a departed member',
+          start_deadline_at: null,
+          deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+            turnId: 'turn_1',
+            attempt: 2,
+            timeoutPolicy: null,
+            startDeadlineAt: null,
+            startedAt: null,
+            executionDeadlineAt: null,
+          }),
+        },
+      }),
+    ).toThrow(/active Group member/iu);
+
+    projection = apply(projection, {
+      aggregateType: 'workflow_instance',
+      aggregateId: 'instance_1',
+      eventType: 'turn_recovered',
+      payload: {
+        turn_id: 'turn_1',
+        assignee_principal_id: ALICE,
+        previous_attempt: 1,
+        next_attempt: 2,
+        reason: 'Owner reassigned work after Bob left',
+        start_deadline_at: null,
+        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+          turnId: 'turn_1',
+          attempt: 2,
+          timeoutPolicy: null,
+          startDeadlineAt: null,
+          startedAt: null,
+          executionDeadlineAt: null,
+        }),
+      },
+    });
+    expect(projection.workflowInstances.instance_1).toMatchObject({
+      lifecycle: 'running',
+      active_turn_id: 'turn_1',
+      resolved_assignments: { build: ALICE },
+    });
+    expect(projection.turns.turn_1).toMatchObject({
+      state: 'pending',
+      attempt: 2,
+      assignee_principal_id: ALICE,
+      claimant_principal_id: null,
+      recovery_reason: null,
+    });
+    const recoveredInputHash = collaborationTurnInputHashV3({
+      groupId: 'group_test',
+      instanceId: 'instance_1',
+      epoch: 1,
+      stateId: 'build',
+      assigneePrincipalId: ALICE,
+      execution: null,
+      incomingHandoffHash: null,
+      workItem: null,
+    });
+    expect(projection.turns.turn_1?.input_hash).toBe(recoveredInputHash);
+    expect(projection.turns.turn_1?.idempotency_key).toBe(
+      collaborationIdempotencyKeyV3({
+        groupId: 'group_test',
+        instanceId: 'instance_1',
+        epoch: 1,
+        turnId: 'turn_1',
+        attempt: 2,
+        inputHash: recoveredInputHash,
+      }),
+    );
+    const startEventId = 'evt_alice_started_recovered_turn';
+    const expectedRevision =
+      projection.aggregateHeads['workflow_instance:instance_1']!.revision;
+    const fence = collaborationFencingTokenV3({
+      groupId: 'group_test',
+      instanceId: 'instance_1',
+      epoch: 1,
+      turnId: 'turn_1',
+      attempt: 2,
+      claimantClientId: ALICE_CLIENT,
+      claimEventId: startEventId,
+      expectedRevision,
+    });
+    projection = apply(projection, {
+      aggregateType: 'workflow_instance',
+      aggregateId: 'instance_1',
+      eventType: 'turn_started',
+      id: startEventId,
+      payload: {
+        turn_id: 'turn_1',
+        attempt: 2,
+        fencing_token: fence,
+        executor_id: null,
+        execution_deadline_at: null,
+        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+          turnId: 'turn_1',
+          attempt: 2,
+          timeoutPolicy: null,
+          startDeadlineAt: null,
+          startedAt: NOW,
+          executionDeadlineAt: null,
+        }),
+      },
+    });
+    expect(projection.turns.turn_1).toMatchObject({
+      state: 'running',
+      claimant_principal_id: ALICE,
+      claimant_client_id: ALICE_CLIENT,
+    });
 
     const rejoinEventId = 'evt_bob_rejoined';
     projection = apply(projection, {

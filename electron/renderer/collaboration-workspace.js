@@ -32,6 +32,7 @@ import {
   buildCollaborationLifecycleRequest,
   buildCollaborationRecoverTurnRequest,
   buildCollaborationStartTurnRequest,
+  collaborationActiveMemberOptions,
   collaborationAnalysisRunAccess,
   collaborationCanApproveMembers,
   collaborationCanAnswerWorkItemAssignment,
@@ -1788,10 +1789,22 @@ export function createCollaborationWorkspace(options) {
     );
     if (!collaborationCanRecoverTurn(group, instance, turn))
       throw new Error('当前身份无权恢复该执行轮次');
+    const assigneeOptions = collaborationActiveMemberOptions(group);
+    if (!assigneeOptions.length)
+      throw new Error('当前没有可接管执行轮次的 active 成员');
+    const defaultAssignee = assigneeOptions.some(
+      ([principalId]) => principalId === turn.assignee_principal_id,
+    )
+      ? turn.assignee_principal_id
+      : assigneeOptions.some(
+            ([principalId]) => principalId === group.localPrincipalId,
+          )
+        ? group.localPrincipalId
+        : assigneeOptions[0][0];
     openDialog({
-      title: '恢复执行轮次',
-      submitText: '确认恢复',
-      body: `<div class="collaboration-transfer-warning"><strong>创建新的执行尝试</strong><span>Host 将校验当前 attempt、实例 revision 与 Git CAS；原执行结果不会被直接采用。</span></div>${field('恢复原因', 'reason', turn.recovery_reason || '', { multiline: true })}`,
+      title: '重新分配并恢复执行轮次',
+      submitText: '确认重新分配',
+      body: `<div class="collaboration-transfer-warning"><strong>创建新的执行尝试</strong><span>负责人、当前状态分配与 Turn 将原子更新；原执行结果不会被直接采用。</span></div><div class="collaboration-form-grid">${field('新的负责人', 'assigneePrincipalId', defaultAssignee, { options: assigneeOptions })}${field('恢复原因', 'reason', turn.recovery_reason || '', { multiline: true })}</div>`,
       onSubmit: async (formData) => {
         await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/turns/${encodeURIComponent(turn.turn_id)}/recover`,
@@ -1805,6 +1818,7 @@ export function createCollaborationWorkspace(options) {
                   instance.instance_id,
                 ),
                 previousAttempt: turn.attempt,
+                assigneePrincipalId: formData.get('assigneePrincipalId'),
                 reason: formData.get('reason'),
               }),
             ),

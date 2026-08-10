@@ -20,6 +20,7 @@ import {
   collaborationDeadlineSnapshotHashV3,
   collaborationFencingTokenV3,
   collaborationIdempotencyKeyV3,
+  collaborationMemberLeftAffectedTurnIdsV3,
   collaborationRecoveryRequestHashV3,
   collaborationRecoveryVerificationCodeV3,
   collaborationTurnCompletionHashV3,
@@ -2530,6 +2531,7 @@ export class CollaborationProjectSpaceService {
         }),
       },
       eventId,
+      occurredAt: startedAt,
       executorId: input.executorId ?? null,
     });
   }
@@ -2784,6 +2786,7 @@ export class CollaborationProjectSpaceService {
     readonly turnId: string;
     readonly expectedRevision: number;
     readonly previousAttempt: number;
+    readonly assigneePrincipalId: string;
     readonly reason: string;
   }): Promise<CollaborationProjectSpaceGroupRecord> {
     const history = await this.sync(input.groupId);
@@ -2802,6 +2805,7 @@ export class CollaborationProjectSpaceService {
       eventType: 'turn_recovered',
       payload: {
         turn_id: input.turnId,
+        assignee_principal_id: input.assigneePrincipalId,
         previous_attempt: input.previousAttempt,
         next_attempt: nextAttempt,
         reason: input.reason,
@@ -3278,6 +3282,7 @@ export class CollaborationProjectSpaceService {
       readonly payload: Record<string, unknown>;
       readonly replaceEventId?: boolean;
       readonly eventId?: string;
+      readonly occurredAt?: string;
       readonly executorId?: string | null;
       readonly materializedFiles?: readonly {
         readonly path: string;
@@ -3390,7 +3395,16 @@ export class CollaborationProjectSpaceService {
           input.eventType === 'group_dissolved' ? 'group' : 'membership',
         aggregateId,
         eventType: input.eventType,
-        payload: { reason: input.reason },
+        payload:
+          input.eventType === 'member_left'
+            ? {
+                reason: input.reason,
+                affected_turn_ids: collaborationMemberLeftAffectedTurnIdsV3(
+                  history.projection,
+                  currentGroup.localPrincipalId!,
+                ),
+              }
+            : { reason: input.reason },
       });
       this.saveHistory(groupId, updated);
       try {
@@ -3466,6 +3480,7 @@ export class CollaborationProjectSpaceService {
     readonly payload: Record<string, unknown>;
     readonly replaceEventId?: boolean;
     readonly eventId?: string;
+    readonly occurredAt?: string;
     readonly executorId?: string | null;
     readonly materializedFiles?: readonly {
       readonly path: string;
@@ -3484,7 +3499,8 @@ export class CollaborationProjectSpaceService {
             `${input.aggregateType}:${input.aggregateId}`
           ];
         const eventId = input.eventId ?? newId('evt');
-        const occurredAt = new Date(this.now()).toISOString();
+        const occurredAt =
+          input.occurredAt ?? new Date(this.now()).toISOString();
         const payload = input.replaceEventId
           ? (JSON.parse(
               JSON.stringify(input.payload)
@@ -3585,27 +3601,21 @@ export class CollaborationProjectSpaceService {
         record.event.event_type === 'member_left' &&
         group.localPrincipalId === history.projection.group.owner_principal_id
       )
-        for (const turn of Object.values(history.projection.turns)) {
-          if (
-            turn.state !== 'recovery_required' ||
-            turn.recovery_reason !==
-              `member_left:${record.event.actor.principal_id}`
-          )
-            continue;
+        for (const turnId of record.event.payload
+          .affected_turn_ids as string[]) {
           this.store.enqueueNotification({
             groupId,
             recipientPrincipalId: group.localPrincipalId,
             recipientClientId: group.localClientId,
             kind: 'member_left_workflow_recovery',
             resourceType: 'turn',
-            resourceId: turn.turn_id,
+            resourceId: turnId,
             reason: 'member_left',
-            dedupeKey: `member-left-recovery:${record.event.event_id}:${turn.turn_id}:${group.localClientId}`,
+            dedupeKey: `member-left-recovery:${record.event.event_id}:${turnId}:${group.localClientId}`,
             severity: 'critical',
             payload: {
               principal_id: record.event.actor.principal_id,
-              workflow_instance_id: turn.workflow_instance_id,
-              turn_id: turn.turn_id,
+              turn_id: turnId,
             },
             nowMs: this.now(),
           });

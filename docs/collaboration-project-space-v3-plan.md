@@ -1747,7 +1747,9 @@ LEFT / REJECTED
   -> REQUESTED or ACTIVE (current join policy, same principal_id)
 ```
 
-Removed/Left Principal 的历史内容和 Actor 记录不删除；新业务写入拒绝。`member_left` 撤销该 Principal 当前有效的全部 Client、Credential 和 Executor。若该 Principal 是活动 Turn 的 assignee 或 claimant，Turn 与 Instance 同时进入 `recovery_required`，并向 Owner 生成 critical 通知。
+Removed/Left Principal 的历史内容和 Actor 记录不删除；新业务写入拒绝。`member_left` 撤销该 Principal 当前有效的全部 Client、Credential 和 Executor。事件必须携带 Reducer 根据事件发生时 Projection 校验过的 `affected_turn_ids`；若该 Principal 是活动 Turn 的 assignee 或 claimant，这些 Turn 与 Instance 同时进入 `recovery_required`，Owner 的 critical 通知直接绑定事件中的 Turn ID，不得从一次批量同步后的最终 Projection 反推。
+
+`turn_recovered` 必须由 Instance 管理者指定新的 active Principal，并在同一个 Workflow Instance Aggregate 事件中原子更新当前状态的 `resolved_assignments`、活动 Turn 的 `assignee_principal_id`、attempt、输入哈希、幂等键和 deadline snapshot。若负责人发生变化，旧 Principal 的 State Execution 快照失效；新 attempt 至少可按 manual 模式启动，之后由新负责人继续执行。恢复不得依赖已退出 Principal 重新加入。
 
 ### 18.3 Archive、Dissolve、Leave 与本机移除
 
@@ -2105,6 +2107,7 @@ Observer 使用相同浏览和验证界面，但：
 ### 23.7 生命周期操作
 
 - Settings 仅向 active/archived Owner 显示“解散群组”，仅向 active/archived 非 Owner Member 显示“退出群组”；服务端仍独立校验 actor、Membership、Credential 和 lifecycle；
+- Owner 从成员退出 critical 通知进入活动 Turn 后，恢复对话框只列出 active Principal，并将“重新分配负责人”和“创建新 attempt”作为一次原子提交；
 - Group 列表右键菜单向所有本地 subscription 显示“从本机移除”；
 - 三种危险操作分别解释远端与本机影响，并要求输入完整 `group_id`；Dissolve 明确标注不可恢复；
 - 远端失败时保留详情和列表；远端成功后立即返回群组列表。cleanup pending 以错误提示说明后台会重试，不重新展示已 detach 群组；

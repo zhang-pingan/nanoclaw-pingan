@@ -55,6 +55,7 @@ import {
   collaborationFindingActionTypes,
   collaborationTurnCompletionDraft,
   collaborationAnalysisRunAccess,
+  collaborationActiveMemberOptions,
   parseCollaborationExternalResult,
   collaborationVerifiedFileTree,
   collaborationWorkItemColumns,
@@ -860,20 +861,57 @@ describe('Collaboration project-space v3 UI helpers', () => {
       buildCollaborationRecoverTurnRequest({
         expectedRevision: 7,
         previousAttempt: 2,
+        assigneePrincipalId: 'principal_alice',
         reason: 'Executor process was replaced',
       }),
     ).toEqual({
       expectedRevision: 7,
       previousAttempt: 2,
+      assigneePrincipalId: 'principal_alice',
       reason: 'Executor process was replaced',
     });
     expect(() =>
       buildCollaborationRecoverTurnRequest({
         expectedRevision: 7,
         previousAttempt: 2,
+        assigneePrincipalId: 'principal_alice',
         reason: ' ',
       }),
     ).toThrow(/恢复原因不能为空/u);
+    expect(() =>
+      buildCollaborationRecoverTurnRequest({
+        expectedRevision: 7,
+        previousAttempt: 2,
+        assigneePrincipalId: ' ',
+        reason: 'Reassign after member exit',
+      }),
+    ).toThrow(/选择新的负责人/u);
+    expect(
+      collaborationActiveMemberOptions({
+        projection: {
+          members: {
+            principal_bob: {
+              principal_id: 'principal_bob',
+              display_name: 'Bob',
+              status: 'left',
+            },
+            principal_carol: {
+              principal_id: 'principal_carol',
+              display_name: 'Carol',
+              status: 'active',
+            },
+            principal_alice: {
+              principal_id: 'principal_alice',
+              display_name: 'Alice',
+              status: 'active',
+            },
+          },
+        },
+      }),
+    ).toEqual([
+      ['principal_alice', 'Alice · principal_alice'],
+      ['principal_carol', 'Carol · principal_carol'],
+    ]);
     expect(
       collaborationWorkflowInstanceCommand({ lifecycle: 'running' }),
     ).toEqual({ command: 'pause', label: '暂停' });

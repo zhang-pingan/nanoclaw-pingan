@@ -68,6 +68,18 @@ const emptyPayloadSchema = z.object({}).strict();
 const reasonPayloadSchema = z
   .object({ reason: z.string().min(1).max(4000) })
   .strict();
+const memberLeftPayloadSchema = z
+  .object({
+    reason: z.string().min(1).max(4000),
+    affected_turn_ids: z.array(id).max(10_000),
+  })
+  .strict()
+  .refine(
+    (payload) =>
+      new Set(payload.affected_turn_ids).size ===
+      payload.affected_turn_ids.length,
+    'Member exit affected Turn ids must be unique',
+  );
 const memberPayloadSchema = z
   .object({
     member: memberDefinitionV3Schema,
@@ -296,6 +308,7 @@ const recoveryPayloadSchema = z
 const turnRecoveredPayloadSchema = z
   .object({
     turn_id: id,
+    assignee_principal_id: id,
     previous_attempt: z.number().int().positive(),
     next_attempt: z.number().int().positive(),
     reason: z.string().min(1).max(4000),
@@ -318,7 +331,7 @@ const payloadSchemas: Record<CollaborationEventTypeV3, z.ZodType> = {
   member_suspended: principalPayloadSchema,
   member_reactivated: principalPayloadSchema,
   member_removed: principalPayloadSchema,
-  member_left: reasonPayloadSchema,
+  member_left: memberLeftPayloadSchema,
   client_revoked: clientIdPayloadSchema,
   credential_rotated: credentialRotationPayloadSchema,
   credential_revoked: credentialIdPayloadSchema,
@@ -686,6 +699,24 @@ export function activeCollaborationMemberV3(
 ): MemberDefinitionV3 | null {
   const member = projection.members[principalId];
   return member?.status === 'active' ? member : null;
+}
+
+export function collaborationMemberLeftAffectedTurnIdsV3(
+  projection: CollaborationProjectionV3,
+  principalId: string,
+): string[] {
+  return Object.values(projection.turns)
+    .filter((turn) => {
+      const instance = projection.workflowInstances[turn.workflow_instance_id];
+      return Boolean(
+        instance?.active_turn_id === turn.turn_id &&
+        !['completed', 'cancelled'].includes(turn.state) &&
+        (turn.assignee_principal_id === principalId ||
+          turn.claimant_principal_id === principalId),
+      );
+    })
+    .map((turn) => turn.turn_id)
+    .sort((left, right) => left.localeCompare(right));
 }
 
 export function hasCollaborationPermissionV3(
@@ -1194,6 +1225,11 @@ export function reduceCollaborationEventV3(
     }
     case 'group_dissolved': {
       reasonPayloadSchema.parse(payload);
+      if (
+        event.aggregate_type !== 'group' ||
+        event.aggregate_id !== next.groupId
+      )
+        conflict('Group dissolution must use the Group Aggregate');
       if (event.actor.principal_id !== next.group.owner_principal_id)
         conflict('Only the Group Owner may dissolve the Group');
       next.group = groupDefinitionV3Schema.parse({
@@ -1410,7 +1446,7 @@ export function reduceCollaborationEventV3(
       break;
     }
     case 'member_left': {
-      reasonPayloadSchema.parse(payload);
+      const parsed = memberLeftPayloadSchema.parse(payload);
       if (
         event.aggregate_type !== 'membership' ||
         event.aggregate_id !== event.actor.principal_id
@@ -1422,6 +1458,17 @@ export function reduceCollaborationEventV3(
       const member = next.members[principalId];
       if (!member || member.status !== 'active')
         conflict('Only an active member may leave the Group');
+      const affectedTurnIds = collaborationMemberLeftAffectedTurnIdsV3(
+        next,
+        principalId,
+      );
+      if (
+        parsed.affected_turn_ids.length !== affectedTurnIds.length ||
+        parsed.affected_turn_ids.some(
+          (turnId, index) => turnId !== affectedTurnIds[index],
+        )
+      )
+        conflict('Member exit affected Turn ids do not match active work');
       member.status = 'left';
       for (const client of Object.values(next.clients[principalId] ?? {}))
         client.status = 'revoked';
@@ -1437,22 +1484,13 @@ export function reduceCollaborationEventV3(
           executor.status = 'revoked';
           executor.revoked_at_event = event.event_id;
         }
-      for (const turn of Object.values(next.turns)) {
+      for (const turnId of affectedTurnIds) {
+        const turn = next.turns[turnId]!;
         const instance = next.workflowInstances[turn.workflow_instance_id];
-        if (
-          !instance ||
-          instance.active_turn_id !== turn.turn_id ||
-          ['completed', 'cancelled', 'recovery_required'].includes(
-            turn.state,
-          ) ||
-          (turn.assignee_principal_id !== principalId &&
-            turn.claimant_principal_id !== principalId)
-        )
-          continue;
         turn.state = 'recovery_required';
         turn.recovery_reason = `member_left:${principalId}`;
-        instance.lifecycle = 'recovery_required';
-        instance.updated_at = event.occurred_at;
+        instance!.lifecycle = 'recovery_required';
+        instance!.updated_at = event.occurred_at;
       }
       break;
     }
@@ -2943,6 +2981,9 @@ export function reduceCollaborationEventV3(
       if (
         !instance ||
         !turn ||
+        instance.active_turn_id !== turn.turn_id ||
+        turn.workflow_instance_id !== instance.instance_id ||
+        turn.state_id !== instance.business_state ||
         turn.state !== 'recovery_required' ||
         parsed.previous_attempt !== turn.attempt ||
         parsed.next_attempt !== turn.attempt + 1
@@ -2950,6 +2991,8 @@ export function reduceCollaborationEventV3(
         conflict('Turn recovery attempt is invalid');
       if (!canManageWorkflowInstance(next, event.actor.principal_id, instance))
         conflict('Actor cannot recover this Workflow Instance');
+      if (!activeCollaborationMemberV3(next, parsed.assignee_principal_id))
+        conflict('Recovered Turn assignee must be an active Group member');
       if (
         parsed.deadline_snapshot_hash !==
         collaborationDeadlineSnapshotHashV3({
@@ -2962,12 +3005,45 @@ export function reduceCollaborationEventV3(
         })
       )
         conflict('Recovered Turn deadline snapshot is invalid');
+      const previousAssignee = instance.resolved_assignments[turn.state_id];
+      instance.resolved_assignments[turn.state_id] =
+        parsed.assignee_principal_id;
+      if (previousAssignee !== parsed.assignee_principal_id)
+        delete next.stateExecutions[instance.instance_id]?.[turn.state_id];
+      const execution =
+        next.stateExecutions[instance.instance_id]?.[turn.state_id] ?? null;
       turn.attempt = parsed.next_attempt;
+      turn.assignee_principal_id = parsed.assignee_principal_id;
       turn.state = 'pending';
       turn.claimant_principal_id = null;
       turn.claimant_client_id = null;
       turn.executor_id = null;
       turn.fencing_token = null;
+      turn.execution_mode = execution?.mode ?? 'manual';
+      turn.action_ref = execution?.action_ref ?? null;
+      turn.action_hash = execution?.action_hash ?? null;
+      turn.prompt_hash = execution?.prompt_hash ?? null;
+      turn.input_hash = collaborationTurnInputHashV3({
+        groupId: next.groupId,
+        instanceId: instance.instance_id,
+        epoch: instance.epoch,
+        stateId: turn.state_id,
+        assigneePrincipalId: parsed.assignee_principal_id,
+        execution,
+        incomingHandoffHash: turn.incoming_handoff_hash,
+        workItem:
+          instance.scope.type === 'work_item'
+            ? (next.workItems[instance.scope.work_item_id] ?? null)
+            : null,
+      });
+      turn.idempotency_key = collaborationIdempotencyKeyV3({
+        groupId: next.groupId,
+        instanceId: instance.instance_id,
+        epoch: instance.epoch,
+        turnId: turn.turn_id,
+        attempt: turn.attempt,
+        inputHash: turn.input_hash,
+      });
       turn.start_deadline_at = parsed.start_deadline_at;
       turn.execution_deadline_at = null;
       turn.deadline_snapshot_hash = parsed.deadline_snapshot_hash;

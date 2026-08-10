@@ -504,11 +504,28 @@ export function buildCollaborationRecoverTurnRequest(input) {
   const reason = String(input.reason || '').trim();
   if (!reason) throw new Error('恢复原因不能为空');
   if (reason.length > 4000) throw new Error('恢复原因最多 4000 个字符');
+  const assigneePrincipalId = String(input.assigneePrincipalId || '').trim();
+  if (!assigneePrincipalId) throw new Error('必须选择新的负责人');
   return {
     expectedRevision: collaborationExpectedRevision(input.expectedRevision),
     previousAttempt,
+    assigneePrincipalId,
     reason,
   };
+}
+
+export function collaborationActiveMemberOptions(group) {
+  return Object.values(group?.projection?.members || {})
+    .filter((member) => member?.status === 'active' && member.principal_id)
+    .sort((left, right) =>
+      String(left.display_name || left.principal_id).localeCompare(
+        String(right.display_name || right.principal_id),
+      ),
+    )
+    .map((member) => [
+      member.principal_id,
+      `${member.display_name || member.principal_id} · ${collaborationShortId(member.principal_id)}`,
+    ]);
 }
 
 export function collaborationWorkflowInstanceCommand(instance) {

@@ -860,6 +860,7 @@ describe('Collaboration project-space v3 Web API', () => {
     const rejectMembership = vi.fn(async () => group());
     const createTurn = vi.fn(async () => group());
     const startTurn = vi.fn(async () => group());
+    const recoverTurn = vi.fn(async () => group());
     await withApiServer(
       new CollaborationWebApi(
         runtime({
@@ -868,6 +869,7 @@ describe('Collaboration project-space v3 Web API', () => {
             rejectMembership,
             createTurn,
             startTurn,
+            recoverTurn,
           },
         }),
       ),
@@ -939,6 +941,28 @@ describe('Collaboration project-space v3 Web API', () => {
           turnId: 'turn_1',
           expectedRevision: 4,
           executorId: 'executor_codex',
+        });
+        expect(
+          (
+            await post(
+              '/groups/group_test/workflow-instances/instance_1/turns/turn_1/recover',
+              {
+                expectedRevision: 5,
+                previousAttempt: 1,
+                assigneePrincipalId: 'principal_alice',
+                reason: 'Reassign after member exit',
+              },
+            )
+          ).status,
+        ).toBe(200);
+        expect(recoverTurn).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          instanceId: 'instance_1',
+          turnId: 'turn_1',
+          expectedRevision: 5,
+          previousAttempt: 1,
+          assigneePrincipalId: 'principal_alice',
+          reason: 'Reassign after member exit',
         });
       },
     );
