@@ -18356,6 +18356,48 @@ textarea.workflow-wizard-input {
   box-shadow: inset 3px 0 0 var(--minimal-accent, #575f6a);
 }
 
+.collaboration-context-menu {
+  position: fixed;
+  z-index: 2200;
+  width: 176px;
+  padding: 5px;
+  border: 1px solid var(--minimal-line, #dfe2e7);
+  border-radius: 8px;
+  background: var(--minimal-surface, #fff);
+  box-shadow: var(--minimal-shadow, 0 12px 32px rgba(16, 24, 40, 0.16));
+}
+
+.collaboration-context-menu button {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--minimal-text, #202327);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-align: left;
+}
+
+.collaboration-context-menu button:hover {
+  background: var(--minimal-nav-strong, #e7e9ec);
+}
+
+.collaboration-confirmation-copy {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 16px;
+  color: var(--minimal-text-soft, #575f6a);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.collaboration-confirmation-copy strong {
+  color: var(--minimal-danger, #b42318);
+}
+
 .collaboration-list-item-head,
 .collaboration-list-meta,
 .collaboration-title-row,

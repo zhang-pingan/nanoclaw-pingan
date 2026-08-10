@@ -50,8 +50,74 @@ export function collaborationCanMutate(group) {
     collaborationLocalMembershipStatus(group) === 'active' &&
     (!group?.icarusIdentity?.credentialId ||
       localCredential?.status === 'active') &&
-    group.lifecycle !== 'archived',
+    group.lifecycle === 'active',
   );
+}
+
+function collaborationHasActiveLocalIdentity(group) {
+  const localCredential = collaborationLocalCredential(group);
+  return Boolean(
+    group?.subscriptionMode === 'member' &&
+    group.localPrincipalId &&
+    group.localClientId &&
+    collaborationLocalMembershipStatus(group) === 'active' &&
+    (!group?.icarusIdentity?.credentialId ||
+      localCredential?.status === 'active'),
+  );
+}
+
+export function collaborationCanDissolve(group) {
+  return Boolean(
+    collaborationHasActiveLocalIdentity(group) &&
+    group.localPrincipalId === group.ownerPrincipalId &&
+    ['active', 'archived'].includes(group.lifecycle),
+  );
+}
+
+export function collaborationCanLeave(group) {
+  return Boolean(
+    collaborationHasActiveLocalIdentity(group) &&
+    group.localPrincipalId !== group.ownerPrincipalId &&
+    ['active', 'archived'].includes(group.lifecycle),
+  );
+}
+
+export function collaborationCanRemoveLocal(group) {
+  return Boolean(group?.groupId);
+}
+
+export function buildCollaborationLifecycleRequest(input) {
+  const operation = String(input?.operation || '');
+  const groupId = String(input?.group?.groupId || '');
+  const confirmation = String(input?.confirmation || '').trim();
+  if (!groupId) throw new Error('群组 ID 缺失');
+  if (confirmation !== groupId) throw new Error('输入的群组 ID 不匹配');
+  if (operation === 'remove-local')
+    return {
+      endpoint: `/subscriptions/${encodeURIComponent(groupId)}`,
+      method: 'DELETE',
+      body: { confirmation },
+    };
+  if (!['dissolve', 'leave'].includes(operation))
+    throw new Error('不支持的群组生命周期操作');
+  const aggregateType = operation === 'leave' ? 'membership' : 'group';
+  const aggregateId =
+    operation === 'leave' ? input.group.localPrincipalId : groupId;
+  const expectedRevision =
+    input.group.projection?.aggregateHeads?.[`${aggregateType}:${aggregateId}`]
+      ?.revision ?? 0;
+  return {
+    endpoint: `/groups/${encodeURIComponent(groupId)}/${
+      operation === 'dissolve' ? 'dissolve' : 'leave'
+    }`,
+    method: 'POST',
+    body: {
+      confirmation,
+      expectedRevision,
+      reason:
+        operation === 'dissolve' ? '群主确认解散群组' : '成员确认退出群组',
+    },
+  };
 }
 
 export function collaborationCanApproveMembers(group) {
@@ -397,6 +463,8 @@ export function collaborationCanCreateTurn(group, instance, definition) {
 
 export function collaborationEligibleTurnExecutors(group, turn, bindings) {
   if (!group || !turn || turn.execution_mode === 'manual') return [];
+  const principalExecutors =
+    group.projection?.executors?.[group.localPrincipalId] || {};
   return [
     ...new Set(
       (bindings || [])
@@ -409,7 +477,8 @@ export function collaborationEligibleTurnExecutors(group, turn, bindings) {
             binding.principalId === group.localPrincipalId &&
             binding.clientId === group.localClientId &&
             binding.actionHash === turn.action_hash &&
-            binding.promptHash === turn.prompt_hash,
+            binding.promptHash === turn.prompt_hash &&
+            principalExecutors[binding.executorId]?.status === 'active',
         )
         .map((binding) => binding.executorId),
     ),

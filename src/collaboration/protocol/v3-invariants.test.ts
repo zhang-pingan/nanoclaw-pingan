@@ -576,6 +576,183 @@ function addWorkItems(
 }
 
 describe('Collaboration v3 reducer invariants', () => {
+  it('allows only the Owner to dissolve and makes dissolution terminal', () => {
+    let projection = withBob();
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'group',
+        aggregateId: 'group_test',
+        eventType: 'group_dissolved',
+        actor: BOB,
+        payload: { reason: 'Unauthorized dissolution' },
+      }),
+    ).toThrow(/Owner/iu);
+
+    projection = apply(projection, {
+      aggregateType: 'group',
+      aggregateId: 'group_test',
+      eventType: 'group_archived',
+      payload: { reason: 'Pause delivery' },
+    });
+    projection = apply(projection, {
+      aggregateType: 'group',
+      aggregateId: 'group_test',
+      eventType: 'group_dissolved',
+      payload: { reason: 'Project is complete' },
+      occurredAt: '2026-08-06T12:05:00.000Z',
+    });
+    expect(projection.group).toMatchObject({
+      lifecycle: 'dissolved',
+      archived_at: null,
+      dissolved_at: '2026-08-06T12:05:00.000Z',
+    });
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'group',
+        aggregateId: 'group_test',
+        eventType: 'group_reopened',
+        payload: { reason: 'Cannot reopen' },
+      }),
+    ).toThrow(/Dissolved/iu);
+  });
+
+  it('revokes a leaving member and recovers active Workflow work before rejoin', () => {
+    let projection = workflowFixture({
+      startTurn: true,
+      secondBobClient: true,
+    }).projection;
+    projection = apply(projection, {
+      aggregateType: 'membership',
+      aggregateId: BOB,
+      eventType: 'executor_registered',
+      actor: BOB,
+      id: 'evt_bob_executor',
+      payload: {
+        executor: {
+          format: 'icarus.collaboration-executor/1',
+          principal_id: BOB,
+          executor_id: 'executor_bob',
+          display_name: 'Bob Executor',
+          kind: 'run_once',
+          capabilities: [],
+          status: 'active',
+          registered_at_event: 'evt_bob_executor',
+          revoked_at_event: null,
+        },
+      },
+    });
+
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'membership',
+        aggregateId: ALICE,
+        eventType: 'member_left',
+        payload: { reason: 'Owner cannot leave' },
+      }),
+    ).toThrow(/Owner/iu);
+
+    projection = apply(projection, {
+      aggregateType: 'membership',
+      aggregateId: BOB,
+      eventType: 'member_left',
+      actor: BOB,
+      id: 'evt_bob_left',
+      payload: { reason: 'Leaving the project' },
+    });
+    expect(projection.members[BOB]?.status).toBe('left');
+    expect(
+      Object.values(projection.clients[BOB] ?? {}).every(
+        (client) => client.status === 'revoked',
+      ),
+    ).toBe(true);
+    expect(
+      Object.values(projection.credentials[BOB] ?? {}).every(
+        (credential) =>
+          credential.status === 'revoked' &&
+          credential.revoked_at_event === 'evt_bob_left',
+      ),
+    ).toBe(true);
+    expect(
+      Object.values(projection.executors[BOB] ?? {}).every(
+        (executor) =>
+          executor.status === 'revoked' &&
+          executor.revoked_at_event === 'evt_bob_left',
+      ),
+    ).toBe(true);
+    expect(projection.turns.turn_1).toMatchObject({
+      state: 'recovery_required',
+      recovery_reason: `member_left:${BOB}`,
+    });
+    expect(projection.workflowInstances.instance_1?.lifecycle).toBe(
+      'recovery_required',
+    );
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'group',
+        aggregateId: 'group_test',
+        eventType: 'group_settings_updated',
+        actor: BOB,
+        payload: { name: 'Unauthorized rename' },
+      }),
+    ).toThrow(/active Group member/iu);
+
+    const rejoinEventId = 'evt_bob_rejoined';
+    projection = apply(projection, {
+      aggregateType: 'membership',
+      aggregateId: BOB,
+      eventType: 'member_registered',
+      actor: BOB,
+      client: 'client_bob_rejoined',
+      credential: 'credential_bob_rejoined',
+      id: rejoinEventId,
+      payload: {
+        member: {
+          format: 'icarus.collaboration-member/3',
+          principal_id: BOB,
+          display_name: 'Bob',
+          status: 'active',
+          joined_at_event: rejoinEventId,
+        },
+        client: {
+          format: 'icarus.collaboration-client/1',
+          principal_id: BOB,
+          client_id: 'client_bob_rejoined',
+          display_name: 'Bob New Device',
+          capabilities: [],
+          status: 'active',
+          registered_at_event: rejoinEventId,
+        },
+        credential: {
+          format: 'icarus.collaboration-credential/1',
+          credential_id: 'credential_bob_rejoined',
+          principal_id: BOB,
+          client_id: 'client_bob_rejoined',
+          public_key: BOB_KEY,
+          fingerprint: BOB_FINGERPRINT,
+          purpose: 'event_signing',
+          status: 'active',
+          created_at_event: rejoinEventId,
+          revoked_at_event: null,
+        },
+      },
+    });
+    expect(projection.members[BOB]).toMatchObject({
+      principal_id: BOB,
+      status: 'active',
+      joined_at_event: rejoinEventId,
+    });
+    expect(projection.credentials[BOB]?.[BOB_CREDENTIAL]?.status).toBe(
+      'revoked',
+    );
+    expect(projection.credentials[BOB]?.credential_bob_rejoined?.status).toBe(
+      'active',
+    );
+    expect(Object.keys(projection.members)).toEqual(
+      expect.arrayContaining([ALICE, BOB]),
+    );
+    expect(Object.keys(projection.members)).toHaveLength(2);
+  });
+
   it('rejects future-dated recovery expiry by an unrelated active Member', () => {
     let projection = withBob();
     const requestEventId = 'evt_recovery_expiry_request';
@@ -690,7 +867,9 @@ describe('Collaboration v3 reducer invariants', () => {
       display_name: 'Bob Executor',
       kind: 'run_once',
       capabilities: [],
+      status: 'active',
       registered_at_event: 'evt_executor_bob',
+      revoked_at_event: null,
     };
     const result = {
       format: 'icarus.collaboration-action-result/3' as const,
@@ -785,7 +964,9 @@ describe('Collaboration v3 reducer invariants', () => {
       display_name: 'Bob Executor',
       kind: 'run_once',
       capabilities: [],
+      status: 'active',
       registered_at_event: 'evt_executor_bob',
+      revoked_at_event: null,
     };
     const handoff = {
       format: 'icarus.collaboration-handoff/1' as const,
@@ -889,7 +1070,9 @@ describe('Collaboration v3 reducer invariants', () => {
       display_name: 'Bob Executor',
       kind: 'run_once',
       capabilities: [],
+      status: 'active',
       registered_at_event: 'evt_executor_bob',
+      revoked_at_event: null,
     };
     const result = {
       format: 'icarus.collaboration-action-result/3' as const,

@@ -439,8 +439,14 @@ export class CollaborationWebApi {
       new RegExp(`^${API_PREFIX}/subscriptions/([^/]+)$`, 'u'),
     );
     if (found && method === 'DELETE') {
+      const body = await jsonBody(
+        req,
+        z.object({ confirmation: identifier }).strict(),
+      );
+      if (body.confirmation !== found[1])
+        throw new Error('Local removal confirmation must match the Group id');
       send(res, 200, {
-        removed: this.runtime.store.deleteSubscription(found[1]!),
+        ...(await this.runtime.groups.removeLocalGroup(found[1]!)),
       });
       return;
     }
@@ -500,6 +506,76 @@ export class CollaborationWebApi {
         group: publicGroup(this.runtime.store.getGroup(found[1]!)),
         verifiedHead: history.head,
       });
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/dissolve$`, 'u'),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            reason: z.string().min(1).max(4000),
+            confirmation: identifier,
+          })
+          .strict(),
+      );
+      if (body.confirmation !== found[1])
+        throw new Error('Dissolution confirmation must match the Group id');
+      send(
+        res,
+        200,
+        await this.runtime.groups.dissolveGroup(
+          found[1]!,
+          body.reason,
+          body.expectedRevision,
+        ),
+      );
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/leave$`, 'u'),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            reason: z.string().min(1).max(4000),
+            confirmation: identifier,
+          })
+          .strict(),
+      );
+      if (body.confirmation !== found[1])
+        throw new Error('Member exit confirmation must match the Group id');
+      send(
+        res,
+        200,
+        await this.runtime.groups.leaveGroup(
+          found[1]!,
+          body.reason,
+          body.expectedRevision,
+        ),
+      );
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(`^${API_PREFIX}/local-bindings/([^/]+)/cleanup/retry$`, 'u'),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z.object({ confirmation: identifier }).strict(),
+      );
+      if (body.confirmation !== found[1])
+        throw new Error('Cleanup retry confirmation must match the Group id');
+      send(res, 200, await this.runtime.groups.retryLocalCleanup(found[1]!));
       return;
     }
     found = match(
