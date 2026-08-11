@@ -182,6 +182,71 @@ export function collaborationWorkItemStatusActionAccess(
   };
 }
 
+export function collaborationWorkflowStateActionAccess(
+  group,
+  instanceId,
+  stateId,
+  action = 'reassign',
+) {
+  const decision =
+    action === 'reassign'
+      ? group?.allowedActions?.workflowInstances?.[instanceId]
+          ?.reassignStates?.[stateId]
+      : null;
+  if (decision && typeof decision.allowed === 'boolean') return decision;
+  return {
+    allowed: false,
+    code: 'ACTION_NOT_PROJECTED',
+    reason: '当前 Workflow State 未提供此操作能力',
+  };
+}
+
+export function collaborationWorkflowStateActionAllowed(
+  group,
+  instanceId,
+  stateId,
+  action = 'reassign',
+) {
+  return collaborationWorkflowStateActionAccess(
+    group,
+    instanceId,
+    stateId,
+    action,
+  ).allowed;
+}
+
+export function collaborationWorkflowTurnActionAccess(
+  group,
+  instanceId,
+  turnId,
+  action,
+) {
+  const decision =
+    group?.allowedActions?.workflowInstances?.[instanceId]?.turns?.[turnId]?.[
+      action
+    ];
+  if (decision && typeof decision.allowed === 'boolean') return decision;
+  return {
+    allowed: false,
+    code: 'ACTION_NOT_PROJECTED',
+    reason: '当前 Turn 未提供此操作能力',
+  };
+}
+
+export function collaborationWorkflowTurnActionAllowed(
+  group,
+  instanceId,
+  turnId,
+  action,
+) {
+  return collaborationWorkflowTurnActionAccess(
+    group,
+    instanceId,
+    turnId,
+    action,
+  ).allowed;
+}
+
 export function collaborationCanApproveMembers(group) {
   if (group?.allowedActions)
     return collaborationActionAllowed(group, 'approveMembers');
@@ -318,6 +383,41 @@ export function buildCollaborationReasonRequest(input) {
   return {
     expectedRevision: collaborationExpectedRevision(input.expectedRevision),
     reason,
+  };
+}
+
+export function buildCollaborationWorkflowReassignmentRequest(input) {
+  const expectedRevision = collaborationExpectedRevision(
+    input.expectedRevision,
+  );
+  const assignments = (input.assignments || []).map((assignment) => ({
+    stateId: String(assignment.stateId || '').trim(),
+    principalId: String(assignment.principalId || '').trim(),
+  }));
+  if (!assignments.length) throw new Error('至少选择一个需要更新的 State');
+  if (assignments.length > 32) throw new Error('一次最多重新分配 32 个 State');
+  if (
+    assignments.some(
+      (assignment) => !assignment.stateId || !assignment.principalId,
+    )
+  )
+    throw new Error('State 与 Active Principal 不能为空');
+  if (
+    new Set(assignments.map((assignment) => assignment.stateId)).size !==
+    assignments.length
+  )
+    throw new Error('同一 State 不能重复分配');
+  return { expectedRevision, assignments };
+}
+
+export function buildCollaborationTurnCancellationRequest(input) {
+  const attempt = Number(input.attempt);
+  if (!Number.isInteger(attempt) || attempt < 1)
+    throw new Error('Turn attempt 必须是正整数');
+  return {
+    ...buildCollaborationReasonRequest(input),
+    attempt,
+    fencingToken: input.fencingToken || null,
   };
 }
 

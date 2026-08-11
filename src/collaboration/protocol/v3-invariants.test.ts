@@ -987,6 +987,19 @@ describe('Collaboration v3 reducer invariants', () => {
         }),
       ).toThrow(/automatic|Executor Result/u);
 
+    const closedInstance = structuredClone(actionCompleted);
+    closedInstance.workflowInstances.instance_1!.lifecycle = 'closed';
+    expect(() =>
+      apply(closedInstance, {
+        aggregateType: 'workflow_instance',
+        aggregateId: 'instance_1',
+        eventType: 'turn_completed',
+        actor: BOB,
+        executor: 'executor_bob',
+        payload: completion(),
+      }),
+    ).toThrow(/running Workflow Instance/u);
+
     expect(
       apply(actionCompleted, {
         aggregateType: 'workflow_instance',
@@ -1012,6 +1025,14 @@ describe('Collaboration v3 reducer invariants', () => {
 
   it('allows only Instance authority to cancel an unclaimed Turn', () => {
     const fixture = workflowFixture();
+    expect(() =>
+      apply(fixture.projection, {
+        aggregateType: 'workflow_instance',
+        aggregateId: 'instance_1',
+        eventType: 'workflow_instance_closed',
+        payload: { reason: 'Must not strand the active Turn' },
+      }),
+    ).toThrow(/active Turn/u);
     const unauthorized = event({
       projection: fixture.projection,
       aggregateType: 'workflow_instance',
@@ -1029,19 +1050,26 @@ describe('Collaboration v3 reducer invariants', () => {
       reduceCollaborationEventV3(fixture.projection, unauthorized),
     ).toThrow(/authority|cancel/u);
 
+    const cancelled = apply(fixture.projection, {
+      aggregateType: 'workflow_instance',
+      aggregateId: 'instance_1',
+      eventType: 'turn_cancelled',
+      payload: {
+        turn_id: 'turn_1',
+        attempt: 1,
+        fencing_token: null,
+        reason: 'Cancelled by creator',
+      },
+    });
+    expect(cancelled.turns.turn_1?.state).toBe('cancelled');
     expect(
-      apply(fixture.projection, {
+      apply(cancelled, {
         aggregateType: 'workflow_instance',
         aggregateId: 'instance_1',
-        eventType: 'turn_cancelled',
-        payload: {
-          turn_id: 'turn_1',
-          attempt: 1,
-          fencing_token: null,
-          reason: 'Cancelled by creator',
-        },
-      }).turns.turn_1?.state,
-    ).toBe('cancelled');
+        eventType: 'workflow_instance_closed',
+        payload: { reason: 'Turn is now cancelled' },
+      }).workflowInstances.instance_1?.lifecycle,
+    ).toBe('closed');
   });
 
   it('does not let a late Action callback revive completed or cancelled Turns', () => {
@@ -1319,6 +1347,14 @@ describe('Collaboration v3 reducer invariants', () => {
 
   it('rejects reassignment to a missing or different Definition State', () => {
     const fixture = workflowFixture();
+    expect(() =>
+      apply(fixture.projection, {
+        aggregateType: 'workflow_instance',
+        aggregateId: 'instance_1',
+        eventType: 'workflow_state_assignee_changed',
+        payload: { state_id: 'build', principal_id: ALICE },
+      }),
+    ).toThrow(/cancel.*Turn|Current State/u);
     expect(() =>
       apply(fixture.projection, {
         aggregateType: 'workflow_instance',

@@ -77,6 +77,8 @@ Workflow Instance State
 3. 固定模板 `member.v1`、`contributor.v1`、`project_manager.v1`、`workflow_manager.v1`、`group_manager.v1` 只生成一组已知 permission；投影通过集合精确匹配解释“来源模板”或“自定义差异”，不把模板当作第二套授权事实。
 4. Group 概览 action 与资源 action 分开投影。例如 `createWorkItem` 需要 `work_item:create`，而 `workItems[id].editDetails/changeAssignment/changeRelations/archive/changeStatus` 分别表达当前资源和目标状态的能力；Discussion 消息、Workflow Definition layout/retire 和 Workflow Instance start/pause/resume/close 同样使用对应资源 action，不能回退到 Active Member 判断。
 5. Web API 返回当前本机 Principal 的 `allowedActions`，Renderer 据此隐藏不适用入口。资源状态也是 decision 的一部分，例如 draft Workflow Instance 的 `start` 返回 `RESOURCE_STATE_BLOCKED`，只提供补齐参与者。同步后权限或状态可能变化，因此 command/API/Reducer 仍在提交时重新校验，并以稳定错误码拒绝过期操作。
+6. 归档 Group 的普通业务 decision 继续返回 `GROUP_ARCHIVED`；`reopen` 是显式生命周期例外，但仍要求 Active Member、Active Client、Active Credential 和 `group:archive`。Renderer 只在该 decision 允许时提供恢复入口。
+7. Workflow Instance 将 `reassignStates[stateId]` 和 `turns[turnId].cancel` 分别投影。活动 Turn 所在的当前 State 不可重分配；多个 State 变更以一个有序事件 batch、一次 Git commit 和一次 CAS push 原子提交。有活动 Turn 时 Instance 不可 close，必须由 claimant 或 Instance authority 先取消 Turn。
 
 群组保存 `default_permission_template_id`。开放加入与审批/邀请批准都在一次远端 CAS 和一个签名 Git commit 中追加有序的 `member_registered` 与 `permission_granted` / `permission_revoked` 事件；batch manifest 固定事件顺序，replay 对每条事件逐一校验 commit signer 与 actor/Credential，并分别记录审计。任一事件构建、提交或 push 失败都不会留下 Active 无权限成员。审批人可在提交前选择模板或自定义集合；修改默认模板只影响以后加入或批准的成员，不改写既有 permission history。
 
@@ -1121,6 +1123,7 @@ Group 级 Instance：
 - 尚未进入的 State 可以由 Instance 管理者重新指派 Principal，并记录 `workflow_state_assignee_changed`；
 - 当前 State 已产生 Turn 后不能直接替换 Principal；
 - 更换当前负责人必须 cancel/recover 当前 attempt，再创建新 Turn；
+- 多个 State 的 reassignment 必须作为一个原子事件 batch 提交，任一 State 校验或 CAS 失败不得留下部分分配；
 - 已完成 State 永久保留当时的 assignee、claimant Client 和 Executor；
 - reassignment 不能修改 Definition，只影响当前 Instance 的 assignment revision。
 
@@ -1216,6 +1219,7 @@ Claimant Principal 必须等于 assignee Principal；Client、attempt 和 fence 
 - `assisted`：用户确认开始；经校验的 Executor Result 通过 `action_completed` 固定为 `executor_result`/`executor_result_hash`，Turn 进入 `awaiting_confirmation`，不推进 Machine；原 claimant Client 可查看建议、选择合法 Outcome、编辑 Handoff/Data/Artifact 后确认，`turn_completed.result_hash` 必须引用已固定 Executor hash；
 - `automatic`：只有经 schema 和当前 State Outcome 校验的 Executor Result 才能自动完成，`turn_completed.result_hash` 必须精确等于 `action_completed.result_hash`；最终 Outcome、summary、instruction、markers、data、空 `data_refs` 和 Artifact refs 必须全部由已冻结的 Executor Result 确定性派生，Reducer 对任一事实漂移 fail closed；Provider `failed`、`cancelled`、`blocked` 或结果解析失败进入 recovery/technical terminal，不能冒充业务 Outcome。
 - Automatic 的 `action_completed` 与 `turn_completed` 是两个独立持久事实。若前者成功而后者因进程退出、CAS 或 Git 错误失败，Scheduler 必须从 Projection 中的 `executor_result`/`executor_result_hash` 幂等续写 `turn_completed`，不得重新 dispatch、observe 或追加第二个 `action_completed`；该恢复不依赖 Executor 的进程内状态。
+- Instance 存在 active Turn 时不能关闭；Turn Cancel 清除 `active_turn_id` 后才能 close。`turn_completed` 只接受仍处于 `running` lifecycle 的 Instance，避免已关闭流程被迟到完成事件继续推进。
 
 `turn_completed.completion_hash` 独立覆盖最终 Outcome、Handoff hash、Artifact refs 和可空 Result hash，因此 Assisted 的人工编辑与原 Executor 建议同时保留在审计链中。
 

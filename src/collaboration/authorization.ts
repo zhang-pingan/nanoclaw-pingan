@@ -104,7 +104,30 @@ export interface CollaborationAllowedActionsProjection {
     >
   >;
   readonly workflowInstances: Readonly<
-    Record<string, Readonly<Record<string, CollaborationActionDecision>>>
+    Record<
+      string,
+      {
+        readonly manage: CollaborationActionDecision;
+        readonly reassign: CollaborationActionDecision;
+        readonly reassignStates: Readonly<
+          Record<string, CollaborationActionDecision>
+        >;
+        readonly createTurn: CollaborationActionDecision;
+        readonly configureCurrentState: CollaborationActionDecision;
+        readonly start: CollaborationActionDecision;
+        readonly pause: CollaborationActionDecision;
+        readonly resume: CollaborationActionDecision;
+        readonly close: CollaborationActionDecision;
+        readonly turns: Readonly<
+          Record<
+            string,
+            {
+              readonly cancel: CollaborationActionDecision;
+            }
+          >
+        >;
+      }
+    >
   >;
   readonly members: Readonly<
     Record<
@@ -242,7 +265,7 @@ export function canManageCollaborationWorkflowInstanceV3(
   );
 }
 
-function boundaryDecision(input: {
+function principalBoundaryDecision(input: {
   readonly projection: CollaborationProjectionV3;
   readonly subscriptionMode: 'observer' | 'member';
   readonly principalId: string | null;
@@ -265,6 +288,18 @@ function boundaryDecision(input: {
       ?.status !== 'active'
   )
     return denied('CREDENTIAL_INACTIVE', '当前签名 Credential 已失效');
+  return allowed();
+}
+
+function boundaryDecision(input: {
+  readonly projection: CollaborationProjectionV3;
+  readonly subscriptionMode: 'observer' | 'member';
+  readonly principalId: string | null;
+  readonly clientId: string | null;
+  readonly credentialId: string | null;
+}): CollaborationActionDecision {
+  const principalBoundary = principalBoundaryDecision(input);
+  if (!principalBoundary.allowed) return principalBoundary;
   if (input.projection.group.lifecycle !== 'active')
     return denied('GROUP_ARCHIVED', '已归档群组不接受业务写入');
   return allowed();
@@ -310,6 +345,7 @@ export function projectCollaborationAllowedActionsV3(input: {
   readonly recoveryCredentialAvailable?: boolean;
 }): CollaborationAllowedActionsProjection {
   const { projection, principalId } = input;
+  const principalBoundary = principalBoundaryDecision(input);
   const boundary = boundaryDecision(input);
   const directPermissions = principalId
     ? (projection.permissionGrants[principalId]?.grants ?? [])
@@ -470,10 +506,9 @@ export function projectCollaborationAllowedActionsV3(input: {
                   ? denied('RESOURCE_STATE_BLOCKED', '已解决的讨论不能修改消息')
                   : message.tombstoned
                     ? denied('RESOURCE_STATE_BLOCKED', '已移除消息不能修改')
-                    : authority(
-                        message.author_principal_id === principalId,
-                        '仅消息作者可修改消息',
-                      ),
+                    : message.author_principal_id !== principalId
+                      ? authority(false, '仅消息作者可修改消息')
+                      : permission('discussion:post'),
               tombstone: message.tombstoned
                 ? denied('RESOURCE_STATE_BLOCKED', '消息已经移除')
                 : authority(
@@ -497,15 +532,6 @@ export function projectCollaborationAllowedActionsV3(input: {
 
   const workflowDefinitions = Object.fromEntries(
     Object.entries(projection.workflowDefinitions).map(([key, entry]) => {
-      const canEditDefinition = Boolean(
-        principalId &&
-        (entry.definition.created_by_principal_id === principalId ||
-          hasCollaborationPermissionV3(
-            projection,
-            principalId,
-            'workflow_definition:propose',
-          )),
-      );
       const launch = (scope: WorkflowInstance['scope']) =>
         !boundary.allowed
           ? boundary
@@ -542,10 +568,7 @@ export function projectCollaborationAllowedActionsV3(input: {
         {
           editDefinition:
             entry.definition.status === 'proposed'
-              ? authority(
-                  canEditDefinition,
-                  '仅 Definition 创建者或 Workflow 设计者可修改草稿',
-                )
+              ? permission('workflow_definition:propose')
               : denied(
                   'RESOURCE_STATE_BLOCKED',
                   '已发布 Definition 业务结构不可修改',
@@ -555,10 +578,7 @@ export function projectCollaborationAllowedActionsV3(input: {
             projection.latestWorkflowDefinitionVersions[
               entry.definition.definition_id
             ] === entry.definition.version
-              ? authority(
-                  canEditDefinition,
-                  '仅 Definition 创建者或 Workflow 设计者可创建新版本',
-                )
+              ? permission('workflow_definition:propose')
               : denied(
                   'RESOURCE_STATE_BLOCKED',
                   '只有已发布 Definition 可以创建新版本',
@@ -612,10 +632,11 @@ export function projectCollaborationAllowedActionsV3(input: {
 
   const workflowInstances = Object.fromEntries(
     Object.values(projection.workflowInstances).map((instance) => {
-      const definition =
+      const definitionEntry =
         projection.workflowDefinitions[
           `${instance.definition_id}@${String(instance.definition_version)}`
-        ]?.definition;
+        ];
+      const definition = definitionEntry?.definition;
       const manage = Boolean(
         principalId &&
         canManageCollaborationWorkflowInstanceV3(
@@ -628,16 +649,74 @@ export function projectCollaborationAllowedActionsV3(input: {
         manage,
         '仅实例创建者、当前负责人或 Workflow 管理员可管理此实例',
       );
+      const instanceAuthority = Boolean(
+        principalId &&
+        (instance.created_by_principal_id === principalId ||
+          hasCollaborationPermissionV3(
+            projection,
+            principalId,
+            'workflow_instance:manage_all',
+          )),
+      );
       const lifecycleDecision = (valid: readonly string[], reason: string) =>
         resourceState(valid.includes(instance.lifecycle), reason);
+      const reassignStates = Object.fromEntries(
+        Object.entries(definitionEntry?.machine.states ?? {})
+          .filter(([, state]) => !state.terminal)
+          .map(([stateId]) => [
+            stateId,
+            instance.lifecycle === 'closed'
+              ? denied('RESOURCE_STATE_BLOCKED', '已关闭实例不能重新分配')
+              : instance.active_turn_id && instance.business_state === stateId
+                ? denied(
+                    'RESOURCE_STATE_BLOCKED',
+                    '当前 State 必须先取消活动 Turn 才能重新分配',
+                  )
+                : manageDecision,
+          ]),
+      );
+      const reassignDecision = Object.values(reassignStates).some(
+        (decision) => decision.allowed,
+      )
+        ? manageDecision
+        : (Object.values(reassignStates)[0] ??
+          denied('RESOURCE_STATE_BLOCKED', '实例没有可重新分配的 State'));
+      const turnDecisions = Object.fromEntries(
+        Object.values(projection.turns)
+          .filter((turn) => turn.workflow_instance_id === instance.instance_id)
+          .map((turn) => {
+            const isActive =
+              instance.active_turn_id === turn.turn_id &&
+              !['completed', 'cancelled'].includes(turn.state);
+            const claimant = Boolean(
+              principalId &&
+              turn.fencing_token &&
+              turn.claimant_principal_id === principalId &&
+              turn.claimant_client_id === input.clientId,
+            );
+            return [
+              turn.turn_id,
+              {
+                cancel: !isActive
+                  ? denied('RESOURCE_STATE_BLOCKED', 'Turn 当前不是活动状态')
+                  : authority(
+                      turn.fencing_token
+                        ? instanceAuthority || claimant
+                        : instanceAuthority,
+                      turn.fencing_token
+                        ? '仅 Turn claimant 或实例管理员可取消'
+                        : '仅实例管理员可取消未领取 Turn',
+                    ),
+              },
+            ];
+          }),
+      );
       return [
         instance.instance_id,
         {
           manage: manageDecision,
-          reassign:
-            instance.lifecycle === 'closed'
-              ? denied('RESOURCE_STATE_BLOCKED', '已关闭实例不能重新分配')
-              : manageDecision,
+          reassign: reassignDecision,
+          reassignStates,
           createTurn: !lifecycleDecision(
             ['running'],
             '只有运行中的实例可以创建执行轮次',
@@ -702,7 +781,13 @@ export function projectCollaborationAllowedActionsV3(input: {
                 ['running', 'paused', 'closing'],
                 '只有运行中或已暂停实例可以关闭',
               )
-            : manageDecision,
+            : instance.active_turn_id
+              ? denied(
+                  'RESOURCE_STATE_BLOCKED',
+                  '必须先取消活动 Turn 才能关闭实例',
+                )
+              : manageDecision,
+          turns: turnDecisions,
         },
       ];
     }),
@@ -843,6 +928,15 @@ export function projectCollaborationAllowedActionsV3(input: {
       managePermissions: permission('permission:grant'),
       updateSettings: permission('group:admin'),
       archive: permission('group:archive'),
+      reopen:
+        projection.group.lifecycle !== 'archived'
+          ? denied('RESOURCE_STATE_BLOCKED', '群组当前未归档')
+          : withPermission(
+              principalBoundary,
+              projection,
+              principalId,
+              'group:archive',
+            ),
       rotateOwnCredential: boundary,
     },
     workItems,

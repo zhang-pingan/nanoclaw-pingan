@@ -2203,16 +2203,43 @@ export class CollaborationProjectSpaceService {
     readonly stateId: string;
     readonly principalId: string;
   }): Promise<CollaborationProjectSpaceGroupRecord> {
-    return this.appendLocal(input.groupId, {
-      aggregateType: 'workflow_instance',
-      aggregateId: input.instanceId,
+    return this.reassignWorkflowStates({
+      groupId: input.groupId,
+      instanceId: input.instanceId,
       expectedRevision: input.expectedRevision,
-      eventType: 'workflow_state_assignee_changed',
-      payload: {
-        state_id: input.stateId,
-        principal_id: input.principalId,
-      },
+      assignments: [{ stateId: input.stateId, principalId: input.principalId }],
     });
+  }
+
+  async reassignWorkflowStates(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly expectedRevision: number;
+    readonly assignments: readonly {
+      readonly stateId: string;
+      readonly principalId: string;
+    }[];
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    if (input.assignments.length === 0 || input.assignments.length > 32)
+      throw new Error('Workflow reassignment requires 1 to 32 States');
+    if (
+      new Set(input.assignments.map((assignment) => assignment.stateId))
+        .size !== input.assignments.length
+    )
+      throw new Error('Workflow reassignment State ids must be unique');
+    return this.appendLocalBatch(
+      input.groupId,
+      input.assignments.map((assignment, index) => ({
+        aggregateType: 'workflow_instance',
+        aggregateId: input.instanceId,
+        expectedRevision: input.expectedRevision + index,
+        eventType: 'workflow_state_assignee_changed',
+        payload: {
+          state_id: assignment.stateId,
+          principal_id: assignment.principalId,
+        },
+      })),
+    );
   }
 
   async publishStateExecution(input: {

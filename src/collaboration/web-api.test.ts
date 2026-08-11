@@ -1024,7 +1024,7 @@ describe('Collaboration project-space v3 Web API', () => {
         'archiveWorkItem',
         'setDiscussionResolved',
         'retireWorkflowDefinition',
-        'reassignWorkflowState',
+        'reassignWorkflowStates',
         'withdrawStateExecution',
         'cancelTurn',
       ].map((name) => [name, vi.fn(async () => group())]),
@@ -1061,8 +1061,13 @@ describe('Collaboration project-space v3 Web API', () => {
             '/groups/group_test/workflow-instances/instance_1/reassign',
             {
               expectedRevision: 2,
-              stateId: 'implementation',
-              principalId: 'principal_bob',
+              assignments: [
+                {
+                  stateId: 'implementation',
+                  principalId: 'principal_bob',
+                },
+                { stateId: 'review', principalId: 'principal_alice' },
+              ],
             },
           ],
           [
@@ -1093,6 +1098,18 @@ describe('Collaboration project-space v3 Web API', () => {
         );
         expect(groups.setDiscussionResolved).toHaveBeenCalledWith(
           expect.objectContaining({ resolved: false }),
+        );
+        expect(groups.reassignWorkflowStates).toHaveBeenCalledWith(
+          expect.objectContaining({
+            expectedRevision: 2,
+            assignments: [
+              {
+                stateId: 'implementation',
+                principalId: 'principal_bob',
+              },
+              { stateId: 'review', principalId: 'principal_alice' },
+            ],
+          }),
         );
       },
     );

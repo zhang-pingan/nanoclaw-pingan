@@ -2330,6 +2330,13 @@ export function reduceCollaborationEventV3(
           : !canManageWorkflowInstance(next, event.actor.principal_id, instance)
       )
         unauthorized('Actor cannot change Workflow Instance lifecycle');
+      if (
+        event.event_type === 'workflow_instance_closed' &&
+        instance.active_turn_id !== null
+      )
+        conflict(
+          'Workflow Instance must cancel its active Turn before closing',
+        );
       const transitions: Record<string, readonly string[]> = {
         workflow_instance_started: ['ready'],
         workflow_instance_paused: ['running', 'pausing'],
@@ -2741,6 +2748,8 @@ export function reduceCollaborationEventV3(
       const parsed = turnCompletedPayloadSchema.parse(payload);
       const turn = next.turns[parsed.turn_id];
       if (!instance || !turn) conflict('Turn does not exist');
+      if (instance.lifecycle !== 'running')
+        conflict('Only a running Workflow Instance can complete a Turn');
       assertTurnFence(turn, parsed, event);
       if (instance.active_turn_id !== turn.turn_id)
         conflict('Turn is not active for this Workflow Instance');

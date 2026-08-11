@@ -39,6 +39,8 @@ import {
   collaborationTurnDeadline,
   collaborationTurnHistory,
   collaborationWorkflowInstanceCommand,
+  collaborationWorkflowStateActionAccess,
+  collaborationWorkflowTurnActionAccess,
   collaborationWorkItemStatusActionAccess,
   buildCollaborationStartTurnRequest,
   buildCollaborationRecoverTurnRequest,
@@ -46,6 +48,8 @@ import {
   buildCollaborationAssignmentDecisionRequest,
   buildCollaborationDiscussionMessageRequest,
   buildCollaborationReasonRequest,
+  buildCollaborationTurnCancellationRequest,
+  buildCollaborationWorkflowReassignmentRequest,
   buildCollaborationWorkItemAssignmentRequest,
   buildCollaborationWorkItemDetailsRequest,
   buildCollaborationWorkItemRelationsRequest,
@@ -174,6 +178,9 @@ describe('Collaboration project-space v3 UI helpers', () => {
   it('reads nested message and status decisions without membership fallback', () => {
     const group = {
       allowedActions: {
+        group: {
+          reopen: { allowed: true, code: 'ALLOWED', reason: null },
+        },
         discussions: {
           thread_1: {
             messages: {
@@ -209,6 +216,19 @@ describe('Collaboration project-space v3 UI helpers', () => {
         workflowInstances: {
           instance_1: {
             close: { allowed: true, code: 'ALLOWED', reason: null },
+            reassignStates: {
+              implementation: {
+                allowed: false,
+                code: 'RESOURCE_STATE_BLOCKED',
+                reason: '当前 State 存在活动 Turn',
+              },
+              review: { allowed: true, code: 'ALLOWED', reason: null },
+            },
+            turns: {
+              turn_1: {
+                cancel: { allowed: true, code: 'ALLOWED', reason: null },
+              },
+            },
           },
         },
       },
@@ -221,6 +241,7 @@ describe('Collaboration project-space v3 UI helpers', () => {
         'revise',
       ),
     ).toBe(true);
+    expect(collaborationActionAllowed(group, 'reopen')).toBe(true);
     expect(
       collaborationDiscussionMessageActionAccess(
         group,
@@ -244,6 +265,33 @@ describe('Collaboration project-space v3 UI helpers', () => {
         'delivery@1',
       ),
     ).toBe(true);
+    expect(
+      collaborationWorkflowStateActionAccess(
+        group,
+        'instance_1',
+        'implementation',
+      ),
+    ).toMatchObject({ allowed: false, code: 'RESOURCE_STATE_BLOCKED' });
+    expect(
+      collaborationWorkflowStateActionAccess(group, 'instance_1', 'review')
+        .allowed,
+    ).toBe(true);
+    expect(
+      collaborationWorkflowTurnActionAccess(
+        group,
+        'instance_1',
+        'turn_1',
+        'cancel',
+      ).allowed,
+    ).toBe(true);
+    expect(
+      collaborationWorkflowTurnActionAccess(
+        group,
+        'instance_1',
+        'turn_missing',
+        'cancel',
+      ),
+    ).toMatchObject({ allowed: false, code: 'ACTION_NOT_PROJECTED' });
     expect(
       collaborationActionAllowed(
         group,
@@ -551,6 +599,43 @@ describe('Collaboration project-space v3 UI helpers', () => {
     expect(() =>
       buildCollaborationReasonRequest({ expectedRevision: 7, reason: ' ' }),
     ).toThrow(/原因不能为空/u);
+    expect(
+      buildCollaborationWorkflowReassignmentRequest({
+        expectedRevision: 8,
+        assignments: [
+          { stateId: ' implementation ', principalId: ' principal_alice ' },
+          { stateId: 'review', principalId: 'principal_bob' },
+        ],
+      }),
+    ).toEqual({
+      expectedRevision: 8,
+      assignments: [
+        { stateId: 'implementation', principalId: 'principal_alice' },
+        { stateId: 'review', principalId: 'principal_bob' },
+      ],
+    });
+    expect(() =>
+      buildCollaborationWorkflowReassignmentRequest({
+        expectedRevision: 8,
+        assignments: [
+          { stateId: 'review', principalId: 'principal_alice' },
+          { stateId: 'review', principalId: 'principal_bob' },
+        ],
+      }),
+    ).toThrow(/不能重复/u);
+    expect(
+      buildCollaborationTurnCancellationRequest({
+        expectedRevision: 9,
+        attempt: 2,
+        fencingToken: 'fence',
+        reason: ' Superseded ',
+      }),
+    ).toEqual({
+      expectedRevision: 9,
+      attempt: 2,
+      fencingToken: 'fence',
+      reason: 'Superseded',
+    });
   });
 
   it('builds cross-field-safe Analysis Run requests', () => {

@@ -197,6 +197,15 @@ describe('collaboration authorization projection', () => {
     expect(actions(value, memberId).group.createDiscussion.code).toBe(
       'GROUP_ARCHIVED',
     );
+    expect(actions(value, memberId).group.reopen).toMatchObject({
+      allowed: false,
+      code: 'PERMISSION_REQUIRED',
+    });
+    expect(actions(value, ownerId).group.reopen.allowed).toBe(true);
+    value.credentials[ownerId]!.credential_0001!.status = 'revoked';
+    expect(actions(value, ownerId).group.reopen.code).toBe(
+      'CREDENTIAL_INACTIVE',
+    );
   });
 
   it('projects direct grants and intrinsic Owner authority from one evaluator', () => {
@@ -282,10 +291,94 @@ describe('collaboration authorization projection', () => {
     expect(running.close.allowed).toBe(true);
     expect(running.createTurn.allowed).toBe(true);
     value.workflowInstances.instance_delivery!.active_turn_id = 'turn_active';
+    value.turns.turn_active = {
+      turn_id: 'turn_active',
+      workflow_instance_id: 'instance_delivery',
+      state_id: 'build',
+      assignee_principal_id: contributorId,
+      claimant_principal_id: null,
+      claimant_client_id: null,
+      fencing_token: null,
+      attempt: 1,
+      state: 'pending',
+    } as unknown as CollaborationProjectionV3['turns'][string];
+    const activeTurn = actions(value, contributorId).workflowInstances
+      .instance_delivery;
+    expect(activeTurn.createTurn.code).toBe('RESOURCE_STATE_BLOCKED');
+    expect(activeTurn.close.code).toBe('RESOURCE_STATE_BLOCKED');
+    expect(activeTurn.reassignStates.build).toMatchObject({
+      allowed: false,
+      code: 'RESOURCE_STATE_BLOCKED',
+    });
+    expect(activeTurn.turns.turn_active?.cancel.allowed).toBe(false);
     expect(
-      actions(value, contributorId).workflowInstances.instance_delivery
-        .createTurn.code,
-    ).toBe('RESOURCE_STATE_BLOCKED');
+      actions(value, ownerId).workflowInstances.instance_delivery.turns
+        .turn_active?.cancel.allowed,
+    ).toBe(true);
+    value.turns.turn_active!.fencing_token = `sha256:${'f'.repeat(64)}`;
+    value.turns.turn_active!.claimant_principal_id = contributorId;
+    value.turns.turn_active!.claimant_client_id = 'client_0003';
+    expect(
+      actions(value, contributorId).workflowInstances.instance_delivery.turns
+        .turn_active?.cancel.allowed,
+    ).toBe(true);
+  });
+
+  it('removes author and Definition creator actions when direct permissions are revoked', () => {
+    const value = projection();
+    value.discussions.thread_1 = {
+      discussion: {
+        thread_id: 'thread_1',
+        created_by: memberId,
+        status: 'open',
+      },
+      messages: {
+        message_1: {
+          message_id: 'message_1',
+          author_principal_id: memberId,
+          tombstoned: false,
+        },
+      },
+    } as unknown as CollaborationProjectionV3['discussions'][string];
+    expect(
+      actions(value, memberId).discussions.thread_1.messages.message_1?.revise
+        .allowed,
+    ).toBe(true);
+    value.permissionGrants[memberId]!.grants = [];
+    expect(
+      actions(value, memberId).discussions.thread_1.messages.message_1?.revise,
+    ).toMatchObject({ allowed: false, code: 'PERMISSION_REQUIRED' });
+
+    value.workflowDefinitions['member-flow@1'] = {
+      definition: {
+        definition_id: 'member-flow',
+        version: 1,
+        status: 'proposed',
+        created_by_principal_id: memberId,
+        launch_policy: {
+          group_admin: false,
+          work_item_owner: false,
+          principals: [],
+        },
+      },
+      machine: { states: {} },
+    } as unknown as CollaborationProjectionV3['workflowDefinitions'][string];
+    value.latestWorkflowDefinitionVersions['member-flow'] = 1;
+    expect(
+      actions(value, memberId).workflowDefinitions['member-flow@1']!
+        .editDefinition,
+    ).toMatchObject({ allowed: false, code: 'PERMISSION_REQUIRED' });
+    value.permissionGrants[memberId]!.grants = ['workflow_definition:propose'];
+    expect(
+      actions(value, memberId).workflowDefinitions['member-flow@1']!
+        .editDefinition.allowed,
+    ).toBe(true);
+    value.workflowDefinitions['member-flow@1']!.definition.status = 'published';
+    value.permissionGrants[memberId]!.grants = [];
+    expect(
+      actions(value, memberId).workflowDefinitions['member-flow@1']!
+        .createVersion,
+    ).toMatchObject({ allowed: false, code: 'PERMISSION_REQUIRED' });
   });
 
   it('projects exact Work Item and Discussion resource actions', () => {

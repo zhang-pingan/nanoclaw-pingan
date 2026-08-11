@@ -2196,14 +2196,23 @@ export class CollaborationWebApi {
         z
           .object({
             expectedRevision,
-            stateId: identifier,
-            principalId: identifier,
+            assignments: z
+              .array(
+                z
+                  .object({
+                    stateId: identifier,
+                    principalId: identifier,
+                  })
+                  .strict(),
+              )
+              .min(1)
+              .max(32),
           })
           .strict(),
       );
       send(res, 200, {
         group: publicGroup(
-          await this.runtime.groups.reassignWorkflowState({
+          await this.runtime.groups.reassignWorkflowStates({
             groupId: found[1]!,
             instanceId: found[2]!,
             ...body,

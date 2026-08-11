@@ -1831,6 +1831,180 @@ describe('Collaboration project space v3 Group and identity service', () => {
     owner.store.close();
   });
 
+  it('reassigns multiple Workflow States atomically and leaves no partial batch on failure', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const remoteUrl = '/tmp/reassignment-project.git';
+    await owner.service.createGroup({
+      remoteUrl,
+      name: 'Reassignment project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_reassignment',
+    });
+    const machine = {
+      format: 'icarus.collaboration-machine/3' as const,
+      initial_state: 'implementation',
+      states: {
+        implementation: {
+          label: 'Implementation',
+          description: '',
+          assignee: {
+            type: 'participant_slot' as const,
+            slot: 'implementer',
+          },
+          terminal: false,
+          transitions: [
+            { outcome: 'review', label: 'Review', target_state: 'review' },
+          ],
+        },
+        review: {
+          label: 'Review',
+          description: '',
+          assignee: {
+            type: 'participant_slot' as const,
+            slot: 'reviewer',
+          },
+          terminal: false,
+          transitions: [
+            { outcome: 'complete', label: 'Complete', target_state: 'done' },
+          ],
+        },
+        done: {
+          label: 'Done',
+          description: '',
+          terminal: true,
+          transitions: [],
+        },
+      },
+    };
+    await owner.service.proposeWorkflowDefinition({
+      groupId: 'group_reassignment',
+      definitionId: 'delivery',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Delivery',
+      machine,
+      layout: {
+        format: 'icarus.collaboration-workflow-layout/1',
+        view: 'participants',
+        nodes: {
+          implementation: { x: 0, y: 0 },
+          review: { x: 240, y: 0 },
+          done: { x: 480, y: 0 },
+        },
+        revision: 1,
+      },
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId: 'group_reassignment',
+      definitionId: 'delivery',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkflowInstance({
+      groupId: 'group_reassignment',
+      definitionId: 'delivery',
+      definitionVersion: 1,
+      instanceId: 'instance_delivery',
+      scope: { type: 'group' },
+    });
+    const before = await transport.inspect({ remoteUrl });
+    transport.failBatchAtEventIndex = 1;
+    await expect(
+      owner.service.reassignWorkflowStates({
+        groupId: 'group_reassignment',
+        instanceId: 'instance_delivery',
+        expectedRevision: 1,
+        assignments: [
+          { stateId: 'implementation', principalId: ALICE.principalId },
+          { stateId: 'review', principalId: ALICE.principalId },
+        ],
+      }),
+    ).rejects.toThrow(/event 2 build failure/u);
+    const failed = await transport.inspect({ remoteUrl });
+    expect(failed.head).toBe(before.head);
+    expect(failed.eventRecords).toHaveLength(before.eventRecords.length);
+    expect(failed.projection.workflowInstances.instance_delivery).toMatchObject(
+      {
+        lifecycle: 'draft',
+        revision: 1,
+        resolved_assignments: {},
+      },
+    );
+
+    transport.failBatchAtEventIndex = null;
+    const reassigned = await owner.service.reassignWorkflowStates({
+      groupId: 'group_reassignment',
+      instanceId: 'instance_delivery',
+      expectedRevision: 1,
+      assignments: [
+        { stateId: 'implementation', principalId: ALICE.principalId },
+        { stateId: 'review', principalId: ALICE.principalId },
+      ],
+    });
+    expect(
+      reassigned.projection?.workflowInstances.instance_delivery,
+    ).toMatchObject({
+      lifecycle: 'ready',
+      revision: 3,
+      resolved_assignments: {
+        implementation: ALICE.principalId,
+        review: ALICE.principalId,
+      },
+    });
+    const committed = await transport.inspect({ remoteUrl });
+    const batchEvents = committed.eventRecords.slice(-2);
+    expect(batchEvents.map((record) => record.event.event_type)).toEqual([
+      'workflow_state_assignee_changed',
+      'workflow_state_assignee_changed',
+    ]);
+    expect(
+      new Set(batchEvents.map((record) => record.commitHash)),
+    ).toHaveLength(1);
+    await owner.service.startWorkflowInstance({
+      groupId: 'group_reassignment',
+      instanceId: 'instance_delivery',
+      expectedRevision: 3,
+    });
+    await owner.service.createTurn({
+      groupId: 'group_reassignment',
+      instanceId: 'instance_delivery',
+      expectedRevision: 4,
+      turnId: 'turn_implementation',
+    });
+    const beforeStateConflict = await transport.inspect({ remoteUrl });
+    await expect(
+      owner.service.reassignWorkflowStates({
+        groupId: 'group_reassignment',
+        instanceId: 'instance_delivery',
+        expectedRevision: 5,
+        assignments: [
+          { stateId: 'review', principalId: ALICE.principalId },
+          { stateId: 'implementation', principalId: ALICE.principalId },
+        ],
+      }),
+    ).rejects.toThrow(/cancel.*Turn|Current State/u);
+    const afterStateConflict = await transport.inspect({ remoteUrl });
+    expect(afterStateConflict.head).toBe(beforeStateConflict.head);
+    expect(
+      afterStateConflict.projection.aggregateHeads[
+        'workflow_instance:instance_delivery'
+      ]?.revision,
+    ).toBe(5);
+    expect(
+      afterStateConflict.projection.workflowInstances.instance_delivery
+        ?.resolved_assignments,
+    ).toEqual(
+      beforeStateConflict.projection.workflowInstances.instance_delivery
+        ?.resolved_assignments,
+    );
+    owner.store.close();
+  });
+
   it('defaults to manual execution, fences competing Clients, and maps a terminal Outcome atomically', async () => {
     const transport = new MemoryTransport();
     const owner = service(tempDirectory(), transport, ALICE);
