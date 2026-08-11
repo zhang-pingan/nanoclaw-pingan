@@ -24,8 +24,9 @@ import {
   PROJECT_ANALYST_CAPABILITY_STATIC_FILES,
 } from './analysis-capability-resources.generated.js';
 import type { CollaborationAnalysisInput } from './analysis-contracts.js';
+import { buildCollaborationGenesisSelfDescription } from './group-self-description.js';
 import { PROJECT_ANALYST_BUNDLE_RELATIVE_PATHS } from './project-analyst-bundle.js';
-import { CollaborationProjectSpaceGitTransport } from './project-space-git.js';
+import { CollaborationProjectSpaceGitTransport as BaseCollaborationProjectSpaceGitTransport } from './project-space-git.js';
 import {
   CollaborationProjectSpaceIdentityService,
   type CollaborationEventSigningIdentity,
@@ -44,6 +45,12 @@ let remote = '';
 let principalId = '';
 const idlePrincipalId = 'principal_00000000-0000-4000-8000-000000000002';
 let validHead = '';
+
+class CollaborationProjectSpaceGitTransport extends BaseCollaborationProjectSpaceGitTransport {
+  constructor() {
+    super((groupId) => buildCollaborationGenesisSelfDescription({ groupId }));
+  }
+}
 
 function temporaryRoot(prefix: string): string {
   const root = mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -260,6 +267,15 @@ describe('project-analyst complete Skill', () => {
       expect(file.contents).toBe(
         readFileSync(path.join(skillRoot, file.path), 'utf8'),
       );
+    for (const relative of [
+      'SKILL.md',
+      'references/repository-mode.md',
+      'references/trust-model.md',
+    ]) {
+      const contents = readFileSync(path.join(skillRoot, relative), 'utf8');
+      expect(contents).toContain('trusted');
+      expect(contents).toMatch(/do not execute|Never execute/iu);
+    }
   });
 
   it('builds a self-consistent local context and upgrades only with a trusted anchor', () => {

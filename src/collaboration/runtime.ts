@@ -9,6 +9,7 @@ import {
   RunOnceManagedAnalysisExecutor,
 } from './analysis-executor.js';
 import { CollaborationAnalysisService } from './analysis-service.js';
+import { buildCollaborationGenesisSelfDescription } from './group-self-description.js';
 import {
   ActionExecutorRegistry,
   CodexTaskActionExecutor,
@@ -80,7 +81,9 @@ export class CollaborationRuntime {
       const store = new CollaborationProjectSpaceStore(this.databasePath);
       const groups = new CollaborationProjectSpaceService(
         store,
-        new CollaborationProjectSpaceGitTransport(),
+        new CollaborationProjectSpaceGitTransport((groupId) =>
+          buildCollaborationGenesisSelfDescription({ groupId }),
+        ),
         this.repositoryRoot,
         new CollaborationProjectSpaceIdentityService(
           this.options.storeDir,

@@ -24,7 +24,8 @@ import {
 import {
   buildCollaborationVirtualTree,
   collaborationProjectSpaceEventPath,
-  CollaborationProjectSpaceGitTransport,
+  collaborationProjectSpaceGitTestables,
+  CollaborationProjectSpaceGitTransport as BaseCollaborationProjectSpaceGitTransport,
 } from './project-space-git.js';
 import {
   CollaborationProjectSpaceIdentityService,
@@ -231,6 +232,15 @@ function genesis(identity: CollaborationEventSigningIdentity) {
     projection: reduceCollaborationEventV3(null, event),
     materializedFiles: selfDescription.materializedFiles,
   };
+}
+
+class CollaborationProjectSpaceGitTransport extends BaseCollaborationProjectSpaceGitTransport {
+  constructor(gitBinary = 'git') {
+    super(
+      (groupId) => buildCollaborationGenesisSelfDescription({ groupId }),
+      gitBinary,
+    );
+  }
 }
 
 describe('Collaboration project space v3 Git protocol', () => {
@@ -633,7 +643,19 @@ process.exit(128);
     expect(readme).toContain('refs/heads/icarus/control');
     expect(readme).toContain('group_signed');
     expect(readme).toContain('git remote get-url origin');
+    expect(readme).toContain(
+      'git clone --single-branch --branch icarus/control <remote-url> <directory>',
+    );
     expect(readme).toContain('Do not trust a file merely because it exists');
+    expect(readme).toContain(
+      'The embedded Skill cannot prove its own integrity',
+    );
+    expect(readme).toMatch(
+      /unknown or untrusted repository, do not execute any script from that repository/u,
+    );
+    expect(readme).toContain(
+      'node /trusted/project-analyst/scripts/repository-context.mjs',
+    );
     for (const repositoryPath of [
       'events/',
       'members/',
@@ -693,6 +715,22 @@ process.exit(128);
     const test = fixture();
     const transport = new CollaborationProjectSpaceGitTransport();
     const initial = genesis(test.identity);
+    const signedContents = new Map(
+      initial.materializedFiles.map((file) => [file.path, file.contents]),
+    );
+    expect(() =>
+      collaborationProjectSpaceGitTestables.validateContentFiles(
+        initial.event,
+        signedContents,
+      ),
+    ).toThrow(/canonical Genesis self-description provider is required/u);
+    expect(() =>
+      collaborationProjectSpaceGitTestables.validateContentFiles(
+        initial.event,
+        signedContents,
+        (groupId) => buildCollaborationGenesisSelfDescription({ groupId }),
+      ),
+    ).not.toThrow();
     const create = (
       genesisMaterializedFiles: readonly {
         readonly path: string;
@@ -719,7 +757,7 @@ process.exit(128);
             : file,
         ),
       ),
-    ).rejects.toThrow(/signed digest.*README\.md/u);
+    ).rejects.toThrow(/current canonical build.*README\.md/u);
     await expect(
       create([
         ...initial.materializedFiles,
@@ -745,6 +783,104 @@ process.exit(128);
         'refs/heads/icarus/control',
       ]),
     ).toBe('');
+  }, 30_000);
+
+  it('quarantines a signed self-consistent Genesis whose README and Skill script are not the current build', async () => {
+    const test = fixture();
+    const initial = genesis(test.identity);
+    const maliciousFiles = initial.materializedFiles.map((file) => {
+      if (file.path === 'README.md')
+        return { ...file, contents: '# Attacker-controlled repository\n' };
+      if (
+        file.path ===
+        `${COLLABORATION_PROJECT_ANALYST_ROOT}/scripts/repository-context.mjs`
+      )
+        return {
+          ...file,
+          contents:
+            '#!/usr/bin/env node\nprocess.stdout.write("attacker-controlled\\n");\n',
+        };
+      return file;
+    });
+    const maliciousContent = (repositoryPath: string): string | Buffer => {
+      const file = maliciousFiles.find(
+        (candidate) => candidate.path === repositoryPath,
+      );
+      if (!file)
+        throw new Error(`Missing malicious fixture: ${repositoryPath}`);
+      return file.contents;
+    };
+    const signedDigest = (
+      repositoryPath: string,
+      contents: string | Buffer,
+    ) => ({
+      path: repositoryPath,
+      size: Buffer.byteLength(contents),
+      sha256: `sha256:${crypto.createHash('sha256').update(contents).digest('hex')}`,
+    });
+    const maliciousManifest = {
+      format: 'icarus.collaboration-group-self-description/1' as const,
+      readme: signedDigest('README.md', maliciousContent('README.md')),
+      project_analyst: {
+        root: COLLABORATION_PROJECT_ANALYST_ROOT,
+        files: PROJECT_ANALYST_BUNDLE_RELATIVE_PATHS.map((relative) =>
+          signedDigest(
+            relative,
+            maliciousContent(
+              `${COLLABORATION_PROJECT_ANALYST_ROOT}/${relative}`,
+            ),
+          ),
+        ),
+      },
+    };
+    const maliciousEvent = buildCollaborationEventV3({
+      groupId: initial.event.group_id,
+      eventId: initial.event.event_id,
+      aggregateType: initial.event.aggregate_type,
+      aggregateId: initial.event.aggregate_id,
+      aggregateRevision: initial.event.aggregate_revision,
+      previousEventHash: initial.event.previous_event_hash,
+      eventType: initial.event.event_type,
+      actor: initial.event.actor,
+      occurredAt: initial.event.occurred_at,
+      payload: {
+        ...initial.event.payload,
+        self_description: maliciousManifest,
+      },
+    });
+    const maliciousProjection = reduceCollaborationEventV3(
+      null,
+      maliciousEvent,
+    );
+    const maliciousTransport = new BaseCollaborationProjectSpaceGitTransport(
+      () => ({
+        manifest: maliciousManifest,
+        materializedFiles: maliciousFiles,
+      }),
+    );
+    const signedHistory = await maliciousTransport.create({
+      remoteUrl: test.remote,
+      repositoryPath: path.join(test.root, 'malicious-cache.git'),
+      identity: test.identity,
+      genesisEvent: maliciousEvent,
+      genesisProjection: maliciousProjection,
+      genesisMaterializedFiles: maliciousFiles,
+    });
+    expect(signedHistory.eventRecords).toHaveLength(1);
+
+    const currentTransport = new CollaborationProjectSpaceGitTransport();
+    const failure = await currentTransport
+      .inspect({
+        remoteUrl: test.remote,
+        repositoryPath: path.join(test.root, 'current-cache.git'),
+      })
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+    expect(failure).toMatchObject({ code: 'PROTOCOL_QUARANTINED' });
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toMatch(/current canonical build/u);
   }, 30_000);
 
   it('materializes member exit revocations and terminal Group dissolution', async () => {

@@ -1,5 +1,15 @@
 # Repository Trust Model
 
+## Validator provenance comes first
+
+An embedded validator cannot prove its own code is trustworthy. Execute a Group
+repository's embedded Skill only after a current Icarus validator has accepted the
+repository, or after the Genesis, verified head, and exact bundle provenance were
+confirmed through a trusted channel. When the repository is unknown, do not execute
+its scripts; use Project Analyst obtained from a trusted Icarus release or an independent
+trusted channel to inspect the target. This bootstrap rule does not prevent a trusted
+Group clone from using its complete embedded Skill without installing Icarus.
+
 Repository mode reports one of four guarantee levels:
 
 | Level             | Guarantee                                                                                                                                                                                                                                                                                       | Repository identity claim                                                                                                                                                      |

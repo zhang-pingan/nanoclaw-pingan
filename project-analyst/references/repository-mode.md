@@ -2,6 +2,18 @@
 
 Repository mode builds a normalized, read-only analysis context without installing or running Icarus.
 
+## Bootstrap trust
+
+The validator and the target repository must not be the same untrusted input. Run an
+embedded Skill only after a current Icarus validator has accepted that Group repository,
+or after its Genesis, verified head, and bundle provenance were confirmed through a
+trusted channel. For an unknown repository, do not execute its embedded scripts. Obtain
+Project Analyst from a trusted Icarus release or independent trusted channel and use that
+copy's `repository-context.mjs` with `--repository` pointing at the unknown target.
+
+After that provenance check, a trusted embedded copy is fully portable and does not
+require an Icarus installation.
+
 ## Runtime
 
 Require Node.js 20 or newer, Git with SSH commit-signature verification, and `ssh-keygen`. No npm install is required. Check the environment:
@@ -25,6 +37,13 @@ node scripts/repository-context.mjs \
   --repository /path/to/group-repository \
   --scope project \
   --output ./project-analysis-context
+```
+
+Bare Group remotes often have no useful default `HEAD`. Clone the control branch
+explicitly when a working tree is needed:
+
+```bash
+git clone --single-branch --branch icarus/control <remote-url> <directory>
 ```
 
 For `mine`, provide the exact Group principal ID:

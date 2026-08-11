@@ -31,6 +31,7 @@ import {
   type CollaborationProjectionV3,
 } from './protocol/v3-reducer.js';
 import {
+  canonicalJsonStringify,
   prettyCollaborationJson,
   strictParseJsonBytes,
 } from './protocol/canonical-json.js';
@@ -43,6 +44,7 @@ import {
   recoveryRequestSchema,
   type ArtifactMetadataV3,
   type CollaborationEventV3,
+  type CollaborationGroupSelfDescription,
   type CredentialDefinition,
   type FileMetadata,
 } from './protocol/v3-schema.js';
@@ -70,6 +72,15 @@ export interface CollaborationProjectSpaceMaterializedFile {
   readonly path: string;
   readonly contents: string | Buffer | null;
 }
+
+export interface CollaborationCanonicalGenesisSelfDescription {
+  readonly manifest: CollaborationGroupSelfDescription;
+  readonly materializedFiles: readonly CollaborationProjectSpaceMaterializedFile[];
+}
+
+export type CollaborationCanonicalGenesisSelfDescriptionProvider = (
+  groupId: string,
+) => CollaborationCanonicalGenesisSelfDescription;
 
 export class CollaborationProjectSpaceGitConflictError extends Error {
   constructor(message: string) {
@@ -967,6 +978,7 @@ function mergeMaterializations(
   event: CollaborationEventV3,
   projection: CollaborationProjectionV3,
   extra: readonly CollaborationProjectSpaceMaterializedFile[],
+  canonicalGenesisSelfDescription: CollaborationCanonicalGenesisSelfDescriptionProvider,
 ): Map<string, string | Buffer | null> {
   const files = automaticMaterialization(event, projection);
   const allowedExtra = allowedExtraMaterializationPaths(event);
@@ -985,7 +997,7 @@ function mergeMaterializations(
       throw new Error(
         `${event.event_type} requires materialized content at ${required}`,
       );
-  validateContentFiles(event, files);
+  validateContentFiles(event, files, canonicalGenesisSelfDescription);
   return files;
 }
 
@@ -993,15 +1005,12 @@ function sha256(contents: Buffer | string): string {
   return `sha256:${crypto.createHash('sha256').update(contents).digest('hex')}`;
 }
 
-function genesisSelfDescriptionFiles(
-  event: CollaborationEventV3,
+function selfDescriptionFiles(
+  description: CollaborationGroupSelfDescription,
 ): Map<
   string,
   { readonly path: string; readonly size: number; readonly sha256: string }
 > {
-  const description = collaborationGroupSelfDescriptionSchema.parse(
-    event.payload.self_description,
-  );
   if (description.readme.path !== COLLABORATION_GROUP_README_PATH)
     throw new Error('Genesis self-description README path is invalid');
   if (description.project_analyst.root !== COLLABORATION_PROJECT_ANALYST_ROOT)
@@ -1024,13 +1033,92 @@ function genesisSelfDescriptionFiles(
   ]);
 }
 
+function genesisSelfDescriptionFiles(
+  event: CollaborationEventV3,
+): Map<
+  string,
+  { readonly path: string; readonly size: number; readonly sha256: string }
+> {
+  return selfDescriptionFiles(
+    collaborationGroupSelfDescriptionSchema.parse(
+      event.payload.self_description,
+    ),
+  );
+}
+
+function canonicalGenesisSelfDescriptionFiles(
+  event: CollaborationEventV3,
+  provider: CollaborationCanonicalGenesisSelfDescriptionProvider | undefined,
+): ReadonlyMap<string, string | Buffer> {
+  if (!provider)
+    throw new Error(
+      'Current canonical Genesis self-description provider is required',
+    );
+  const canonical = provider(event.group_id);
+  const canonicalManifest = collaborationGroupSelfDescriptionSchema.parse(
+    canonical.manifest,
+  );
+  const canonicalMetadata = selfDescriptionFiles(canonicalManifest);
+  const signedManifest = collaborationGroupSelfDescriptionSchema.parse(
+    event.payload.self_description,
+  );
+  if (
+    canonicalJsonStringify(signedManifest) !==
+    canonicalJsonStringify(canonicalManifest)
+  )
+    throw new Error(
+      'Genesis self-description manifest does not match the current canonical build',
+    );
+
+  const canonicalContents = new Map<string, string | Buffer>();
+  for (const file of canonical.materializedFiles) {
+    const repositoryPath = normalizedRepositoryPath(file.path);
+    if (file.contents === null)
+      throw new Error(
+        `Current canonical Genesis content cannot delete ${repositoryPath}`,
+      );
+    if (canonicalContents.has(repositoryPath))
+      throw new Error(
+        `Current canonical Genesis content duplicates ${repositoryPath}`,
+      );
+    canonicalContents.set(repositoryPath, file.contents);
+  }
+  if (
+    canonicalContents.size !== canonicalMetadata.size ||
+    [...canonicalContents].some(
+      ([repositoryPath]) => !canonicalMetadata.has(repositoryPath),
+    )
+  )
+    throw new Error(
+      'Current canonical Genesis content file set does not match its manifest',
+    );
+  for (const [repositoryPath, metadata] of canonicalMetadata) {
+    const content = canonicalContents.get(repositoryPath);
+    if (content === undefined)
+      throw new Error(
+        `Current canonical Genesis content is missing: ${repositoryPath}`,
+      );
+    const bytes = typeof content === 'string' ? Buffer.from(content) : content;
+    if (bytes.byteLength !== metadata.size || sha256(bytes) !== metadata.sha256)
+      throw new Error(
+        `Current canonical Genesis content does not match its manifest: ${repositoryPath}`,
+      );
+  }
+  return canonicalContents;
+}
+
 function validateContentFiles(
   event: CollaborationEventV3,
   files: ReadonlyMap<string, string | Buffer | null>,
+  canonicalGenesisSelfDescription?: CollaborationCanonicalGenesisSelfDescriptionProvider,
 ): void {
   if (event.event_type === 'group_initialized') {
-    for (const [repositoryPath, metadata] of genesisSelfDescriptionFiles(
+    for (const [
+      repositoryPath,
+      expected,
+    ] of canonicalGenesisSelfDescriptionFiles(
       event,
+      canonicalGenesisSelfDescription,
     )) {
       const content = files.get(repositoryPath);
       if (content == null)
@@ -1039,12 +1127,11 @@ function validateContentFiles(
         );
       const bytes =
         typeof content === 'string' ? Buffer.from(content) : content;
-      if (
-        bytes.byteLength !== metadata.size ||
-        sha256(bytes) !== metadata.sha256
-      )
+      const expectedBytes =
+        typeof expected === 'string' ? Buffer.from(expected) : expected;
+      if (!bytes.equals(expectedBytes))
         throw new Error(
-          `Genesis self-description content does not match its signed digest: ${repositoryPath}`,
+          `Genesis self-description content does not match the current canonical build: ${repositoryPath}`,
         );
     }
   }
@@ -1376,6 +1463,7 @@ async function verifyMaterializedCommit(
   }[],
   batchFile: string | null,
   changes: readonly { readonly status: string; readonly file: string }[],
+  canonicalGenesisSelfDescription: CollaborationCanonicalGenesisSelfDescriptionProvider,
 ): Promise<void> {
   const automatic = new Map<string, string | Buffer | null>();
   const allowedExtra = new Set<string>();
@@ -1435,7 +1523,11 @@ async function verifyMaterializedCommit(
     for (const file of allowedExtraMaterializationPaths(entry.event))
       contentFiles.set(file, await showBytes(repositoryPath, commit, file));
     try {
-      validateContentFiles(entry.event, contentFiles);
+      validateContentFiles(
+        entry.event,
+        contentFiles,
+        canonicalGenesisSelfDescription,
+      );
     } catch (error) {
       throw new CollaborationProtocolError(
         'PROTOCOL_QUARANTINED',
@@ -1449,6 +1541,7 @@ export async function validateCollaborationProjectSpaceHistory(input: {
   readonly repositoryPath: string;
   readonly head: string;
   readonly previousHead?: string | null;
+  readonly canonicalGenesisSelfDescription: CollaborationCanonicalGenesisSelfDescriptionProvider;
 }): Promise<ValidatedProjectSpaceHistory> {
   if (input.previousHead && input.previousHead !== input.head) {
     const ancestry = await git(
@@ -1512,6 +1605,7 @@ export async function validateCollaborationProjectSpaceHistory(input: {
       entries,
       batchFile,
       changes,
+      input.canonicalGenesisSelfDescription,
     );
   }
   if (!projection)
@@ -1663,7 +1757,10 @@ export function buildCollaborationVirtualTree(
 }
 
 export class CollaborationProjectSpaceGitTransport implements CollaborationProjectSpaceTransport {
-  constructor(private readonly gitBinary = 'git') {}
+  constructor(
+    private readonly canonicalGenesisSelfDescription: CollaborationCanonicalGenesisSelfDescriptionProvider,
+    private readonly gitBinary = 'git',
+  ) {}
 
   async inspect(input: {
     readonly remoteUrl: string;
@@ -1703,6 +1800,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         repositoryPath: input.repositoryPath,
         head,
         previousHead: input.previousHead,
+        canonicalGenesisSelfDescription: this.canonicalGenesisSelfDescription,
       });
     } catch (error) {
       if (
@@ -1713,6 +1811,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         const replacement = await validateCollaborationProjectSpaceHistory({
           repositoryPath: input.repositoryPath,
           head,
+          canonicalGenesisSelfDescription: this.canonicalGenesisSelfDescription,
         }).catch(() => null);
         throw new CollaborationProjectSpaceHistoryRewrittenError(
           replacement
@@ -1767,6 +1866,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
       const history = await validateCollaborationProjectSpaceHistory({
         repositoryPath: checkoutPath,
         head,
+        canonicalGenesisSelfDescription: this.canonicalGenesisSelfDescription,
       });
       const push = await execute(
         checkoutPath,
@@ -1929,6 +2029,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         event,
         projection,
         extra,
+        this.canonicalGenesisSelfDescription,
       ))
         files.set(file, contents);
       entries.push({ event, projection, materializedFiles: extra });
@@ -2008,7 +2109,12 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     projection: CollaborationProjectionV3,
     extra: readonly CollaborationProjectSpaceMaterializedFile[],
   ): void {
-    const files = mergeMaterializations(event, projection, extra);
+    const files = mergeMaterializations(
+      event,
+      projection,
+      extra,
+      this.canonicalGenesisSelfDescription,
+    );
     writeRepositoryFile(
       checkoutPath,
       collaborationProjectSpaceEventPath(event),

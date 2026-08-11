@@ -32,6 +32,8 @@ import {
   buildCollaborationProjectInsight,
   buildMyItems,
 } from '../src/collaboration/project-insight.js';
+import { buildCollaborationGenesisSelfDescriptionFromBundle } from '../src/collaboration/group-self-description-contract.js';
+import { PROJECT_ANALYST_BUNDLE_RELATIVE_PATHS } from '../src/collaboration/project-analyst-bundle.js';
 import { validateCollaborationProjectSpaceHistory } from '../src/collaboration/project-space-git.js';
 import type { ValidatedProjectSpaceHistory } from '../src/collaboration/project-space-service.js';
 import { canonicalJsonStringify } from '../src/collaboration/protocol/canonical-json.js';
@@ -45,6 +47,27 @@ import { COLLABORATION_CONTROL_BRANCH } from '../src/collaboration/protocol/vers
 
 const DEFAULT_REF = 'icarus/control';
 const TOOL_VERSION = 1;
+const SKILL_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+);
+
+function canonicalGenesisSelfDescription(groupId: string) {
+  return buildCollaborationGenesisSelfDescriptionFromBundle({
+    groupId,
+    projectAnalystFiles: PROJECT_ANALYST_BUNDLE_RELATIVE_PATHS.map(
+      (relative) => {
+        const target = path.join(SKILL_ROOT, relative);
+        const entry = lstatSync(target);
+        if (entry.isSymbolicLink() || !entry.isFile())
+          throw new Error(
+            `Trusted Project Analyst bundle entry is not a regular file: ${relative}`,
+          );
+        return { path: relative, contents: readFileSync(target) };
+      },
+    ),
+  });
+}
 
 function installControlledGitEnvironment(): () => void {
   const runtimeRoot = mkdtempSync(
@@ -739,6 +762,7 @@ async function main(): Promise<void> {
       history = await validateCollaborationProjectSpaceHistory({
         repositoryPath: prepared.repositoryPath,
         head,
+        canonicalGenesisSelfDescription,
       });
       projection = history.projection;
       verification = collaborationRepositoryVerificationSchema.parse({
