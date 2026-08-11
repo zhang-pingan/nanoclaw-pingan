@@ -226,6 +226,21 @@ describe('collaboration authorization projection', () => {
     expect(owner.principal.isOwner).toBe(true);
   });
 
+  it('separates Discussion creation from posting for custom grants', () => {
+    const value = projection();
+    value.permissionGrants[memberId] = {
+      ...value.permissionGrants[memberId]!,
+      grants: ['discussion:create'],
+    };
+
+    const member = actions(value, memberId);
+    expect(member.group.createDiscussion.allowed).toBe(true);
+    expect(member.group.postDiscussion).toMatchObject({
+      allowed: false,
+      code: 'PERMISSION_REQUIRED',
+    });
+  });
+
   it('projects member notification authority through the shared permission boundary', () => {
     const value = projection();
     value.permissionGrants[memberId] = {

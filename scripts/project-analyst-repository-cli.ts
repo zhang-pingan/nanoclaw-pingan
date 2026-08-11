@@ -41,6 +41,7 @@ import {
   workflowDefinitionVersionKey,
   type CollaborationProjectionV3,
 } from '../src/collaboration/protocol/v3-reducer.js';
+import { memberNotificationV3Schema } from '../src/collaboration/protocol/v3-schema.js';
 import { COLLABORATION_CONTROL_BRANCH } from '../src/collaboration/protocol/version.js';
 
 const DEFAULT_REF = 'icarus/control';
@@ -525,6 +526,7 @@ function loadProjectionOnly(
     workItems: {},
     workItemUpdates: {},
     discussions: {},
+    notifications: {},
     workflowDefinitions: {},
     latestWorkflowDefinitionVersions: {},
     workflowInstances: {},
@@ -570,6 +572,16 @@ function loadProjectionOnly(
     match = /^projections\/discussions\/([^/]+)\.json$/u.exec(file);
     if (match && value.discussion)
       projection.discussions[match[1]!] = value as any;
+    match = /^projections\/notifications\/([^/]+)\.json$/u.exec(file);
+    if (match) {
+      const id = match[1]!;
+      const notification = memberNotificationV3Schema.parse(value);
+      if (notification.notification_id !== id)
+        throw new Error(
+          `Projection notification id does not match path: ${file}`,
+        );
+      projection.notifications[id] = notification;
+    }
     match = /^projections\/workflow-definitions\/([^/]+)\.json$/u.exec(file);
     if (match && value.definition) {
       const definitionId = match[1]!;

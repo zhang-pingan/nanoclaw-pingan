@@ -30,6 +30,7 @@ import {
   collaborationDiscussionMessageActionAccess,
   collaborationDiscussionMessageActionAllowed,
   collaborationEligibleTurnExecutors,
+  collaborationFileById,
   collaborationIsObserver,
   collaborationLocalMembershipStatus,
   collaborationLocalCredential,
@@ -1210,6 +1211,9 @@ describe('Collaboration project-space v3 UI helpers', () => {
 
   it('routes evidence and notifications to exact Project Space views', () => {
     const projection = {
+      files: {
+        file_1: { file_id: 'file_1' },
+      },
       discussions: {
         discussion_1: {
           discussion: { thread_id: 'discussion_1' },
@@ -1232,9 +1236,9 @@ describe('Collaboration project-space v3 UI helpers', () => {
       tab: 'discussions',
       selectedDiscussionId: 'discussion_1',
     });
-    expect(collaborationResourceTarget('file', 'file_1')).toMatchObject({
-      tab: 'files',
-    });
+    expect(
+      collaborationResourceTarget('file', 'file_1', projection),
+    ).toMatchObject({ tab: 'files', selectedFileId: 'file_1' });
     expect(collaborationResourceTarget('event', 'event_1')).toMatchObject({
       tab: 'audit',
     });
@@ -1254,6 +1258,25 @@ describe('Collaboration project-space v3 UI helpers', () => {
     expect(
       collaborationResourceTarget('discussion', 'missing_thread', projection),
     ).toMatchObject({ tab: 'discussions', selectedDiscussionId: '' });
+    expect(
+      collaborationResourceTarget('file', 'missing_file', projection),
+    ).toMatchObject({ tab: 'files', selectedFileId: '' });
+  });
+
+  it('finds the exact verified file for notification navigation', () => {
+    const files = [
+      {
+        repositoryPath: 'workspace/shared/documents/first/content.txt',
+        metadata: { file_id: 'file_1' },
+      },
+      {
+        repositoryPath: 'workspace/shared/documents/second/content.txt',
+        metadata: { file_id: 'file_2' },
+      },
+    ];
+
+    expect(collaborationFileById(files, 'file_2')).toBe(files[1]);
+    expect(collaborationFileById(files, 'missing_file')).toBeNull();
   });
 
   it('derives member notification scope from the current verified resource', () => {

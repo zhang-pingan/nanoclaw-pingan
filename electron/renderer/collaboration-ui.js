@@ -1316,7 +1316,12 @@ export function collaborationResourceTarget(
       selectedAnalysisId: id,
     };
   if (type === 'file')
-    return { tab: 'files', resourceType: type, resourceId: id };
+    return {
+      tab: 'files',
+      resourceType: type,
+      resourceId: id,
+      selectedFileId: projection?.files?.[id] ? id : '',
+    };
   if (type === 'event')
     return { tab: 'audit', resourceType: type, resourceId: id };
   if (type === 'message') {
@@ -1349,6 +1354,12 @@ export function collaborationResourceTarget(
   if (['protocol', 'integrity', 'sync'].includes(type))
     return { tab: 'diagnostics', resourceType: type, resourceId: id };
   return { tab: 'overview', resourceType: type, resourceId: id };
+}
+
+export function collaborationFileById(files, fileId) {
+  const id = String(fileId || '').trim();
+  if (!id || !Array.isArray(files)) return null;
+  return files.find((file) => file?.metadata?.file_id === id) ?? null;
 }
 
 export function collaborationNotificationTarget(

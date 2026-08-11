@@ -216,7 +216,15 @@ beforeAll(async () => {
         displayName: 'Idle member',
         clientDisplayName: 'Idle test client',
       });
-      validHead = joined.lastVerifiedHead!;
+      expect(joined.lastVerifiedHead).toBeTruthy();
+      const notified = await service.sendMemberNotification({
+        groupId: group.groupId,
+        notificationId: 'notification_analyst_fixture',
+        recipientPrincipalIds: [idlePrincipalId],
+        bodyMarkdown: 'Review the **release analysis**.',
+        scope: { type: 'group', ref: group.groupId },
+      });
+      validHead = notified.lastVerifiedHead!;
     } finally {
       idleStore.close();
     }
@@ -271,6 +279,9 @@ describe('project-analyst complete Skill', () => {
       scope: { type: 'project' },
     });
     expect(context.resource_index).toContain('work_item:wi_release');
+    expect(context.resource_index).toContain(
+      'notification:notification_analyst_fixture',
+    );
     expect(context.rule_signals).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ rule_id: 'work_item_overdue' }),
@@ -619,6 +630,12 @@ describe('project-analyst complete Skill', () => {
           projection_json_readable: 'passed',
         },
       },
+    );
+    expect(
+      json(path.join(fallback.output, 'resources/catalog.json')),
+    ).toHaveProperty(
+      'notification:notification_analyst_fixture.body_markdown',
+      'Review the **release analysis**.',
     );
   });
 

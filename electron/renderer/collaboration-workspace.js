@@ -64,6 +64,7 @@ import {
   collaborationDiscussionMessageActionAllowed,
   collaborationEligibleTurnExecutors,
   collaborationElapsed,
+  collaborationFileById,
   collaborationFindingActionDraft,
   collaborationFindingActionTypes,
   collaborationIsObserver,
@@ -321,6 +322,7 @@ function renderTreeNode(node) {
 export function createCollaborationWorkspace(options) {
   const state = options.state;
   state.selectedAnalysisId ||= '';
+  state.selectedFileId ||= '';
   state.overviewOnlyMine ??= false;
   state.overviewRiskOnly ??= false;
   state.notificationSeverity ||= '';
@@ -1118,6 +1120,32 @@ export function createCollaborationWorkspace(options) {
     )();
   };
 
+  const previewFile = async (file) => {
+    if (!file?.repositoryPath) return false;
+    const group = selectedGroup();
+    const url = options.fileUrl(
+      `/api/collaboration/groups/${encodeURIComponent(group.groupId)}/files/content?path=${encodeURIComponent(file.repositoryPath)}`,
+    );
+    const textMedia = /^(?:text\/|application\/(?:json|xml))/u.test(
+      file.metadata?.media_type || '',
+    );
+    let text = '';
+    if (textMedia) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('File content is unavailable');
+      text = await response.text();
+    }
+    state.selectedFileId = file.metadata?.file_id || '';
+    state.filePreview = {
+      fileId: state.selectedFileId,
+      name: file.virtualPath || file.repositoryPath,
+      mediaType: file.metadata?.media_type,
+      url,
+      text,
+    };
+    return true;
+  };
+
   const loadTabData = async () => {
     const groupId = state.selectedGroupId;
     if (!groupId) return;
@@ -1154,6 +1182,22 @@ export function createCollaborationWorkspace(options) {
         `/groups/${encodeURIComponent(groupId)}/files`,
       );
       state.tabData.files = data.files || [];
+      if (state.selectedFileId) {
+        const selected = collaborationFileById(
+          state.tabData.files,
+          state.selectedFileId,
+        );
+        state.selectedFileId = '';
+        state.filePreview = null;
+        if (selected) {
+          try {
+            await previewFile(selected);
+          } catch {
+            state.filePreview = null;
+            options.showToast('目标文件不可用，已返回文件列表');
+          }
+        }
+      }
     } else if (state.activeTab === 'members')
       state.tabData.members = await options.request(
         `/groups/${encodeURIComponent(groupId)}/members`,
@@ -2157,28 +2201,35 @@ export function createCollaborationWorkspace(options) {
 
   const newDiscussion = () => {
     const group = selectedGroup();
+    const canPost = groupAction('postDiscussion');
     openDialog({
       title: '新建讨论',
       submitText: '创建讨论',
-      body: `<div class="collaboration-form-grid collaboration-form-grid-single">${field('标题', 'title')}${field('首条消息', 'body', '', { multiline: true })}${memberPicker(group, { name: 'mentions', legend: '@成员（可选）' })}</div>`,
-      onOpen: () => bindMemberPicker(elements.dialogBody),
+      body: `<div class="collaboration-form-grid collaboration-form-grid-single">${field('标题', 'title')}${canPost ? `${field('首条消息（可选）', 'body', '', { multiline: true, required: false })}${memberPicker(group, { name: 'mentions', legend: '@成员（可选）' })}` : ''}</div>`,
+      onOpen: () => {
+        if (canPost) bindMemberPicker(elements.dialogBody);
+      },
       onSubmit: async (formData) => {
-        const message = buildCollaborationDiscussionMessageRequest({
-          expectedRevision: 0,
-          body: formData.get('body'),
-          mentions: formData.getAll('mentions'),
-        });
+        const body = String(formData.get('body') || '').trim();
+        const request = {
+          title: formData.get('title'),
+          scope: { type: 'group' },
+        };
+        if (canPost && body) {
+          const message = buildCollaborationDiscussionMessageRequest({
+            expectedRevision: 0,
+            body,
+            mentions: formData.getAll('mentions'),
+          });
+          request.body = message.body;
+          request.mentions = message.mentions;
+        }
         await submitDiscussionMutation(group.groupId, () =>
           options.request(
             `/groups/${encodeURIComponent(group.groupId)}/discussions`,
             {
               method: 'POST',
-              body: JSON.stringify({
-                title: formData.get('title'),
-                scope: { type: 'group' },
-                body: message.body,
-                mentions: message.mentions,
-              }),
+              body: JSON.stringify(request),
             },
           ),
         );
@@ -3477,6 +3528,8 @@ export function createCollaborationWorkspace(options) {
     state.selectedDiscussionId = navigation.selectedDiscussionId || '';
     state.selectedInstanceId = navigation.selectedInstanceId || '';
     state.selectedAnalysisId = navigation.selectedAnalysisId || '';
+    state.selectedFileId = navigation.selectedFileId || '';
+    if (navigation.tab === 'files') state.filePreview = null;
     updateRoute();
     renderShell();
     await loadTabData();
@@ -4118,21 +4171,12 @@ export function createCollaborationWorkspace(options) {
       const indexed = (state.tabData.files || []).find(
         (file) => file.repositoryPath === path,
       );
-      const url = options.fileUrl(
-        `/api/collaboration/groups/${encodeURIComponent(group.groupId)}/files/content?path=${encodeURIComponent(path)}`,
-      );
-      const textMedia = /^(?:text\/|application\/(?:json|xml))/u.test(
-        indexed?.metadata?.media_type || '',
-      );
-      state.filePreview = {
-        fileId: indexed?.metadata?.file_id || '',
-        name: indexed?.virtualPath || path,
-        mediaType: indexed?.metadata?.media_type,
-        url,
-        text: textMedia
-          ? await fetch(url).then((response) => response.text())
-          : '',
-      };
+      if (!indexed) {
+        state.selectedFileId = '';
+        state.filePreview = null;
+        return renderContent();
+      }
+      await previewFile(indexed);
       return renderContent();
     }
     if (action === 'new-workflow') return openWorkflowEditor();

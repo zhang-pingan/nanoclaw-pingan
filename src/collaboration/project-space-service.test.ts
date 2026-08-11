@@ -3098,8 +3098,34 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.updatePermissions({
       groupId: 'group_project',
       principalId: bobIdentity.principalId,
-      grants: ['discussion:create', 'discussion:post'],
+      grants: ['discussion:create'],
       expectedRevision: membershipRevision,
+    });
+    await bob.service.sync('group_project');
+    const emptyDiscussion = await bob.service.createDiscussion({
+      groupId: 'group_project',
+      threadId: 'thread_create_only',
+      title: 'Create-only discussion',
+      scope: { type: 'group' },
+    });
+    expect(
+      emptyDiscussion.projection?.discussions.thread_create_only.messages,
+    ).toEqual({});
+    await expect(
+      bob.service.createDiscussionWithMessage({
+        groupId: 'group_project',
+        threadId: 'thread_create_only_forbidden',
+        title: 'Posting is separately revoked',
+        scope: { type: 'group' },
+        body: 'This initial message must be rejected.',
+      }),
+    ).rejects.toThrow(/cannot post to Discussions/u);
+    await owner.service.sync('group_project');
+    await owner.service.updatePermissions({
+      groupId: 'group_project',
+      principalId: bobIdentity.principalId,
+      grants: ['discussion:create', 'discussion:post'],
+      expectedRevision: membershipRevision + 1,
     });
     await owner.service.createDiscussion({
       groupId: 'group_project',
