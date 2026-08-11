@@ -40,6 +40,7 @@ import {
   collaborationNotificationScope,
   collaborationResourceTarget,
   collaborationPrincipalName,
+  collaborationWorkspaceLinkOwnerLabel,
   collaborationShortId,
   stageCollaborationArtifactFiles,
   collaborationTurnAccess,
@@ -699,6 +700,15 @@ describe('Collaboration project-space v4 UI helpers', () => {
       'release-report.txt',
     );
     expect(
+      collaborationWorkspaceLinkOwnerLabel(projection, {
+        scope: 'principal',
+        ownerPrincipalId: 'principal_alice',
+      }),
+    ).toBe('Alice Chen');
+    expect(
+      collaborationWorkspaceLinkOwnerLabel(projection, { scope: 'shared' }),
+    ).toBe('Shared');
+    expect(
       collaborationArtifactName(
         projection,
         'artifacts/work-items/work_1/artifact_report/metadata.json',
@@ -919,6 +929,19 @@ describe('Collaboration project-space v4 UI helpers', () => {
             },
             open: { allowed: true, code: 'ALLOWED', reason: null },
           },
+          link_bob: {
+            revise: {
+              allowed: false,
+              code: 'RESOURCE_AUTHORITY_REQUIRED',
+              reason: 'Only Bob may revise this link',
+            },
+            remove: {
+              allowed: false,
+              code: 'RESOURCE_AUTHORITY_REQUIRED',
+              reason: 'Only Bob may remove this link',
+            },
+            open: { allowed: true, code: 'ALLOWED', reason: null },
+          },
         },
       },
     };
@@ -930,6 +953,15 @@ describe('Collaboration project-space v4 UI helpers', () => {
     ).toBe(false);
     expect(
       collaborationActionAllowed(projected, 'revise', 'link', 'missing'),
+    ).toBe(false);
+    expect(
+      collaborationActionAllowed(projected, 'open', 'link', 'link_bob'),
+    ).toBe(true);
+    expect(
+      collaborationActionAllowed(projected, 'revise', 'link', 'link_bob'),
+    ).toBe(false);
+    expect(
+      collaborationActionAllowed(projected, 'remove', 'link', 'link_bob'),
     ).toBe(false);
 
     const bridge = vi.fn(async () => ({ ok: true }));
@@ -963,6 +995,18 @@ describe('Collaboration project-space v4 UI helpers', () => {
       recipientPrincipalIds: ['principal_bob', 'principal_carol'],
       bodyMarkdown: '**Please review**',
       scope: { type: 'discussion', ref: 'discussion_1' },
+      origin: 'human',
+    });
+    expect(
+      buildCollaborationMemberNotificationRequest({
+        recipientPrincipalIds: ['principal_bob'],
+        bodyMarkdown: 'Review the link.',
+        scope: { type: 'link', ref: 'link_shared' },
+      }),
+    ).toEqual({
+      recipientPrincipalIds: ['principal_bob'],
+      bodyMarkdown: 'Review the link.',
+      scope: { type: 'link', ref: 'link_shared' },
       origin: 'human',
     });
     expect(() =>
@@ -1305,6 +1349,9 @@ describe('Collaboration project-space v4 UI helpers', () => {
       files: {
         file_1: { file_id: 'file_1' },
       },
+      links: {
+        link_1: { link_id: 'link_1' },
+      },
       discussions: {
         discussion_1: {
           discussion: { thread_id: 'discussion_1' },
@@ -1330,6 +1377,9 @@ describe('Collaboration project-space v4 UI helpers', () => {
     expect(
       collaborationResourceTarget('file', 'file_1', projection),
     ).toMatchObject({ tab: 'files', selectedFileId: 'file_1' });
+    expect(
+      collaborationResourceTarget('link', 'link_1', projection),
+    ).toMatchObject({ tab: 'files', selectedLinkId: 'link_1' });
     expect(collaborationResourceTarget('event', 'event_1')).toMatchObject({
       tab: 'audit',
     });
@@ -1352,6 +1402,9 @@ describe('Collaboration project-space v4 UI helpers', () => {
     expect(
       collaborationResourceTarget('file', 'missing_file', projection),
     ).toMatchObject({ tab: 'files', selectedFileId: '' });
+    expect(
+      collaborationResourceTarget('link', 'missing_link', projection),
+    ).toMatchObject({ tab: 'files', selectedLinkId: '' });
   });
 
   it('finds the exact verified file for notification navigation', () => {
@@ -1377,6 +1430,7 @@ describe('Collaboration project-space v4 UI helpers', () => {
         workItems: { work_1: { work_item_id: 'work_1' } },
         discussions: { thread_1: { discussion: { thread_id: 'thread_1' } } },
         files: { file_1: { file_id: 'file_1' } },
+        links: { link_1: { link_id: 'link_1' } },
         workflowInstances: {
           instance_1: { instance_id: 'instance_1', active_turn_id: 'turn_1' },
         },
@@ -1398,6 +1452,12 @@ describe('Collaboration project-space v4 UI helpers', () => {
     expect(
       collaborationNotificationScope(group, {
         activeTab: 'files',
+        selectedLinkId: 'link_1',
+      }),
+    ).toEqual({ type: 'link', ref: 'link_1' });
+    expect(
+      collaborationNotificationScope(group, {
+        activeTab: 'files',
         filePreview: { fileId: 'file_1' },
       }),
     ).toEqual({ type: 'file', ref: 'file_1' });
@@ -1407,6 +1467,12 @@ describe('Collaboration project-space v4 UI helpers', () => {
         selectedInstanceId: 'instance_1',
       }),
     ).toEqual({ type: 'turn', ref: 'turn_1' });
+    expect(
+      collaborationNotificationScope(group, {
+        activeTab: 'files',
+        selectedLinkId: 'missing_link',
+      }),
+    ).toEqual({ type: 'group', ref: 'group_1' });
     expect(
       collaborationNotificationScope(group, {
         activeTab: 'work-items',

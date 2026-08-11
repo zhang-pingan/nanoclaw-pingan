@@ -281,6 +281,30 @@ beforeAll(async () => {
         clientDisplayName: 'Idle test client',
       });
       expect(joined.lastVerifiedHead).toBeTruthy();
+      await service.sync('group_analyst_fixture');
+      const withRemovedContext = await service.postDiscussionMessage({
+        groupId: 'group_analyst_fixture',
+        threadId: 'discussion_release_review',
+        expectedRevision: 1,
+        messageId: 'message_removed_context',
+        body: 'This context will be deleted.',
+        mentions: [idlePrincipalId],
+        refs: ['workspace/shared/documents/private/content.md'],
+        links: [
+          {
+            title: 'Removed private URL',
+            url: 'https://example.com/private?token=must-not-be-current',
+          },
+        ],
+      });
+      validHead = withRemovedContext.lastVerifiedHead!;
+      const withoutRemovedContext = await service.tombstoneDiscussionMessage({
+        groupId: 'group_analyst_fixture',
+        threadId: 'discussion_release_review',
+        expectedRevision: 2,
+        messageId: 'message_removed_context',
+      });
+      validHead = withoutRemovedContext.lastVerifiedHead!;
       const notified = await service.sendMemberNotification({
         groupId: group.groupId,
         notificationId: 'notification_analyst_fixture',
@@ -400,8 +424,18 @@ describe('project-analyst complete Skill', () => {
             }),
           ],
         },
+        message_removed_context: {
+          body: '',
+          links: [],
+          mentions: [],
+          refs: [],
+          tombstoned: true,
+        },
       },
     });
+    expect(JSON.stringify(catalog)).not.toContain(
+      'https://example.com/private?token=must-not-be-current',
+    );
     expect(context.rule_signals).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ rule_id: 'work_item_overdue' }),

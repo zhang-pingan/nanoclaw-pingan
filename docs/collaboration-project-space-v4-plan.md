@@ -866,7 +866,7 @@ discussion_resolved
 discussion_reopened
 ```
 
-Message 可以引用 Principal、Work Item、Workflow State/Turn、Progress Update 和 Artifact。消息作者在讨论开放且仍有 `discussion:post` 时可修订自己的消息；作者或持有 `discussion:moderate` 的成员可软删除消息，讨论创建者或 moderator 可解决和重开讨论。已解决讨论拒绝回复和修订，tombstone 只清空正文而不改写签名历史。
+Message 可以引用 Principal、Work Item、Workflow State/Turn、Progress Update 和 Artifact。消息作者在讨论开放且仍有 `discussion:post` 时可修订自己的消息；作者或持有 `discussion:moderate` 的成员可软删除消息，讨论创建者或 moderator 可解决和重开讨论。已解决讨论拒绝回复和修订；tombstone 在 current Projection 中清空正文、links、mentions 与 refs，使已删除内容不再参与当前分析和关联，同时保留完整签名事件历史。
 
 Discussion 新建、回复和修订使用 Active Member 选择器表达 `@成员`，不要求业务用户输入 Principal ID 或 JSON。每个被提及的成员在 verified sync 后通过与通用成员通知相同的本地投递器收到通知；事件、Discussion、recipient Principal 和 recipient Client 共同参与稳定去重。
 
@@ -2040,6 +2040,7 @@ GET  /api/collaboration/groups/{groupId}/files/content
 POST /api/collaboration/groups/{groupId}/workspace/shared/files
 POST /api/collaboration/groups/{groupId}/workspace/me/updates
 POST /api/collaboration/groups/{groupId}/workspace/me/files
+GET  /api/collaboration/groups/{groupId}/workspace/links
 GET  /api/collaboration/groups/{groupId}/workspace/shared/links
 POST /api/collaboration/groups/{groupId}/workspace/shared/links
 PATCH /api/collaboration/groups/{groupId}/workspace/shared/links/{linkId}
@@ -2049,6 +2050,8 @@ POST /api/collaboration/groups/{groupId}/workspace/me/links
 PATCH /api/collaboration/groups/{groupId}/workspace/me/links/{linkId}
 DELETE /api/collaboration/groups/{groupId}/workspace/me/links/{linkId}
 ```
+
+`GET /workspace/links` 是 Group-visible 的只读统一查询面，返回当前 Shared Link 与所有 Principal-owned Link；Observer 也可读取。`/workspace/shared/links` 与 `/workspace/me/links` 继续限定写入 scope，不能借统一查询面修改其他 Principal 的空间。
 
 客户端不能提交任意 repository path。Host 根据 endpoint、local Principal 和对象 ID 生成 canonical path。
 

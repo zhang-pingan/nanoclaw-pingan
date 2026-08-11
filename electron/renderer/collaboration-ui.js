@@ -575,6 +575,7 @@ export function buildCollaborationMemberNotificationRequest(input) {
     'workflow_instance',
     'turn',
     'file',
+    'link',
   ]);
   const type = String(scope.type || '').trim();
   const ref = String(scope.ref || '').trim();
@@ -1313,6 +1314,12 @@ export function collaborationNotificationScope(group, view = {}) {
     return { type: 'discussion', ref: view.selectedDiscussionId };
   if (
     view.activeTab === 'files' &&
+    view.selectedLinkId &&
+    projection?.links?.[view.selectedLinkId]
+  )
+    return { type: 'link', ref: view.selectedLinkId };
+  if (
+    view.activeTab === 'files' &&
     view.filePreview?.fileId &&
     projection?.files?.[view.filePreview.fileId]
   )
@@ -1382,6 +1389,13 @@ export function collaborationResourceTarget(
       resourceId: id,
       selectedFileId: projection?.files?.[id] ? id : '',
     };
+  if (type === 'link')
+    return {
+      tab: 'files',
+      resourceType: type,
+      resourceId: id,
+      selectedLinkId: projection?.links?.[id] ? id : '',
+    };
   if (type === 'event')
     return { tab: 'audit', resourceType: type, resourceId: id };
   if (type === 'message') {
@@ -1420,6 +1434,16 @@ export function collaborationFileById(files, fileId) {
   const id = String(fileId || '').trim();
   if (!id || !Array.isArray(files)) return null;
   return files.find((file) => file?.metadata?.file_id === id) ?? null;
+}
+
+export function collaborationWorkspaceLinkOwnerLabel(projection, entry) {
+  if (entry?.scope === 'shared' || entry?.metadata?.scope === 'shared')
+    return 'Shared';
+  const principalId =
+    entry?.ownerPrincipalId || entry?.metadata?.owner_principal_id;
+  return principalId
+    ? collaborationPrincipalName(projection, principalId)
+    : '未知成员';
 }
 
 export function collaborationNotificationTarget(

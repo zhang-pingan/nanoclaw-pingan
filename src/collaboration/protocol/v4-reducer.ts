@@ -2356,6 +2356,9 @@ export function reduceCollaborationEventV4(
         unauthorized('Only the author or a moderator may tombstone a message');
       message.tombstoned = true;
       message.body = '';
+      message.links = [];
+      message.mentions = [];
+      message.refs = [];
       message.revision += 1;
       message.updated_at = event.occurred_at;
       thread.discussion.revision = event.aggregate_revision;
@@ -2432,7 +2435,8 @@ export function reduceCollaborationEventV4(
         (scope.type === 'workflow_instance' &&
           Boolean(next.workflowInstances[scope.ref])) ||
         (scope.type === 'turn' && Boolean(next.turns[scope.ref])) ||
-        (scope.type === 'file' && Boolean(next.files[scope.ref]));
+        (scope.type === 'file' && Boolean(next.files[scope.ref])) ||
+        (scope.type === 'link' && Boolean(next.links[scope.ref]));
       if (!scopeExists)
         conflict('Member Notification scope does not exist in the Group');
       next.notifications[notification.notification_id] = notification;

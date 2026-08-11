@@ -74,6 +74,7 @@ const COLLABORATION_LABELS = Object.freeze({
   delta: '增量变化',
   work_item: '工作项',
   discussion: '讨论',
+  link: '链接',
   notification: '成员通知',
   workflow_definition: '工作流定义',
   workflow_instance: '工作流实例',

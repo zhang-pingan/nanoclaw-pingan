@@ -2249,6 +2249,14 @@ process.exit(result.status === null ? 1 : result.status);
         title: 'Atomic review',
         scope: { type: 'group' },
         body: 'The initial review request.',
+        mentions: [test.identity.principalId],
+        refs: ['workspace/shared/documents/review/content.md'],
+        links: [
+          {
+            title: 'Private review context',
+            url: 'https://example.test/private-review?token=signed-history',
+          },
+        ],
       });
 
       const records = store
@@ -2294,6 +2302,60 @@ process.exit(result.status === null ? 1 : result.status);
       ).toMatchObject({
         message_id: 'message_initial',
         body: 'The initial review request.',
+        links: [
+          {
+            title: 'Private review context',
+            url: 'https://example.test/private-review?token=signed-history',
+          },
+        ],
+      });
+
+      const tombstoned = await service.tombstoneDiscussionMessage({
+        groupId: 'group_signed',
+        threadId: 'thread_atomic',
+        expectedRevision: 1,
+        messageId: 'message_initial',
+      });
+      const currentMessage = JSON.parse(
+        (
+          await transport.readVerifiedFile({
+            repositoryPath: tombstoned.repositoryPath,
+            verifiedHead: tombstoned.lastVerifiedHead!,
+            repositoryFile:
+              'discussions/thread_atomic/messages/message_initial.json',
+          })
+        ).toString('utf8'),
+      );
+      expect(currentMessage).toMatchObject({
+        message_id: 'message_initial',
+        body: '',
+        links: [],
+        mentions: [],
+        refs: [],
+        tombstoned: true,
+        revision: 2,
+      });
+      const replayed = await transport.inspect({
+        remoteUrl: test.remote,
+        repositoryPath: path.join(test.root, 'fresh-discussion-cache.git'),
+        gitSshKeyPath: test.identity.privateKeyPath,
+      });
+      expect(
+        replayed.projection.discussions.thread_atomic.messages.message_initial,
+      ).toMatchObject({
+        body: '',
+        links: [],
+        mentions: [],
+        refs: [],
+        tombstoned: true,
+      });
+      expect(replayed.eventRecords[1]?.event.payload.message).toMatchObject({
+        body: 'The initial review request.',
+        links: [
+          expect.objectContaining({
+            url: 'https://example.test/private-review?token=signed-history',
+          }),
+        ],
       });
     } finally {
       store.close();

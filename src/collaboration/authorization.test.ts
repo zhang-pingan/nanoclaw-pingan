@@ -271,6 +271,48 @@ describe('collaboration authorization projection', () => {
     });
   });
 
+  it('keeps Principal-owned links Group-visible while limiting management to their owner', () => {
+    const value = projection();
+    value.links.link_shared = {
+      link_id: 'link_shared',
+      scope: 'shared',
+      owner_principal_id: null,
+    } as unknown as CollaborationProjectionV4['links'][string];
+    value.links.link_bob = {
+      link_id: 'link_bob',
+      scope: 'principal',
+      owner_principal_id: memberId,
+    } as unknown as CollaborationProjectionV4['links'][string];
+    value.permissionGrants[memberId] = {
+      ...value.permissionGrants[memberId]!,
+      grants: ['workspace:publish_owned'],
+    };
+
+    const alice = actions(value, ownerId);
+    expect(Object.keys(alice.links)).toEqual(['link_shared', 'link_bob']);
+    expect(alice.links.link_shared?.revise.allowed).toBe(true);
+    expect(alice.links.link_bob).toMatchObject({
+      revise: { allowed: false },
+      remove: { allowed: false },
+      open: { allowed: true },
+    });
+
+    const bob = actions(value, memberId);
+    expect(bob.links.link_bob).toMatchObject({
+      revise: { allowed: true },
+      remove: { allowed: true },
+      open: { allowed: true },
+    });
+
+    const observer = actions(value, null, 'observer');
+    expect(Object.keys(observer.links)).toEqual(['link_shared', 'link_bob']);
+    expect(observer.links.link_bob).toMatchObject({
+      revise: { allowed: false },
+      remove: { allowed: false },
+      open: { allowed: true },
+    });
+  });
+
   it('projects current Workflow assignee and per-scope launch authority', () => {
     const value = projection();
     value.workflowDefinitions['delivery@1'] = {

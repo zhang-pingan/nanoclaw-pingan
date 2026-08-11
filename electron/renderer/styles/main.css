@@ -322,6 +322,24 @@
   min-width: 0;
 }
 
+.collaboration-workspace-link-select {
+  min-width: 0;
+  display: grid;
+  flex: 1 1 auto;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.collaboration-workspace-link.selected {
+  border-color: #8a929d;
+  box-shadow: inset 3px 0 0 var(--minimal-accent, #575f6a);
+}
+
 .collaboration-link-cards span,
 .collaboration-workspace-link span,
 .collaboration-workspace-link small {
@@ -20751,6 +20769,54 @@ textarea.workflow-wizard-input {
     gap: 12px;
   }
 
+  .collaboration-detail-copy,
+  .collaboration-title-row,
+  .collaboration-detail-meta {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .collaboration-title-row {
+    align-items: flex-start;
+  }
+
+  .collaboration-title-row h2 {
+    flex: 1 1 100%;
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .collaboration-detail-meta > span {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .collaboration-detail-meta > span:first-child {
+    flex: 1 1 100%;
+  }
+
+  .collaboration-list-item-head {
+    align-items: flex-start;
+  }
+
+  .collaboration-list-item-head strong,
+  .collaboration-list-id {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .collaboration-list-item-head strong {
+    flex: 1 1 auto;
+  }
+
+  .collaboration-list-meta {
+    flex-wrap: wrap;
+  }
+
   .collaboration-header-actions,
   .collaboration-command-btn {
     width: 100%;
@@ -20759,6 +20825,8 @@ textarea.workflow-wizard-input {
 
   .collaboration-header-actions button {
     flex: 1 1 140px;
+    min-width: 0;
+    white-space: normal;
   }
 
   .collaboration-member-picker-tools {

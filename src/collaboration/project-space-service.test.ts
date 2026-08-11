@@ -3550,6 +3550,44 @@ describe('Collaboration project space v4 Group and identity service', () => {
       bodyMarkdown: 'Please also check the **release notes**.',
       scope: { type: 'discussion', ref: 'thread_api' },
     });
+    const linked = await owner.service.publishSharedLink({
+      groupId: 'group_project',
+      expectedRevision: 0,
+      title: 'Release checklist',
+      url: 'https://example.test/release-checklist',
+    });
+    const notificationLink = Object.values(linked.projection!.links).find(
+      (link) => link.title === 'Release checklist',
+    )!;
+    await owner.service.sendMemberNotification({
+      groupId: 'group_project',
+      notificationId: 'notification_link_review',
+      recipientPrincipalIds: [bobIdentity.principalId],
+      bodyMarkdown: 'Please review the linked checklist.',
+      scope: { type: 'link', ref: notificationLink.link_id },
+    });
+    await owner.service.removeSharedLink({
+      groupId: 'group_project',
+      expectedRevision: 1,
+      linkId: notificationLink.link_id,
+      revision: 1,
+    });
+    await expect(
+      owner.service.sendMemberNotification({
+        groupId: 'group_project',
+        recipientPrincipalIds: [bobIdentity.principalId],
+        bodyMarkdown: 'A deleted link is no longer a valid scope.',
+        scope: { type: 'link', ref: notificationLink.link_id },
+      }),
+    ).rejects.toThrow(/scope does not exist/u);
+    await expect(
+      owner.service.sendMemberNotification({
+        groupId: 'group_project',
+        recipientPrincipalIds: [bobIdentity.principalId],
+        bodyMarkdown: 'A missing link is not a valid scope.',
+        scope: { type: 'link', ref: 'link_missing' },
+      }),
+    ).rejects.toThrow(/scope does not exist/u);
     await bob.service.sync('group_project');
     await bob.service.sync('group_project');
     const communications = bob.store.listPendingNotifications({
@@ -3557,7 +3595,7 @@ describe('Collaboration project space v4 Group and identity service', () => {
       clientId: bobIdentity.clientId,
       groupId: 'group_project',
     });
-    expect(communications).toHaveLength(2);
+    expect(communications).toHaveLength(3);
     expect(communications).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -3576,10 +3614,19 @@ describe('Collaboration project space v4 Group and identity service', () => {
             body_markdown: 'Please also check the **release notes**.',
           }),
         }),
+        expect.objectContaining({
+          kind: 'member_communication',
+          reason: 'notified',
+          resourceType: 'link',
+          resourceId: notificationLink.link_id,
+          payload: expect.objectContaining({
+            body_markdown: 'Please review the linked checklist.',
+          }),
+        }),
       ]),
     );
     expect(new Set(communications.map((entry) => entry.dedupeKey)).size).toBe(
-      2,
+      3,
     );
     await expect(
       bob.service.sendMemberNotification({
@@ -3634,6 +3681,14 @@ describe('Collaboration project space v4 Group and identity service', () => {
       expectedRevision: 3,
       messageId: 'message_bob',
       body: 'Reviewed and approved with one note.',
+      mentions: [ALICE.principalId],
+      refs: ['workspace/shared/documents/review/content.md'],
+      links: [
+        {
+          title: 'Review context',
+          url: 'https://example.test/private-review',
+        },
+      ],
     });
     await bob.service.tombstoneDiscussionMessage({
       groupId: 'group_project',
@@ -3686,6 +3741,9 @@ describe('Collaboration project space v4 Group and identity service', () => {
     expect(
       final.projection.discussions.thread_api.messages.message_bob.tombstoned,
     ).toBe(true);
+    expect(
+      final.projection.discussions.thread_api.messages.message_bob,
+    ).toMatchObject({ body: '', links: [], mentions: [], refs: [] });
     owner.store.close();
     bob.store.close();
   });

@@ -1686,6 +1686,18 @@ export class CollaborationWebApi {
     }
     found = match(
       url.pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/workspace/links$`, 'u'),
+    );
+    if (found && method === 'GET') {
+      if (!this.runtime.store.getGroup(found[1]!))
+        throw new Error('Collaboration Group not found');
+      send(res, 200, {
+        links: this.runtime.store.listLinkIndex(found[1]!),
+      });
+      return true;
+    }
+    found = match(
+      url.pathname,
       new RegExp(
         `^${API_PREFIX}/groups/([^/]+)/workspace/(shared|me)/links$`,
         'u',

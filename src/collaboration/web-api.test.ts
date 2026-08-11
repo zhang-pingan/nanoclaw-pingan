@@ -1132,10 +1132,11 @@ describe('Collaboration project-space v4 Web API', () => {
         verifiedHead: 'a'.repeat(40),
       },
     ];
+    const listLinkIndex = vi.fn(() => indexed);
     await withApiServer(
       new CollaborationWebApi(
         runtime({
-          store: { listLinkIndex: vi.fn(() => indexed) },
+          store: { listLinkIndex },
           groups: {
             publishSharedLink,
             publishPrincipalLink,
@@ -1149,6 +1150,15 @@ describe('Collaboration project-space v4 Web API', () => {
       ),
       async (baseUrl) => {
         const prefix = `${baseUrl}/api/collaboration/groups/group_test`;
+        const groupVisibleRead = await fetch(`${prefix}/workspace/links`);
+        expect(groupVisibleRead.status).toBe(200);
+        expect(await groupVisibleRead.json()).toMatchObject({
+          links: [
+            { linkId: 'link_shared', scope: 'shared' },
+            { linkId: 'link_owned', ownerPrincipalId: 'principal_alice' },
+            { linkId: 'link_other', ownerPrincipalId: 'principal_bob' },
+          ],
+        });
         const sharedRead = await fetch(`${prefix}/workspace/shared/links`);
         expect(sharedRead.status).toBe(200);
         expect(await sharedRead.json()).toMatchObject({
@@ -1284,6 +1294,27 @@ describe('Collaboration project-space v4 Web API', () => {
         expect(invalid.status).toBe(400);
       },
     );
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({
+          selectedGroup: group('observer'),
+          store: { listLinkIndex },
+        }),
+      ),
+      async (baseUrl) => {
+        const response = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/workspace/links`,
+        );
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+          links: [
+            { linkId: 'link_shared' },
+            { linkId: 'link_owned' },
+            { linkId: 'link_other', ownerPrincipalId: 'principal_bob' },
+          ],
+        });
+      },
+    );
   });
 
   it('maps per-Aggregate revision conflicts to 409', async () => {
@@ -1352,6 +1383,29 @@ describe('Collaboration project-space v4 Web API', () => {
           bodyMarkdown: '**Please review**',
           scope: { type: 'work_item', ref: 'work_1' },
           origin: 'human',
+        });
+        const linkNotification = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/notifications`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              recipientPrincipalIds: [
+                'principal_00000000-0000-4000-8000-000000000002',
+              ],
+              bodyMarkdown: 'Review this link.',
+              scope: { type: 'link', ref: 'link_shared' },
+            }),
+          },
+        );
+        expect(linkNotification.status).toBe(201);
+        expect(sendMemberNotification).toHaveBeenLastCalledWith({
+          groupId: 'group_test',
+          recipientPrincipalIds: [
+            'principal_00000000-0000-4000-8000-000000000002',
+          ],
+          bodyMarkdown: 'Review this link.',
+          scope: { type: 'link', ref: 'link_shared' },
         });
 
         const discussion = await fetch(
@@ -1441,7 +1495,7 @@ describe('Collaboration project-space v4 Web API', () => {
           );
           expect(invalidNotification.status).toBe(400);
         }
-        expect(sendMemberNotification).toHaveBeenCalledTimes(1);
+        expect(sendMemberNotification).toHaveBeenCalledTimes(2);
 
         const workflow = await fetch(
           `${baseUrl}/api/collaboration/groups/group_test/workflow-definitions`,

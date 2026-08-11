@@ -767,6 +767,66 @@ describe('Collaboration v4 reducer invariants', () => {
         }),
       ),
     ).toThrow(/scope does not exist/u);
+    projection = apply(projection, {
+      aggregateType: 'workspace',
+      aggregateId: 'shared',
+      eventType: 'shared_link_published',
+      payload: {
+        link: {
+          format: 'icarus.collaboration-workspace-link/1',
+          link_id: 'link_notification',
+          title: 'Notification context',
+          url: 'https://example.test/notify',
+          description: '',
+          scope: 'shared',
+          owner_principal_id: null,
+          refs: {
+            work_item_refs: [],
+            workflow_instance_refs: [],
+            discussion_refs: [],
+          },
+          created_by_principal_id: ALICE,
+          created_by_client_id: ALICE_CLIENT,
+          updated_by_principal_id: ALICE,
+          updated_by_client_id: ALICE_CLIENT,
+          created_at: NOW,
+          updated_at: NOW,
+          revision: 1,
+        },
+      },
+    });
+    projection = apply(
+      projection,
+      notifyEvent('notification_link', {
+        scope: { type: 'link', ref: 'link_notification' },
+      }),
+    );
+    expect(projection.notifications.notification_link.scope).toEqual({
+      type: 'link',
+      ref: 'link_notification',
+    });
+    projection = apply(projection, {
+      aggregateType: 'workspace',
+      aggregateId: 'shared',
+      eventType: 'shared_link_removed',
+      payload: { link_id: 'link_notification', revision: 2 },
+    });
+    expect(() =>
+      apply(
+        projection,
+        notifyEvent('notification_removed_link', {
+          scope: { type: 'link', ref: 'link_notification' },
+        }),
+      ),
+    ).toThrow(/scope does not exist/u);
+    expect(() =>
+      apply(
+        projection,
+        notifyEvent('notification_missing_link', {
+          scope: { type: 'link', ref: 'link_missing' },
+        }),
+      ),
+    ).toThrow(/scope does not exist/u);
     expect(() =>
       apply(
         projection,
@@ -849,6 +909,70 @@ describe('Collaboration v4 reducer invariants', () => {
         actor: BOB,
       }),
     ).toThrow(/cannot notify/u);
+  });
+
+  it('removes tombstoned message content from the current projection', () => {
+    let projection = withBob();
+    projection = apply(projection, {
+      aggregateType: 'discussion',
+      aggregateId: 'discussion_tombstone',
+      eventType: 'discussion_created',
+      payload: {
+        discussion: {
+          format: 'icarus.collaboration-discussion/1',
+          thread_id: 'discussion_tombstone',
+          title: 'Sensitive review',
+          created_by: ALICE,
+          scope: { type: 'group' },
+          status: 'open',
+          created_at: NOW,
+          resolved_at: null,
+          revision: 1,
+        },
+        message: {
+          format: 'icarus.collaboration-message/2',
+          message_id: 'message_tombstone',
+          thread_id: 'discussion_tombstone',
+          author_principal_id: ALICE,
+          actor_client_id: ALICE_CLIENT,
+          executor_id: null,
+          origin: 'human',
+          body: 'Remove this current content.',
+          mentions: [BOB],
+          refs: ['workspace/shared/documents/evidence/content.md'],
+          links: [
+            {
+              format: 'icarus.collaboration-external-link/1',
+              link_id: 'link_context_tombstone',
+              title: 'Sensitive URL',
+              url: 'https://example.test/private?token=visible-before-delete',
+              description: 'Current content only',
+            },
+          ],
+          revision: 1,
+          tombstoned: false,
+          created_at: NOW,
+          updated_at: NOW,
+        },
+      },
+    });
+    projection = apply(projection, {
+      aggregateType: 'discussion',
+      aggregateId: 'discussion_tombstone',
+      eventType: 'message_tombstoned',
+      payload: { message_id: 'message_tombstone' },
+    });
+
+    expect(
+      projection.discussions.discussion_tombstone.messages.message_tombstone,
+    ).toMatchObject({
+      body: '',
+      links: [],
+      mentions: [],
+      refs: [],
+      tombstoned: true,
+      revision: 2,
+    });
   });
 
   it('allows only the Owner to dissolve and makes dissolution terminal', () => {

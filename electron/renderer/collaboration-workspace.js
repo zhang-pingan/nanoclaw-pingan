@@ -92,6 +92,7 @@ import {
   collaborationWorkflowTurnActionAllowed,
   collaborationWorkItemStatusActionAccess,
   collaborationWorkItemColumns,
+  collaborationWorkspaceLinkOwnerLabel,
 } from './collaboration-ui.js';
 
 export const collaborationRouteTabs = new Set([
@@ -391,6 +392,7 @@ export function createCollaborationWorkspace(options) {
   const state = options.state;
   state.selectedAnalysisId ||= '';
   state.selectedFileId ||= '';
+  state.selectedLinkId ||= '';
   state.overviewOnlyMine ??= false;
   state.overviewRiskOnly ??= false;
   state.notificationSeverity ||= '';
@@ -886,7 +888,12 @@ export function createCollaborationWorkspace(options) {
         const link = entry.metadata || {};
         const canRevise = resourceAction('link', link.link_id, 'revise');
         const canRemove = resourceAction('link', link.link_id, 'remove');
-        return `<article class="collaboration-workspace-link"><div><strong>${html(link.title)}</strong><span>${html(link.url)}</span>${link.description ? `<small>${html(link.description)}</small>` : ''}<small>${link.scope === 'shared' ? 'Shared' : '个人'} · r${html(link.revision)}</small></div><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="open-external-link" data-link-url="${attr(link.url)}">打开</button>${canRevise ? `<button type="button" class="btn-ghost" data-collaboration-action="edit-workspace-link" data-link-id="${attr(link.link_id)}">编辑</button>` : ''}${canRemove ? `<button type="button" class="btn-danger-soft" data-collaboration-action="remove-workspace-link" data-link-id="${attr(link.link_id)}">删除</button>` : ''}</div></article>`;
+        const owner = collaborationWorkspaceLinkOwnerLabel(
+          group.projection,
+          entry,
+        );
+        const selected = state.selectedLinkId === link.link_id;
+        return `<article class="collaboration-workspace-link${selected ? ' selected' : ''}"><button type="button" class="collaboration-workspace-link-select" data-collaboration-action="select-workspace-link" data-link-id="${attr(link.link_id)}" aria-pressed="${selected}"><strong>${html(link.title)}</strong><span>${html(link.url)}</span>${link.description ? `<small>${html(link.description)}</small>` : ''}<small>${html(owner)} · r${html(link.revision)}</small></button><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="open-external-link" data-link-url="${attr(link.url)}">打开</button>${canRevise ? `<button type="button" class="btn-ghost" data-collaboration-action="edit-workspace-link" data-link-id="${attr(link.link_id)}">编辑</button>` : ''}${canRemove ? `<button type="button" class="btn-danger-soft" data-collaboration-action="remove-workspace-link" data-link-id="${attr(link.link_id)}">删除</button>` : ''}</div></article>`;
       })
       .join('') || empty('暂无链接')}</div></section>${state.filePreview ? `<section class="collaboration-file-preview"><header><strong>${html(state.filePreview.name)}</strong><small>${html(state.filePreview.mediaType)}</small></header>${state.filePreview.text ? `<pre>${html(state.filePreview.text)}</pre>` : `<a class="btn-primary" href="${attr(state.filePreview.url)}" download>下载</a>`}</section>` : ''}</main></section>`;
   };
@@ -1256,20 +1263,21 @@ export function createCollaborationWorkspace(options) {
           )
         : null;
     } else if (state.activeTab === 'files') {
-      const [data, sharedLinks, ownedLinks] = await Promise.all([
+      const [data, linkData] = await Promise.all([
         options.request(`/groups/${encodeURIComponent(groupId)}/files`),
         options.request(
-          `/groups/${encodeURIComponent(groupId)}/workspace/shared/links`,
-        ),
-        options.request(
-          `/groups/${encodeURIComponent(groupId)}/workspace/me/links`,
+          `/groups/${encodeURIComponent(groupId)}/workspace/links`,
         ),
       ]);
       state.tabData.files = data.files || [];
-      state.tabData.links = [
-        ...(sharedLinks.links || []),
-        ...(ownedLinks.links || []),
-      ];
+      state.tabData.links = linkData.links || [];
+      if (
+        state.selectedLinkId &&
+        !state.tabData.links.some(
+          (entry) => entry.metadata?.link_id === state.selectedLinkId,
+        )
+      )
+        state.selectedLinkId = '';
       if (state.selectedFileId) {
         const selected = collaborationFileById(
           state.tabData.files,
@@ -1405,6 +1413,7 @@ export function createCollaborationWorkspace(options) {
       workflow_instance: scope.ref,
       turn: projection.turns?.[scope.ref]?.state_id,
       file: projection.files?.[scope.ref]?.original_filename,
+      link: projection.links?.[scope.ref]?.title,
     };
     return `${collaborationLabel(scope.type)} · ${labels[scope.type] || collaborationShortId(scope.ref)}`;
   };
@@ -3744,6 +3753,7 @@ export function createCollaborationWorkspace(options) {
     state.selectedInstanceId = navigation.selectedInstanceId || '';
     state.selectedAnalysisId = navigation.selectedAnalysisId || '';
     state.selectedFileId = navigation.selectedFileId || '';
+    state.selectedLinkId = navigation.selectedLinkId || '';
     if (navigation.tab === 'files') state.filePreview = null;
     updateRoute();
     renderShell();
@@ -4386,6 +4396,14 @@ export function createCollaborationWorkspace(options) {
       return editWorkspaceLink(button.dataset.linkId);
     if (action === 'remove-workspace-link')
       return removeWorkspaceLink(button.dataset.linkId);
+    if (action === 'select-workspace-link') {
+      const linkId = button.dataset.linkId || '';
+      state.selectedLinkId =
+        state.selectedLinkId === linkId ? '' : linkId;
+      state.selectedFileId = '';
+      state.filePreview = null;
+      return renderContent();
+    }
     if (action === 'open-external-link')
       return openExternalLink(button.dataset.linkUrl);
     if (action === 'open-file') {
@@ -4395,9 +4413,11 @@ export function createCollaborationWorkspace(options) {
       );
       if (!indexed) {
         state.selectedFileId = '';
+        state.selectedLinkId = '';
         state.filePreview = null;
         return renderContent();
       }
+      state.selectedLinkId = '';
       await previewFile(indexed);
       return renderContent();
     }
