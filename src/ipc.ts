@@ -67,7 +67,10 @@ import {
   InteractiveCard,
   RegisteredAgent,
 } from './types.js';
-import { runLocalHostScript } from './host-script-runner.js';
+import {
+  CONTAINER_LOCAL_SHELL_ROOT,
+  runLocalHostScript,
+} from './host-script-runner.js';
 import { getWikiPageDetail } from './wiki.js';
 import {
   editAiImage,
@@ -75,6 +78,11 @@ import {
   getAiImageWaitTimeoutMs,
 } from './ai-image.js';
 import { getRecentTodayPlanDetails } from './today-plan.js';
+import {
+  activeWorkflowPackExecutionFileScopeAuthorities,
+  installWorkflowPackExecutionIpcClosingDrainer,
+  type WorkflowPackExecutionFileScopeAuthority,
+} from './workflow-packs/execution-file-scope-authority.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
@@ -101,10 +109,33 @@ export interface IpcDeps {
 
 let ipcWatcherRunning = false;
 
-function resolveContainerFilePath(
+const SEND_FILE_SCOPES = new Set([
+  'agent',
+  'attachments',
+  'desktop_captures',
+  'ai_images',
+] as const);
+
+export function resolveContainerFilePath(
   filePath: string,
   sourceAgent: string,
+  fileScopeAuthority?: WorkflowPackExecutionFileScopeAuthority,
 ): { hostPath: string; error?: string } {
+  if (fileScopeAuthority) {
+    try {
+      return {
+        hostPath: fileScopeAuthority.snapshotContainerFile(
+          filePath,
+          SEND_FILE_SCOPES,
+        ),
+      };
+    } catch (error) {
+      return {
+        hostPath: '',
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
   const mappings = [
     {
       containerPrefix: '/workspace/agent/',
@@ -148,6 +179,355 @@ function resolveContainerFilePath(
   return { hostPath };
 }
 
+export interface IpcExecutionContext {
+  readonly fileScopeAuthority?: WorkflowPackExecutionFileScopeAuthority;
+}
+
+export type IpcTaskOutcome =
+  | { readonly status: 'success' }
+  | { readonly status: 'rejected'; readonly error: string };
+
+const RECEIPT_BACKED_HOST_ACTIONS = new Set([
+  'send_message',
+  'send_file',
+  'schedule_task',
+  'pause_task',
+  'resume_task',
+  'cancel_task',
+  'update_task',
+  'request_delegation',
+  'complete_delegation',
+  'reload_tools',
+]);
+
+function hostActionForTask(data: Record<string, unknown>): string | null {
+  if (typeof data.type !== 'string' || data.type.length === 0) return null;
+  if (data.type === 'reload_container') return 'reload_tools';
+  if (data.type === 'ai_image_edit_image') return 'ai_image_generate_image';
+  if (
+    data.type === 'ask_user_question' &&
+    data.metadata &&
+    typeof data.metadata === 'object' &&
+    !Array.isArray(data.metadata) &&
+    (data.metadata as Record<string, unknown>).source_type ===
+      'request_human_input'
+  ) {
+    return 'request_human_input';
+  }
+  return data.type;
+}
+
+function protectedRequestAllowed(
+  authority: WorkflowPackExecutionFileScopeAuthority | undefined,
+  action: string | null,
+): boolean {
+  return !authority || (action !== null && authority.allowsHostAction(action));
+}
+
+function assertReceiptBackedRequestIdentity(
+  file: string,
+  data: Record<string, unknown>,
+  action: string | null,
+): void {
+  if (!action || !RECEIPT_BACKED_HOST_ACTIONS.has(action)) return;
+  if (
+    typeof data.requestId !== 'string' ||
+    !/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/.test(data.requestId)
+  ) {
+    throw new Error(`Workflow Pack ${action} requestId is missing or invalid`);
+  }
+  if (file !== `${data.requestId}.json`) {
+    throw new Error(
+      `Workflow Pack ${action} request filename does not match requestId`,
+    );
+  }
+}
+
+export async function processIpcNamespaceOnce(input: {
+  readonly rootPath: string;
+  readonly sourceAgent: string;
+  readonly isMain: boolean;
+  readonly deps: IpcDeps;
+  readonly fileScopeAuthority?: WorkflowPackExecutionFileScopeAuthority;
+  readonly closingDrain?: boolean;
+}): Promise<void> {
+  const {
+    rootPath,
+    sourceAgent,
+    isMain,
+    deps,
+    fileScopeAuthority,
+    closingDrain = false,
+  } = input;
+  const releaseOperation = closingDrain
+    ? undefined
+    : fileScopeAuthority?.beginOperation();
+  if (fileScopeAuthority && !closingDrain && !releaseOperation) return;
+  const messagesDir = path.join(rootPath, 'messages');
+  const tasksDir = path.join(rootPath, 'tasks');
+  const errorDir = fileScopeAuthority
+    ? path.join(rootPath, 'errors')
+    : path.join(DATA_DIR, 'ipc', 'errors');
+  const closingErrors: Error[] = [];
+
+  const writeMessageReceipt = (
+    data: Record<string, unknown>,
+    payload: { status: 'success' | 'error'; error?: string },
+  ): void => {
+    if (!fileScopeAuthority || typeof data.requestId !== 'string') return;
+    const action =
+      data.type === 'message'
+        ? 'send_message'
+        : data.type === 'file'
+          ? 'send_file'
+          : 'unknown';
+    fileScopeAuthority.writeHostActionResult(data.requestId, action, payload);
+  };
+
+  try {
+    try {
+      if (fs.existsSync(messagesDir)) {
+        const messageFiles = fs
+          .readdirSync(messagesDir)
+          .filter((file) => file.endsWith('.json'));
+        for (const file of messageFiles) {
+          const filePath = path.join(messagesDir, file);
+          let data: Record<string, unknown> | null = null;
+          try {
+            data = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<
+              string,
+              unknown
+            >;
+            const action =
+              data.type === 'message'
+                ? 'send_message'
+                : data.type === 'file'
+                  ? 'send_file'
+                  : null;
+            if (fileScopeAuthority) {
+              assertReceiptBackedRequestIdentity(file, data, action);
+            }
+            if (!protectedRequestAllowed(fileScopeAuthority, action)) {
+              throw new Error(
+                `Workflow Pack IPC Host action was not declared: ${action || 'unknown'}`,
+              );
+            } else if (
+              data.type === 'message' &&
+              typeof data.chatJid === 'string' &&
+              typeof data.text === 'string'
+            ) {
+              const targetAgent = deps.registeredAgents()[data.chatJid];
+              if (
+                isMain ||
+                (targetAgent && targetAgent.folder === sourceAgent)
+              ) {
+                await deps.sendMessage(data.chatJid, data.text);
+                logger.info(
+                  { chatJid: data.chatJid, sourceAgent },
+                  'IPC message sent',
+                );
+              } else {
+                throw new Error('Unauthorized IPC message attempt blocked');
+              }
+            } else if (
+              data.type === 'file' &&
+              typeof data.chatJid === 'string' &&
+              typeof data.filePath === 'string'
+            ) {
+              const targetAgent = deps.registeredAgents()[data.chatJid];
+              if (
+                isMain ||
+                (targetAgent && targetAgent.folder === sourceAgent)
+              ) {
+                const { hostPath, error } = resolveContainerFilePath(
+                  data.filePath,
+                  sourceAgent,
+                  fileScopeAuthority,
+                );
+                if (error) {
+                  throw new Error(error);
+                } else if (!fs.existsSync(hostPath)) {
+                  throw new Error('IPC file does not exist on host');
+                } else if (!fs.statSync(hostPath).isFile()) {
+                  throw new Error('IPC file path is not a file');
+                } else if (deps.sendFile) {
+                  await deps.sendFile(
+                    data.chatJid,
+                    hostPath,
+                    data.caption as string | undefined,
+                  );
+                  logger.info(
+                    { chatJid: data.chatJid, hostPath, sourceAgent },
+                    'IPC file sent',
+                  );
+                } else {
+                  await deps.sendMessage(
+                    data.chatJid,
+                    (typeof data.caption === 'string' && data.caption) ||
+                      `[文件: ${path.basename(hostPath)}] (该渠道不支持发送文件)`,
+                  );
+                  logger.info(
+                    { chatJid: data.chatJid, sourceAgent },
+                    'IPC file fallback to text (sendFile not supported)',
+                  );
+                }
+              } else {
+                throw new Error('Unauthorized IPC file attempt blocked');
+              }
+            } else {
+              throw new Error('Invalid IPC message request');
+            }
+            writeMessageReceipt(data, { status: 'success' });
+            fs.unlinkSync(filePath);
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            if (data) {
+              try {
+                writeMessageReceipt(data, { status: 'error', error: message });
+              } catch (receiptError) {
+                fileScopeAuthority?.recordIpcFailure(receiptError);
+                if (closingDrain)
+                  closingErrors.push(
+                    receiptError instanceof Error
+                      ? receiptError
+                      : new Error(String(receiptError)),
+                  );
+              }
+            }
+            logger.error(
+              { file, sourceAgent, err: error },
+              'Error processing IPC message',
+            );
+            fs.mkdirSync(errorDir, { recursive: true });
+            fs.renameSync(
+              filePath,
+              path.join(errorDir, `${sourceAgent}-${file}`),
+            );
+            if (closingDrain) {
+              closingErrors.push(
+                error instanceof Error ? error : new Error(String(error)),
+              );
+            }
+          }
+        }
+      }
+    } catch (error) {
+      logger.error(
+        { err: error, sourceAgent },
+        'Error reading IPC messages directory',
+      );
+    }
+
+    try {
+      if (fs.existsSync(tasksDir)) {
+        const taskFiles = fs
+          .readdirSync(tasksDir)
+          .filter((file) => file.endsWith('.json'));
+        for (const file of taskFiles) {
+          const filePath = path.join(tasksDir, file);
+          let data: Record<string, unknown> | null = null;
+          try {
+            data = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<
+              string,
+              unknown
+            >;
+            const action = hostActionForTask(data);
+            if (fileScopeAuthority) {
+              assertReceiptBackedRequestIdentity(file, data, action);
+            }
+            if (!protectedRequestAllowed(fileScopeAuthority, action)) {
+              throw new Error(
+                `Workflow Pack IPC Host action was not declared: ${action || 'unknown'}`,
+              );
+            } else {
+              const outcome = await processTaskIpc(
+                data as Parameters<typeof processTaskIpc>[0],
+                sourceAgent,
+                isMain,
+                deps,
+                fileScopeAuthority ? { fileScopeAuthority } : undefined,
+              );
+              if (
+                fileScopeAuthority &&
+                action &&
+                RECEIPT_BACKED_HOST_ACTIONS.has(action) &&
+                typeof data.requestId === 'string'
+              ) {
+                fileScopeAuthority.writeHostActionResult(
+                  data.requestId,
+                  action,
+                  outcome.status === 'success'
+                    ? { status: 'success' }
+                    : { status: 'error', error: outcome.error },
+                );
+              }
+              if (outcome.status === 'rejected' && closingDrain) {
+                closingErrors.push(new Error(outcome.error));
+              }
+            }
+            fs.unlinkSync(filePath);
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            if (fileScopeAuthority && data) {
+              const action = hostActionForTask(data);
+              if (
+                action &&
+                RECEIPT_BACKED_HOST_ACTIONS.has(action) &&
+                typeof data.requestId === 'string'
+              ) {
+                try {
+                  fileScopeAuthority.writeHostActionResult(
+                    data.requestId,
+                    action,
+                    { status: 'error', error: message },
+                  );
+                } catch (receiptError) {
+                  fileScopeAuthority.recordIpcFailure(receiptError);
+                  if (closingDrain)
+                    closingErrors.push(
+                      receiptError instanceof Error
+                        ? receiptError
+                        : new Error(String(receiptError)),
+                    );
+                }
+              }
+            }
+            logger.error(
+              { file, sourceAgent, err: error },
+              'Error processing IPC task',
+            );
+            fs.mkdirSync(errorDir, { recursive: true });
+            fs.renameSync(
+              filePath,
+              path.join(errorDir, `${sourceAgent}-${file}`),
+            );
+            if (closingDrain) {
+              closingErrors.push(
+                error instanceof Error ? error : new Error(String(error)),
+              );
+            }
+          }
+        }
+      }
+    } catch (error) {
+      logger.error(
+        { err: error, sourceAgent },
+        'Error reading IPC tasks directory',
+      );
+    }
+  } finally {
+    releaseOperation?.();
+  }
+  if (closingErrors.length > 0) {
+    throw new AggregateError(
+      closingErrors,
+      `Workflow Pack IPC closing drain failed for ${closingErrors.length} request(s)`,
+    );
+  }
+}
+
 export function startIpcWatcher(deps: IpcDeps): void {
   if (ipcWatcherRunning) {
     logger.debug('IPC watcher already running, skipping duplicate start');
@@ -155,194 +535,93 @@ export function startIpcWatcher(deps: IpcDeps): void {
   }
   ipcWatcherRunning = true;
 
+  installWorkflowPackExecutionIpcClosingDrainer(async (authority) => {
+    await processIpcNamespaceOnce({
+      rootPath: authority.ipcRootPath,
+      sourceAgent: authority.agentFolder,
+      isMain: authority.isMain,
+      deps,
+      fileScopeAuthority: authority,
+      closingDrain: true,
+    });
+  });
+
   const ipcBaseDir = path.join(DATA_DIR, 'ipc');
   fs.mkdirSync(ipcBaseDir, { recursive: true });
 
   const processIpcFiles = async () => {
-    // Scan all agent IPC directories (identity determined by directory)
-    let agentFolders: string[];
     try {
-      agentFolders = fs.readdirSync(ipcBaseDir).filter((f) => {
-        const stat = fs.statSync(path.join(ipcBaseDir, f));
-        return stat.isDirectory() && f !== 'errors';
-      });
+      // Scan all agent IPC directories (identity determined by directory)
+      let agentFolders: string[];
+      try {
+        agentFolders = fs.readdirSync(ipcBaseDir).filter((f) => {
+          const stat = fs.statSync(path.join(ipcBaseDir, f));
+          return stat.isDirectory() && f !== 'errors';
+        });
+      } catch (err) {
+        logger.error({ err }, 'Error reading IPC base directory');
+        return;
+      }
+
+      const registeredAgents = deps.registeredAgents();
+
+      try {
+        await expirePendingAskQuestions({
+          registeredAgents,
+          sendMessage: deps.sendMessage,
+        });
+      } catch (err) {
+        logger.warn({ err }, 'Failed to expire pending ask questions');
+      }
+
+      // Build folder→isMain lookup from registered agents
+      const folderIsMain = new Map<string, boolean>();
+      for (const agent of Object.values(registeredAgents)) {
+        if (agent.isMain) folderIsMain.set(agent.folder, true);
+      }
+
+      for (const sourceAgent of agentFolders) {
+        const isMain = folderIsMain.get(sourceAgent) === true;
+        try {
+          await processIpcNamespaceOnce({
+            rootPath: path.join(ipcBaseDir, sourceAgent),
+            sourceAgent,
+            isMain,
+            deps,
+          });
+        } catch (err) {
+          logger.error(
+            { err, sourceAgent },
+            'IPC watcher isolated an Agent namespace failure',
+          );
+        }
+      }
+
+      for (const authority of activeWorkflowPackExecutionFileScopeAuthorities()) {
+        try {
+          await processIpcNamespaceOnce({
+            rootPath: authority.ipcRootPath,
+            sourceAgent: authority.agentFolder,
+            isMain: authority.isMain,
+            deps,
+            fileScopeAuthority: authority,
+          });
+        } catch (err) {
+          authority.recordIpcFailure(err);
+          logger.error(
+            { err, authorityId: authority.id, runId: authority.runId },
+            'IPC watcher isolated a Workflow Pack authority failure',
+          );
+        }
+      }
     } catch (err) {
-      logger.error({ err }, 'Error reading IPC base directory');
+      logger.error({ err }, 'IPC watcher scan failed');
+    } finally {
       setTimeout(processIpcFiles, IPC_POLL_INTERVAL);
-      return;
     }
-
-    const registeredAgents = deps.registeredAgents();
-
-    try {
-      await expirePendingAskQuestions({
-        registeredAgents,
-        sendMessage: deps.sendMessage,
-      });
-    } catch (err) {
-      logger.warn({ err }, 'Failed to expire pending ask questions');
-    }
-
-    // Build folder→isMain lookup from registered agents
-    const folderIsMain = new Map<string, boolean>();
-    for (const agent of Object.values(registeredAgents)) {
-      if (agent.isMain) folderIsMain.set(agent.folder, true);
-    }
-
-    for (const sourceAgent of agentFolders) {
-      const isMain = folderIsMain.get(sourceAgent) === true;
-      const messagesDir = path.join(ipcBaseDir, sourceAgent, 'messages');
-      const tasksDir = path.join(ipcBaseDir, sourceAgent, 'tasks');
-
-      // Process messages from this agent's IPC directory
-      try {
-        if (fs.existsSync(messagesDir)) {
-          const messageFiles = fs
-            .readdirSync(messagesDir)
-            .filter((f) => f.endsWith('.json'));
-          for (const file of messageFiles) {
-            const filePath = path.join(messagesDir, file);
-            try {
-              const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-              if (data.type === 'message' && data.chatJid && data.text) {
-                // Authorization: verify this agent can send to this chatJid
-                const targetAgent = registeredAgents[data.chatJid];
-                if (
-                  isMain ||
-                  (targetAgent && targetAgent.folder === sourceAgent)
-                ) {
-                  await deps.sendMessage(data.chatJid, data.text);
-                  logger.info(
-                    { chatJid: data.chatJid, sourceAgent },
-                    'IPC message sent',
-                  );
-                } else {
-                  logger.warn(
-                    { chatJid: data.chatJid, sourceAgent },
-                    'Unauthorized IPC message attempt blocked',
-                  );
-                }
-              } else if (
-                data.type === 'file' &&
-                data.chatJid &&
-                data.filePath
-              ) {
-                // Authorization: same as message
-                const targetAgent = registeredAgents[data.chatJid];
-                if (
-                  isMain ||
-                  (targetAgent && targetAgent.folder === sourceAgent)
-                ) {
-                  // Map container path to host path
-                  if (typeof data.filePath !== 'string') {
-                    logger.warn(
-                      { filePath: data.filePath, sourceAgent },
-                      'IPC file path must be a string',
-                    );
-                  } else {
-                    const { hostPath, error } = resolveContainerFilePath(
-                      data.filePath,
-                      sourceAgent,
-                    );
-                    if (error) {
-                      logger.warn(
-                        { filePath: data.filePath, hostPath, sourceAgent },
-                        error,
-                      );
-                    } else if (!fs.existsSync(hostPath)) {
-                      logger.warn(
-                        { hostPath, sourceAgent },
-                        'IPC file does not exist on host',
-                      );
-                    } else if (!fs.statSync(hostPath).isFile()) {
-                      logger.warn(
-                        { hostPath, sourceAgent },
-                        'IPC file path is not a file',
-                      );
-                    } else if (deps.sendFile) {
-                      await deps.sendFile(data.chatJid, hostPath, data.caption);
-                      logger.info(
-                        { chatJid: data.chatJid, hostPath, sourceAgent },
-                        'IPC file sent',
-                      );
-                    } else {
-                      // Fallback: send caption text if channel doesn't support files
-                      await deps.sendMessage(
-                        data.chatJid,
-                        data.caption ||
-                          `[文件: ${path.basename(hostPath)}] (该渠道不支持发送文件)`,
-                      );
-                      logger.info(
-                        { chatJid: data.chatJid, sourceAgent },
-                        'IPC file fallback to text (sendFile not supported)',
-                      );
-                    }
-                  }
-                } else {
-                  logger.warn(
-                    { chatJid: data.chatJid, sourceAgent },
-                    'Unauthorized IPC file attempt blocked',
-                  );
-                }
-              }
-              fs.unlinkSync(filePath);
-            } catch (err) {
-              logger.error(
-                { file, sourceAgent, err },
-                'Error processing IPC message',
-              );
-              const errorDir = path.join(ipcBaseDir, 'errors');
-              fs.mkdirSync(errorDir, { recursive: true });
-              fs.renameSync(
-                filePath,
-                path.join(errorDir, `${sourceAgent}-${file}`),
-              );
-            }
-          }
-        }
-      } catch (err) {
-        logger.error(
-          { err, sourceAgent },
-          'Error reading IPC messages directory',
-        );
-      }
-
-      // Process tasks from this agent's IPC directory
-      try {
-        if (fs.existsSync(tasksDir)) {
-          const taskFiles = fs
-            .readdirSync(tasksDir)
-            .filter((f) => f.endsWith('.json'));
-          for (const file of taskFiles) {
-            const filePath = path.join(tasksDir, file);
-            try {
-              const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-              // Pass source agent identity to processTaskIpc for authorization
-              await processTaskIpc(data, sourceAgent, isMain, deps);
-              fs.unlinkSync(filePath);
-            } catch (err) {
-              logger.error(
-                { file, sourceAgent, err },
-                'Error processing IPC task',
-              );
-              const errorDir = path.join(ipcBaseDir, 'errors');
-              fs.mkdirSync(errorDir, { recursive: true });
-              fs.renameSync(
-                filePath,
-                path.join(errorDir, `${sourceAgent}-${file}`),
-              );
-            }
-          }
-        }
-      } catch (err) {
-        logger.error({ err, sourceAgent }, 'Error reading IPC tasks directory');
-      }
-    }
-
-    setTimeout(processIpcFiles, IPC_POLL_INTERVAL);
   };
 
-  processIpcFiles();
+  void processIpcFiles();
   logger.info('IPC watcher started (per-agent namespaces)');
 }
 
@@ -966,7 +1245,17 @@ export async function processTaskIpc(
   sourceAgent: string, // Verified identity from IPC directory
   isMain: boolean, // Verified from directory path
   deps: IpcDeps,
-): Promise<void> {
+  context: IpcExecutionContext = {},
+): Promise<IpcTaskOutcome> {
+  const fileScopeAuthority = context.fileScopeAuthority;
+  if (
+    fileScopeAuthority &&
+    data.requestId !== undefined &&
+    (typeof data.requestId !== 'string' ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(data.requestId))
+  ) {
+    throw new Error('Workflow Pack IPC requestId is invalid');
+  }
   const registeredAgents = deps.registeredAgents();
   const writeMemoryResult = (
     agentFolder: string,
@@ -1100,32 +1389,26 @@ export async function processTaskIpc(
         break;
       }
 
-      const conversationsDir = path.resolve(
-        path.join(AGENTS_DIR, sourceAgent, 'conversations'),
-      );
-      const archivePath = path.resolve(
-        path.join(conversationsDir, archiveName),
-      );
-      if (
-        !archivePath.startsWith(`${conversationsDir}${path.sep}`) &&
-        archivePath !== conversationsDir
-      ) {
+      let archiveBuffer: Buffer;
+      try {
+        archiveBuffer = fileScopeAuthority
+          ? fileScopeAuthority.readScopeFile(
+              'agent',
+              `conversations/${archiveName}`,
+            )
+          : fs.readFileSync(
+              path.join(AGENTS_DIR, sourceAgent, 'conversations', archiveName),
+            );
+      } catch (error) {
         logger.warn(
-          { sourceAgent, archivePath },
-          'memory_extract_from_archive path traversal blocked',
-        );
-        break;
-      }
-      if (!fs.existsSync(archivePath)) {
-        logger.warn(
-          { sourceAgent, archivePath },
-          'memory_extract_from_archive archive file not found',
+          { sourceAgent, archiveName, err: error },
+          'memory_extract_from_archive archive file was unavailable',
         );
         break;
       }
 
-      const archiveBytes = fs.statSync(archivePath).size;
-      const markdown = fs.readFileSync(archivePath, 'utf-8');
+      const archiveBytes = archiveBuffer.length;
+      const markdown = archiveBuffer.toString('utf-8');
       const extractConfig = getMemoryExtractConfig(sourceAgent);
       const parsedMessages = parseArchiveMarkdownMessages(markdown);
       const sanitizedMessages =
@@ -1245,7 +1528,14 @@ export async function processTaskIpc(
             err,
             sourceAgent,
             archiveFile: archiveName,
-            archivePath,
+            archivePath: fileScopeAuthority
+              ? `/workspace/agent/conversations/${archiveName}`
+              : path.join(
+                  AGENTS_DIR,
+                  sourceAgent,
+                  'conversations',
+                  archiveName,
+                ),
             archiveBytes,
             requestSummary: {
               max_tokens: requestPayload.max_tokens,
@@ -1266,223 +1556,289 @@ export async function processTaskIpc(
       break;
     }
 
-    case 'schedule_task':
+    case 'schedule_task': {
       if (
-        data.prompt &&
-        data.schedule_type &&
-        data.schedule_value &&
-        data.targetJid
+        !data.prompt ||
+        !data.schedule_type ||
+        !data.schedule_value ||
+        !data.targetJid
       ) {
-        // Resolve the target agent from JID
-        const targetJid = data.targetJid as string;
-        const targetAgentEntry = registeredAgents[targetJid];
-
-        if (!targetAgentEntry) {
+        return {
+          status: 'rejected',
+          error: 'schedule_task is missing required fields',
+        };
+      }
+      const targetJid = data.targetJid;
+      const targetAgentEntry = registeredAgents[targetJid];
+      if (!targetAgentEntry) {
+        logger.warn(
+          { targetJid },
+          'Cannot schedule task: target agent not registered',
+        );
+        return {
+          status: 'rejected',
+          error: `Cannot schedule task: target agent is not registered (${targetJid})`,
+        };
+      }
+      const targetFolder = targetAgentEntry.folder;
+      if (!isMain && targetFolder !== sourceAgent) {
+        logger.warn(
+          { sourceAgent, targetFolder },
+          'Unauthorized schedule_task attempt blocked',
+        );
+        return {
+          status: 'rejected',
+          error: 'Unauthorized schedule_task target',
+        };
+      }
+      if (!['cron', 'interval', 'once'].includes(data.schedule_type)) {
+        return {
+          status: 'rejected',
+          error: `Unsupported schedule type: ${data.schedule_type}`,
+        };
+      }
+      const scheduleType = data.schedule_type as 'cron' | 'interval' | 'once';
+      let nextRun: string | null = null;
+      if (scheduleType === 'cron') {
+        try {
+          const interval = CronExpressionParser.parse(data.schedule_value, {
+            tz: TIMEZONE,
+          });
+          nextRun = formatLocalTime(interval.next().toDate());
+        } catch {
           logger.warn(
-            { targetJid },
-            'Cannot schedule task: target agent not registered',
+            { scheduleValue: data.schedule_value },
+            'Invalid cron expression',
           );
-          break;
+          return { status: 'rejected', error: 'Invalid cron expression' };
         }
-
-        const targetFolder = targetAgentEntry.folder;
-
-        // Authorization: non-main agents can only schedule for themselves
-        if (!isMain && targetFolder !== sourceAgent) {
+      } else if (scheduleType === 'interval') {
+        const ms = parseInt(data.schedule_value, 10);
+        if (isNaN(ms) || ms <= 0) {
           logger.warn(
-            { sourceAgent, targetFolder },
-            'Unauthorized schedule_task attempt blocked',
+            { scheduleValue: data.schedule_value },
+            'Invalid interval',
           );
-          break;
+          return { status: 'rejected', error: 'Invalid task interval' };
         }
+        nextRun = formatLocalTime(new Date(Date.now() + ms));
+      } else {
+        const date = new Date(data.schedule_value);
+        if (isNaN(date.getTime())) {
+          logger.warn(
+            { scheduleValue: data.schedule_value },
+            'Invalid timestamp',
+          );
+          return { status: 'rejected', error: 'Invalid task timestamp' };
+        }
+        nextRun = formatLocalTime(date);
+      }
 
-        const scheduleType = data.schedule_type as 'cron' | 'interval' | 'once';
+      const taskId =
+        data.taskId ||
+        `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const contextMode =
+        data.context_mode === 'agent' || data.context_mode === 'isolated'
+          ? data.context_mode
+          : 'isolated';
+      createTask({
+        id: taskId,
+        agent_folder: targetFolder,
+        chat_jid: targetJid,
+        prompt: data.prompt,
+        schedule_type: scheduleType,
+        schedule_value: data.schedule_value,
+        context_mode: contextMode,
+        next_run: nextRun,
+        status: 'active',
+        created_at: formatLocalTime(new Date()),
+      });
+      logger.info(
+        { taskId, sourceAgent, targetFolder, contextMode },
+        'Task created via IPC',
+      );
+      return { status: 'success' };
+    }
 
-        let nextRun: string | null = null;
-        if (scheduleType === 'cron') {
+    case 'pause_task': {
+      if (!data.taskId) {
+        return { status: 'rejected', error: 'pause_task requires taskId' };
+      }
+      const task = getTaskById(data.taskId);
+      if (!task) {
+        return {
+          status: 'rejected',
+          error: `Scheduled task not found: ${data.taskId}`,
+        };
+      }
+      if (!isMain && task.agent_folder !== sourceAgent) {
+        logger.warn(
+          { taskId: data.taskId, sourceAgent },
+          'Unauthorized task pause attempt',
+        );
+        return { status: 'rejected', error: 'Unauthorized task pause attempt' };
+      }
+      if (task.status !== 'active') {
+        return {
+          status: 'rejected',
+          error: `Scheduled task ${data.taskId} is not active`,
+        };
+      }
+      updateTask(data.taskId, { status: 'paused' });
+      logger.info({ taskId: data.taskId, sourceAgent }, 'Task paused via IPC');
+      return { status: 'success' };
+    }
+
+    case 'resume_task': {
+      if (!data.taskId) {
+        return { status: 'rejected', error: 'resume_task requires taskId' };
+      }
+      const task = getTaskById(data.taskId);
+      if (!task) {
+        return {
+          status: 'rejected',
+          error: `Scheduled task not found: ${data.taskId}`,
+        };
+      }
+      if (!isMain && task.agent_folder !== sourceAgent) {
+        logger.warn(
+          { taskId: data.taskId, sourceAgent },
+          'Unauthorized task resume attempt',
+        );
+        return {
+          status: 'rejected',
+          error: 'Unauthorized task resume attempt',
+        };
+      }
+      if (task.status !== 'paused') {
+        return {
+          status: 'rejected',
+          error: `Scheduled task ${data.taskId} is not paused`,
+        };
+      }
+      updateTask(data.taskId, { status: 'active' });
+      logger.info({ taskId: data.taskId, sourceAgent }, 'Task resumed via IPC');
+      return { status: 'success' };
+    }
+
+    case 'cancel_task': {
+      if (!data.taskId) {
+        return { status: 'rejected', error: 'cancel_task requires taskId' };
+      }
+      const task = getTaskById(data.taskId);
+      if (!task) {
+        return {
+          status: 'rejected',
+          error: `Scheduled task not found: ${data.taskId}`,
+        };
+      }
+      if (!isMain && task.agent_folder !== sourceAgent) {
+        logger.warn(
+          { taskId: data.taskId, sourceAgent },
+          'Unauthorized task cancel attempt',
+        );
+        return {
+          status: 'rejected',
+          error: 'Unauthorized task cancel attempt',
+        };
+      }
+      deleteTask(data.taskId);
+      logger.info(
+        { taskId: data.taskId, sourceAgent },
+        'Task cancelled via IPC',
+      );
+      return { status: 'success' };
+    }
+
+    case 'update_task': {
+      if (!data.taskId) {
+        return { status: 'rejected', error: 'update_task requires taskId' };
+      }
+      const task = getTaskById(data.taskId);
+      if (!task) {
+        logger.warn(
+          { taskId: data.taskId, sourceAgent },
+          'Task not found for update',
+        );
+        return {
+          status: 'rejected',
+          error: `Scheduled task not found: ${data.taskId}`,
+        };
+      }
+      if (!isMain && task.agent_folder !== sourceAgent) {
+        logger.warn(
+          { taskId: data.taskId, sourceAgent },
+          'Unauthorized task update attempt',
+        );
+        return {
+          status: 'rejected',
+          error: 'Unauthorized task update attempt',
+        };
+      }
+
+      const updates: Parameters<typeof updateTask>[1] = {};
+      if (data.prompt !== undefined) updates.prompt = data.prompt;
+      if (data.schedule_type !== undefined)
+        updates.schedule_type = data.schedule_type as
+          | 'cron'
+          | 'interval'
+          | 'once';
+      if (data.schedule_value !== undefined)
+        updates.schedule_value = data.schedule_value;
+
+      // Recompute next_run if schedule changed
+      if (data.schedule_type || data.schedule_value) {
+        const updatedTask = {
+          ...task,
+          ...updates,
+        };
+        if (updatedTask.schedule_type === 'cron') {
           try {
-            const interval = CronExpressionParser.parse(data.schedule_value, {
-              tz: TIMEZONE,
-            });
-            nextRun = formatLocalTime(interval.next().toDate());
+            const interval = CronExpressionParser.parse(
+              updatedTask.schedule_value,
+              { tz: TIMEZONE },
+            );
+            updates.next_run = formatLocalTime(interval.next().toDate());
           } catch {
             logger.warn(
-              { scheduleValue: data.schedule_value },
-              'Invalid cron expression',
+              { taskId: data.taskId, value: updatedTask.schedule_value },
+              'Invalid cron in task update',
             );
-            break;
+            return {
+              status: 'rejected',
+              error: 'Invalid cron expression in task update',
+            };
           }
-        } else if (scheduleType === 'interval') {
-          const ms = parseInt(data.schedule_value, 10);
-          if (isNaN(ms) || ms <= 0) {
-            logger.warn(
-              { scheduleValue: data.schedule_value },
-              'Invalid interval',
-            );
-            break;
+        } else if (updatedTask.schedule_type === 'interval') {
+          const ms = parseInt(updatedTask.schedule_value, 10);
+          if (!isNaN(ms) && ms > 0) {
+            updates.next_run = formatLocalTime(new Date(Date.now() + ms));
+          } else {
+            return {
+              status: 'rejected',
+              error: 'Invalid interval in task update',
+            };
           }
-          nextRun = formatLocalTime(new Date(Date.now() + ms));
-        } else if (scheduleType === 'once') {
-          // Node.js Date parses naive strings as local time.
-          const date = new Date(data.schedule_value ?? '');
-          if (isNaN(date.getTime())) {
-            logger.warn(
-              { scheduleValue: data.schedule_value },
-              'Invalid timestamp',
-            );
-            break;
-          }
-          nextRun = formatLocalTime(date);
-        }
-
-        const taskId =
-          data.taskId ||
-          `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const contextMode =
-          data.context_mode === 'agent' || data.context_mode === 'isolated'
-            ? data.context_mode
-            : 'isolated';
-        createTask({
-          id: taskId,
-          agent_folder: targetFolder,
-          chat_jid: targetJid,
-          prompt: data.prompt,
-          schedule_type: scheduleType,
-          schedule_value: data.schedule_value,
-          context_mode: contextMode,
-          next_run: nextRun,
-          status: 'active',
-          created_at: formatLocalTime(new Date()),
-        });
-        logger.info(
-          { taskId, sourceAgent, targetFolder, contextMode },
-          'Task created via IPC',
-        );
-      }
-      break;
-
-    case 'pause_task':
-      if (data.taskId) {
-        const task = getTaskById(data.taskId);
-        if (task && (isMain || task.agent_folder === sourceAgent)) {
-          updateTask(data.taskId, { status: 'paused' });
-          logger.info(
-            { taskId: data.taskId, sourceAgent },
-            'Task paused via IPC',
-          );
-        } else {
-          logger.warn(
-            { taskId: data.taskId, sourceAgent },
-            'Unauthorized task pause attempt',
-          );
-        }
-      }
-      break;
-
-    case 'resume_task':
-      if (data.taskId) {
-        const task = getTaskById(data.taskId);
-        if (task && (isMain || task.agent_folder === sourceAgent)) {
-          updateTask(data.taskId, { status: 'active' });
-          logger.info(
-            { taskId: data.taskId, sourceAgent },
-            'Task resumed via IPC',
-          );
-        } else {
-          logger.warn(
-            { taskId: data.taskId, sourceAgent },
-            'Unauthorized task resume attempt',
-          );
-        }
-      }
-      break;
-
-    case 'cancel_task':
-      if (data.taskId) {
-        const task = getTaskById(data.taskId);
-        if (task && (isMain || task.agent_folder === sourceAgent)) {
-          deleteTask(data.taskId);
-          logger.info(
-            { taskId: data.taskId, sourceAgent },
-            'Task cancelled via IPC',
-          );
-        } else {
-          logger.warn(
-            { taskId: data.taskId, sourceAgent },
-            'Unauthorized task cancel attempt',
-          );
-        }
-      }
-      break;
-
-    case 'update_task':
-      if (data.taskId) {
-        const task = getTaskById(data.taskId);
-        if (!task) {
-          logger.warn(
-            { taskId: data.taskId, sourceAgent },
-            'Task not found for update',
-          );
-          break;
-        }
-        if (!isMain && task.agent_folder !== sourceAgent) {
-          logger.warn(
-            { taskId: data.taskId, sourceAgent },
-            'Unauthorized task update attempt',
-          );
-          break;
-        }
-
-        const updates: Parameters<typeof updateTask>[1] = {};
-        if (data.prompt !== undefined) updates.prompt = data.prompt;
-        if (data.schedule_type !== undefined)
-          updates.schedule_type = data.schedule_type as
-            | 'cron'
-            | 'interval'
-            | 'once';
-        if (data.schedule_value !== undefined)
-          updates.schedule_value = data.schedule_value;
-
-        // Recompute next_run if schedule changed
-        if (data.schedule_type || data.schedule_value) {
-          const updatedTask = {
-            ...task,
-            ...updates,
-          };
-          if (updatedTask.schedule_type === 'cron') {
-            try {
-              const interval = CronExpressionParser.parse(
-                updatedTask.schedule_value,
-                { tz: TIMEZONE },
-              );
-              updates.next_run = formatLocalTime(interval.next().toDate());
-            } catch {
-              logger.warn(
-                { taskId: data.taskId, value: updatedTask.schedule_value },
-                'Invalid cron in task update',
-              );
-              break;
-            }
-          } else if (updatedTask.schedule_type === 'interval') {
-            const ms = parseInt(updatedTask.schedule_value, 10);
-            if (!isNaN(ms) && ms > 0) {
-              updates.next_run = formatLocalTime(new Date(Date.now() + ms));
-            }
-          } else if (updatedTask.schedule_type === 'once') {
-            const date = new Date(updatedTask.schedule_value ?? '');
-            if (!isNaN(date.getTime())) {
-              updates.next_run = formatLocalTime(date);
-            }
+        } else if (updatedTask.schedule_type === 'once') {
+          const date = new Date(updatedTask.schedule_value ?? '');
+          if (!isNaN(date.getTime())) {
+            updates.next_run = formatLocalTime(date);
+          } else {
+            return {
+              status: 'rejected',
+              error: 'Invalid timestamp in task update',
+            };
           }
         }
-
-        updateTask(data.taskId, updates);
-        logger.info(
-          { taskId: data.taskId, sourceAgent, updates },
-          'Task updated via IPC',
-        );
       }
-      break;
+
+      updateTask(data.taskId, updates);
+      logger.info(
+        { taskId: data.taskId, sourceAgent, updates },
+        'Task updated via IPC',
+      );
+      return { status: 'success' };
+    }
 
     case 'register_agent':
       // Only main agent can register new agents
@@ -1622,12 +1978,18 @@ export async function processTaskIpc(
           { sourceAgent },
           'Main agent should use delegate_task directly, not request_delegation',
         );
-        break;
+        return {
+          status: 'rejected',
+          error: 'Main Agent must use delegate_task directly',
+        };
       }
 
       if (!data.task) {
         logger.warn({ sourceAgent }, 'request_delegation missing task');
-        break;
+        return {
+          status: 'rejected',
+          error: 'request_delegation requires task',
+        };
       }
 
       // Find main agent of the same channel
@@ -1638,7 +2000,10 @@ export async function processTaskIpc(
         ) || Object.entries(registeredAgents).find(([, g]) => g.isMain);
       if (!mainEntry) {
         logger.warn('request_delegation: main agent not found');
-        break;
+        return {
+          status: 'rejected',
+          error: 'request_delegation could not find a main Agent',
+        };
       }
       const [mainJid, mainAgent] = mainEntry;
 
@@ -1687,7 +2052,7 @@ export async function processTaskIpc(
         { sourceAgent, sourceName: reqSourceName },
         'Delegation request forwarded to main agent',
       );
-      break;
+      return { status: 'success' };
     }
 
     case 'delegate_task': {
@@ -1872,7 +2237,10 @@ export async function processTaskIpc(
           { sourceAgent },
           'complete_delegation missing delegationId or result',
         );
-        break;
+        return {
+          status: 'rejected',
+          error: 'complete_delegation requires delegationId and result',
+        };
       }
 
       const delegation = getDelegation(data.delegationId);
@@ -1881,7 +2249,10 @@ export async function processTaskIpc(
           { delegationId: data.delegationId },
           'complete_delegation: delegation not found',
         );
-        break;
+        return {
+          status: 'rejected',
+          error: `Delegation not found: ${data.delegationId}`,
+        };
       }
 
       // Verify the caller is the delegation's target
@@ -1894,7 +2265,16 @@ export async function processTaskIpc(
           },
           'Unauthorized complete_delegation attempt',
         );
-        break;
+        return {
+          status: 'rejected',
+          error: 'Unauthorized complete_delegation attempt',
+        };
+      }
+      if (delegation.status !== 'pending') {
+        return {
+          status: 'rejected',
+          error: `Delegation ${data.delegationId} is not pending`,
+        };
       }
 
       // Update delegation status
@@ -1972,7 +2352,7 @@ export async function processTaskIpc(
         'Delegation completed via IPC',
       );
 
-      break;
+      return { status: 'success' };
     }
 
     case 'memory_search': {
@@ -2179,6 +2559,7 @@ export async function processTaskIpc(
         data.args,
         data.requestId,
         sourceAgent,
+        fileScopeAuthority,
       );
       writeAiImageResult(sourceAgent, data.requestId, {
         ...result,
@@ -2203,7 +2584,12 @@ export async function processTaskIpc(
         break;
       }
 
-      const result = await editAiImage(data.args, data.requestId, sourceAgent);
+      const result = await editAiImage(
+        data.args,
+        data.requestId,
+        sourceAgent,
+        fileScopeAuthority,
+      );
       writeAiImageResult(sourceAgent, data.requestId, {
         ...result,
         waitTimeoutMs: getAiImageWaitTimeoutMs(),
@@ -2379,25 +2765,41 @@ export async function processTaskIpc(
     case 'reload_container': {
       if (!data.chatJid) {
         logger.warn({ sourceAgent }, 'reload_container missing chatJid');
-        break;
+        return {
+          status: 'rejected',
+          error: 'reload_tools requires a target chatJid',
+        };
       }
       // Authorization: agent can only reload itself, main can reload any
       const targetAgent = registeredAgents[data.chatJid];
-      if (isMain || (targetAgent && targetAgent.folder === sourceAgent)) {
-        if (deps.reloadContainer) {
-          deps.reloadContainer(data.chatJid);
-          logger.info(
-            { chatJid: data.chatJid, sourceAgent },
-            'Container reload requested',
-          );
-        }
-      } else {
+      if (!targetAgent) {
+        return {
+          status: 'rejected',
+          error: `reload_tools target is not registered: ${data.chatJid}`,
+        };
+      }
+      if (!isMain && targetAgent.folder !== sourceAgent) {
         logger.warn(
           { chatJid: data.chatJid, sourceAgent },
           'Unauthorized reload_container attempt blocked',
         );
+        return {
+          status: 'rejected',
+          error: 'Unauthorized reload_tools target',
+        };
       }
-      break;
+      if (!deps.reloadContainer) {
+        return {
+          status: 'rejected',
+          error: 'Container reload is unavailable',
+        };
+      }
+      deps.reloadContainer(data.chatJid);
+      logger.info(
+        { chatJid: data.chatJid, sourceAgent },
+        'Container reload requested',
+      );
+      return { status: 'success' };
     }
 
     case 'run_local_host_script': {
@@ -2444,9 +2846,29 @@ export async function processTaskIpc(
       }
 
       try {
+        let hostRootDir: string | undefined;
+        if (fileScopeAuthority) {
+          const normalizedScriptPath = path.posix.normalize(data.scriptPath);
+          if (
+            !normalizedScriptPath.startsWith(`${CONTAINER_LOCAL_SHELL_ROOT}/`)
+          ) {
+            throw new Error(
+              `scriptPath must start with ${CONTAINER_LOCAL_SHELL_ROOT}/`,
+            );
+          }
+          fileScopeAuthority.readContainerFile(
+            data.scriptPath,
+            new Set(['workspace']),
+          );
+          hostRootDir = fileScopeAuthority.snapshotScopeDirectory(
+            'workspace',
+            'local/shell',
+          );
+        }
         const result = await runLocalHostScript(
           data.scriptPath,
           (data.args as string[] | undefined) || [],
+          hostRootDir ? { hostRootDir } : undefined,
         );
         writeHostScriptResult(sourceAgent, data.requestId, result);
         logger.info(
@@ -2530,6 +2952,14 @@ export async function processTaskIpc(
           typeof data.waitMs === 'number' && Number.isFinite(data.waitMs)
             ? data.waitMs
             : undefined,
+        writeImage: fileScopeAuthority
+          ? (filename, bytes) =>
+              fileScopeAuthority.createScopeFile(
+                'desktop_captures',
+                filename,
+                bytes,
+              )
+          : undefined,
       };
 
       try {
@@ -2566,4 +2996,5 @@ export async function processTaskIpc(
     default:
       logger.warn({ type: data.type }, 'Unknown IPC task type');
   }
+  return { status: 'success' };
 }

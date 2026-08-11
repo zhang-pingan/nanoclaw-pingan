@@ -171,7 +171,7 @@ describe('G0.5 Safety, Retention, and SQLite Contract Pack', () => {
       'action_required',
       'quarantined',
     ]);
-    expect(retention.rules.feature_policy_may_only_extend_user_artifact).toBe(
+    expect(retention.rules.pack_policy_may_only_extend_user_artifact).toBe(
       true,
     );
   });

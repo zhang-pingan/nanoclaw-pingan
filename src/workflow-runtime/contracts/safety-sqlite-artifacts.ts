@@ -335,7 +335,7 @@ function retentionSchema(): Schema {
           uniqueItems: true,
         },
         user_artifact_not_before_workflow_closed: { const: true },
-        feature_policy_may_only_extend_user_artifact: { const: true },
+        pack_policy_may_only_extend_user_artifact: { const: true },
         manual_pin_may_extend_backup: { const: true },
         existing_objects_pin_policy_ref_and_hash: { const: true },
       }),

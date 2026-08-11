@@ -401,7 +401,7 @@ export const RETENTION_RULE_KEYS = [
   'duration_origin',
   'run_recovery_strong_states',
   'user_artifact_not_before_workflow_closed',
-  'feature_policy_may_only_extend_user_artifact',
+  'pack_policy_may_only_extend_user_artifact',
   'manual_pin_may_extend_backup',
   'existing_objects_pin_policy_ref_and_hash',
 ] as const;
@@ -420,7 +420,7 @@ export interface LocalSingleUserRetentionPolicy {
       'quarantined',
     ];
     user_artifact_not_before_workflow_closed: true;
-    feature_policy_may_only_extend_user_artifact: true;
+    pack_policy_may_only_extend_user_artifact: true;
     manual_pin_may_extend_backup: true;
     existing_objects_pin_policy_ref_and_hash: true;
   };
@@ -455,7 +455,7 @@ export const LOCAL_SINGLE_USER_RETENTION_POLICY = {
       'quarantined',
     ],
     user_artifact_not_before_workflow_closed: true,
-    feature_policy_may_only_extend_user_artifact: true,
+    pack_policy_may_only_extend_user_artifact: true,
     manual_pin_may_extend_backup: true,
     existing_objects_pin_policy_ref_and_hash: true,
   },

@@ -52,6 +52,7 @@ type CoordinatorChatResponse = Awaited<
 export interface TaskWorkspaceRuntimeGateway {
   listRecipes: RuntimeWorkspaceGateway['listRecipes'];
   refreshRecipeSelection: RuntimeWorkspaceGateway['refreshRecipeSelection'];
+  resolveSystemRecipe: RuntimeWorkspaceGateway['resolveSystemRecipe'];
   createPublished: RuntimeWorkspaceGateway['createPublished'];
   createTemporary: RuntimeWorkspaceGateway['createTemporary'];
   launchPublished?: RuntimeWorkspaceGateway['launchPublished'];
@@ -439,17 +440,10 @@ export class TaskWorkspaceService {
         expires_at_ms: this.now(),
       };
     }
-    const catalog = this.options.runtimeGateway.listRecipes({
+    return this.options.runtimeGateway.listRecipes({
       principal_ref: principalRef,
       now_ms: this.now(),
     });
-    if (!(await this.refreshTemporaryAdapterError())) return catalog;
-    return {
-      ...catalog,
-      items: catalog.items.filter(
-        (item) => item.recipe_ref.id !== 'ad_hoc_personal_task',
-      ),
-    };
   }
 
   async send(input: {
@@ -525,17 +519,13 @@ export class TaskWorkspaceService {
     let selectionToken: string | null = null;
     if (this.options.runtimeGateway) {
       if (temporary) {
-        const temporaryOuter = this.options.runtimeGateway
-          .listRecipes({
-            principal_ref: input.principalRef,
-            now_ms: nowMs,
-          })
-          .items.find((item) => item.recipe_ref.id === 'ad_hoc_personal_task');
-        if (temporaryOuter) {
-          selectedRecipeRef = temporaryOuter.recipe_ref;
-          selectedRecipeHash = temporaryOuter.recipe_hash;
-          selectionToken = temporaryOuter.selection_token;
-        }
+        const temporaryOuter = this.options.runtimeGateway.resolveSystemRecipe({
+          purpose: 'temporary_workflow',
+          principal_ref: input.principalRef,
+          now_ms: nowMs,
+        });
+        selectedRecipeRef = temporaryOuter.recipe_ref;
+        selectedRecipeHash = temporaryOuter.recipe_hash;
       } else {
         selectionToken = input.selectionToken ?? null;
       }
@@ -1735,11 +1725,9 @@ export class TaskWorkspaceService {
     }
     try {
       const nowMs = this.now();
-      const selectionToken = this.refreshLaunchSelection(session, launch);
       const receipt = this.options.runtimeGateway.launchTemporary
         ? this.options.runtimeGateway.launchTemporary({
             principal_ref: session.owner_principal_ref,
-            selection_token: selectionToken,
             authorization_ref: `temporary-confirmation:${revision.revision_id}`,
             launch: {
               request_id: launch.launch_intent_id,
@@ -1761,7 +1749,6 @@ export class TaskWorkspaceService {
           })
         : this.options.runtimeGateway.createTemporary({
             principal_ref: session.owner_principal_ref,
-            selection_token: selectionToken,
             authorization_ref: `temporary-confirmation:${revision.revision_id}`,
             creation: await this.options.prepareTemporaryCreation!({
               session,
@@ -1942,7 +1929,6 @@ export class TaskWorkspaceService {
           }
           const compiled = runtimeGateway.prepareTemporaryDraft({
             principal_ref: session.owner_principal_ref,
-            selection_token: this.refreshLaunchSelection(session, launch),
             source_json: draft.source,
             now_ms: this.now(),
           });

@@ -302,10 +302,10 @@ function validateTypeScriptUnionConformance(
   );
   const definition = byFormat.get('icarus.workflow-definition-schema/1');
   const command = byFormat.get('icarus.workflow-runtime-command-schema/1');
-  const feature = byFormat.get('icarus.workflow-feature-manifest-v2-schema/1');
+  const pack = byFormat.get('icarus.workflow-pack-manifest-schema/1');
   const source = byFormat.get('icarus.workflow-graph-scope-source-schema/1');
   const transition = byFormat.get('icarus.workflow-transition-schema/1');
-  if (!definition || !command || !feature || !source || !transition) {
+  if (!definition || !command || !pack || !source || !transition) {
     throw new Error('Closed union conformance schema is missing');
   }
 
@@ -377,20 +377,20 @@ function validateTypeScriptUnionConformance(
     CLOSED_SCHEMA_UNIONS.graph_node_types,
     'Graph node',
   );
-  const resourceKind = objectAt(feature.payload, [
+  const resourceKind = objectAt(pack.payload, [
     'properties',
-    'dynamic_workflow_resources',
+    'workflow_resources',
     'items',
     'properties',
     'kind',
   ]);
   if (!Array.isArray(resourceKind.enum)) {
-    throw new Error('Feature resource kind enum is missing');
+    throw new Error('Pack resource kind enum is missing');
   }
   assertSameValues(
     resourceKind.enum.map(String),
-    CLOSED_SCHEMA_UNIONS.feature_resource_kinds,
-    'Feature resource kind',
+    CLOSED_SCHEMA_UNIONS.pack_resource_kinds,
+    'Pack resource kind',
   );
 
   const valueBinding = objectAt(definition.payload, ['$defs', 'value_binding']);

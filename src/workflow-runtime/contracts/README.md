@@ -13,7 +13,7 @@ Use the smallest affected authority and its tests:
 | Area                                                               | Current authority                                                                       |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
 | Common artifact serialization and functional hashes               | `artifact.ts`, `versioned-ref.ts`, `strict-json.ts`, `hash.ts`                          |
-| Definition, Recipe, Command, Feature, Card, Source and Compiled IR | `schemas/`, `closed-schema-pack.ts`, `catalogs/`                                        |
+| Definition, Recipe, Command, Workflow Pack, Card, Source and Compiled IR | `schemas/`, `closed-schema-pack.ts`, `catalogs/`                                 |
 | Safety, Capacity baseline, Retention and SQLite profile            | `safety/`, `capacity/`, `sqlite/`                                                       |
 | Current Logical Schema                                             | `logical-schema/` plus `../store/schema/`                                               |
 | Compiler authority                                                 | `../compiler/`, including `../compiler/golden/`, and deterministic replay               |
@@ -35,7 +35,7 @@ Normal development uses the smallest relevant contract check and focused tests. 
 
 `contracts:check` verifies current foundation/schema artifacts, current Compiler replay, Registry authority, and static boundaries. `test:current` exercises the current Store, Registry, authoring, Runtime, and Host Core behavior against test-owned temporary state. Neither command treats the accepted physical snapshot, archived construction Markdown, or retired Gate-state assertions as a development gate.
 
-Current Store tests create isolated databases under the OS temporary directory and inject test adapters and clocks explicitly. Store compatibility uses `PRAGMA user_version`, supported transactional migrations, and focused required-structure smoke checks; tests do not select a Runtime identity mode or read local Runtime pointers.
+Current Store tests create isolated databases under the OS temporary directory and inject test adapters and clocks explicitly. Store compatibility uses `PRAGMA user_version`, exact current-version acceptance, and focused required-structure smoke checks. Older schemas fail closed and require explicit reset/reinitialize; tests do not select a Runtime identity mode or read local Runtime pointers.
 
 Domain-specific generate commands remain implementation tools for versioned changes. They must not rewrite the retained v1 snapshot or historical fixtures in place. A future internal baseline should add only the minimum versioned boundary required by the affected data or runtime interface; it does not need to repeat G0-G9 certification.
 

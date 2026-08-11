@@ -66,6 +66,7 @@ function genesis(groupId = 'group_test') {
       visibility_policy: { observer_access: 'allowed' as const },
       created_at: NOW,
       archived_at: null,
+      dissolved_at: null,
     },
     member: {
       format: 'icarus.collaboration-member/3' as const,
@@ -287,7 +288,7 @@ function analysisResult(
 }
 
 describe('Collaboration project space v3 store', () => {
-  it('creates only the fresh v9 schema and rejects stale v8', () => {
+  it('creates only the fresh v11 schema and rejects stale v10', () => {
     const databasePath = temporaryPath('current.db');
     const store = new CollaborationProjectSpaceStore(databasePath);
     expect(
@@ -334,7 +335,7 @@ describe('Collaboration project space v3 store', () => {
 
     const stalePath = temporaryPath('stale.db');
     const stale = new Database(stalePath);
-    stale.pragma('user_version = 8');
+    stale.pragma('user_version = 10');
     stale.close();
     expect(() => new CollaborationProjectSpaceStore(stalePath)).toThrow(
       expect.objectContaining<Partial<CollaborationProjectSpaceStoreError>>({
@@ -375,6 +376,87 @@ describe('Collaboration project space v3 store', () => {
         .prepare('SELECT COUNT(*) AS count FROM collaboration_principals')
         .get(),
     ).toEqual({ count: 0 });
+    store.close();
+  });
+
+  it('detaches Group data transactionally while retaining identity recovery binding', () => {
+    const store = registerMemberStore('detach.db');
+    createAnalysisRun(store, 'analysis_detach', 100);
+    store.enqueueNotification({
+      groupId: 'group_test',
+      recipientPrincipalId: PRINCIPAL,
+      recipientClientId: CLIENT,
+      kind: 'workflow_recovery',
+      resourceType: 'turn',
+      resourceId: 'turn_detach',
+      reason: 'test',
+      dedupeKey: 'detach:test',
+      nowMs: 100,
+    });
+    const staged = store.stageArtifact({
+      artifactId: 'artifact_detach',
+      groupId: 'group_test',
+      scopeType: 'work_item',
+      scopeId: 'work_detach',
+      principalId: PRINCIPAL,
+      clientId: CLIENT,
+      originalName: 'detach.txt',
+      mediaType: 'text/plain',
+      contents: Buffer.from('local only'),
+      nowMs: 100,
+      expiresAtMs: 200,
+    });
+
+    const plan = store.detachLocalGroup({
+      groupId: 'group_test',
+      reason: 'local_remove',
+      terminalHead: ANALYSIS_HEAD,
+      nowMs: 150,
+    });
+    expect(plan.detached).toBe(true);
+    expect(plan.cleanupPaths).toEqual(
+      expect.arrayContaining([
+        '/tmp/group_test-cache.git',
+        path.dirname(staged.stagedPath),
+      ]),
+    );
+    expect(store.getGroup('group_test')).toBeNull();
+    expect(store.listGroups()).toEqual([]);
+    expect(store.getLocalGroupBinding('group_test')).toMatchObject({
+      groupId: 'group_test',
+      remoteUrl: '/tmp/group_test.git',
+      principalId: PRINCIPAL,
+      credentialId: CREDENTIAL,
+      recoveryCredentialId: null,
+      bindingState: 'cleanup_pending',
+      detachReason: 'local_remove',
+      terminalHead: ANALYSIS_HEAD,
+      cleanupError: null,
+    });
+    const database = store.rawDatabaseForTests();
+    for (const table of [
+      'collaboration_groups',
+      'collaboration_notifications',
+      'collaboration_staged_artifacts',
+      'collaboration_analysis_runs',
+    ])
+      expect(
+        database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get(),
+      ).toEqual({ count: 0 });
+
+    store.failLocalGroupCleanup('group_test', 'filesystem busy', 175);
+    expect(store.getLocalGroupBinding('group_test')).toMatchObject({
+      bindingState: 'cleanup_pending',
+      cleanupError: 'filesystem busy',
+    });
+    store.completeLocalGroupCleanup('group_test', 200);
+    expect(store.getLocalGroupBinding('group_test')).toMatchObject({
+      bindingState: 'retained',
+      cleanupPaths: [],
+      cleanupError: null,
+      principalId: PRINCIPAL,
+      credentialId: CREDENTIAL,
+    });
     store.close();
   });
 
@@ -1087,16 +1169,41 @@ describe('Collaboration project space v3 store', () => {
     });
     const restored = new CollaborationProjectSpaceStore(restoredPath);
     expect(restored.getGroup('group_old')).toBeNull();
+    expect(restored.getLocalGroupBinding('group_old')).toBeNull();
     expect(restored.listEventRecords('group_old')).toEqual([]);
     expect(restored.listLocalAuditEvidence('group_old')).toEqual([]);
     expect(restored.getStagedArtifact(oldArtifact.artifactId)).toBeNull();
     expect(restored.getGroup('group_shared')).not.toBeNull();
+    expect(restored.getLocalGroupBinding('group_shared')).toMatchObject({
+      groupId: 'group_shared',
+      credentialId: CREDENTIAL,
+      bindingState: 'attached',
+    });
     expect(restored.listEventRecords('group_shared')).toHaveLength(1);
     expect(restored.listLocalAuditEvidence('group_shared')).toHaveLength(1);
     expect(
       restored.readStagedArtifact(sharedArtifact.artifactId).contents,
     ).toEqual(Buffer.from('shared backup bytes'));
     restored.close();
+  });
+
+  it('retains a Credential identity referenced only by another Group binding', () => {
+    const store = new CollaborationProjectSpaceStore(
+      temporaryPath('binding-credential-reference.db'),
+    );
+    registerTestGroup(store, 'group_retained_binding');
+    store.detachLocalGroup({
+      groupId: 'group_retained_binding',
+      reason: 'local_remove',
+    });
+    store.completeLocalGroupCleanup('group_retained_binding');
+
+    expect(store.getGroup('group_retained_binding')).toBeNull();
+    expect(store.credentialIdentityIsReferenced(CREDENTIAL)).toBe(true);
+    expect(store.credentialIdentityIsReferenced(RECOVERY_CREDENTIAL)).toBe(
+      false,
+    );
+    store.close();
   });
 
   it('persists the first fenced action claim and records one durable receipt', () => {

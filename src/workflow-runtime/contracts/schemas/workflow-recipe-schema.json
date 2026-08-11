@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-recipe-schema:1\n",
-  "hash": "sha256:c2768894c7fe6aab492f11d2948a4c92ccefbadc44cb094e103df4a8cdca9bb2",
+  "hash": "sha256:b02fe6a0667b555d463c5ad69048eaf3840ebe5e865a0292fc5f55e1da9ff646",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-recipe/1",
@@ -14,10 +14,10 @@
     "type": "object",
     "additionalProperties": false,
     "required": [
+      "format",
       "ref",
-      "owner_feature_id",
-      "recipe_family",
-      "task_kinds",
+      "catalog_visibility",
+      "name",
       "workflow_definition_ref",
       "entry_point",
       "workflow_execution_policy_ref",
@@ -25,25 +25,60 @@
       "workflow_command_policy_ref",
       "input_schema_ref",
       "output_schema_ref",
+      "routing_scope_ref",
       "launch_policy",
       "effect_ceiling",
-      "derived_effect_summary",
-      "required_permissions",
-      "allowed_child_recipe_refs",
-      "resource_claims",
-      "recipe_hash"
+      "input_summary"
     ],
     "properties": {
+      "format": {
+        "const": "icarus.workflow-recipe/1"
+      },
       "ref": {
         "$ref": "#/$defs/versioned_ref"
       },
-      "owner_feature_id": {
+      "owner_pack_id": {
         "anyOf": [
           {
             "type": "string",
             "minLength": 1,
             "maxLength": 255,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "catalog_visibility": {
+        "type": "string",
+        "enum": [
+          "system_only",
+          "selectable"
+        ]
+      },
+      "system_purposes": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "temporary_workflow",
+            "personal_workflow"
+          ]
+        },
+        "uniqueItems": true
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255
+      },
+      "description": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
           },
           {
             "type": "null"
@@ -76,6 +111,12 @@
         "maxLength": 255,
         "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
       },
+      "initial_state_key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+      },
       "workflow_execution_policy_ref": {
         "$ref": "#/$defs/versioned_ref"
       },
@@ -89,6 +130,9 @@
         "$ref": "#/$defs/versioned_ref"
       },
       "output_schema_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "routing_scope_ref": {
         "$ref": "#/$defs/versioned_ref"
       },
       "launch_policy": {
@@ -106,6 +150,16 @@
           "mutable_effects",
           "irreversible"
         ]
+      },
+      "input_summary": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+        },
+        "additionalProperties": {
+          "$ref": "#/$defs/json_value"
+        }
       },
       "derived_effect_summary": {
         "type": "object",

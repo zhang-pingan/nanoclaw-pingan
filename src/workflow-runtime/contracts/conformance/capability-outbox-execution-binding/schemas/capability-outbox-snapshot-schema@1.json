@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-capability-outbox-snapshot-schema:1\n",
-  "hash": "sha256:727082726ca74fc88adf1a95f8505246c6e51976dc8c5a2e6d56271b3259e9b8",
+  "hash": "sha256:fe37e073cea44efb5a576ab13589ecced89baab9f93172b3b10d91708efe39f2",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/capability-outbox-snapshot/1",
@@ -3581,6 +3581,30 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
+              "type",
+              "cancel_action_ref",
+              "ack_required_before_close",
+              "safe_if_cancel_lost"
+            ],
+            "properties": {
+              "type": {
+                "const": "cooperative"
+              },
+              "cancel_action_ref": {
+                "$ref": "#/$defs/versioned_ref"
+              },
+              "ack_required_before_close": {
+                "const": true
+              },
+              "safe_if_cancel_lost": {
+                "const": false
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
               "type"
             ],
             "properties": {
@@ -5281,15 +5305,6 @@
               }
             }
           },
-          "max_steps": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 9007199254740991
-          },
-          "program_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
           "operand_types": {
             "type": "array",
             "items": {
@@ -5304,6 +5319,15 @@
               ]
             },
             "minItems": 1
+          },
+          "max_steps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "program_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
           }
         }
       },
@@ -6346,13 +6370,13 @@
         "properties": {
           "closure_key": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,510}$"
+            "minLength": 1
           },
           "parent_closure_key": {
             "anyOf": [
               {
                 "type": "string",
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,510}$"
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -6385,26 +6409,7 @@
           "source_ref": {
             "anyOf": [
               {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "id",
-                  "version"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 255,
-                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
-                  },
-                  "version": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
-                  }
-                }
+                "$ref": "#/$defs/versioned_ref"
               },
               {
                 "type": "null"

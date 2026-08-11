@@ -21,7 +21,7 @@ export interface WorkflowProjectionRow extends JsonObject {
   readonly started_at_ms: number | null;
   readonly deadline_at_ms: number | null;
   readonly severity_rank: number | null;
-  readonly feature_id: string | null;
+  readonly pack_id: string | null;
   readonly workflow_status: string | null;
   readonly operational_state: string | null;
   readonly source_kind: string;
@@ -548,7 +548,7 @@ function workflowRows(source: WorkflowRuntimeStore): WorkflowProjectionRow[] {
         : row.operational_state === 'action_required'
           ? 1
           : null,
-    feature_id: null,
+    pack_id: null,
     workflow_status: row.status,
     operational_state: row.operational_state,
     source_kind: 'runtime_store',
@@ -603,7 +603,7 @@ function agentExecutionRows(
     started_at_ms: row.execution_started_at_ms ?? row.created_at_ms,
     deadline_at_ms: row.execution_deadline_at_ms,
     severity_rank: null,
-    feature_id: null,
+    pack_id: null,
     workflow_status: null,
     operational_state: null,
     source_kind: 'runtime_store',
@@ -654,7 +654,7 @@ function pendingRows(source: WorkflowRuntimeStore): WorkflowProjectionRow[] {
     started_at_ms: row.opened_at_ms,
     deadline_at_ms: row.remediation_deadline_at_ms,
     severity_rank: row.severity === 'quarantine' ? 0 : 1,
-    feature_id: null,
+    pack_id: null,
     workflow_status: null,
     operational_state: row.severity,
     source_kind: 'runtime_store',
@@ -680,7 +680,7 @@ function traceRows(
     started_at_ms: event.occurred_at_ms,
     deadline_at_ms: null,
     severity_rank: event.event_type === 'orchestration_error' ? 0 : null,
-    feature_id: null,
+    pack_id: null,
     workflow_status: null,
     operational_state: null,
     source_kind: 'runtime_store_event',

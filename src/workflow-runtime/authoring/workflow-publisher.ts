@@ -8,7 +8,7 @@ import {
   G37_INVOCATION_DOMAIN,
   validateG37WorkflowPublisherReceipt,
   validateG37WorkflowPublisherRequest,
-  workflowFeatureReleaseId,
+  workflowPackReleaseId,
   workflowPublishedRetentionHandleId,
   workflowPublisherCommandId,
 } from '../contracts/g3-workflow-publisher.js';
@@ -33,6 +33,10 @@ import type {
   WorkflowRuntimeStore,
   WorkflowRuntimeWriteTransaction,
 } from '../store/runtime-store/index.js';
+import {
+  publishWorkflowBundleInTransaction,
+  WorkflowBundlePublisherError,
+} from './workflow-bundle-publisher.js';
 
 export interface WorkflowPublisherApprovedReviewRegistry {
   resolveApprovedReview(
@@ -44,7 +48,7 @@ export interface WorkflowPublisherApprovedReviewRegistry {
 export type WorkflowPublisherFaultPoint =
   | 'after_command_pending'
   | 'after_registry_publication'
-  | 'after_feature_release_resources'
+  | 'after_pack_release_resources'
   | 'after_retention_root'
   | 'before_command_finalize';
 
@@ -66,8 +70,8 @@ export class WorkflowPublisherError extends Error {
 interface PublisherCommandRow extends Record<string, unknown> {
   command_id: string;
   domain_request_hash: string;
-  target_feature_release_id: string;
-  target_feature_release_hash: string;
+  target_pack_release_id: string;
+  target_pack_release_hash: string;
   canonical_receipt_value_id: string | null;
   canonical_receipt_hash: string | null;
   canonical_receipt_schema_resource_id: string | null;
@@ -103,7 +107,7 @@ interface ValueRow extends Record<string, unknown> {
 
 interface ReleaseRow extends Record<string, unknown> {
   id: string;
-  feature_id: string;
+  pack_id: string;
   release_ref: string;
   release_version: string;
   release_hash: string;
@@ -141,8 +145,8 @@ interface PublisherEventInput {
     | 'recovery_failed'
     | 'terminal_failed';
   failure_code: string | null;
-  related_feature_release_id: string | null;
-  related_feature_release_hash: string | null;
+  related_pack_release_id: string | null;
+  related_pack_release_hash: string | null;
   detail: G3WorkflowPublisherResult | null;
 }
 
@@ -221,8 +225,8 @@ function loadCommand(
   request: G3WorkflowPublisherRequest,
 ): PublisherCommandRow | undefined {
   return connection.queryOne<PublisherCommandRow>(
-    `SELECT command_id, domain_request_hash, target_feature_release_id,
-            target_feature_release_hash, canonical_receipt_value_id,
+    `SELECT command_id, domain_request_hash, target_pack_release_id,
+            target_pack_release_hash, canonical_receipt_value_id,
             canonical_receipt_hash, canonical_receipt_schema_resource_id,
             canonical_receipt_schema_hash, lifecycle
        FROM workflow_publisher_commands
@@ -454,8 +458,8 @@ function insertEvents(
       phase: input.phase,
       event_type: input.event_type,
       failure_code: input.failure_code,
-      related_feature_release_id: input.related_feature_release_id,
-      related_feature_release_hash: input.related_feature_release_hash,
+      related_pack_release_id: input.related_pack_release_id,
+      related_pack_release_hash: input.related_pack_release_hash,
       detail_value_id: detailValueId,
       detail_hash: detailHash,
       detail_schema_resource_id: input.detail ? resultSchemaResourceId : null,
@@ -467,7 +471,7 @@ function insertEvents(
     transaction.execute(
       `INSERT INTO workflow_publisher_events (
         command_id, event_no, attempt_no, phase, event_type, failure_code,
-        related_feature_release_id, related_feature_release_hash,
+        related_pack_release_id, related_pack_release_hash,
         detail_value_id, detail_hash, detail_schema_resource_id,
         detail_schema_hash, previous_event_hash, event_hash, occurred_at_ms
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -478,8 +482,8 @@ function insertEvents(
         input.phase,
         input.event_type,
         input.failure_code,
-        input.related_feature_release_id,
-        input.related_feature_release_hash,
+        input.related_pack_release_id,
+        input.related_pack_release_hash,
         detailValueId,
         detailHash,
         input.detail ? resultSchemaResourceId : null,
@@ -549,15 +553,15 @@ function appendExistingDisposition(
     request.contract_schemas.result.content_hash,
     previousHash,
   );
-  const releaseId = command.target_feature_release_id;
-  const releaseHash = command.target_feature_release_hash;
+  const releaseId = command.target_pack_release_id;
+  const releaseHash = command.target_pack_release_hash;
   const events: PublisherEventInput[] = [
     {
       phase: 'authenticate',
       event_type: 'attempt_started',
       failure_code: null,
-      related_feature_release_id: null,
-      related_feature_release_hash: null,
+      related_pack_release_id: null,
+      related_pack_release_hash: null,
       detail: null,
     },
   ];
@@ -566,8 +570,8 @@ function appendExistingDisposition(
       phase: 'validate',
       event_type: 'pre_transaction_failed',
       failure_code: 'idempotency_conflict',
-      related_feature_release_id: null,
-      related_feature_release_hash: null,
+      related_pack_release_id: null,
+      related_pack_release_hash: null,
       detail: result,
     });
   } else if (invocation.invocation_kind === 'recovery') {
@@ -575,8 +579,8 @@ function appendExistingDisposition(
       phase: 'recovery',
       event_type: 'recovery_started',
       failure_code: null,
-      related_feature_release_id: null,
-      related_feature_release_hash: null,
+      related_pack_release_id: null,
+      related_pack_release_hash: null,
       detail: null,
     });
     events.push({
@@ -587,9 +591,9 @@ function appendExistingDisposition(
           : 'recovery_failed',
       failure_code:
         command.lifecycle === 'applied' ? null : 'publisher_transaction_failed',
-      related_feature_release_id:
+      related_pack_release_id:
         command.lifecycle === 'applied' ? releaseId : null,
-      related_feature_release_hash:
+      related_pack_release_hash:
         command.lifecycle === 'applied' ? releaseHash : null,
       detail: result,
     });
@@ -598,8 +602,8 @@ function appendExistingDisposition(
       phase: 'finalize',
       event_type: 'phase_succeeded',
       failure_code: null,
-      related_feature_release_id: null,
-      related_feature_release_hash: null,
+      related_pack_release_id: null,
+      related_pack_release_hash: null,
       detail: result,
     });
   }
@@ -620,49 +624,44 @@ function assertNoReleaseCollision(
   request: G3WorkflowPublisherRequest,
 ): void {
   const release = request.target_release;
-  const id = workflowFeatureReleaseId(release.release_ref);
+  const id = workflowPackReleaseId(release.release_ref);
   const rows = transaction.queryAll<ReleaseRow>(
-    `SELECT id, feature_id, release_ref, release_version, release_hash,
+    `SELECT id, pack_id, release_ref, release_version, release_hash,
             execution_artifact_resource_id, execution_artifact_hash, status,
             staged_at_ms, activated_at_ms, disabled_at_ms, row_version
-       FROM workflow_feature_releases
-      WHERE id = ? OR (feature_id = ? AND release_ref = ? AND release_version = ?)`,
-    [
-      id,
-      release.feature_id,
-      release.release_ref.id,
-      release.release_ref.version,
-    ],
+       FROM workflow_pack_releases
+      WHERE id = ? OR (pack_id = ? AND release_ref = ? AND release_version = ?)`,
+    [id, release.pack_id, release.release_ref.id, release.release_ref.version],
   );
   if (rows.length !== 0) {
     throw new WorkflowPublisherError(
-      'feature_release_identity_collision',
-      `Target Feature Release already exists outside this idempotency command: ${id}`,
+      'pack_release_identity_collision',
+      `Target Pack Release already exists outside this idempotency command: ${id}`,
     );
   }
 }
 
-function insertFeatureRelease(
+function insertPackRelease(
   transaction: WorkflowRuntimeWriteTransaction,
   request: G3WorkflowPublisherRequest,
   stagedAtMs: number,
 ): string {
   const release = request.target_release;
-  const releaseId = workflowFeatureReleaseId(release.release_ref);
+  const releaseId = workflowPackReleaseId(release.release_ref);
   transaction.execute(
-    `INSERT INTO workflow_feature_releases (
-      id, feature_id, release_ref, release_version, release_hash,
+    `INSERT INTO workflow_pack_releases (
+      id, pack_id, release_ref, release_version, release_hash,
       execution_artifact_resource_id, execution_artifact_hash, status,
       staged_at_ms, activated_at_ms, disabled_at_ms, row_version
     ) VALUES (?, ?, ?, ?, ?, ?, ?, 'staged', ?, NULL, NULL, 1)`,
     [
       releaseId,
-      release.feature_id,
+      release.pack_id,
       release.release_ref.id,
       release.release_ref.version,
       release.release_hash,
       registryResourceId({
-        resource_type: 'feature_execution_artifact',
+        resource_type: 'pack_execution_artifact',
         ref: release.execution_artifact.ref,
       }),
       release.execution_artifact.hash,
@@ -690,9 +689,9 @@ function insertPendingCommand(
       source_manifest_schema_hash, compiled_plan_value_id, compiled_plan_hash,
       compiled_plan_schema_resource_id, compiled_plan_schema_hash,
       execution_artifact_resource_id, execution_artifact_hash,
-      closure_manifest_id, closure_hash, target_feature_release_id,
-      target_feature_release_hash, applied_feature_release_id,
-      applied_feature_release_hash, canonical_receipt_value_id,
+      closure_manifest_id, closure_hash, target_pack_release_id,
+      target_pack_release_hash, applied_pack_release_id,
+      applied_pack_release_hash, canonical_receipt_value_id,
       canonical_receipt_hash, canonical_receipt_schema_resource_id,
       canonical_receipt_schema_hash, lifecycle, created_at_ms,
       finalized_at_ms, row_version
@@ -725,7 +724,7 @@ function insertPendingCommand(
       registryResourceId(request.compiled_plan.schema),
       request.compiled_plan.schema.content_hash,
       registryResourceId({
-        resource_type: 'feature_execution_artifact',
+        resource_type: 'pack_execution_artifact',
         ref: request.target_release.execution_artifact.ref,
       }),
       request.target_release.execution_artifact.hash,
@@ -749,7 +748,7 @@ function finalizeCommand(
 ): void {
   const result = transaction.execute(
     `UPDATE workflow_publisher_commands
-        SET applied_feature_release_id = ?, applied_feature_release_hash = ?,
+        SET applied_pack_release_id = ?, applied_pack_release_hash = ?,
             canonical_receipt_value_id = ?, canonical_receipt_hash = ?,
             canonical_receipt_schema_resource_id = ?,
             canonical_receipt_schema_hash = ?, lifecycle = ?,
@@ -815,21 +814,25 @@ function publishRegistryResources(
   request: G3WorkflowPublisherRequest,
   publishedAtMs: number,
 ): void {
-  for (const query of request.release_resources) {
-    const result = transaction.execute(
-      `UPDATE workflow_registry_resources
-          SET publication_state = 'published', published_at_ms = ?,
-              row_version = row_version + 1
-        WHERE id = ? AND content_hash = ? AND publication_state = 'staged'
-          AND published_at_ms IS NULL AND retired_at_ms IS NULL`,
-      [publishedAtMs, registryResourceId(query), query.content_hash],
-    );
-    if (result.changes !== 1) {
+  try {
+    publishWorkflowBundleInTransaction(transaction, {
+      owner: { kind: 'pack', pack_id: request.target_release.pack_id },
+      resources: request.release_resources,
+      published_at_ms: publishedAtMs,
+      publication_ref: workflowPublisherCommandId(
+        request.idempotency_domain,
+        request.idempotency_key,
+      ),
+    });
+  } catch (error) {
+    if (error instanceof WorkflowBundlePublisherError) {
       throw new WorkflowPublisherError(
         'registry_publication_collision',
-        `Registry publication CAS failed for ${registryResourceId(query)}`,
+        error.message,
+        { cause: error },
       );
     }
+    throw error;
   }
 }
 
@@ -840,7 +843,7 @@ function insertReleaseResources(
 ): void {
   for (const entry of request.target_release.resources) {
     transaction.execute(
-      `INSERT INTO workflow_feature_release_resources (
+      `INSERT INTO workflow_pack_release_resources (
         release_id, resource_id, content_hash, resource_role
       ) VALUES (?, ?, ?, ?)`,
       [
@@ -865,7 +868,7 @@ function insertRetentionRoot(
   );
   const collision = transaction.queryOne<Record<string, unknown>>(
     `SELECT id FROM workflow_registry_retention_handles
-      WHERE id = ? OR (handle_kind = 'published' AND feature_release_id = ?
+      WHERE id = ? OR (handle_kind = 'published' AND pack_release_id = ?
         AND closure_manifest_id = ?)`,
     [
       handleId,
@@ -881,7 +884,7 @@ function insertRetentionRoot(
   }
   transaction.execute(
     `INSERT INTO workflow_registry_retention_handles (
-      id, handle_kind, feature_release_id, graph_run_id, backup_id,
+      id, handle_kind, pack_release_id, graph_run_id, backup_id,
       external_actor_ref, closure_manifest_id, closure_hash, status,
       created_at_ms, released_at_ms, row_version
     ) VALUES (?, 'published', ?, NULL, NULL, NULL, ?, ?, 'held', ?, NULL, 1)`,
@@ -930,8 +933,8 @@ function eventInputsForNewCommand(
       phase: 'authenticate',
       event_type: 'attempt_started',
       failure_code: null,
-      related_feature_release_id: null,
-      related_feature_release_hash: null,
+      related_pack_release_id: null,
+      related_pack_release_hash: null,
       detail: null,
     },
   ];
@@ -940,8 +943,8 @@ function eventInputsForNewCommand(
       phase: 'recovery',
       event_type: 'recovery_started',
       failure_code: null,
-      related_feature_release_id: null,
-      related_feature_release_hash: null,
+      related_pack_release_id: null,
+      related_pack_release_hash: null,
       detail: null,
     });
   }
@@ -950,16 +953,16 @@ function eventInputsForNewCommand(
       phase: 'validate',
       event_type: 'phase_succeeded',
       failure_code: null,
-      related_feature_release_id: null,
-      related_feature_release_hash: null,
+      related_pack_release_id: null,
+      related_pack_release_hash: null,
       detail: null,
     },
     {
       phase: 'review',
       event_type: 'phase_succeeded',
       failure_code: null,
-      related_feature_release_id: null,
-      related_feature_release_hash: null,
+      related_pack_release_id: null,
+      related_pack_release_hash: null,
       detail: null,
     },
   );
@@ -969,16 +972,16 @@ function eventInputsForNewCommand(
         phase: 'preflight',
         event_type: 'pre_transaction_failed',
         failure_code: failureCode,
-        related_feature_release_id: null,
-        related_feature_release_hash: null,
+        related_pack_release_id: null,
+        related_pack_release_hash: null,
         detail: result,
       },
       {
         phase: 'finalize',
         event_type: 'terminal_failed',
         failure_code: failureCode,
-        related_feature_release_id: null,
-        related_feature_release_hash: null,
+        related_pack_release_id: null,
+        related_pack_release_hash: null,
         detail: result,
       },
     );
@@ -989,24 +992,24 @@ function eventInputsForNewCommand(
       phase: 'preflight',
       event_type: 'phase_succeeded',
       failure_code: null,
-      related_feature_release_id: null,
-      related_feature_release_hash: null,
+      related_pack_release_id: null,
+      related_pack_release_hash: null,
       detail: null,
     },
     {
       phase: 'publish_transaction',
       event_type: 'publish_transaction_started',
       failure_code: null,
-      related_feature_release_id: null,
-      related_feature_release_hash: null,
+      related_pack_release_id: null,
+      related_pack_release_hash: null,
       detail: null,
     },
     {
       phase: 'publish_transaction',
       event_type: 'publish_committed',
       failure_code: null,
-      related_feature_release_id: releaseId,
-      related_feature_release_hash: releaseHash,
+      related_pack_release_id: releaseId,
+      related_pack_release_hash: releaseHash,
       detail: null,
     },
   );
@@ -1016,16 +1019,16 @@ function eventInputsForNewCommand(
           phase: 'recovery',
           event_type: 'recovery_succeeded',
           failure_code: null,
-          related_feature_release_id: releaseId,
-          related_feature_release_hash: releaseHash,
+          related_pack_release_id: releaseId,
+          related_pack_release_hash: releaseHash,
           detail: result,
         }
       : {
           phase: 'finalize',
           event_type: 'phase_succeeded',
           failure_code: null,
-          related_feature_release_id: null,
-          related_feature_release_hash: null,
+          related_pack_release_id: null,
+          related_pack_release_hash: null,
           detail: result,
         },
   );
@@ -1121,7 +1124,7 @@ export function publishStagedWorkflowRelease(
     );
 
     const failureCode = failureFromPreflights(transaction, request);
-    const releaseId = insertFeatureRelease(
+    const releaseId = insertPackRelease(
       transaction,
       request,
       invocation.requested_at_ms,
@@ -1144,7 +1147,7 @@ export function publishStagedWorkflowRelease(
       );
       options.faultInjector?.('after_registry_publication');
       insertReleaseResources(transaction, request, releaseId);
-      options.faultInjector?.('after_feature_release_resources');
+      options.faultInjector?.('after_pack_release_resources');
       retentionHandleId = insertRetentionRoot(
         transaction,
         request,
@@ -1159,8 +1162,8 @@ export function publishStagedWorkflowRelease(
       command_id: commandId,
       outcome: failureCode ? 'failed' : 'applied',
       domain_request_hash: request.domain_request_hash,
-      feature_release_ref: request.target_release.release_ref,
-      feature_release_hash: request.target_release.release_hash,
+      pack_release_ref: request.target_release.release_ref,
+      pack_release_hash: request.target_release.release_hash,
       closure_ref: request.approved_review.closure_ref,
       closure_hash: request.approved_review.closure_hash,
       execution_artifact_ref: request.target_release.execution_artifact.ref,

@@ -29,11 +29,15 @@ import {
   buildCollaborationDiscussionMessageRequest,
   buildCollaborationExternalResultRequest,
   buildCollaborationFindingDecisionRequest,
+  buildCollaborationLifecycleRequest,
   buildCollaborationRecoverTurnRequest,
   buildCollaborationStartTurnRequest,
+  collaborationActiveMemberOptions,
   collaborationAnalysisRunAccess,
   collaborationCanApproveMembers,
   collaborationCanAnswerWorkItemAssignment,
+  collaborationCanDissolve,
+  collaborationCanLeave,
   collaborationCanRecoverTurn,
   collaborationCanDecideRecovery,
   collaborationCanCreateTurn,
@@ -249,6 +253,7 @@ export function createCollaborationWorkspace(options) {
     dialogBody: document.getElementById('collaboration-dialog-body'),
     dialogError: document.getElementById('collaboration-dialog-error'),
     dialogSubmit: document.getElementById('collaboration-dialog-submit'),
+    contextMenu: document.getElementById('collaboration-group-context-menu'),
     tabs: [...document.querySelectorAll('[data-collaboration-tab]')],
   };
   let workflowEditor = null;
@@ -330,6 +335,46 @@ export function createCollaborationWorkspace(options) {
           .join('')
       : empty(state.loading ? '正在加载' : '暂无群组');
   };
+
+  const closeGroupContextMenu = () => {
+    elements.contextMenu?.classList.add('hidden');
+    state.contextGroupId = '';
+  };
+
+  elements.list?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-collaboration-group-id]');
+    if (!(button instanceof HTMLButtonElement)) return;
+    closeGroupContextMenu();
+    void selectGroup(button.dataset.collaborationGroupId);
+  });
+
+  elements.list?.addEventListener('contextmenu', (event) => {
+    const button = event.target.closest('[data-collaboration-group-id]');
+    if (!(button instanceof HTMLButtonElement) || !elements.contextMenu) return;
+    event.preventDefault();
+    state.contextGroupId = button.dataset.collaborationGroupId || '';
+    elements.contextMenu.style.left = `${Math.max(
+      8,
+      Math.min(event.clientX, window.innerWidth - 190),
+    )}px`;
+    elements.contextMenu.style.top = `${Math.max(
+      8,
+      Math.min(event.clientY, window.innerHeight - 56),
+    )}px`;
+    elements.contextMenu.classList.remove('hidden');
+  });
+
+  elements.contextMenu?.addEventListener('click', () => {
+    const group = state.groups.find(
+      (candidate) => candidate.groupId === state.contextGroupId,
+    );
+    closeGroupContextMenu();
+    if (group) openLifecycleConfirmation('remove-local', group);
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!elements.contextMenu?.contains(event.target)) closeGroupContextMenu();
+  });
 
   const renderShell = () => {
     const group = selectedGroup();
@@ -753,7 +798,26 @@ export function createCollaborationWorkspace(options) {
     const group = selectedGroup();
     const identity = group.icarusIdentity || {};
     const localCredential = collaborationLocalCredential(group);
-    return `${renderObserverBand(group)}<section class="collaboration-section"><div class="collaboration-section-head"><h3>Git Remote Access</h3><button type="button" class="btn-ghost" data-collaboration-action="edit-git-ssh-key">修改 SSH Key</button></div><dl class="collaboration-definition-list"><div><dt>Remote</dt><dd>${html(group.remoteUrl)}</dd></div><div><dt>本地 SSH Key</dt><dd>${html(group.gitRemoteAccess?.sshKeyPath || '-')}</dd></div><div><dt>权限边界</dt><dd>clone / fetch / push</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="clear-git-ssh-key">使用默认路径</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Icarus Group Permission 与身份</h3></div><dl class="collaboration-definition-list"><div><dt>业务身份</dt><dd title="${attr(identity.principalId || '')}">${html(identity.principalId ? collaborationShortId(identity.principalId) : '-')}</dd></div><div><dt>当前 Client</dt><dd title="${attr(identity.clientId || '')}">${html(identity.clientId ? collaborationShortId(identity.clientId) : '-')}</dd></div><div><dt>当前 Credential</dt><dd title="${attr(identity.credentialId || '')}">${html(identity.credentialId ? collaborationShortId(identity.credentialId) : '-')}</dd></div><div><dt>签名状态</dt><dd>${html(collaborationStatusLabel(localCredential?.status || (identity.credentialId ? 'unknown' : 'not_configured')))}</dd></div><div><dt>离线 Group recovery</dt><dd>${identity.recoveryCredentialAvailable ? '本机可用' : '本机未导入'}</dd></div><div><dt>权限边界</dt><dd>Host API / 协议验证 / Reducer</dd></div></dl><div class="collaboration-record-actions">${collaborationCanMutate(group) ? '<button type="button" class="btn-ghost" data-collaboration-action="rotate-credential">轮换 Credential</button>' : ''}${identity.recoveryCredentialAvailable ? '<button type="button" class="btn-ghost" data-collaboration-action="export-recovery-credential">导出离线恢复凭据</button>' : ''}<button type="button" class="btn-ghost" data-collaboration-action="import-recovery-credential">导入离线恢复凭据</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>群组与本地数据</h3></div><dl class="collaboration-definition-list"><div><dt>群组 ID</dt><dd>${html(group.groupId)}</dd></div><div><dt>订阅模式</dt><dd>${html(collaborationLabel(group.subscriptionMode))}</dd></div><div><dt>协议状态</dt><dd>${html(collaborationStatusLabel(group.protocolStatus))}</dd></div><div><dt>已验证版本</dt><dd>${html(group.lastVerifiedHead || '-')}</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="backup">创建备份</button><button type="button" class="btn-ghost" data-collaboration-action="restore">恢复备份</button>${group.localPrincipalId === group.ownerPrincipalId && group.lifecycle === 'active' ? '<button type="button" class="btn-danger-soft" data-collaboration-action="archive-group">归档群组</button>' : ''}${collaborationCanInitializeGroup(group) ? '<button type="button" class="btn-danger-soft" data-collaboration-action="initialize-group">初始化群组</button>' : ''}</div></section>`;
+    const lifecycleActions = [
+      group.localPrincipalId === group.ownerPrincipalId &&
+      group.lifecycle === 'active'
+        ? '<button type="button" class="btn-danger-soft" data-collaboration-action="archive-group">归档群组</button>'
+        : '',
+      group.localPrincipalId === group.ownerPrincipalId &&
+      group.lifecycle === 'archived'
+        ? '<button type="button" class="btn-ghost" data-collaboration-action="reopen-group">重新开放</button>'
+        : '',
+      collaborationCanLeave(group)
+        ? '<button type="button" class="btn-danger-soft" data-collaboration-action="leave-group">退出群组</button>'
+        : '',
+      collaborationCanDissolve(group)
+        ? '<button type="button" class="btn-danger-soft" data-collaboration-action="dissolve-group">解散群组</button>'
+        : '',
+      collaborationCanInitializeGroup(group)
+        ? '<button type="button" class="btn-danger-soft" data-collaboration-action="initialize-group">初始化群组</button>'
+        : '',
+    ].join('');
+    return `${renderObserverBand(group)}<section class="collaboration-section"><div class="collaboration-section-head"><h3>Git Remote Access</h3><button type="button" class="btn-ghost" data-collaboration-action="edit-git-ssh-key">修改 SSH Key</button></div><dl class="collaboration-definition-list"><div><dt>Remote</dt><dd>${html(group.remoteUrl)}</dd></div><div><dt>本地 SSH Key</dt><dd>${html(group.gitRemoteAccess?.sshKeyPath || '-')}</dd></div><div><dt>权限边界</dt><dd>clone / fetch / push</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="clear-git-ssh-key">使用默认路径</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Icarus Group Permission 与身份</h3></div><dl class="collaboration-definition-list"><div><dt>业务身份</dt><dd title="${attr(identity.principalId || '')}">${html(identity.principalId ? collaborationShortId(identity.principalId) : '-')}</dd></div><div><dt>当前 Client</dt><dd title="${attr(identity.clientId || '')}">${html(identity.clientId ? collaborationShortId(identity.clientId) : '-')}</dd></div><div><dt>当前 Credential</dt><dd title="${attr(identity.credentialId || '')}">${html(identity.credentialId ? collaborationShortId(identity.credentialId) : '-')}</dd></div><div><dt>签名状态</dt><dd>${html(collaborationStatusLabel(localCredential?.status || (identity.credentialId ? 'unknown' : 'not_configured')))}</dd></div><div><dt>离线 Group recovery</dt><dd>${identity.recoveryCredentialAvailable ? '本机可用' : '本机未导入'}</dd></div><div><dt>权限边界</dt><dd>Host API / 协议验证 / Reducer</dd></div></dl><div class="collaboration-record-actions">${collaborationCanMutate(group) ? '<button type="button" class="btn-ghost" data-collaboration-action="rotate-credential">轮换 Credential</button>' : ''}${identity.recoveryCredentialAvailable ? '<button type="button" class="btn-ghost" data-collaboration-action="export-recovery-credential">导出离线恢复凭据</button>' : ''}<button type="button" class="btn-ghost" data-collaboration-action="import-recovery-credential">导入离线恢复凭据</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>群组与本地数据</h3></div><dl class="collaboration-definition-list"><div><dt>群组 ID</dt><dd>${html(group.groupId)}</dd></div><div><dt>订阅模式</dt><dd>${html(collaborationLabel(group.subscriptionMode))}</dd></div><div><dt>协议状态</dt><dd>${html(collaborationStatusLabel(group.protocolStatus))}</dd></div><div><dt>已验证版本</dt><dd>${html(group.lastVerifiedHead || '-')}</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="backup">创建备份</button><button type="button" class="btn-ghost" data-collaboration-action="restore">恢复备份</button>${lifecycleActions}</div></section>`;
   };
 
   const renderDiagnostics = () => {
@@ -904,14 +968,20 @@ export function createCollaborationWorkspace(options) {
 
   const syncSelected = async () => {
     if (!state.selectedGroupId) return;
-    await options.request(
+    const groupId = state.selectedGroupId;
+    const result = await options.request(
       `/groups/${encodeURIComponent(state.selectedGroupId)}/sync`,
       {
         method: 'POST',
         body: '{}',
       },
     );
-    await loadDetail(state.selectedGroupId, false);
+    if (!result.group) {
+      forgetLocalGroup(groupId);
+      options.showToast('远端生命周期已同步，群组已从本机列表移除');
+      return;
+    }
+    await loadDetail(groupId, false);
     options.showToast('群组同步完成');
   };
 
@@ -1726,10 +1796,22 @@ export function createCollaborationWorkspace(options) {
     );
     if (!collaborationCanRecoverTurn(group, instance, turn))
       throw new Error('当前身份无权恢复该执行轮次');
+    const assigneeOptions = collaborationActiveMemberOptions(group);
+    if (!assigneeOptions.length)
+      throw new Error('当前没有可接管执行轮次的 active 成员');
+    const defaultAssignee = assigneeOptions.some(
+      ([principalId]) => principalId === turn.assignee_principal_id,
+    )
+      ? turn.assignee_principal_id
+      : assigneeOptions.some(
+            ([principalId]) => principalId === group.localPrincipalId,
+          )
+        ? group.localPrincipalId
+        : assigneeOptions[0][0];
     openDialog({
-      title: '恢复执行轮次',
-      submitText: '确认恢复',
-      body: `<div class="collaboration-transfer-warning"><strong>创建新的执行尝试</strong><span>Host 将校验当前 attempt、实例 revision 与 Git CAS；原执行结果不会被直接采用。</span></div>${field('恢复原因', 'reason', turn.recovery_reason || '', { multiline: true })}`,
+      title: '重新分配并恢复执行轮次',
+      submitText: '确认重新分配',
+      body: `<div class="collaboration-transfer-warning"><strong>创建新的执行尝试</strong><span>负责人、当前状态分配与 Turn 将原子更新；原执行结果不会被直接采用。</span></div><div class="collaboration-form-grid">${field('新的负责人', 'assigneePrincipalId', defaultAssignee, { options: assigneeOptions })}${field('恢复原因', 'reason', turn.recovery_reason || '', { multiline: true })}</div>`,
       onSubmit: async (formData) => {
         await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/turns/${encodeURIComponent(turn.turn_id)}/recover`,
@@ -1743,6 +1825,7 @@ export function createCollaborationWorkspace(options) {
                   instance.instance_id,
                 ),
                 previousAttempt: turn.attempt,
+                assigneePrincipalId: formData.get('assigneePrincipalId'),
                 reason: formData.get('reason'),
               }),
             ),
@@ -1917,6 +2000,75 @@ export function createCollaborationWorkspace(options) {
           elements.dialogSubmit.textContent = '确认初始化';
           throw error;
         }
+      },
+    });
+  };
+
+  const forgetLocalGroup = (groupId) => {
+    state.groups = state.groups.filter((group) => group.groupId !== groupId);
+    if (state.selectedGroupId === groupId) {
+      clearAnalysisPoll();
+      state.selectedGroupId = '';
+      state.detail = null;
+      state.tabData = {};
+      state.activeTab = 'overview';
+      updateRoute(true);
+    }
+    renderList();
+    renderShell();
+  };
+
+  const openLifecycleConfirmation = (
+    operation,
+    targetGroup = selectedGroup(),
+  ) => {
+    if (!targetGroup) return;
+    const configurations = {
+      dissolve: {
+        title: '解散群组',
+        submitText: '永久解散',
+        copy: '<strong>解散不可恢复。</strong><span>远端将记录正式解散事件并保留审计历史；同步成功后，本机群组数据会被移除。</span>',
+      },
+      leave: {
+        title: '退出群组',
+        submitText: '确认退出',
+        copy: '<strong>退出会立即失效当前身份的 Client、Credential 与 Executor。</strong><span>再次加入时仍使用原 principal，并重新按当前加入策略审批。</span>',
+      },
+      'remove-local': {
+        title: '从本机移除',
+        submitText: '从本机移除',
+        copy: '<strong>此操作只影响当前设备。</strong><span>不会退出或解散群组；本机 Credential、私钥、备份和身份恢复绑定会保留。</span>',
+      },
+    };
+    const configuration = configurations[operation];
+    if (!configuration) return;
+    openDialog({
+      title: configuration.title,
+      submitText: configuration.submitText,
+      danger: true,
+      body: `<div class="collaboration-confirmation-copy">${configuration.copy}</div>${field('输入群组 ID 以确认', 'confirmation')}`,
+      onSubmit: async (formData) => {
+        const confirmation = String(formData.get('confirmation') || '').trim();
+        const request = buildCollaborationLifecycleRequest({
+          operation,
+          group: targetGroup,
+          confirmation,
+        });
+        const result = await options.request(request.endpoint, {
+          method: request.method,
+          body: JSON.stringify(request.body),
+        });
+        closeDialog();
+        forgetLocalGroup(targetGroup.groupId);
+        options.showToast(
+          result.cleanupPending
+            ? `群组已隐藏，本地清理将在重试后完成：${result.cleanupError || '清理失败'}`
+            : operation === 'dissolve'
+              ? '群组已解散'
+              : operation === 'leave'
+                ? '已退出群组'
+                : '已从本机移除',
+        );
       },
     });
   };
@@ -2783,6 +2935,27 @@ export function createCollaborationWorkspace(options) {
       );
       return loadDetail(group.groupId, false);
     }
+    if (action === 'reopen-group') {
+      await options.request(
+        `/groups/${encodeURIComponent(group.groupId)}/reopen`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            expectedRevision: aggregateRevision(
+              group.projection,
+              'group',
+              group.groupId,
+            ),
+            reason: '从群组设置页面重新开放',
+          }),
+        },
+      );
+      return loadDetail(group.groupId, false);
+    }
+    if (action === 'dissolve-group')
+      return openLifecycleConfirmation('dissolve', group);
+    if (action === 'leave-group')
+      return openLifecycleConfirmation('leave', group);
     if (action === 'export-audit') {
       const blob = new Blob(
         [`${JSON.stringify(state.tabData.audit, null, 2)}\n`],

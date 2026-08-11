@@ -33,15 +33,6 @@ import {
   DATA_DIR,
   PROJECT_ROOT,
 } from '../config.js';
-import {
-  deleteFeatureData,
-  featureApiRoutes,
-  getFeatureDeletionSummary,
-  getEnabledFeatureInfo,
-  listFeatureManagementInfo,
-  resolveEnabledFeatureStaticPath,
-  setFeatureEnabledAndApply,
-} from '../features/index.js';
 import { readEnvFile } from '../env.js';
 import {
   ensureUniqueUploadPath,
@@ -316,6 +307,8 @@ interface PendingDesktopCapture {
   expectedResponses: number;
   responseCount: number;
   errors: string[];
+  outputDirectory: string;
+  writeImage?: (filename: string, bytes: Buffer) => string | Promise<string>;
   timeout: NodeJS.Timeout;
   resolve: (result: DesktopCaptureResult) => void;
 }
@@ -664,6 +657,8 @@ class WebChannel {
         expectedResponses: targets.length,
         responseCount: 0,
         errors: [],
+        outputDirectory: options.outputDirectory || DESKTOP_CAPTURE_DIR,
+        writeImage: options.writeImage,
         timeout,
         resolve,
       });
@@ -709,7 +704,10 @@ class WebChannel {
     }
   }
 
-  private handleDesktopCaptureSuccess(ws: WebSocket, msg: IncomingMsg): void {
+  private async handleDesktopCaptureSuccess(
+    ws: WebSocket,
+    msg: IncomingMsg,
+  ): Promise<void> {
     const requestId = msg.requestId || '';
     const pending = this.pendingDesktopCaptures.get(requestId);
     if (!pending) return;
@@ -774,9 +772,24 @@ class WebChannel {
       const filename = `${timestamp}-${safeRequestId}${desktopCaptureExtensionForMime(
         mimeType,
       )}`;
-      fs.mkdirSync(DESKTOP_CAPTURE_DIR, { recursive: true });
-      const hostPath = path.join(DESKTOP_CAPTURE_DIR, filename);
-      fs.writeFileSync(hostPath, imageBuffer);
+      let hostPath: string;
+      try {
+        if (pending.writeImage) {
+          hostPath = await pending.writeImage(filename, imageBuffer);
+        } else {
+          fs.mkdirSync(pending.outputDirectory, { recursive: true });
+          hostPath = path.join(pending.outputDirectory, filename);
+          fs.writeFileSync(hostPath, imageBuffer);
+        }
+      } catch (error) {
+        this.completeDesktopCapture(requestId, {
+          status: 'error',
+          requestId,
+          error: 'Host rejected the desktop capture output path.',
+          details: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
 
       image = {
         path: hostPath,
@@ -883,9 +896,6 @@ class WebChannel {
       if (pathname === '/' || pathname === '/index.html') {
         return this.serveFile('/index.html', 'text/html', res);
       }
-      if (pathname === '/api/features/enabled' && req.method === 'GET') {
-        return this.apiGetEnabledFeatures(res);
-      }
       if (pathname.startsWith('/api/collaboration/')) {
         if (this.opts.collaborationApi) {
           await this.opts.collaborationApi.handle(req, res, reqUrl);
@@ -906,22 +916,18 @@ class WebChannel {
       ) {
         if (await this.opts.taskWorkspaceApi.handle(req, res, reqUrl)) return;
       }
-      if (pathname === '/api/features/config' && req.method === 'GET') {
-        return this.apiGetFeatureConfig(res);
-      }
-      if (pathname.startsWith('/api/features/')) {
-        const handledFeatureManagement = await this.handleFeatureManagementApi(
-          pathname,
-          req,
-          res,
-        );
-        if (handledFeatureManagement) return;
-      }
-      if (
-        pathname.startsWith('/api/features/') &&
-        (await featureApiRoutes.dispatch({ req, res, url: reqUrl }))
-      ) {
-        return;
+      if (pathname.startsWith('/api/workflow-packs')) {
+        if (this.opts.workflowPackApi) {
+          if (await this.opts.workflowPackApi.handle(req, res, reqUrl)) return;
+        } else {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              error: 'Workflow Runtime is not configured on this Host',
+            }),
+          );
+          return;
+        }
       }
       if (pathname === '/api/agents' && req.method === 'GET') {
         return this.apiGetAgents(reqUrl, res);
@@ -1157,9 +1163,6 @@ class WebChannel {
       if (pathname.startsWith('/api/files/')) {
         return this.apiServeFile(pathname, res);
       }
-      if (pathname.startsWith('/features/')) {
-        return this.serveEnabledFeatureStatic(pathname, res);
-      }
       // Shutdown endpoint — only POST, no auth (localhost only via 127.0.0.1 binding)
       if (pathname === '/api/shutdown' && req.method === 'POST') {
         logger.info('Shutdown requested via web channel API');
@@ -1265,151 +1268,10 @@ class WebChannel {
     res.end(data);
   }
 
-  private serveEnabledFeatureStatic(
-    pathname: string,
-    res: http.ServerResponse,
-  ): void {
-    let resolved: { filePath: string; featureId: string } | null;
-    try {
-      resolved = resolveEnabledFeatureStaticPath(pathname);
-    } catch {
-      resolved = null;
-    }
-    if (
-      !resolved ||
-      !fs.existsSync(resolved.filePath) ||
-      fs.statSync(resolved.filePath).isDirectory()
-    ) {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('Not found');
-      return;
-    }
-    const ext = path.extname(resolved.filePath);
-    const mime: Record<string, string> = {
-      '.js': 'application/javascript',
-      '.mjs': 'application/javascript',
-      '.css': 'text/css',
-      '.html': 'text/html',
-      '.json': 'application/json',
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.svg': 'image/svg+xml',
-      '.woff2': 'font/woff2',
-    };
-    const data = fs.readFileSync(resolved.filePath);
-    res.writeHead(200, {
-      'Content-Type': mime[ext] || 'application/octet-stream',
-    });
-    res.end(data);
-  }
-
   private getRegisteredAgentChannel(jid: string, folder: string): string {
     const folderChannel = folder.includes('_') ? folder.split('_')[0] : '';
     if (folderChannel) return folderChannel;
     return jid.includes(':') ? jid.split(':')[0] : '';
-  }
-
-  private apiGetEnabledFeatures(res: http.ServerResponse): void {
-    const features = getEnabledFeatureInfo().map((feature) => ({
-      id: feature.id,
-      name: feature.name,
-      version: feature.version,
-      description: feature.description,
-      apiPrefix: feature.apiPrefix,
-      rendererEntryUrl: feature.rendererEntryUrl,
-      nav: feature.nav.map((item) => ({
-        key: item.key,
-        label: item.label,
-        order: item.order,
-        rendererEntryUrl: item.rendererEntryUrl,
-      })),
-    }));
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ features }));
-  }
-
-  private apiGetFeatureConfig(res: http.ServerResponse): void {
-    const features = listFeatureManagementInfo();
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ features }));
-  }
-
-  private async handleFeatureManagementApi(
-    pathname: string,
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-  ): Promise<boolean> {
-    const match = pathname.match(
-      /^\/api\/features\/([^/]+)\/(enable|disable|delete-summary|delete-data)$/,
-    );
-    if (!match) return false;
-    const featureId = decodeURIComponent(match[1]);
-    const action = match[2];
-    try {
-      if (action === 'enable' || action === 'disable') {
-        if (req.method !== 'POST') {
-          res.writeHead(405, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Method not allowed' }));
-          return true;
-        }
-        const result = await setFeatureEnabledAndApply({
-          featureId,
-          enabled: action === 'enable',
-        });
-        if (result.error) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: result.error }));
-          return true;
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, ...result }));
-        return true;
-      }
-      if (action === 'delete-summary') {
-        if (req.method !== 'GET') {
-          res.writeHead(405, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Method not allowed' }));
-          return true;
-        }
-        const summary = getFeatureDeletionSummary(featureId);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ summary }));
-        return true;
-      }
-      if (action === 'delete-data') {
-        if (req.method !== 'POST') {
-          res.writeHead(405, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Method not allowed' }));
-          return true;
-        }
-        let body: unknown = {};
-        try {
-          body = await this.parseJsonBody(req);
-        } catch {
-          // Fall through to confirmation validation.
-        }
-        if ((body as { confirm?: unknown }).confirm !== true) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'confirm=true required' }));
-          return true;
-        }
-        const result = await deleteFeatureData(featureId);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, ...result }));
-        return true;
-      }
-    } catch (err) {
-      logger.error({ err, featureId, action }, 'Feature management API error');
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      );
-      return true;
-    }
-    return false;
   }
 
   private apiGetAgents(reqUrl: URL, res: http.ServerResponse): void {
@@ -4032,7 +3894,12 @@ class WebChannel {
           return;
         }
         if (msg.ok === true) {
-          this.handleDesktopCaptureSuccess(ws, msg);
+          void this.handleDesktopCaptureSuccess(ws, msg).catch((error) => {
+            logger.error(
+              { err: error, requestId: msg.requestId },
+              'Desktop capture result processing failed',
+            );
+          });
         } else {
           this.handleDesktopCaptureError(ws, msg);
         }

@@ -18,7 +18,7 @@ local/shell/host-core-release.sh snapshot remove --id <snapshot-id>
 
 Creation builds in an isolated staging directory and installs the result under `host-core-snapshots/<snapshot-id>/`. The ID combines a timestamp, short Git commit, and random suffix; it is not content-addressed. A dirty checkout is recorded and warned about rather than rejected.
 
-The `snapshot.json` file records only creation time, optional label, Git commit and dirty flag, entry path and checksum, Workflow Runtime integer schema version and supported migration range, Node major/native ABI/platform/arch, and validation status. It does not contain a complete inventory, per-file hashes, immutable version binding, certification evidence, or Runtime, Compiler, release, logical-schema, migration-file, or physical-schema identity hashes.
+The `snapshot.json` file records only creation time, optional label, Git commit and dirty flag, entry path and checksum, the exact Workflow Runtime integer schema version accepted by that snapshot, Node major/native ABI/platform/arch, and validation status. It does not contain a complete inventory, per-file hashes, immutable version binding, certification evidence, or Runtime, Compiler, release, logical-schema, or physical-schema identity hashes.
 
 Default creation executes the snapshot entry with `ICARUS_HOST_CORE_SMOKE=1`. This resolves and evaluates the complete static module graph, then the entry prints a fixed ready marker and exits before `main()` can start containers, proxies, network connections, message loops, or Workflow state. Validation requires a clean exit, the exact marker, and completion within 10 seconds. It also loads `better-sqlite3` from the snapshot itself for an in-memory query. `--full-check` additionally runs `test:current`, `contracts:check`, `typecheck`, and `format:check` before installation.
 
@@ -35,7 +35,7 @@ local/shell/start.sh --mode active
 
 `current` builds and launches the checkout. `active` verifies and launches the snapshot selected by `active-core` without rebuilding or changing selection. Host Core reaches Workflow Runtime schema behavior through `gateway/host-core.ts`; it does not import certification, Store implementation, or execution internals.
 
-Immediately before launch, startup reads `PRAGMA user_version`. `NO_STATE`, `SAME_SCHEMA`, and `MIGRATION_SUPPORTED` allow startup. `RESET_REQUIRED` and `UNKNOWN_BLOCKED` stop it. Current-version databases also run focused required table, column, and index checks. Supported older versions are migrated by normal Store startup.
+Immediately before launch, startup reads `PRAGMA user_version`. Only `NO_STATE` and `SAME_SCHEMA` allow startup. `RESET_REQUIRED` and `UNKNOWN_BLOCKED` stop it. Current-version databases also run focused required table, column, and index checks. The current Store is latest-only (schema v16): it never opens or mutates an older database and performs no automatic migration. Older development state requires the explicit backup/reset/reinitialize workflow below.
 
 ## Workflow State Maintenance
 

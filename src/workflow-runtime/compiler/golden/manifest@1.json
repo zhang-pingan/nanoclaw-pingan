@@ -4,6 +4,5 @@
   "compiler_semantic_version": "3.0.6",
   "schema_version": 1,
   "case_count": 40,
-  "corpus_hash": "sha256:72cd9ab9f9ef589753e595e9171fc58baf9e95299c92fbf15a400155ea45e2d5",
-  "change_reason": "remove compiler identity authority"
+  "corpus_hash": "sha256:c51809e77b1ede20d2a754d2f430b5563e2285bb8c3d362633c0c0f6cae08da9"
 }

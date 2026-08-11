@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { WORKFLOW_COMPILER_VERSION } from '../compiler/version.js';
-import { calculateG32AFeatureManifestHash } from './g3-2a-feature-manifest-intake.js';
 import type { G3RegistryExactResourceQueryInput } from './g3-registry-exact-resource-query-types.js';
 import {
   buildDependencyClosure,
@@ -36,6 +35,7 @@ import {
   G37_RECEIPT_SCHEMA,
   G37_RESULT_SCHEMA,
   G37_SCHEMA_REFS,
+  calculateWorkflowPackSourceManifestHash,
 } from './g3-workflow-publisher.js';
 import type {
   G3WorkflowPublisherApprovedReview,
@@ -150,7 +150,7 @@ function schemaResource(
   return record;
 }
 
-function featureResource(
+function packResource(
   resourceType: G3RegistryResourceRecord['resource_type'],
   ref: VersionedRef,
   content: JsonObject,
@@ -161,7 +161,7 @@ function featureResource(
     format: 'icarus.workflow-registry-resource/1',
     resource_type: resourceType,
     ref,
-    owner: { kind: 'feature', feature_id: 'fixture.feature' },
+    owner: { kind: 'pack', pack_id: 'fixture.pack' },
     schema_ref: schema.ref,
     schema_hash: schema.content_hash,
     content,
@@ -197,7 +197,7 @@ function candidate(
   const compiled =
     resource.resource_type === 'definition' ? planPin(plan) : null;
   const execution =
-    resource.resource_type === 'feature_execution_artifact'
+    resource.resource_type === 'pack_execution_artifact'
       ? {
           ref: resource.ref,
           artifact_hash: artifactContent.artifact_hash as Sha256Hash,
@@ -245,7 +245,7 @@ function sourceManifest(
   const entries = publishResources
     .filter(
       (resource) =>
-        resource.owner.kind === 'feature' &&
+        resource.owner.kind === 'pack' &&
         allowedKinds.has(resource.resource_type),
     )
     .map((resource) => ({
@@ -261,39 +261,33 @@ function sourceManifest(
       ),
     );
   const manifest: JsonObject = {
-    format: 'icarus.feature-manifest/2',
-    feature_ref: { id: 'fixture.feature', version: '1.0.0' },
+    format: 'icarus.workflow-pack/1',
+    pack_ref: { id: 'fixture.pack', version: '1.0.0' },
+    display_name: 'Fixture Pack',
+    description: 'Workflow Publisher fixture',
     namespace: 'fixture',
     owner_principal_ref: 'human:local-owner',
     dependencies: [],
-    package_resources: {
-      skills: [],
-      agents: [],
-      mcp: [],
-      scripts: [],
-      templates: [],
+    workflow_resources: entries.filter(
+      (entry) => entry.kind !== 'executor_implementation',
+    ),
+    execution_resources: {
+      agents: null,
+      skills: null,
+      mcp: null,
+      scripts: null,
+      templates: null,
     },
-    extension_surfaces: {
-      api_entry: null,
-      nav_entry: null,
-      renderer_entry: null,
-    },
-    dynamic_workflow_resources: entries,
-    ownership: {
-      feature_source_root: 'features/fixture',
-      workflow_source_root: 'features/fixture/workflow-src',
-      execution_bundle_owner: 'feature_release',
-      registry_namespace: 'fixture',
-    },
-    lifecycle: {
-      draining_policy_ref: { id: 'fixture.draining-policy', version: '1.0.0' },
-      retention_policy_ref: G3_RETENTION_POLICY_REF,
-      deletion_policy_ref: { id: 'fixture.deletion-policy', version: '1.0.0' },
+    permissions: {
+      host_actions: [],
+      file_scopes: [],
+      mcp_servers: [],
+      effect_ceiling: 'read_only',
     },
     manifest_hash:
       'sha256:0000000000000000000000000000000000000000000000000000000000000000',
   };
-  manifest.manifest_hash = calculateG32AFeatureManifestHash(manifest as never);
+  manifest.manifest_hash = calculateWorkflowPackSourceManifestHash(manifest);
   return manifest;
 }
 
@@ -310,7 +304,7 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
   if (!genericSchema || !recipe)
     throw new Error('G3.7 fixture base resources are incomplete');
 
-  const definition = featureResource(
+  const definition = packResource(
     'definition',
     { id: 'fixture.definition', version: '1.0.0' },
     {
@@ -339,7 +333,7 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
     G37_RESULT_SCHEMA,
   );
   const manifestSchemaArtifact = readJson(
-    'schemas/feature-manifest-v2-schema.json',
+    'schemas/workflow-pack-manifest-schema.json',
   );
   const manifestSchema = schemaResource(
     manifestSchemaArtifact.ref as VersionedRef,
@@ -408,7 +402,7 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
   );
   const manifest = sourceManifest(publishResources);
   const manifestRef = {
-    id: 'fixture.feature-manifest',
+    id: 'fixture.workflow-pack',
     version: '2.0.0',
   };
   const publishCandidates = releaseResourceRecords.map((resource) =>
@@ -419,10 +413,10 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
     operation: 'validate_only',
     target_registry: 'test_only',
     fixture_scope: 'test_only',
-    feature_manifest_ref: manifestRef,
-    feature_manifest_hash: manifest.manifest_hash as Sha256Hash,
-    feature_release_ref: base.feature_release_ref,
-    feature_release_hash: base.feature_release_hash,
+    pack_manifest_ref: manifestRef,
+    pack_manifest_hash: manifest.manifest_hash as Sha256Hash,
+    pack_release_ref: base.pack_release_ref,
+    pack_release_hash: base.pack_release_hash,
     resources: publishCandidates,
     expected_oracle: 'golden_corpus_expected',
     production_compiler_actual_role: 'comparison_only',
@@ -435,8 +429,8 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
   };
 
   const targetReleaseWithoutHash: G3WorkflowPublisherTargetRelease = {
-    feature_id: 'fixture',
-    release_ref: base.feature_release_ref,
+    pack_id: 'fixture.pack',
+    release_ref: base.pack_release_ref,
     release_hash:
       'sha256:0000000000000000000000000000000000000000000000000000000000000000',
     execution_artifact: base.execution_artifact,
@@ -457,7 +451,7 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
   targetReleaseWithoutHash.release_hash = calculateG37TargetReleaseHash(
     targetReleaseWithoutHash,
   );
-  publishPreflight.feature_release_hash = targetReleaseWithoutHash.release_hash;
+  publishPreflight.pack_release_hash = targetReleaseWithoutHash.release_hash;
   publishPreflight.preflight_hash =
     calculateG3PublishPreflightHash(publishPreflight);
 
@@ -477,8 +471,8 @@ export function g37WorkflowPublisherStoreFixtureForTest(): G37WorkflowPublisherS
     execution_artifact_hash: targetReleaseWithoutHash.execution_artifact.hash,
     closure_ref: closure.ref,
     closure_hash: closure.closure_hash,
-    feature_release_ref: targetReleaseWithoutHash.release_ref,
-    feature_release_hash: targetReleaseWithoutHash.release_hash,
+    pack_release_ref: targetReleaseWithoutHash.release_ref,
+    pack_release_hash: targetReleaseWithoutHash.release_hash,
   };
   review.review_hash = calculateG37ApprovedReviewHash(review);
 

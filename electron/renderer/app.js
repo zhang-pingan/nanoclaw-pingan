@@ -73,7 +73,6 @@ var knowledgeManagementScreen = document.getElementById(
   'knowledge-management-screen',
 );
 var traceMonitorScreen = document.getElementById('trace-monitor-screen');
-var featureRuntimeScreen = document.getElementById('feature-runtime-screen');
 var collaborationScreen = document.getElementById('collaboration-screen');
 var collaborationRuntimeBanner = document.getElementById(
   'collaboration-runtime-banner',
@@ -121,7 +120,6 @@ var collaborationDialogCancel = document.getElementById(
 var collaborationDialogSubmit = document.getElementById(
   'collaboration-dialog-submit',
 );
-var featureRuntimeOutlet = document.getElementById('feature-runtime-outlet');
 var configurationScreen = document.getElementById('configuration-screen');
 var configurationServicesToggle = document.getElementById(
   'configuration-services-toggle',
@@ -129,11 +127,11 @@ var configurationServicesToggle = document.getElementById(
 var configurationServiceList = document.getElementById(
   'configuration-service-list',
 );
-var configurationFeaturesToggle = document.getElementById(
-  'configuration-features-toggle',
+var configurationWorkflowPacksToggle = document.getElementById(
+  'configuration-workflow-packs-toggle',
 );
-var configurationFeatureList = document.getElementById(
-  'configuration-feature-list',
+var configurationWorkflowPackList = document.getElementById(
+  'configuration-workflow-pack-list',
 );
 var configurationServiceRefreshBtn = document.getElementById(
   'configuration-service-refresh-btn',
@@ -180,35 +178,38 @@ var configurationServiceJsonFormatBtn = document.getElementById(
 var configurationServiceJsonApplyBtn = document.getElementById(
   'configuration-service-json-apply-btn',
 );
-var configurationFeatureEmpty = document.getElementById(
-  'configuration-feature-empty',
+var configurationWorkflowPackEmpty = document.getElementById(
+  'configuration-workflow-pack-empty',
 );
-var configurationFeatureDetail = document.getElementById(
-  'configuration-feature-detail',
+var configurationWorkflowPackDetail = document.getElementById(
+  'configuration-workflow-pack-detail',
 );
-var configurationFeatureTitle = document.getElementById(
-  'configuration-feature-title',
+var configurationWorkflowPackTitle = document.getElementById(
+  'configuration-workflow-pack-title',
 );
-var configurationFeatureSummary = document.getElementById(
-  'configuration-feature-summary',
+var configurationWorkflowPackSummary = document.getElementById(
+  'configuration-workflow-pack-summary',
 );
-var configurationFeatureMeta = document.getElementById(
-  'configuration-feature-meta',
+var configurationWorkflowPackMeta = document.getElementById(
+  'configuration-workflow-pack-meta',
 );
-var configurationFeatureStatus = document.getElementById(
-  'configuration-feature-status',
+var configurationWorkflowPackStatus = document.getElementById(
+  'configuration-workflow-pack-status',
 );
-var configurationFeatureToggleBtn = document.getElementById(
-  'configuration-feature-toggle-btn',
+var configurationWorkflowPackToggleBtn = document.getElementById(
+  'configuration-workflow-pack-toggle-btn',
 );
-var configurationFeatureDeleteDataBtn = document.getElementById(
-  'configuration-feature-delete-data-btn',
+var configurationWorkflowPackUninstallBtn = document.getElementById(
+  'configuration-workflow-pack-uninstall-btn',
 );
-var configurationFeatureDeleteSummary = document.getElementById(
-  'configuration-feature-delete-summary',
+var configurationWorkflowPackPurgeBtn = document.getElementById(
+  'configuration-workflow-pack-purge-btn',
 );
-var configurationFeatureResources = document.getElementById(
-  'configuration-feature-resources',
+var configurationWorkflowPackPurgeSummary = document.getElementById(
+  'configuration-workflow-pack-purge-summary',
+);
+var configurationWorkflowPackResources = document.getElementById(
+  'configuration-workflow-pack-resources',
 );
 var configurationServiceFieldInputs = Array.from(
   document.querySelectorAll('[data-service-config-path]'),
@@ -317,7 +318,7 @@ var taskWorkspaceHost =
         navigation: primaryNav,
         screenParent: mainScreen,
         navInsertBefore: componentManagementNavGroup,
-        screenInsertBefore: featureRuntimeScreen,
+        screenInsertBefore: traceMonitorScreen,
       })
     : null;
 var taskWorkspaceScreen = taskWorkspaceHost?.screen || null;
@@ -501,11 +502,6 @@ var todayPlanMailCcText = '';
 var activeTraceMonitorScope = 'active';
 var runtimeCenterTargetLink = initialRuntimeCenterLink;
 var runtimeCenterTaskWorkspaceLink = null;
-var enabledFeatureRuntimeItems = [];
-var featureRendererModules = new Map();
-var featureRendererCleanups = new Map();
-var mountedFeatureNavKey = '';
-var featureRendererMountSeq = 0;
 var serviceConfigRegistry = {};
 var collaborationState = {
   status: null,
@@ -538,11 +534,11 @@ var serviceConfigSaving = false;
 var serviceConfigFieldError = '';
 var serviceConfigListExpanded = true;
 var configurationMode = 'services';
-var featureConfigItems = [];
-var currentFeatureConfigId = '';
-var featureConfigRequestSeq = 0;
-var featureConfigListExpanded = true;
-var featureConfigActionBusy = false;
+var workflowPackItems = [];
+var currentWorkflowPackId = '';
+var workflowPackRequestSeq = 0;
+var workflowPackListExpanded = true;
+var workflowPackActionBusy = false;
 var activeMemoryAgentJid = '';
 var memoryEntries = [];
 var knowledgeMaterials = [];
@@ -2483,8 +2479,6 @@ function setConnectionStatus(status) {
 
 function applyScreenVisibility() {
   const showTodayPlan = todayPlanVisible;
-  const showFeatureRuntime =
-    !showTodayPlan && getFeatureRuntimeItem(activePrimaryNavKey);
   const showAssistant = !showTodayPlan && activePrimaryNavKey === 'assistant';
   const showWorkspace = !showTodayPlan && activePrimaryNavKey === 'sessions';
   const showTaskWorkspace =
@@ -2549,9 +2543,6 @@ function applyScreenVisibility() {
   }
   if (traceMonitorScreen) {
     traceMonitorScreen.classList.toggle('active', showTraceMonitor);
-  }
-  if (featureRuntimeScreen) {
-    featureRuntimeScreen.classList.toggle('active', !!showFeatureRuntime);
   }
 }
 
@@ -2757,23 +2748,13 @@ function setPrimaryNav(navKey, options = {}) {
   }
   if (navKey === 'configuration') {
     loadServiceConfigs({ preserveSelection: true });
-    loadFeatureConfigs({ preserveSelection: true });
+    loadWorkflowPacks({ preserveSelection: true });
   }
   if (navKey === 'trace-monitor') {
     loadTraceMonitorData({ force: false });
   }
   if (navKey === 'groups') {
     loadCollaborationGroups({ preserveSelection: true });
-  }
-  const featureItem = getFeatureRuntimeItem(navKey);
-  if (featureItem) {
-    mountFeatureRenderer(featureItem).catch((err) => {
-      if (activePrimaryNavKey !== featureItem.navKey) return;
-      console.error('Failed to mount feature renderer:', err);
-      renderFeatureRuntimeStatus(err.message || 'Feature renderer failed');
-    });
-  } else {
-    unmountCurrentFeatureRenderer();
   }
 }
 
@@ -2804,166 +2785,6 @@ function cyclePrimaryNav(step) {
 
 function refreshPrimaryNavItems() {
   primaryNavItems = Array.from(document.querySelectorAll('.primary-nav-item'));
-}
-
-function featureRuntimeNavKey(feature, item) {
-  return `feature:${feature.id}:${item.key}`;
-}
-
-function getFeatureRuntimeItem(navKey) {
-  return (
-    enabledFeatureRuntimeItems.find((item) => item.navKey === navKey) || null
-  );
-}
-
-function renderFeatureRuntimeStatus(message) {
-  if (!featureRuntimeOutlet) return;
-  featureRuntimeOutlet.innerHTML = `<div class="feature-runtime-status">${escapeHtml(message)}</div>`;
-}
-
-async function loadEnabledFeatures() {
-  if (!primaryNav) return;
-  try {
-    const res = await apiFetch('/api/features/enabled');
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    renderFeatureNavItems(Array.isArray(data.features) ? data.features : []);
-  } catch (err) {
-    console.error('Failed to load enabled features:', err);
-  }
-}
-
-function renderFeatureNavItems(features) {
-  const existing = primaryNav.querySelectorAll('[data-feature-nav="true"]');
-  existing.forEach((item) => item.remove());
-  enabledFeatureRuntimeItems = [];
-
-  const navItems = [];
-  features.forEach((feature) => {
-    (feature.nav || []).forEach((item) => {
-      navItems.push({
-        feature,
-        item,
-        navKey: featureRuntimeNavKey(feature, item),
-        order: Number.isFinite(item.order) ? item.order : 0,
-      });
-    });
-  });
-  navItems.sort(
-    (a, b) => a.order - b.order || a.item.label.localeCompare(b.item.label),
-  );
-  enabledFeatureRuntimeItems = navItems;
-  const featureInsertBefore =
-    componentManagementNavGroup &&
-    componentManagementNavGroup.parentElement === primaryNav
-      ? componentManagementNavGroup
-      : null;
-
-  navItems.forEach((entry) => {
-    const button = document.createElement('button');
-    button.className = 'primary-nav-item';
-    button.setAttribute('data-nav-key', entry.navKey);
-    button.setAttribute('data-feature-nav', 'true');
-    button.setAttribute('data-feature-id', entry.feature.id);
-    button.innerHTML = `
-      <span class="primary-nav-dot"></span>
-      <span class="primary-nav-label">${escapeHtml(entry.item.label || entry.feature.name)}</span>
-    `;
-    button.addEventListener('click', () => setPrimaryNav(entry.navKey));
-    primaryNav.insertBefore(button, featureInsertBefore);
-  });
-  refreshPrimaryNavItems();
-  syncPrimaryNavActiveState();
-}
-
-async function mountFeatureRenderer(entry) {
-  if (!featureRuntimeOutlet) return;
-  if (mountedFeatureNavKey === entry.navKey) return;
-  const mountSeq = ++featureRendererMountSeq;
-  const cleanup = featureRendererCleanups.get(mountedFeatureNavKey);
-  if (typeof cleanup === 'function') {
-    try {
-      cleanup();
-    } catch (err) {
-      console.warn('Feature renderer cleanup failed:', err);
-    }
-  }
-  featureRuntimeOutlet.innerHTML = '';
-  renderFeatureRuntimeStatus('Loading...');
-  const entryUrl =
-    entry.item.rendererEntryUrl || entry.feature.rendererEntryUrl;
-  if (!entryUrl) {
-    renderFeatureRuntimeStatus('Feature renderer entry is not configured');
-    mountedFeatureNavKey = entry.navKey;
-    return;
-  }
-  let mod = featureRendererModules.get(entryUrl);
-  if (!mod) {
-    mod = await import(apiUrl(entryUrl));
-    featureRendererModules.set(entryUrl, mod);
-  }
-  if (
-    mountSeq !== featureRendererMountSeq ||
-    activePrimaryNavKey !== entry.navKey
-  ) {
-    return;
-  }
-  featureRuntimeOutlet.innerHTML = '';
-  const mount =
-    typeof mod.mount === 'function' ? mod.mount : mod.default?.mount;
-  if (typeof mount !== 'function') {
-    renderFeatureRuntimeStatus('Feature renderer does not export mount()');
-    mountedFeatureNavKey = entry.navKey;
-    return;
-  }
-  const result = await mount({
-    root: featureRuntimeOutlet,
-    feature: entry.feature,
-    navItem: entry.item,
-    apiFetch,
-    apiUrl,
-    showToast,
-  });
-  if (
-    mountSeq !== featureRendererMountSeq ||
-    activePrimaryNavKey !== entry.navKey
-  ) {
-    try {
-      if (typeof result === 'function') {
-        result();
-      } else if (result && typeof result.unmount === 'function') {
-        result.unmount();
-      }
-    } catch (err) {
-      console.warn('Feature renderer cleanup failed:', err);
-    }
-    return;
-  }
-  if (typeof result === 'function') {
-    featureRendererCleanups.set(entry.navKey, result);
-  } else if (result && typeof result.unmount === 'function') {
-    featureRendererCleanups.set(entry.navKey, () => result.unmount());
-  }
-  mountedFeatureNavKey = entry.navKey;
-}
-
-function unmountCurrentFeatureRenderer() {
-  featureRendererMountSeq += 1;
-  if (!mountedFeatureNavKey) {
-    if (featureRuntimeOutlet) featureRuntimeOutlet.innerHTML = '';
-    return;
-  }
-  const cleanup = featureRendererCleanups.get(mountedFeatureNavKey);
-  if (typeof cleanup === 'function') {
-    try {
-      cleanup();
-    } catch (err) {
-      console.warn('Feature renderer cleanup failed:', err);
-    }
-  }
-  featureRendererCleanups.delete(mountedFeatureNavKey);
-  mountedFeatureNavKey = '';
-  if (featureRuntimeOutlet) featureRuntimeOutlet.innerHTML = '';
 }
 
 function openSchedulersPanel() {
@@ -12827,13 +12648,13 @@ async function deleteCurrentServiceConfig() {
 }
 
 function setConfigurationMode(mode) {
-  configurationMode = mode === 'features' ? 'features' : 'services';
+  configurationMode = mode === 'workflow-packs' ? 'workflow-packs' : 'services';
   const showServices = configurationMode === 'services';
   if (configurationServicesToggle) {
     configurationServicesToggle.classList.toggle('active', showServices);
   }
-  if (configurationFeaturesToggle) {
-    configurationFeaturesToggle.classList.toggle('active', !showServices);
+  if (configurationWorkflowPacksToggle) {
+    configurationWorkflowPacksToggle.classList.toggle('active', !showServices);
   }
   if (configurationServiceAddBtn) {
     configurationServiceAddBtn.classList.toggle('hidden', !showServices);
@@ -12850,138 +12671,146 @@ function setConfigurationMode(mode) {
       !showServices || !currentServiceConfigName,
     );
   }
-  if (configurationFeatureEmpty) {
-    configurationFeatureEmpty.classList.toggle(
+  if (configurationWorkflowPackEmpty) {
+    configurationWorkflowPackEmpty.classList.toggle(
       'hidden',
-      showServices || Boolean(currentFeatureConfigId),
+      showServices || Boolean(currentWorkflowPackId),
     );
   }
-  if (configurationFeatureDetail) {
-    configurationFeatureDetail.classList.toggle(
+  if (configurationWorkflowPackDetail) {
+    configurationWorkflowPackDetail.classList.toggle(
       'hidden',
-      showServices || !currentFeatureConfigId,
+      showServices || !currentWorkflowPackId,
     );
   }
-  if (!showServices) renderFeatureConfigDetail();
+  if (!showServices) renderWorkflowPackDetail();
 }
 
-function renderFeatureConfigList() {
-  if (!configurationFeatureList) return;
-  if (configurationFeaturesToggle) {
-    configurationFeaturesToggle.setAttribute(
+function renderWorkflowPackList() {
+  if (!configurationWorkflowPackList) return;
+  if (configurationWorkflowPacksToggle) {
+    configurationWorkflowPacksToggle.setAttribute(
       'aria-expanded',
-      featureConfigListExpanded ? 'true' : 'false',
+      workflowPackListExpanded ? 'true' : 'false',
     );
-    const group = configurationFeaturesToggle.closest(
+    const group = configurationWorkflowPacksToggle.closest(
       '.configuration-nav-group',
     );
-    if (group) group.classList.toggle('expanded', featureConfigListExpanded);
-    const chevron = configurationFeaturesToggle.querySelector(
+    if (group) group.classList.toggle('expanded', workflowPackListExpanded);
+    const chevron = configurationWorkflowPacksToggle.querySelector(
       '.configuration-nav-chevron',
     );
-    if (chevron) chevron.textContent = featureConfigListExpanded ? '▾' : '▸';
+    if (chevron) chevron.textContent = workflowPackListExpanded ? '▾' : '▸';
   }
-  configurationFeatureList.classList.toggle(
+  configurationWorkflowPackList.classList.toggle(
     'hidden',
-    !featureConfigListExpanded,
+    !workflowPackListExpanded,
   );
-  if (!featureConfigListExpanded) return;
-  if (!featureConfigItems.length) {
-    configurationFeatureList.innerHTML =
-      '<div class="management-list-empty">暂无可用功能包</div>';
+  if (!workflowPackListExpanded) return;
+  if (!workflowPackItems.length) {
+    configurationWorkflowPackList.innerHTML =
+      '<div class="management-list-empty">暂无 Workflow Pack</div>';
     return;
   }
-  configurationFeatureList.innerHTML = featureConfigItems
-    .map((feature) => {
-      const enabled = Boolean(feature.enabled);
+  configurationWorkflowPackList.innerHTML = workflowPackItems
+    .map((pack) => {
       return `
-        <button type="button" class="management-list-item configuration-service-item${feature.id === currentFeatureConfigId ? ' active' : ''}" data-feature-config-id="${escapeAttribute(feature.id)}">
+        <button type="button" class="management-list-item configuration-service-item${pack.pack_id === currentWorkflowPackId ? ' active' : ''}" data-workflow-pack-id="${escapeAttribute(pack.pack_id)}">
           <div class="management-list-head">
-            <div class="management-list-title">${escapeHtml(feature.name || feature.id)}</div>
-            <span class="management-pill management-main-pill">${enabled ? 'enabled' : 'disabled'}</span>
+            <div class="management-list-title">${escapeHtml(pack.display_name || pack.pack_id)}</div>
+            <span class="management-pill management-main-pill">${escapeHtml(pack.state || 'unknown')}</span>
           </div>
-          <p class="management-list-desc">${escapeHtml(feature.description || feature.id)}</p>
+          <p class="management-list-desc">${escapeHtml(pack.description || pack.pack_id)}</p>
           <div class="management-list-meta">
-            <span class="management-pill"><strong>ID</strong>${escapeHtml(feature.id)}</span>
-            <span class="management-pill"><strong>Version</strong>${escapeHtml(feature.version || '--')}</span>
+            <span class="management-pill"><strong>ID</strong>${escapeHtml(pack.pack_id)}</span>
+            <span class="management-pill"><strong>Version</strong>${escapeHtml(pack.version || '--')}</span>
           </div>
         </button>
       `;
     })
     .join('');
   Array.from(
-    configurationFeatureList.querySelectorAll('[data-feature-config-id]'),
+    configurationWorkflowPackList.querySelectorAll('[data-workflow-pack-id]'),
   ).forEach((button) => {
     button.addEventListener('click', () => {
-      const featureId = button.getAttribute('data-feature-config-id') || '';
-      selectFeatureConfig(featureId);
+      selectWorkflowPack(button.getAttribute('data-workflow-pack-id') || '');
     });
   });
 }
 
-function getSelectedFeatureConfig() {
+function getSelectedWorkflowPack() {
   return (
-    featureConfigItems.find(
-      (feature) => feature.id === currentFeatureConfigId,
-    ) || null
+    workflowPackItems.find((pack) => pack.pack_id === currentWorkflowPackId) ||
+    null
   );
 }
 
-function selectFeatureConfig(featureId) {
-  if (!featureId) return;
-  const feature = featureConfigItems.find((item) => item.id === featureId);
-  if (!feature) return;
-  currentFeatureConfigId = feature.id;
-  setConfigurationMode('features');
-  renderFeatureConfigList();
-  renderFeatureConfigDetail();
-  loadFeatureDeletionSummary(feature.id).catch((err) => {
-    if (currentFeatureConfigId !== feature.id) return;
-    renderFeatureDeletionSummaryError(err);
+function selectWorkflowPack(packId) {
+  if (!packId) return;
+  const pack = workflowPackItems.find((item) => item.pack_id === packId);
+  if (!pack) return;
+  currentWorkflowPackId = pack.pack_id;
+  setConfigurationMode('workflow-packs');
+  renderWorkflowPackList();
+  renderWorkflowPackDetail();
+  loadWorkflowPackPurgePreview(pack.pack_id).catch((err) => {
+    if (currentWorkflowPackId !== pack.pack_id) return;
+    renderWorkflowPackPurgePreviewError(err);
   });
 }
 
-function renderFeatureConfigDetail() {
-  const feature = getSelectedFeatureConfig();
-  const showFeatureDetail =
-    configurationMode === 'features' && Boolean(feature);
-  if (configurationFeatureEmpty) {
-    configurationFeatureEmpty.classList.toggle('hidden', showFeatureDetail);
+function renderWorkflowPackDetail() {
+  const pack = getSelectedWorkflowPack();
+  const showPackDetail =
+    configurationMode === 'workflow-packs' && Boolean(pack);
+  if (configurationWorkflowPackEmpty) {
+    configurationWorkflowPackEmpty.classList.toggle('hidden', showPackDetail);
   }
-  if (configurationFeatureDetail) {
-    configurationFeatureDetail.classList.toggle('hidden', !showFeatureDetail);
+  if (configurationWorkflowPackDetail) {
+    configurationWorkflowPackDetail.classList.toggle('hidden', !showPackDetail);
   }
-  if (!feature) return;
-  if (configurationFeatureTitle) {
-    configurationFeatureTitle.textContent = feature.name || feature.id;
+  if (!pack) return;
+  if (configurationWorkflowPackTitle) {
+    configurationWorkflowPackTitle.textContent =
+      pack.display_name || pack.pack_id;
   }
-  if (configurationFeatureSummary) {
-    configurationFeatureSummary.textContent =
-      feature.description || 'No description';
+  if (configurationWorkflowPackSummary) {
+    configurationWorkflowPackSummary.textContent =
+      pack.description || 'No description';
   }
-  if (configurationFeatureStatus) {
-    configurationFeatureStatus.textContent = feature.enabled
-      ? 'enabled'
-      : 'disabled';
-    configurationFeatureStatus.dataset.state = feature.enabled
-      ? 'saved'
-      : 'dirty';
+  if (configurationWorkflowPackStatus) {
+    configurationWorkflowPackStatus.textContent = pack.state || 'unknown';
+    configurationWorkflowPackStatus.dataset.state =
+      pack.state === 'enabled' ? 'saved' : 'dirty';
   }
-  if (configurationFeatureToggleBtn) {
-    configurationFeatureToggleBtn.disabled = featureConfigActionBusy;
-    configurationFeatureToggleBtn.textContent = feature.enabled
-      ? '仅停用'
-      : '启用';
+  if (configurationWorkflowPackToggleBtn) {
+    configurationWorkflowPackToggleBtn.disabled =
+      workflowPackActionBusy || (!pack.desired_enabled && !pack.source_present);
+    configurationWorkflowPackToggleBtn.textContent = pack.desired_enabled
+      ? 'Disable'
+      : 'Enable';
   }
-  if (configurationFeatureDeleteDataBtn) {
-    configurationFeatureDeleteDataBtn.disabled = featureConfigActionBusy;
+  if (configurationWorkflowPackUninstallBtn) {
+    configurationWorkflowPackUninstallBtn.disabled =
+      workflowPackActionBusy || !pack.actions?.uninstall;
   }
-  if (configurationFeatureMeta) {
-    configurationFeatureMeta.innerHTML = [
-      { label: 'ID', value: feature.id },
-      { label: 'Version', value: feature.version || '--' },
-      { label: 'API', value: feature.apiPrefix || '--' },
-      { label: 'Nav', value: String(feature.nav_count || 0) },
+  if (configurationWorkflowPackPurgeBtn) {
+    configurationWorkflowPackPurgeBtn.disabled =
+      workflowPackActionBusy || !pack.actions?.purge;
+  }
+  if (configurationWorkflowPackMeta) {
+    configurationWorkflowPackMeta.innerHTML = [
+      { label: 'ID', value: pack.pack_id },
+      { label: 'Version', value: pack.version || '--' },
+      {
+        label: 'Desired',
+        value: pack.desired_enabled ? 'enabled' : 'disabled',
+      },
+      {
+        label: 'Active Release',
+        value: pack.active_release?.release_id || '--',
+      },
+      { label: 'Active Run Pins', value: String(pack.active_run_pins || 0) },
     ]
       .map(
         (item) =>
@@ -12989,188 +12818,163 @@ function renderFeatureConfigDetail() {
       )
       .join('');
   }
-  if (configurationFeatureResources) {
-    const resources =
-      feature.resources && typeof feature.resources === 'object'
-        ? Object.entries(feature.resources).filter(([, value]) => value)
-        : [];
-    configurationFeatureResources.innerHTML = resources.length
-      ? resources
-          .map(
-            ([kind, value]) =>
-              `<span class="management-pill"><strong>${escapeHtml(kind)}</strong>${escapeHtml(String(value))}</span>`,
-          )
-          .join('')
-      : '<div class="management-list-empty">未声明资源</div>';
+  if (configurationWorkflowPackResources) {
+    const recipes = Array.isArray(pack.recipes) ? pack.recipes : [];
+    const permissionText = pack.permissions
+      ? JSON.stringify(pack.permissions)
+      : '--';
+    configurationWorkflowPackResources.innerHTML = [
+      ...recipes.map(
+        (recipe) =>
+          `<span class="management-pill"><strong>Recipe</strong>${escapeHtml(`${recipe.id}@${recipe.version}`)}</span>`,
+      ),
+      `<span class="management-pill"><strong>Permissions</strong>${escapeHtml(permissionText)}</span>`,
+    ].join('');
   }
 }
 
-function renderFeatureDeletionSummary(summary) {
-  if (!configurationFeatureDeleteSummary) return;
-  const counts = summary?.counts || {};
+function renderWorkflowPackPurgePreview(preview) {
+  if (!configurationWorkflowPackPurgeSummary) return;
   const metrics = [
-    ['Agents', counts.agents],
-    ['Traces', counts.agent_queries],
-    ['Messages', counts.messages],
-    ['Projection Tables', counts.feature_projection_tables],
-    ['Projection Rows', counts.feature_projection_rows],
-    ['Runtime Paths', Array.isArray(summary?.paths) ? summary.paths.length : 0],
-    ['Migrations', counts.feature_migrations],
+    [
+      'Managed Paths',
+      Array.isArray(preview?.managed_paths) ? preview.managed_paths.length : 0,
+    ],
+    [
+      'Purgeable Resources',
+      Array.isArray(preview?.registry_resource_ids)
+        ? preview.registry_resource_ids.length
+        : 0,
+    ],
+    ['Retained Releases', preview?.retained_release_count || 0],
+    ['Active Run Pins', preview?.active_run_pins || 0],
   ];
-  configurationFeatureDeleteSummary.innerHTML = metrics
-    .map(
-      ([label, value]) => `
-        <div class="configuration-feature-metric">
+  configurationWorkflowPackPurgeSummary.innerHTML =
+    metrics
+      .map(
+        ([label, value]) => `
+        <div class="configuration-workflow-pack-metric">
           <span>${escapeHtml(label)}</span>
           <strong>${escapeHtml(String(value ?? 0))}</strong>
         </div>
       `,
-    )
-    .join('');
+      )
+      .join('') +
+    `<div class="management-list-empty">Preserved: ${escapeHtml((preview?.preserves || []).join(', '))}</div>`;
 }
 
-function renderFeatureDeletionSummaryError(err) {
-  if (!configurationFeatureDeleteSummary) return;
-  configurationFeatureDeleteSummary.innerHTML = `<div class="management-list-empty">删除摘要加载失败：${escapeHtml(err instanceof Error ? err.message : String(err))}</div>`;
+function renderWorkflowPackPurgePreviewError(err) {
+  if (!configurationWorkflowPackPurgeSummary) return;
+  configurationWorkflowPackPurgeSummary.innerHTML = `<div class="management-list-empty">Purge preview failed: ${escapeHtml(err instanceof Error ? err.message : String(err))}</div>`;
 }
 
-async function loadFeatureDeletionSummary(featureId) {
-  if (!configurationFeatureDeleteSummary || !featureId) return null;
-  configurationFeatureDeleteSummary.innerHTML =
-    '<div class="management-list-empty">加载删除摘要中...</div>';
+async function loadWorkflowPackPurgePreview(packId) {
+  if (!configurationWorkflowPackPurgeSummary || !packId) return null;
+  configurationWorkflowPackPurgeSummary.innerHTML =
+    '<div class="management-list-empty">Loading purge preview...</div>';
   const res = await apiFetch(
-    `/api/features/${encodeURIComponent(featureId)}/delete-summary`,
+    `/api/workflow-packs/${encodeURIComponent(packId)}/purge-preview`,
   );
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  if (currentFeatureConfigId === featureId) {
-    renderFeatureDeletionSummary(data.summary || {});
+  if (currentWorkflowPackId === packId) {
+    renderWorkflowPackPurgePreview(data.preview || {});
   }
-  return data.summary || null;
+  return data.preview || null;
 }
 
-async function loadFeatureConfigs(options = {}) {
-  if (!configurationFeatureList) return;
-  const requestSeq = ++featureConfigRequestSeq;
+async function loadWorkflowPacks(options = {}) {
+  if (!configurationWorkflowPackList) return;
+  const requestSeq = ++workflowPackRequestSeq;
   const preserveSelection = options.preserveSelection !== false;
-  configurationFeatureList.innerHTML =
-    '<div class="management-list-empty">加载功能包中...</div>';
+  configurationWorkflowPackList.innerHTML =
+    '<div class="management-list-empty">Loading Workflow Packs...</div>';
   try {
-    const res = await apiFetch('/api/features/config');
+    const res = await apiFetch('/api/workflow-packs');
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    if (requestSeq !== featureConfigRequestSeq) return;
-    featureConfigItems = Array.isArray(data.features) ? data.features : [];
+    if (requestSeq !== workflowPackRequestSeq) return;
+    workflowPackItems = Array.isArray(data.packs) ? data.packs : [];
     const nextSelection =
       preserveSelection &&
-      currentFeatureConfigId &&
-      featureConfigItems.some(
-        (feature) => feature.id === currentFeatureConfigId,
-      )
-        ? currentFeatureConfigId
-        : featureConfigItems[0]?.id || '';
-    currentFeatureConfigId = nextSelection;
-    renderFeatureConfigList();
-    if (configurationMode === 'features') {
-      renderFeatureConfigDetail();
-      if (currentFeatureConfigId) {
-        await loadFeatureDeletionSummary(currentFeatureConfigId);
+      currentWorkflowPackId &&
+      workflowPackItems.some((pack) => pack.pack_id === currentWorkflowPackId)
+        ? currentWorkflowPackId
+        : workflowPackItems[0]?.pack_id || '';
+    currentWorkflowPackId = nextSelection;
+    renderWorkflowPackList();
+    if (configurationMode === 'workflow-packs') {
+      renderWorkflowPackDetail();
+      if (currentWorkflowPackId) {
+        await loadWorkflowPackPurgePreview(currentWorkflowPackId);
       }
     }
   } catch (err) {
-    console.error('Failed to load feature config:', err);
-    configurationFeatureList.innerHTML = `<div class="management-list-empty">加载失败：${escapeHtml(err instanceof Error ? err.message : String(err))}</div>`;
+    console.error('Failed to load Workflow Packs:', err);
+    configurationWorkflowPackList.innerHTML = `<div class="management-list-empty">加载失败：${escapeHtml(err instanceof Error ? err.message : String(err))}</div>`;
   }
 }
 
-async function setSelectedFeatureEnabled(enabled) {
-  const feature = getSelectedFeatureConfig();
-  if (!feature || featureConfigActionBusy) return;
+async function setSelectedWorkflowPackEnabled(enabled) {
+  const pack = getSelectedWorkflowPack();
+  if (!pack || workflowPackActionBusy) return;
   if (!enabled) {
     const confirmed = await openConfirmDialog(
-      `确认仅停用功能包 ${feature.id}？历史数据和 Agent 会保留。`,
+      `Disable Workflow Pack ${pack.pack_id}? Existing Runs and history are preserved.`,
       {
-        title: '仅停用功能包',
-        confirmText: '仅停用',
+        title: 'Disable Workflow Pack',
+        confirmText: 'Disable',
         cancelText: '取消',
       },
     );
     if (!confirmed) return;
   }
-  featureConfigActionBusy = true;
-  renderFeatureConfigDetail();
+  workflowPackActionBusy = true;
+  renderWorkflowPackDetail();
   try {
     const action = enabled ? 'enable' : 'disable';
     const res = await apiFetch(
-      `/api/features/${encodeURIComponent(feature.id)}/${action}`,
+      `/api/workflow-packs/${encodeURIComponent(pack.pack_id)}/${action}`,
       { method: 'POST' },
     );
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    showToast(enabled ? '功能包已启用' : '功能包已停用', 1800);
-    await loadEnabledFeatures();
-    await loadFeatureConfigs({ preserveSelection: true });
+    showToast(
+      enabled
+        ? 'Workflow Pack enable queued for restart'
+        : 'Workflow Pack disabled',
+      1800,
+    );
+    await loadWorkflowPacks({ preserveSelection: true });
   } catch (err) {
     showToast(
       `操作失败：${err instanceof Error ? err.message : String(err)}`,
       2600,
     );
   } finally {
-    featureConfigActionBusy = false;
-    renderFeatureConfigDetail();
+    workflowPackActionBusy = false;
+    renderWorkflowPackDetail();
   }
 }
 
-function formatFeatureDeletionConfirmMessage(feature, summary) {
-  const counts = summary?.counts || {};
-  return [
-    `功能包：${feature.id}`,
-    `Agents：${counts.agents || 0}`,
-    `Traces：${counts.agent_queries || 0}`,
-    `Projection Tables：${counts.feature_projection_tables || 0}`,
-    `Runtime Paths：${Array.isArray(summary?.paths) ? summary.paths.length : 0}`,
-  ].join('\n');
-}
-
-async function deleteSelectedFeatureData() {
-  const feature = getSelectedFeatureConfig();
-  if (!feature || featureConfigActionBusy) return;
-  let summary;
-  try {
-    summary = await loadFeatureDeletionSummary(feature.id);
-  } catch (err) {
-    showToast(
-      `删除摘要加载失败：${err instanceof Error ? err.message : String(err)}`,
-      2600,
-    );
-    return;
-  }
-  const reviewed = await openConfirmDialog(
-    formatFeatureDeletionConfirmMessage(feature, summary),
-    {
-      title: '停用并删除摘要',
-      confirmText: '继续',
-      cancelText: '取消',
-      confirmButtonClassName: 'btn-primary',
-    },
-  );
-  if (!reviewed) return;
+async function uninstallSelectedWorkflowPack() {
+  const pack = getSelectedWorkflowPack();
+  if (!pack || workflowPackActionBusy) return;
   const confirmed = await openConfirmDialog(
-    `二次确认删除功能包 ${feature.id} 的历史数据、独占 Agent 和运行目录。`,
+    `Uninstall Workflow Pack ${pack.pack_id}? Source is archived; TaskSession and Runtime history are preserved.`,
     {
-      title: '确认删除功能包数据',
-      confirmText: '停用并删除',
+      title: 'Uninstall Workflow Pack',
+      confirmText: 'Uninstall',
       cancelText: '取消',
-      confirmButtonClassName: 'btn-primary',
+      danger: true,
     },
   );
   if (!confirmed) return;
-
-  featureConfigActionBusy = true;
-  renderFeatureConfigDetail();
+  workflowPackActionBusy = true;
+  renderWorkflowPackDetail();
   try {
     const res = await apiFetch(
-      `/api/features/${encodeURIComponent(feature.id)}/delete-data`,
+      `/api/workflow-packs/${encodeURIComponent(pack.pack_id)}/uninstall`,
       {
         method: 'POST',
         body: JSON.stringify({ confirm: true }),
@@ -13178,18 +12982,67 @@ async function deleteSelectedFeatureData() {
     );
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    showToast('功能包数据已删除', 2200);
-    await loadEnabledFeatures();
-    await loadFeatureConfigs({ preserveSelection: true });
+    showToast('Workflow Pack source archived', 2200);
+    await loadWorkflowPacks({ preserveSelection: true });
   } catch (err) {
     showToast(
-      `删除失败：${err instanceof Error ? err.message : String(err)}`,
+      `Uninstall failed: ${err instanceof Error ? err.message : String(err)}`,
       3200,
     );
-    await loadFeatureDeletionSummary(feature.id).catch(() => undefined);
   } finally {
-    featureConfigActionBusy = false;
-    renderFeatureConfigDetail();
+    workflowPackActionBusy = false;
+    renderWorkflowPackDetail();
+  }
+}
+
+async function purgeSelectedWorkflowPack() {
+  const pack = getSelectedWorkflowPack();
+  if (!pack || workflowPackActionBusy) return;
+  let preview;
+  try {
+    preview = await loadWorkflowPackPurgePreview(pack.pack_id);
+  } catch (err) {
+    showToast(
+      `Purge preview failed: ${err instanceof Error ? err.message : String(err)}`,
+      2600,
+    );
+    return;
+  }
+  const confirmed = await openConfirmDialog(
+    [
+      `Purge Pack-owned data for ${pack.pack_id}?`,
+      `Managed paths: ${preview.managed_paths?.length || 0}`,
+      `Registry resources: ${preview.registry_resource_ids?.length || 0}`,
+      `Active Run pins: ${preview.active_run_pins || 0}`,
+    ].join('\n'),
+    {
+      title: 'Purge Workflow Pack Data',
+      confirmText: 'Purge',
+      cancelText: '取消',
+      danger: true,
+    },
+  );
+  if (!confirmed) return;
+  workflowPackActionBusy = true;
+  renderWorkflowPackDetail();
+  try {
+    const res = await apiFetch(
+      `/api/workflow-packs/${encodeURIComponent(pack.pack_id)}/purge`,
+      { method: 'POST', body: JSON.stringify({ confirm: true }) },
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast('Pack-owned data purged', 2200);
+    await loadWorkflowPacks({ preserveSelection: true });
+    await loadWorkflowPackPurgePreview(pack.pack_id);
+  } catch (err) {
+    showToast(
+      `Purge failed: ${err instanceof Error ? err.message : String(err)}`,
+      3200,
+    );
+  } finally {
+    workflowPackActionBusy = false;
+    renderWorkflowPackDetail();
   }
 }
 
@@ -13216,7 +13069,6 @@ document.addEventListener(
 );
 connectWS();
 loadAgents();
-loadEnabledFeatures();
 
 // --- Event listeners ---
 if (primaryNav) {
@@ -13526,7 +13378,7 @@ if (configurationServiceRefreshBtn) {
   configurationServiceRefreshBtn.addEventListener('click', async () => {
     await Promise.all([
       loadServiceConfigs({ preserveSelection: true }),
-      loadFeatureConfigs({ preserveSelection: true }),
+      loadWorkflowPacks({ preserveSelection: true }),
     ]);
   });
 }
@@ -13549,18 +13401,18 @@ if (configurationServicesToggle) {
     renderServiceConfigList();
   });
 }
-if (configurationFeaturesToggle) {
-  configurationFeaturesToggle.addEventListener('click', () => {
-    if (configurationMode !== 'features') {
-      setConfigurationMode('features');
-      renderFeatureConfigList();
-      if (!featureConfigItems.length) {
-        loadFeatureConfigs({ preserveSelection: true });
+if (configurationWorkflowPacksToggle) {
+  configurationWorkflowPacksToggle.addEventListener('click', () => {
+    if (configurationMode !== 'workflow-packs') {
+      setConfigurationMode('workflow-packs');
+      renderWorkflowPackList();
+      if (!workflowPackItems.length) {
+        loadWorkflowPacks({ preserveSelection: true });
       }
       return;
     }
-    featureConfigListExpanded = !featureConfigListExpanded;
-    renderFeatureConfigList();
+    workflowPackListExpanded = !workflowPackListExpanded;
+    renderWorkflowPackList();
   });
 }
 if (configurationServiceSaveBtn) {
@@ -13618,16 +13470,21 @@ if (configurationServiceJsonApplyBtn) {
     updateServiceConfigFromJson(true);
   });
 }
-if (configurationFeatureToggleBtn) {
-  configurationFeatureToggleBtn.addEventListener('click', async () => {
-    const feature = getSelectedFeatureConfig();
-    if (!feature) return;
-    await setSelectedFeatureEnabled(!feature.enabled);
+if (configurationWorkflowPackToggleBtn) {
+  configurationWorkflowPackToggleBtn.addEventListener('click', async () => {
+    const pack = getSelectedWorkflowPack();
+    if (!pack) return;
+    await setSelectedWorkflowPackEnabled(!pack.desired_enabled);
   });
 }
-if (configurationFeatureDeleteDataBtn) {
-  configurationFeatureDeleteDataBtn.addEventListener('click', async () => {
-    await deleteSelectedFeatureData();
+if (configurationWorkflowPackUninstallBtn) {
+  configurationWorkflowPackUninstallBtn.addEventListener('click', async () => {
+    await uninstallSelectedWorkflowPack();
+  });
+}
+if (configurationWorkflowPackPurgeBtn) {
+  configurationWorkflowPackPurgeBtn.addEventListener('click', async () => {
+    await purgeSelectedWorkflowPack();
   });
 }
 

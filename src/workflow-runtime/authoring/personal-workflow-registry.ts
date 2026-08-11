@@ -19,15 +19,13 @@ import type {
   Sha256Hash,
   VersionedRef,
 } from '../contracts/types.js';
-import {
-  persistRegistryPersistenceBatchInTransaction,
-  type RegistryPersistenceReceipt,
-} from '../store/registry-persistence.js';
+import type { RegistryPersistenceReceipt } from '../store/registry-persistence.js';
 import type {
   WorkflowRuntimeReadConnection,
   WorkflowRuntimeStore,
   WorkflowRuntimeWriteTransaction,
 } from '../store/runtime-store/index.js';
+import { publishWorkflowBundleInTransaction } from './workflow-bundle-publisher.js';
 
 const RELEASE_HASH_DOMAIN = 'icarus:personal-workflow-release:1\n';
 const POLICY_EFFECT_ENVELOPE_HASH_DOMAIN =
@@ -467,31 +465,16 @@ export function publishPersonalWorkflowRelease(
       );
     }
 
-    const persistence = persistRegistryPersistenceBatchInTransaction(
-      transaction,
-      request.registry_batch,
-    );
-    for (const resource of request.registry_batch.resources) {
-      const updated = transaction.execute(
-        `UPDATE workflow_registry_resources
-            SET publication_state = 'published', published_at_ms = ?, row_version = row_version + 1
-          WHERE id = ? AND content_hash = ? AND publication_state = 'staged'
-            AND owner_core_ref IS NULL AND owner_feature_id IS NULL
-            AND owner_principal_ref = ?`,
-        [
-          request.requested_at_ms,
-          registryResourceId(resource),
-          resource.content_hash,
-          request.owner_principal_ref,
-        ],
-      );
-      if (updated.changes !== 1) {
-        throw new PersonalWorkflowRegistryError(
-          'principal_owner_mismatch',
-          `Registry resource ${registryResourceId(resource)} was not staged for this principal`,
-        );
-      }
-    }
+    const publication = publishWorkflowBundleInTransaction(transaction, {
+      owner: {
+        kind: 'principal',
+        principal_ref: request.owner_principal_ref,
+      },
+      resources: request.registry_batch.resources,
+      registry_batch: request.registry_batch,
+      published_at_ms: request.requested_at_ms,
+      publication_ref: validated.releaseId,
+    });
 
     transaction.execute(
       `INSERT INTO workflow_personal_releases (
@@ -560,7 +543,10 @@ export function publishPersonalWorkflowRelease(
         request.registry_batch.snapshot.ref,
       ),
       registry_snapshot_hash: request.registry_batch.snapshot.snapshot_hash,
-      registry_persistence_disposition: persistence.disposition,
+      registry_persistence_disposition:
+        publication.persistence_disposition === 'pre_staged'
+          ? 'exact_replay'
+          : publication.persistence_disposition,
       active: false,
     };
     insertAppliedOperation(transaction, {

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { runOnceFileSchema } from '../internal-agent-run-once/schemas.js';
+import type { WorkflowPackExecutionResourcePin } from '../workflow-packs/execution-resources.js';
 
 export const CONTAINER_AGENT_ADAPTER_ID =
   'icarus.adapter.container-agent' as const;
@@ -86,6 +87,7 @@ export interface WorkflowAdapterExecutionContext {
   readonly delegationId: string;
   readonly runWorkFenceEpoch: number;
   readonly scopeWorkFenceEpoch: number;
+  readonly workflowPackExecutionResources?: WorkflowPackExecutionResourcePin | null;
 }
 
 export type WorkflowAdapterExecutionState =

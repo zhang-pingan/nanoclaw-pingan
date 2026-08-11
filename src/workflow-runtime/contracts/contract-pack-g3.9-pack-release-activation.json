@@ -1,0 +1,150 @@
+{
+  "format": "icarus.workflow-contract-pack-g3-pack-release-activation/1",
+  "ref": {
+    "id": "icarus.workflow-contract-pack-g3-pack-release-activation",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-contract-pack-g3-pack-release-activation:1\n",
+  "payload": {
+    "gate": "G3",
+    "slice": "G3.9",
+    "status": "DONE",
+    "g3_status": "EXIT_CANDIDATE_PENDING_INDEPENDENT_G3_REGRESSION",
+    "schema_resource_hashes": {
+      "request": "sha256:a753d23a65104e770006ca832b29de47334f64177f9de913b1b8f91ffb9b945d",
+      "receipt": "sha256:1289161c92b8c27e0beebdffdb5f54ce70dbddfa4e5be256b8d3feff8816efd8",
+      "result": "sha256:3ed23eca248ed856ea8e25114a352bf699230923a213025c95fec4b1812a89b8"
+    },
+    "fixture_digest": "sha256:135098e75969f152f61d8a3f77a1e7bfbe32c7e2c575e77d6134f6bf9596ea64",
+    "error_precedence": [
+      "activation_request_strict_parse_invalid",
+      "activation_request_removed_field",
+      "activation_request_unknown_field",
+      "activation_request_schema_invalid",
+      "activation_request_hash_mismatch",
+      "activation_authentication_mismatch",
+      "idempotency_conflict",
+      "terminal_integrity_mismatch",
+      "target_release_missing",
+      "target_release_identity_mismatch",
+      "target_release_owner_mismatch",
+      "target_release_resource_set_mismatch",
+      "runtime_abi_incompatible",
+      "target_release_lifecycle_invalid",
+      "previous_release_missing",
+      "previous_release_identity_mismatch",
+      "previous_release_owner_mismatch",
+      "previous_release_lifecycle_invalid",
+      "target_retention_missing",
+      "target_retention_identity_mismatch",
+      "target_retention_status_mismatch",
+      "target_retention_row_version_mismatch",
+      "previous_retention_missing",
+      "previous_retention_identity_mismatch",
+      "previous_retention_status_mismatch",
+      "previous_retention_row_version_mismatch",
+      "pointer_cas_conflict",
+      "activation_persistence_identity_collision"
+    ],
+    "command_boundary": "workflow_pack_release_activation_commands/invocations/events",
+    "forbidden_command_unions": [
+      "workflow_runtime_commands",
+      "runtime_capacity_admin_commands",
+      "workflow_publisher_commands"
+    ],
+    "store_transaction": "single_begin_immediate",
+    "compatibility_check": "direct_runtime_abi_major",
+    "active_pointer_dml": "adjacent_cas_only",
+    "receipt_owner": "committed_pointer_transition_only",
+    "recovery": "bounded_pending_scan_then_strict_terminal_and_chain_verification",
+    "positive_case_count": 9,
+    "negative_case_count": 34,
+    "fault_case_count": 17,
+    "artifacts": [
+      {
+        "path": "registry/workflow-pack-release-activation-request-schema@1.json",
+        "format": "icarus.workflow-pack-release-activation-request-schema/1",
+        "ref": {
+          "id": "icarus.workflow-pack-release-activation-request-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-pack-release-activation-request-schema:1\n",
+        "hash": "sha256:4b72f57380f9b2205acfb174ffc89bd0c42aa7d30818e608e0011e98621fa2d2"
+      },
+      {
+        "path": "registry/workflow-pack-release-activation-receipt-schema@1.json",
+        "format": "icarus.workflow-pack-release-activation-receipt-schema/1",
+        "ref": {
+          "id": "icarus.workflow-pack-release-activation-receipt-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-pack-release-activation-receipt-schema:1\n",
+        "hash": "sha256:59754711222b2ac97d64070d49baa7789f637ed34f379deb5473ef480cda605e"
+      },
+      {
+        "path": "registry/workflow-pack-release-activation-result-schema@1.json",
+        "format": "icarus.workflow-pack-release-activation-result-schema/1",
+        "ref": {
+          "id": "icarus.workflow-pack-release-activation-result-schema",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-pack-release-activation-result-schema:1\n",
+        "hash": "sha256:74412c4d0cf78dd108b082f2935c2adbf55c2bb65976a9722837ee2f68ca44cd"
+      },
+      {
+        "path": "conformance/g3.9-pack-release-activation/positive-cases.json",
+        "format": "icarus.workflow-g3-pack-release-activation-positive-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g3-pack-release-activation-positive-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-g3-pack-release-activation-positive-cases:1\n",
+        "hash": "sha256:abaf5d692d1cf3e350996a20f47642f876bc9dea4ed4696851468cda5819e2da"
+      },
+      {
+        "path": "conformance/g3.9-pack-release-activation/negative-cases.json",
+        "format": "icarus.workflow-g3-pack-release-activation-negative-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g3-pack-release-activation-negative-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-g3-pack-release-activation-negative-cases:1\n",
+        "hash": "sha256:31e63dcfadb81f83c4c0096a002015a2c62f750c6f8806af3e063a2f12e1e0cc"
+      },
+      {
+        "path": "conformance/g3.9-pack-release-activation/fault-cases.json",
+        "format": "icarus.workflow-g3-pack-release-activation-fault-cases/1",
+        "ref": {
+          "id": "icarus.workflow-g3-pack-release-activation-fault-cases",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-g3-pack-release-activation-fault-cases:1\n",
+        "hash": "sha256:d0b8af01b8a14ae95dd72be1135adeaa64f2b8ce507d0dff68f20bdd94359e29"
+      },
+      {
+        "path": "registry/workflow-pack-release-activation-domain-separators@1.json",
+        "format": "icarus.workflow-pack-release-activation-domain-separators/1",
+        "ref": {
+          "id": "icarus.workflow-pack-release-activation-domain-separators",
+          "version": "1.0.0"
+        },
+        "version": 1,
+        "domain_separator": "icarus:workflow-pack-release-activation-domain-separators:1\n",
+        "hash": "sha256:3113c9e4c7370f2bc83cd9738f571dcedc880200aa036b84ceb40b65c77ef90a"
+      }
+    ],
+    "production_loader_implemented": false,
+    "execution_artifact_build_or_install": false,
+    "gc_or_delete_implemented": false,
+    "authoring_stages_implemented": false,
+    "g4_through_g9_status": "NOT_READY"
+  },
+  "hash": "sha256:e448490a0b00de9b48a6f2537d1fa758aafd2a6ecda6cd1950d54b7fa2124978"
+}

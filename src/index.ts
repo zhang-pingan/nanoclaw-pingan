@@ -91,11 +91,6 @@ import {
   storeChatMetadata,
   storeMessage,
 } from './db.js';
-import {
-  activateConfiguredFeatures,
-  configureFeatureManagementHostHooks,
-  type FeatureDeletionSummary,
-} from './features/index.js';
 import { backfillWebMessageModel, clearWebMessages } from './web-db.js';
 import { AgentQueue, OneShotAgentSlotEvent } from './agent-queue.js';
 import { resolveAgentFolderPath } from './agent-folder.js';
@@ -179,6 +174,8 @@ import { TaskWorkspaceStore } from './task-workspace/store.js';
 import { TaskWorkspaceService } from './task-workspace/service.js';
 import { TaskWorkspaceWebApi } from './task-workspace/web-api.js';
 import type { TaskWorkspaceTimelineDeltaV1 } from './task-workspace/contracts.js';
+import { WorkflowPackManager } from './workflow-packs/management.js';
+import { WorkflowPackWebApi } from './workflow-packs/web-api.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -934,32 +931,6 @@ function loadState(): void {
     { agentCount: Object.keys(registeredAgents).length },
     'State loaded',
   );
-}
-
-function reloadRegisteredAgentsFromDb(): void {
-  registeredAgents = getAllRegisteredAgents();
-  logger.info(
-    { agentCount: Object.keys(registeredAgents).length },
-    'Registered agents reloaded',
-  );
-}
-
-async function stopFeatureAgentsForDeletion(
-  agents: FeatureDeletionSummary['agents'],
-): Promise<void> {
-  for (const agent of agents) {
-    const stopResult = await queue.stopAgent(agent.jid);
-    if (!stopResult.ok && stopResult.error !== 'Agent is not active') {
-      logger.warn(
-        { agentJid: agent.jid, featureAgent: agent, error: stopResult.error },
-        'Failed to stop feature agent before deletion',
-      );
-      throw new Error(
-        `Failed to stop feature agent ${agent.jid}: ${stopResult.error}`,
-      );
-    }
-    queue.purgeAgentState(agent.jid, 'feature_delete_data');
-  }
 }
 
 function saveState(): void {
@@ -2719,11 +2690,6 @@ async function main(): Promise<void> {
   ensureContainerSystemRunning();
   initDatabase();
   logger.info('Database initialized');
-  configureFeatureManagementHostHooks({
-    reloadRegisteredAgents: reloadRegisteredAgentsFromDb,
-    stopFeatureAgents: (agents) => stopFeatureAgentsForDeletion(agents),
-  });
-  await activateConfiguredFeatures();
   loadState();
   restoreRemoteControl();
 
@@ -2791,6 +2757,7 @@ async function main(): Promise<void> {
   let workflowRuntimeStore: ReturnType<
     typeof WorkflowRuntimeConnectionFactory.openStore
   > | null = null;
+  let workflowPackManager: WorkflowPackManager | null = null;
   let workflowAdapterExecutionStore: WorkflowAdapterExecutionStore | null =
     null;
   let workflowAdapters: WorkflowExecutionAdapterRegistry | null = null;
@@ -2803,6 +2770,12 @@ async function main(): Promise<void> {
         : 'create',
     });
     ensureTaskWorkspaceCore(workflowRuntimeStore);
+    workflowPackManager = new WorkflowPackManager(workflowRuntimeStore);
+    const workflowPackReport = workflowPackManager.reconcileAtStartup();
+    logger.info(
+      { workflowPacks: workflowPackReport.items },
+      'Workflow Packs reconciled from desired state',
+    );
     workflowRuntimeService = new WorkflowRuntimeService({
       authority: new WorkflowRuntimeTransactionAuthority(workflowRuntimeStore),
       logger,
@@ -2908,6 +2881,9 @@ async function main(): Promise<void> {
   });
   await taskWorkspaceService.start();
   const taskWorkspaceApi = new TaskWorkspaceWebApi(taskWorkspaceService);
+  const workflowPackApi = workflowPackManager
+    ? new WorkflowPackWebApi(workflowPackManager)
+    : undefined;
 
   const collaborationRuntime = new CollaborationRuntime({
     storeDir: STORE_DIR,
@@ -3014,6 +2990,7 @@ async function main(): Promise<void> {
     registerAgent?: (jid: string, agent: RegisteredAgent) => void;
     collaborationApi?: CollaborationWebApi;
     taskWorkspaceApi?: TaskWorkspaceWebApi;
+    workflowPackApi?: WorkflowPackWebApi;
     onAgentStatusChange?: () => void;
     onAgentQueryTraceChange?: () => void;
   } = {
@@ -3047,6 +3024,7 @@ async function main(): Promise<void> {
     },
     collaborationApi,
     taskWorkspaceApi,
+    workflowPackApi,
     onChatMetadata: (
       chatJid: string,
       timestamp: string,

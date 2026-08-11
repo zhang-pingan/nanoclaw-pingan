@@ -25,8 +25,8 @@
           },
           "schema_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
           "owner": {
-            "kind": "feature",
-            "feature_id": "fixture.feature"
+            "kind": "pack",
+            "pack_id": "fixture.pack"
           },
           "publication_state": "staged",
           "dependencies": [
@@ -59,8 +59,8 @@
           },
           "schema_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
           "owner": {
-            "kind": "feature",
-            "feature_id": "fixture.feature"
+            "kind": "pack",
+            "pack_id": "fixture.pack"
           },
           "publication_state": "staged",
           "dependencies": [
@@ -93,8 +93,8 @@
           },
           "schema_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
           "owner": {
-            "kind": "feature",
-            "feature_id": "fixture.feature"
+            "kind": "pack",
+            "pack_id": "fixture.pack"
           },
           "publication_state": "staged",
           "dependencies": [
@@ -128,8 +128,8 @@
           },
           "schema_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
           "owner": {
-            "kind": "feature",
-            "feature_id": "fixture.feature"
+            "kind": "pack",
+            "pack_id": "fixture.pack"
           },
           "publication_state": "staged",
           "dependencies": [
@@ -163,8 +163,8 @@
           },
           "schema_hash": "sha256:b0fac291df4e8f9635dd823e1121475d210ba675a8bb8633649b0fb88eb7f820",
           "owner": {
-            "kind": "feature",
-            "feature_id": "fixture.feature"
+            "kind": "pack",
+            "pack_id": "fixture.pack"
           },
           "publication_state": "staged",
           "dependencies": [
@@ -192,5 +192,5 @@
       }
     ]
   },
-  "hash": "sha256:3a06af87c002ebcf3063ac289e5556cc78e4482ba3bbec98013436b16ff12643"
+  "hash": "sha256:75cae2fd87c715e5f5545052f6151b286dafb4d1d04b0727e471fc1a08d76c62"
 }

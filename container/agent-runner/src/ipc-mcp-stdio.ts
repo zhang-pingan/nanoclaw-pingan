@@ -11,9 +11,16 @@ import fs from 'fs';
 import path from 'path';
 import { CronExpressionParser } from 'cron-parser';
 
+import {
+  hostActionToolResponse,
+  waitForHostActionReceipt,
+  type HostActionReceiptAction,
+} from './host-action-receipts.js';
+
 const IPC_DIR = '/workspace/ipc';
 const MESSAGES_DIR = path.join(IPC_DIR, 'messages');
 const TASKS_DIR = path.join(IPC_DIR, 'tasks');
+const HOST_ACTION_RESULTS_DIR = path.join(IPC_DIR, 'host-action-results');
 const MCP_CONFIG_PATH = '/workspace/mcp/mcp.json';
 
 // Context from environment variables (set by the agent runner)
@@ -21,6 +28,8 @@ const chatJid = process.env.ICARUS_CHAT_JID!;
 const agentFolder = process.env.ICARUS_AGENT_FOLDER!;
 const isMain = process.env.ICARUS_IS_MAIN === '1';
 const delegationId = process.env.ICARUS_DELEGATION_ID || '';
+const requireHostActionReceipts =
+  process.env.ICARUS_HOST_ACTION_RECEIPTS === '1';
 
 type ToolVisibility = 'all' | 'main' | 'non_main';
 
@@ -147,7 +156,13 @@ function toolVisibilityAllows(visibility: ToolVisibility): boolean {
 function writeIpcFile(dir: string, data: object): string {
   fs.mkdirSync(dir, { recursive: true });
 
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`;
+  const requestId = (data as { requestId?: unknown }).requestId;
+  const filename =
+    requireHostActionReceipts &&
+    typeof requestId === 'string' &&
+    /^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/.test(requestId)
+      ? `${requestId}.json`
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`;
   const filepath = path.join(dir, filename);
 
   // Atomic write: temp file then rename
@@ -173,6 +188,39 @@ async function waitForIpcResult<T>(
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
   return null;
+}
+
+async function waitForProtectedHostActionReceipt(
+  requestId: string,
+  action: HostActionReceiptAction,
+) {
+  return waitForHostActionReceipt({
+    required: requireHostActionReceipts,
+    resultsDirectory: HOST_ACTION_RESULTS_DIR,
+    requestId,
+    action,
+  });
+}
+
+async function submitReceiptBackedHostAction(
+  directory: string,
+  requestId: string,
+  action: HostActionReceiptAction,
+  data: object,
+  messages: {
+    readonly queuedText: string;
+    readonly completedText: string;
+  },
+) {
+  writeIpcFile(directory, { ...data, requestId });
+  const receipt = await waitForProtectedHostActionReceipt(requestId, action);
+  return hostActionToolResponse(
+    receipt,
+    requestId,
+    action,
+    messages,
+    requireHostActionReceipts,
+  );
 }
 
 const AI_IMAGE_WORKSPACE_PREFIXES = [
@@ -411,8 +459,10 @@ server.tool(
       ),
   },
   async (args) => {
+    const requestId = `sendmsg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const data: Record<string, string | undefined> = {
       type: 'message',
+      requestId,
       chatJid,
       text: args.text,
       sender: args.sender || undefined,
@@ -423,9 +473,16 @@ server.tool(
       timestamp: new Date().toISOString(),
     };
 
-    writeIpcFile(MESSAGES_DIR, data);
-
-    return { content: [{ type: 'text' as const, text: 'Message sent.' }] };
+    return submitReceiptBackedHostAction(
+      MESSAGES_DIR,
+      requestId,
+      'send_message',
+      data,
+      {
+        queuedText: 'Message send requested.',
+        completedText: 'Message sent.',
+      },
+    );
   },
 );
 
@@ -486,8 +543,10 @@ server.tool(
       };
     }
 
+    const requestId = `sendfile-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const data = {
       type: 'file',
+      requestId,
       chatJid,
       filePath: resolved,
       caption: args.caption || undefined,
@@ -495,11 +554,16 @@ server.tool(
       timestamp: new Date().toISOString(),
     };
 
-    writeIpcFile(MESSAGES_DIR, data);
-
-    return {
-      content: [{ type: 'text' as const, text: '文件发送请求已提交。' }],
-    };
+    return submitReceiptBackedHostAction(
+      MESSAGES_DIR,
+      requestId,
+      'send_file',
+      data,
+      {
+        queuedText: '文件发送请求已提交。',
+        completedText: '文件已发送。',
+      },
+    );
   },
 );
 
@@ -710,16 +774,17 @@ SCHEDULE VALUE FORMAT:
       timestamp: new Date().toISOString(),
     };
 
-    writeIpcFile(TASKS_DIR, data);
-
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `Task ${taskId} scheduled: ${args.schedule_type} - ${args.schedule_value}`,
-        },
-      ],
-    };
+    const requestId = `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return submitReceiptBackedHostAction(
+      TASKS_DIR,
+      requestId,
+      'schedule_task',
+      data,
+      {
+        queuedText: `Task ${taskId} scheduling requested: ${args.schedule_type} - ${args.schedule_value}`,
+        completedText: `Task ${taskId} scheduled: ${args.schedule_type} - ${args.schedule_value}`,
+      },
+    );
   },
 );
 
@@ -957,16 +1022,17 @@ server.tool(
       timestamp: new Date().toISOString(),
     };
 
-    writeIpcFile(TASKS_DIR, data);
-
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `Task ${args.task_id} pause requested.`,
-        },
-      ],
-    };
+    const requestId = `pause-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return submitReceiptBackedHostAction(
+      TASKS_DIR,
+      requestId,
+      'pause_task',
+      data,
+      {
+        queuedText: `Task ${args.task_id} pause requested.`,
+        completedText: `Task ${args.task_id} paused.`,
+      },
+    );
   },
 );
 
@@ -983,16 +1049,17 @@ server.tool(
       timestamp: new Date().toISOString(),
     };
 
-    writeIpcFile(TASKS_DIR, data);
-
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `Task ${args.task_id} resume requested.`,
-        },
-      ],
-    };
+    const requestId = `resume-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return submitReceiptBackedHostAction(
+      TASKS_DIR,
+      requestId,
+      'resume_task',
+      data,
+      {
+        queuedText: `Task ${args.task_id} resume requested.`,
+        completedText: `Task ${args.task_id} resumed.`,
+      },
+    );
   },
 );
 
@@ -1009,16 +1076,17 @@ server.tool(
       timestamp: new Date().toISOString(),
     };
 
-    writeIpcFile(TASKS_DIR, data);
-
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `Task ${args.task_id} cancellation requested.`,
-        },
-      ],
-    };
+    const requestId = `cancel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return submitReceiptBackedHostAction(
+      TASKS_DIR,
+      requestId,
+      'cancel_task',
+      data,
+      {
+        queuedText: `Task ${args.task_id} cancellation requested.`,
+        completedText: `Task ${args.task_id} cancelled.`,
+      },
+    );
   },
 );
 
@@ -1087,16 +1155,17 @@ server.tool(
     if (args.schedule_value !== undefined)
       data.schedule_value = args.schedule_value;
 
-    writeIpcFile(TASKS_DIR, data);
-
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `Task ${args.task_id} update requested.`,
-        },
-      ],
-    };
+    const requestId = `update-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return submitReceiptBackedHostAction(
+      TASKS_DIR,
+      requestId,
+      'update_task',
+      data,
+      {
+        queuedText: `Task ${args.task_id} update requested.`,
+        completedText: `Task ${args.task_id} updated.`,
+      },
+    );
   },
 );
 
@@ -2131,16 +2200,18 @@ server.tool(
       timestamp: new Date().toISOString(),
     };
 
-    writeIpcFile(TASKS_DIR, data);
-
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: '委派请求已发送给主 Agent，主 Agent 将决定是否委派及委派目标。',
-        },
-      ],
-    };
+    const requestId = `requestdel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return submitReceiptBackedHostAction(
+      TASKS_DIR,
+      requestId,
+      'request_delegation',
+      data,
+      {
+        queuedText: '委派请求已提交，等待 Host 处理。',
+        completedText:
+          '委派请求已发送给主 Agent，主 Agent 将决定是否委派及委派目标。',
+      },
+    );
   },
 );
 
@@ -2167,16 +2238,17 @@ Be thorough in your result — include all relevant findings, data, and conclusi
       timestamp: new Date().toISOString(),
     };
 
-    writeIpcFile(TASKS_DIR, data);
-
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `委派任务 ${args.delegation_id} 的结果已提交。`,
-        },
-      ],
-    };
+    const requestId = `completedel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return submitReceiptBackedHostAction(
+      TASKS_DIR,
+      requestId,
+      'complete_delegation',
+      data,
+      {
+        queuedText: `委派任务 ${args.delegation_id} 的结果提交请求已发送。`,
+        completedText: `委派任务 ${args.delegation_id} 的结果已提交。`,
+      },
+    );
   },
 );
 
@@ -2428,17 +2500,22 @@ server.tool(
   '重新加载工具。修改了自定义工具源码后调用此工具，会重启容器并恢复当前会话。',
   {},
   async () => {
-    writeIpcFile(TASKS_DIR, {
-      type: 'reload_container',
-      chatJid,
-      agentFolder,
-      timestamp: new Date().toISOString(),
-    });
-    return {
-      content: [
-        { type: 'text' as const, text: '工具重载请求已提交，容器即将重启...' },
-      ],
-    };
+    const requestId = `reload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    return submitReceiptBackedHostAction(
+      TASKS_DIR,
+      requestId,
+      'reload_tools',
+      {
+        type: 'reload_container',
+        chatJid,
+        agentFolder,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        queuedText: '工具重载请求已提交，等待 Host 处理...',
+        completedText: '工具重载请求已接受，容器即将重启...',
+      },
+    );
   },
 );
 

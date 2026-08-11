@@ -1465,7 +1465,7 @@ function createRequiredChild(
     `INSERT INTO workflows (
        id, status, operational_state, recipe_resource_id, recipe_resource_hash,
        recipe_version, creation_request_id, creation_domain, creation_key,
-       owner_principal_ref, controlling_feature_id, creator_automation_ref,
+       owner_principal_ref, controlling_pack_id, creator_automation_ref,
        ownership_hash, root_workflow_id, parent_workflow_id, workflow_depth,
        lineage_budget_account_id, workflow_execution_policy_resource_id,
        workflow_execution_policy_resource_hash,

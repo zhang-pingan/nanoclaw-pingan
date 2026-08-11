@@ -17,6 +17,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   buildCollaborationVirtualTree,
+  collaborationProjectSpaceEventPath,
   CollaborationProjectSpaceGitTransport,
 } from './project-space-git.js';
 import {
@@ -483,6 +484,296 @@ process.exit(128);
       previousHead: history.head,
     });
     expect(replayed.projection).toEqual(history.projection);
+  }, 30_000);
+
+  it('materializes member exit revocations and terminal Group dissolution', async () => {
+    const test = fixture();
+    const transport = new CollaborationProjectSpaceGitTransport();
+    const initial = genesis(test.identity);
+    let history = await transport.create({
+      remoteUrl: test.remote,
+      repositoryPath: test.cache,
+      identity: test.identity,
+      genesisEvent: initial.event,
+      genesisProjection: initial.projection,
+    });
+    const bob: CollaborationEventSigningIdentity = {
+      ...test.identity,
+      principalId: 'principal_00000000-0000-4000-8000-000000000002',
+      clientId: 'client_bob',
+      credentialId: 'credential_bob',
+    };
+    const joinEventId = 'evt_bob_join';
+    history = await transport.append({
+      remoteUrl: test.remote,
+      repositoryPath: test.cache,
+      previousHead: history.head,
+      identity: bob,
+      buildEvent: (current) =>
+        buildCollaborationEventV3({
+          groupId: 'group_signed',
+          eventId: joinEventId,
+          aggregateType: 'membership',
+          aggregateId: bob.principalId,
+          aggregateRevision: 1,
+          previousEventHash: null,
+          eventType: 'member_registered',
+          actor: {
+            principal_id: bob.principalId,
+            client_id: bob.clientId,
+            credential_id: bob.credentialId,
+            executor_id: null,
+          },
+          occurredAt: NOW,
+          payload: {
+            member: {
+              format: 'icarus.collaboration-member/3',
+              principal_id: bob.principalId,
+              display_name: 'Bob',
+              status: 'active',
+              joined_at_event: joinEventId,
+            },
+            client: {
+              format: 'icarus.collaboration-client/1',
+              principal_id: bob.principalId,
+              client_id: bob.clientId,
+              display_name: 'Bob MacBook',
+              capabilities: [],
+              status: 'active',
+              registered_at_event: joinEventId,
+            },
+            credential: {
+              format: 'icarus.collaboration-credential/1',
+              credential_id: bob.credentialId,
+              principal_id: bob.principalId,
+              client_id: bob.clientId,
+              public_key: bob.publicKey,
+              fingerprint: bob.fingerprint,
+              purpose: 'event_signing',
+              status: 'active',
+              created_at_event: joinEventId,
+              revoked_at_event: null,
+            },
+          },
+        }),
+    });
+    const executorEventId = 'evt_bob_executor';
+    history = await transport.append({
+      remoteUrl: test.remote,
+      repositoryPath: test.cache,
+      previousHead: history.head,
+      identity: bob,
+      buildEvent: (current) => {
+        const head =
+          current.projection.aggregateHeads[`membership:${bob.principalId}`]!;
+        return buildCollaborationEventV3({
+          groupId: 'group_signed',
+          eventId: executorEventId,
+          aggregateType: 'membership',
+          aggregateId: bob.principalId,
+          aggregateRevision: head.revision + 1,
+          previousEventHash: head.eventHash,
+          eventType: 'executor_registered',
+          actor: {
+            principal_id: bob.principalId,
+            client_id: bob.clientId,
+            credential_id: bob.credentialId,
+            executor_id: null,
+          },
+          occurredAt: NOW,
+          payload: {
+            executor: {
+              format: 'icarus.collaboration-executor/1',
+              principal_id: bob.principalId,
+              executor_id: 'executor_bob',
+              display_name: 'Bob Executor',
+              kind: 'run_once',
+              capabilities: [],
+              status: 'active',
+              registered_at_event: executorEventId,
+              revoked_at_event: null,
+            },
+          },
+        });
+      },
+    });
+    const leftEventId = 'evt_bob_left';
+    history = await transport.append({
+      remoteUrl: test.remote,
+      repositoryPath: test.cache,
+      previousHead: history.head,
+      identity: bob,
+      buildEvent: (current) => {
+        const head =
+          current.projection.aggregateHeads[`membership:${bob.principalId}`]!;
+        return buildCollaborationEventV3({
+          groupId: 'group_signed',
+          eventId: leftEventId,
+          aggregateType: 'membership',
+          aggregateId: bob.principalId,
+          aggregateRevision: head.revision + 1,
+          previousEventHash: head.eventHash,
+          eventType: 'member_left',
+          actor: {
+            principal_id: bob.principalId,
+            client_id: bob.clientId,
+            credential_id: bob.credentialId,
+            executor_id: null,
+          },
+          occurredAt: NOW,
+          payload: {
+            reason: 'Leaving the project',
+            affected_turn_ids: [],
+          },
+        });
+      },
+    });
+    const dissolvedAt = '2026-08-06T12:30:00.000Z';
+    history = await transport.append({
+      remoteUrl: test.remote,
+      repositoryPath: test.cache,
+      previousHead: history.head,
+      identity: test.identity,
+      buildEvent: (current) => {
+        const head = current.projection.aggregateHeads['group:group_signed']!;
+        return buildCollaborationEventV3({
+          groupId: 'group_signed',
+          eventId: 'evt_group_dissolved',
+          aggregateType: 'group',
+          aggregateId: 'group_signed',
+          aggregateRevision: head.revision + 1,
+          previousEventHash: head.eventHash,
+          eventType: 'group_dissolved',
+          actor: {
+            principal_id: test.identity.principalId,
+            client_id: test.identity.clientId,
+            credential_id: test.identity.credentialId,
+            executor_id: null,
+          },
+          occurredAt: dissolvedAt,
+          payload: { reason: 'Project complete' },
+        });
+      },
+    });
+
+    const showJson = (repositoryFile: string) =>
+      JSON.parse(
+        run(test.cache, ['git', 'show', `${history.head}:${repositoryFile}`]),
+      ) as Record<string, unknown>;
+    expect(showJson('group.json')).toMatchObject({
+      lifecycle: 'dissolved',
+      archived_at: null,
+      dissolved_at: dissolvedAt,
+    });
+    expect(showJson(`members/${bob.principalId}/member.json`)).toMatchObject({
+      status: 'left',
+    });
+    expect(
+      showJson(`members/${bob.principalId}/clients/${bob.clientId}.json`),
+    ).toMatchObject({ status: 'revoked' });
+    expect(
+      showJson(
+        `members/${bob.principalId}/credentials/${bob.credentialId}.json`,
+      ),
+    ).toMatchObject({ status: 'revoked', revoked_at_event: leftEventId });
+    expect(
+      showJson(`members/${bob.principalId}/executors/executor_bob.json`),
+    ).toMatchObject({ status: 'revoked', revoked_at_event: leftEventId });
+    expect(
+      history.eventRecords.map((record) => record.event.event_type),
+    ).toEqual([
+      'group_initialized',
+      'member_registered',
+      'executor_registered',
+      'member_left',
+      'group_dissolved',
+    ]);
+    const replayed = await transport.inspect({
+      remoteUrl: test.remote,
+      repositoryPath: test.cache,
+      previousHead: history.head,
+    });
+    expect(replayed.projection).toEqual(history.projection);
+  }, 30_000);
+
+  it('rejects a signed Git replay that dissolves through a non-Group Aggregate', async () => {
+    const test = fixture();
+    const transport = new CollaborationProjectSpaceGitTransport();
+    const initial = genesis(test.identity);
+    const history = await transport.create({
+      remoteUrl: test.remote,
+      repositoryPath: test.cache,
+      identity: test.identity,
+      genesisEvent: initial.event,
+      genesisProjection: initial.projection,
+    });
+    const maliciousEvent = buildCollaborationEventV3({
+      groupId: 'group_signed',
+      eventId: 'evt_wrong_aggregate_dissolve',
+      aggregateType: 'membership',
+      aggregateId: test.identity.principalId,
+      aggregateRevision: 1,
+      previousEventHash: null,
+      eventType: 'group_dissolved',
+      actor: {
+        principal_id: test.identity.principalId,
+        client_id: test.identity.clientId,
+        credential_id: test.identity.credentialId,
+        executor_id: null,
+      },
+      occurredAt: NOW,
+      payload: { reason: 'Wrong Aggregate replay' },
+    });
+    const checkout = path.join(test.root, 'wrong-aggregate');
+    run(test.root, ['git', 'clone', '-q', test.remote, checkout]);
+    run(checkout, [
+      'git',
+      'checkout',
+      '-q',
+      '-b',
+      'wrong-aggregate',
+      'origin/icarus/control',
+    ]);
+    run(checkout, ['git', 'config', 'user.name', test.identity.principalId]);
+    run(checkout, [
+      'git',
+      'config',
+      'user.email',
+      `${test.identity.principalId}@icarus.local`,
+    ]);
+    run(checkout, ['git', 'config', 'gpg.format', 'ssh']);
+    run(checkout, [
+      'git',
+      'config',
+      'user.signingkey',
+      test.identity.privateKeyPath,
+    ]);
+    run(checkout, ['git', 'config', 'commit.gpgsign', 'true']);
+    const eventPath = collaborationProjectSpaceEventPath(maliciousEvent);
+    mkdirSync(path.join(checkout, path.dirname(eventPath)), {
+      recursive: true,
+    });
+    writeFileSync(
+      path.join(checkout, eventPath),
+      `${JSON.stringify(maliciousEvent, null, 2)}\n`,
+    );
+    run(checkout, ['git', 'add', eventPath]);
+    run(checkout, ['git', 'commit', '-q', '-m', 'wrong aggregate dissolve']);
+    run(checkout, [
+      'git',
+      'push',
+      '-q',
+      'origin',
+      'HEAD:refs/heads/icarus/control',
+    ]);
+
+    await expect(
+      transport.inspect({
+        remoteUrl: test.remote,
+        repositoryPath: test.cache,
+        previousHead: history.head,
+      }),
+    ).rejects.toThrow(/Group Aggregate/iu);
   }, 30_000);
 
   it('passes the configured SSH key to the append checkout fetch process', async () => {

@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-runtime-retention-policy-schema:1\n",
-  "hash": "sha256:7a99fe14f31ed2023556c2938f68fb2a1c672efd6c27f71a91915efc52d4d832",
+  "hash": "sha256:aa849feed86a2dc0bb466977277f8b400e4c02bb75e4abe40f028c485ce6f3e4",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "urn:icarus:workflow-runtime-retention-policy:1",
@@ -129,7 +129,7 @@
           "duration_origin",
           "run_recovery_strong_states",
           "user_artifact_not_before_workflow_closed",
-          "feature_policy_may_only_extend_user_artifact",
+          "pack_policy_may_only_extend_user_artifact",
           "manual_pin_may_extend_backup",
           "existing_objects_pin_policy_ref_and_hash"
         ],
@@ -155,7 +155,7 @@
           "user_artifact_not_before_workflow_closed": {
             "const": true
           },
-          "feature_policy_may_only_extend_user_artifact": {
+          "pack_policy_may_only_extend_user_artifact": {
             "const": true
           },
           "manual_pin_may_extend_backup": {

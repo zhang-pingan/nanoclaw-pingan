@@ -1,7 +1,31 @@
-import { describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const { attachmentsDir, axiosGetMock } = vi.hoisted(() => ({
+  attachmentsDir: `${(process.env.TMPDIR || '/tmp').replace(/\/$/, '')}/icarus-feishu-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  axiosGetMock: vi.fn(),
+}));
+
+vi.mock('axios', () => ({
+  default: {
+    get: axiosGetMock,
+    post: vi.fn(),
+  },
+}));
+
+vi.mock('../config.js', () => ({ ATTACHMENTS_DIR: attachmentsDir }));
 
 import { FeishuChannel } from './feishu.js';
 import type { InteractiveCard } from '../types.js';
+import { createWorkflowPackExecutionFileScopeAuthority } from '../workflow-packs/execution-file-scope-authority.js';
+
+afterEach(() => {
+  axiosGetMock.mockReset();
+  fs.rmSync(attachmentsDir, { recursive: true, force: true });
+});
 
 function createChannel(): FeishuChannel {
   return new FeishuChannel(
@@ -230,6 +254,72 @@ describe('FeishuChannel form cards', () => {
       tag: 'button',
       disabled: true,
     });
+  });
+});
+
+describe('Feishu attachment writes during a read-only Pack Run', () => {
+  it('keeps the channel write available while an overlapping authority is active', async () => {
+    fs.mkdirSync(attachmentsDir, { recursive: true });
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-feishu-pack-isolation-'),
+    );
+    const shadow = path.join(root, 'shadow');
+    fs.mkdirSync(shadow, { recursive: true });
+    const authority = createWorkflowPackExecutionFileScopeAuthority({
+      parentDirectory: path.join(root, 'ipc'),
+      runId: 'feishu-overlap-run',
+      queryId: 'feishu-overlap-query',
+      agentFolder: 'feishu-agent',
+      isMain: false,
+      hostActions: [],
+      mappings: [
+        {
+          scope: 'attachments',
+          sourcePath: attachmentsDir,
+          shadowHostPath: shadow,
+        },
+      ],
+    });
+    authority.register();
+    const channel = createChannel();
+    Object.assign(channel as unknown as Record<string, unknown>, {
+      token: 'cached-token',
+      tokenExpiry: Date.now() + 60_000,
+    });
+    axiosGetMock.mockResolvedValue({ data: Buffer.from('feishu-bytes') });
+
+    try {
+      const containerPath = await (
+        channel as unknown as {
+          downloadMessageResource: (
+            messageId: string,
+            fileKey: string,
+            fileName: string,
+            type: 'file' | 'image',
+            agentFolder: string,
+          ) => Promise<string | null>;
+        }
+      ).downloadMessageResource(
+        'message-1',
+        'file-key-1',
+        'brief.pdf',
+        'file',
+        'feishu-agent',
+      );
+
+      expect(containerPath).toMatch(/^\/workspace\/attachments\//);
+      expect(
+        fs.readFileSync(
+          path.join(attachmentsDir, path.basename(containerPath!)),
+          'utf8',
+        ),
+      ).toBe('feishu-bytes');
+      expect(fs.readdirSync(shadow)).toEqual([]);
+    } finally {
+      await authority.deactivateAndDrain();
+      authority.cleanup();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

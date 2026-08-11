@@ -80,7 +80,9 @@ describe('Collaboration store preflight', () => {
       targetSchemaVersion: CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION,
     });
     expect(result.archiveDirectory).toContain(
-      `collaboration-schema-20260809T123456789Z-v6-to-v${CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION}`,
+      `collaboration-schema-20260809T123456789Z-v6-to-v${String(
+        CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION,
+      )}`,
     );
     expect(fs.existsSync(databasePath)).toBe(false);
     const manifest = JSON.parse(
@@ -118,6 +120,74 @@ describe('Collaboration store preflight', () => {
       current.rawDatabaseForTests().pragma('user_version', { simple: true }),
     ).toBe(CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION);
     current.close();
+  });
+
+  it('archives and rebuilds the lifecycle-only main v10 store as v11', () => {
+    const storeDir = temporaryStore();
+    const databasePath = path.join(storeDir, 'collaboration.db');
+    new CollaborationProjectSpaceStore(databasePath).close();
+
+    const lifecycleV10 = new Database(databasePath);
+    lifecycleV10.exec(`
+      DROP TABLE collaboration_group_initializations;
+      UPDATE collaboration_meta
+         SET value = 'icarus.collaboration-local-store/10'
+       WHERE key = 'format';
+      INSERT INTO collaboration_local_group_bindings (
+        group_id, remote_url, principal_id, credential_id,
+        recovery_credential_id, binding_state, detach_reason,
+        terminal_head, cleanup_paths_json, cleanup_error, updated_at_ms
+      ) VALUES (
+        'group_main_v10', '/tmp/main-v10.git',
+        'principal_main_v10', 'credential_main_v10',
+        'credential_main_v10_recovery', 'retained', 'local_remove',
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', NULL, NULL, 1
+      );
+    `);
+    lifecycleV10.pragma('user_version = 10');
+    lifecycleV10.close();
+
+    const result = preflightCollaborationStore({
+      storeDir,
+      now: () => new Date('2026-08-10T12:34:56.789Z'),
+    });
+    expect(result).toMatchObject({
+      decision: 'archived',
+      observedSchemaVersion: 10,
+      targetSchemaVersion: 11,
+    });
+    expect(fs.existsSync(databasePath)).toBe(false);
+
+    const archived = new Database(
+      path.join(result.archiveDirectory!, 'collaboration.db'),
+      { readonly: true },
+    );
+    expect(archived.pragma('user_version', { simple: true })).toBe(10);
+    expect(
+      archived
+        .prepare(
+          `SELECT binding_state FROM collaboration_local_group_bindings
+            WHERE group_id = 'group_main_v10'`,
+        )
+        .get(),
+    ).toEqual({ binding_state: 'retained' });
+    expect(
+      archived
+        .prepare(
+          `SELECT 1 FROM sqlite_master
+            WHERE type = 'table' AND name = 'collaboration_group_initializations'`,
+        )
+        .get(),
+    ).toBeUndefined();
+    archived.close();
+
+    const rebuilt = new CollaborationProjectSpaceStore(databasePath);
+    expect(
+      rebuilt.rawDatabaseForTests().pragma('user_version', { simple: true }),
+    ).toBe(11);
+    expect(rebuilt.getLocalGroupBinding('group_main_v10')).toBeNull();
+    expect(rebuilt.listGroupInitializations()).toEqual([]);
+    rebuilt.close();
   });
 
   it('rejects a corrupt database without replacing it', () => {

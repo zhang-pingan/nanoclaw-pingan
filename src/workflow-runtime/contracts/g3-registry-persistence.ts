@@ -133,10 +133,10 @@ export const G3_REGISTRY_RESOURCE_SCHEMA: JsonObject = {
         {
           type: 'object',
           additionalProperties: false,
-          required: ['kind', 'feature_id'],
+          required: ['kind', 'pack_id'],
           properties: {
-            kind: { const: 'feature' },
-            feature_id: {
+            kind: { const: 'pack' },
+            pack_id: {
               type: 'string',
               minLength: 1,
               maxLength: 255,
@@ -799,7 +799,7 @@ function fixtureResource(
     format: G3_REGISTRY_PERSISTENCE_FORMATS.resource,
     resource_type: resourceType,
     ref,
-    owner: { kind: 'feature' as const, feature_id: 'fixture.feature' },
+    owner: { kind: 'pack' as const, pack_id: 'fixture.pack' },
     schema_ref: schemaRef,
     schema_hash: schemaHash,
     content,
@@ -830,7 +830,7 @@ export function g3RegistryPersistenceFixturesForTest(): {
     format: G3_REGISTRY_PERSISTENCE_FORMATS.resource,
     resource_type: 'schema' as const,
     ref: FIXTURE_SCHEMA_REF,
-    owner: { kind: 'feature' as const, feature_id: 'fixture.feature' },
+    owner: { kind: 'pack' as const, pack_id: 'fixture.pack' },
     schema_ref: FIXTURE_SCHEMA_REF,
     schema_hash: '' as Sha256Hash,
     content: schemaContent,

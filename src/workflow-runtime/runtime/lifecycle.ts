@@ -243,7 +243,7 @@ export function activateWorkflowT1InTransaction(
   );
   transaction.execute(
     `INSERT INTO workflow_registry_retention_handles (
-       id, handle_kind, feature_release_id, graph_run_id, backup_id,
+       id, handle_kind, pack_release_id, graph_run_id, backup_id,
        external_actor_ref, closure_manifest_id, closure_hash, status,
        created_at_ms, released_at_ms, row_version
      ) VALUES (?, 'active_run', NULL, ?, NULL, NULL, ?, ?, 'held', ?, NULL, 1)`,

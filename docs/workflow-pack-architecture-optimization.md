@@ -1,8 +1,8 @@
-# Workflow Pack 架构优化方案
+# Workflow Pack 当前架构
 
-> **状态**：Proposed
+> **状态**：Implemented / Current
 > **日期**：2026-08-08
-> **范围**：Task Workspace、Workflow Runtime Registry、Core System Recipe、Feature Package Runtime、Personal Workflow、Temporary Workflow
+> **范围**：Task Workspace、Workflow Runtime Registry、Core System Recipe、Workflow Pack、Personal Workflow、Temporary Workflow
 > **项目边界**：Icarus 是本地单用户内部实验工具。当前没有必须兼容的历史业务 Workflow 数据，本方案遵循 [`internal-experimental-scope.md`](internal-experimental-scope.md) 的 latest-only 策略。
 
 ## 1. 决策摘要
@@ -37,62 +37,21 @@ Temporary Workflow
   -> Workflow Runtime
 ```
 
-## 2. 背景与当前代码结论
+## 2. 当前实现
 
-Task Workspace 合入后，Core、Feature、Personal Recipe 已通过统一 Catalog 返回，并最终进入同一个 `createWorkflowT0`。当前 `recipe_kind` 由 Registry resource ownership 推导，不代表不同的执行引擎。
+当前代码已完成 latest-only 收敛：
 
-当前代码同时保留了两套互不连通的 Feature 控制面。
+1. `src/features/`、旧 Feature Manifest、Host entry、renderer/nav/API dispatch、Feature migration/provisioning 和相关主库表已删除。
+2. `local/workflow-packs.json` 只保存期望状态；`workflow_pack_active_releases` 是公开 Catalog 和新执行的唯一 Pack authority。
+3. Core 只发布 `system_only` 的 `ad_hoc_personal_task` 内部协议。公开 `listRecipes()`/`refreshRecipeSelection()` 只返回 Pack/Personal；Temporary/Personal 内部路径使用 Host-only `resolveSystemRecipe(purpose)`。
+4. Core、Pack、Personal 都通过 `WorkflowBundlePublisher` 完成 Registry persistence、exact collision、publication state 与 receipt；owner-specific Release/active pointer 仍保持 typed 表。
+5. Pack loader 校验 `icarus.workflow-pack/1` Manifest、portable path、source byte hash、Host lifecycle absence、Core binding allowlist 和 execution resource inventory。它基于已发布 Core System compiler authority 构造 production compiler snapshot，对 Pack Definition 做 activation 前编译，并把 compiler evidence 与 exact Core binding hashes 固定到 execution artifact。
+6. Pack v1 对非空跨 Pack `dependencies` fail closed；不会静默接受尚无 exact dependency authority 的声明。
+7. execution artifact 固定 Pack id/version、Manifest hash 和逐文件 hash。Run resolver 按 exact Registry snapshot、active-run retention、published retention、Pack Release 和 artifact 顺序解析 staging copy，且每次执行前验证目录与字节。
+8. Disable 删除 active pointer；Uninstall 只归档源码；Purge 只删除 managed Pack data/staging，并在 active Run pin 存在时拒绝。TaskSession、Runtime history、共享 Artifact、audit 和 external workspace 始终保留。
+9. Workflow Runtime Store 当前 schema 为 v16，只创建/打开 v16；旧 schema fail closed 并要求显式 backup/reset/reinitialize，不保留旧 Feature/Pack 双读或 migration compatibility。
 
-第一套位于 `src/features/`：
-
-- 扫描 `features/{featureId}/feature.json`；
-- 读取 `local/features.json` 或 `ICARUS_FEATURES`；
-- 动态加载 `hostEntry`；
-- 注册 Feature API、nav 和 renderer；
-- Provision 独立 Agent；
-- 注册 skill、agent、MCP、script 和 template 目录；
-- 运行 Feature migration；
-- 在 Web 设置页执行进程内 enable/disable/reload。
-
-第二套位于 `src/workflow-runtime/`：
-
-- 解析 `icarus.feature-manifest/2`；
-- 发布 Workflow Registry resources 和 closure snapshot；
-- 维护 Feature Release；
-- 维护 `workflow_feature_active_releases`；
-- 通过 active pointer 控制 Feature Recipe 是否进入 Workspace Catalog；
-- 维护 draining、retention 和运行中资源引用。
-
-两套控制面没有共同的 activation transaction。`activateConfiguredFeatures()` 不持有 Workflow Runtime Store，也不发布或激活 Feature Release；Workspace Catalog 则不读取 `local/features.json`。因此当前可能出现：
-
-```text
-local/features.json = enabled
-  but
-Workflow Feature Release = inactive
-  -> 设置页显示已启用，Task Workspace 没有 Recipe
-```
-
-也可能出现反向状态：
-
-```text
-Workflow Feature Release = active
-  but
-local/features.json = disabled
-  -> Catalog 仍可能持有 Pack Recipe，但容器资源已被卸载
-```
-
-Personal Workflow 已经扩展 Registry ownership，并拥有独立 Release、active pointer 和发布流程。这解决了 principal ownership，但 Core、Feature、Personal 仍分别使用 bootstrap、Feature Publisher/Activation 和 Personal Publisher/Activation 三条作者路径。
-
-### 2.1 2026-08-08 代码复核结论
-
-Task Workspace Core 1.2 和 Temporary Workflow 执行链的最新实现没有改变本方案的目标架构，但改变了部分工作的完成状态和优先级：
-
-1. `task-workspace-core.ts` 已不再在运行时读取 `compiler/golden/cases@1.json`，而是发布自包含的 compiler snapshot、Schema、Graph Policy、Scope Interface、Capability、Executor、Adapter 和 Outbox Policy；Temporary Workflow 也已绑定真实的 `codex-task` 执行资源。因此“去除 Golden fixture 运行时依赖”已经完成，不再作为待实现项。
-2. Core 1.2 仍通过专用 bootstrap SQL 和发布逻辑写入资源，没有复用共享 `WorkflowBundlePublisher`。`compiled_plan_pin.provenance` 仍为 `golden_corpus`，需要在统一 Publisher 前明确该字段表达的是编译器验证来源还是资源发布来源，并按合同保留或更名，避免已不读取 Golden fixture 后继续产生误导。
-3. `ad_hoc_personal_task` 仍作为普通 `core` Recipe 被公开 `listRecipes()` 返回；Temporary launch 也仍通过公开 Catalog 搜索它并取得 selection token。新增的 `refreshRecipeSelection()` 同样基于公开 `listRecipes()`，只能服务用户可选 Recipe 的 token 刷新，不能承担隐藏 System Recipe 解析。这使 System Recipe 隐藏成为当前最高优先级的架构缺口。
-4. Temporary Coordinator 已补齐 closed-schema 校验、真实 execution resource contract、draft/confirm/idempotency/recovery，以及 Artifact、attempt、edge 和 completion cut 等 Runtime detail。这说明 System Recipe 应被定义为自包含的平台执行协议 bundle，而不是 Core 提供给用户选择的 Workflow 模板。
-5. Task Workspace 已支持用户显式删除自己的 TaskSession。该能力属于 Task Workspace 的生命周期；Pack Purge 仍不得借用该命令跨领域删除与 Pack Run 关联的 TaskSession。
-6. 旧 `src/features/` Host/UI/API lifecycle 和 Runtime `workflow_feature_active_releases` 双控制面未发生实质变化，删除旧 Feature App Runtime、建立单一 Pack activation authority 的结论保持不变。
+公开 Pack Recipe 已由测试覆盖从 startup reconcile、Catalog selection 到统一 `launchPublished()`/`createWorkflowT0` 的真实路径；compile 失败时旧 active pointer 保持不变。
 
 ## 3. 目标
 
@@ -148,7 +107,7 @@ System Recipe 必须满足：
 - 不承载 PM、Research、Ops 等业务语义；
 - 删除后只会关闭相应平台能力，不会导致 Runtime 无法启动。
 
-当前 `ad_hoc_personal_task` 应从普通 Core Recipe 调整为隐藏 System Recipe。Task Workspace 的 `Temporary Workflow` 是 UI launch mode，不是对该 Recipe 的直接 Catalog 展示。
+当前 `ad_hoc_personal_task` 已是隐藏 System Recipe。Task Workspace 的 `Temporary Workflow` 是 UI launch mode，不是对该 Recipe 的直接 Catalog 展示。
 
 Host 应提供与公开 Catalog 分离的 system-only resolver，例如：
 
@@ -168,9 +127,8 @@ Workflow Pack 是开发者维护、Git 管理、可整体启停的声明式 Work
 
 Workflow Pack 负责：
 
-- Recipe、Definition、Policy 和 Schema；
-- Capability、Executor binding、Prompt 和 Tool binding；
-- Wait、Card 和 Artifact contract；
+- Manifest v1 closed surface 中的 Recipe、Definition、Policy、Schema、Scope Interface、Graph Template 和 Card；
+- 对 Core allowlist 中 exact Capability/Executor/Adapter binding 的引用；
 - Agent prompt、Skill、MCP、Script 和 Template 资源；
 - Pack namespace、依赖、permission 和 effect ceiling；
 - Pack Release 与 Catalog activation。
@@ -256,7 +214,7 @@ store/task-workspace.db
 
 ## 7. Workflow Pack 目录与 Manifest
 
-原 `features/` 建议 latest-only 重命名为 `workflow-packs/`：
+当前 Pack source root 为 `workflow-packs/`：
 
 ```text
 workflow-packs/{packId}/
@@ -281,7 +239,7 @@ workflow-packs/{packId}/
   README.md
 ```
 
-建议 Manifest：
+当前 Manifest v1 形态：
 
 ```json
 {
@@ -337,7 +295,7 @@ Agent 应作为 Workflow execution resource 被具体 Capability/Executor 引用
 
 ### 8.1 Catalog 项目
 
-`WorkspaceRecipeCatalogItem` 建议将 `recipe_kind` 重命名为更准确的 `distribution_kind`：
+`WorkspaceRecipeCatalogItem` 使用 `distribution_kind` 区分公开分发来源：
 
 ```ts
 type WorkflowDistributionKind = 'pack' | 'personal';
@@ -384,7 +342,7 @@ Pack disable 或 Release 切换后，旧 token 必须返回 `selection_stale`，
 
 ### 9.1 Desired State
 
-建议配置改为：
+当前期望状态配置为：
 
 ```text
 local/workflow-packs.json
@@ -423,7 +381,7 @@ desired enabled config
 
 ### 9.3 Startup 顺序
 
-目标启动顺序：
+当前启动顺序：
 
 ```text
 initialize Core database
@@ -436,19 +394,32 @@ initialize Core database
   -> expose Catalog and settings API
 ```
 
-这取代当前“先 activate source Feature、后打开 Workflow Runtime Store”的顺序。
+这已经取代旧的“先 activate source Feature、后打开 Workflow Runtime Store”顺序。
 
 ### 9.4 第一版不热卸载
 
-原始需求是“项目启动时插拔”，不要求进程内热卸载。第一版 Pack 设置变更应返回 `restart_required=true`，由下次启动统一 reconcile。
+原始需求是“项目启动时插拔”，不要求进程内热加载新 Release。启用和源码更新返回 `restart_required=true`，由下次启动统一 reconcile；Disable 同步删除 Runtime active pointer 以立即阻止新 launch，同时仍返回 restart requirement 完成期望状态收敛。
 
 这样可以删除：
 
-- `activate -> deactivate -> reactivate` 回滚链；
 - Feature host cleanup；
 - renderer dynamic unmount；
-- 运行中 container resource 被即时移除的竞态；
+- 运行中 container resource 被 Disable/Uninstall 即时移除的竞态；
 - 多个 Store 无法原子 reload 的伪事务。
+
+### 9.5 read_only Pack 的持久文件终态
+
+Manifest 中的 Pack 容器权限 `effect_ceiling` 只在存在 exact `workflowPackExecutionResources` pin 的 Pack Run 上生效；它与 Recipe、Execution Policy 和 compiled plan 中的 Workflow effect impact 不是同一层合同。
+
+`read_only` 不裁剪 Bash、Write/Edit、MCP 或已声明 Host action。Agent 可以在执行中临时修改文件，但必须在最终回答前恢复 Pack 明确声明的持久 `file_scopes`。Host 将这些 scope 挂载为每次 Run 的可写隔离副本，并为该 Run 建立随机 IPC request namespace 和绑定 exact Run、Query、Agent 身份的文件 scope authority。`send_file`、AI Image、desktop capture 和本地 Host script 等 Host 文件入口只能通过 authority 的 canonical-root child API 读取、创建或生成 Host 私有快照；输出创建使用已打开目录 FD 锚定的逐级 `openat(..., O_NOFOLLOW)`，不会在 path 校验后再用可变完整路径创建。它们不信任容器提交的 `runId`、`queryId` 或 Agent folder，也不把 shadow 内可变子目录的 `realpath` 当作新信任根。Host action 仍按 pinned Manifest allowlist 检查。
+
+anchored output helper 的 C 源码位于 `native/anchored-file-helper.c`，只在项目安装、开发启动前或构建阶段为当前 `darwin`/`linux`、`arm64`/`x64` target 编译。源码运行使用 `build/native/{platform}-{arch}`；`npm run build` 和 Host Core snapshot builder 都将同一产物与 platform、arch、SHA-256 manifest 复制到目标 `dist/workflow-packs/native/{platform}-{arch}`，构建后运行只解析该同目录产物。Host 运行时不会调用 `CC`/`cc`，并在执行前拒绝缺失、符号链接、非可执行或 hash 不匹配的 helper。
+
+容器进程关闭是 protected IPC 不再产生合法新请求的确定边界。Host 在该边界停止 watcher 接收新 operation，等待已经开始的 operation，随后同步接管随机 namespace 中所有完整 `messages`/`tasks` JSON。`send_message`、`send_file`、schedule/pause/resume/cancel/update task、request/complete delegation 和 `reload_tools` 共用 requestId-bound receipt：request 文件名必须与内容中的 `requestId` 一致，receipt 内容必须同时匹配 `requestId` 与 action，结果目录在 Pack 容器内只读且 receipt 只由 Host 清理。业务拒绝和超时向工具返回 error；receipt 冲突等单请求/单 authority 故障 fail closed 当前 Run，但被 watcher 隔离，不能终止其他 namespace 的后续扫描。pending request 和 active operation 都清空后才注销 authority，并同时比较 shadow 与初始副本、真实 source 与执行前状态的新增、删除、内容、符号链接目标和权限。任一不一致、关闭 drain 失败或 authority/shadow 清理失败都会覆盖尚未交付的成功结果，返回 retryable error；随后删除 Run IPC namespace 和隔离目录。
+
+该门禁不应用于普通 Agent、非 Pack `external_system_once`、Core Workflow、`workspace_write` 或 `external_write` Pack Run。`/workspace/run-once`（包括 `outputs/{runId}`）、session、IPC 和只读 Pack execution bundle 不属于持久业务文件比较范围。
+
+这个机制只保证声明的持久文件在 Run 结束时与初始状态一致，不保证或宣称阻止 MCP、Host action、网络、数据库、消息发送或其他非文件副作用。MCP server 和 Host action 仍分别受 Manifest allowlist 约束。它不获取跨域 writer lease，也不阻止、等待或降级普通 Agent、Core、非 Pack、可写 Pack 或渠道附件写入；如果其他合法模块在当前 Run 期间改变共享真实 source，只有当前 `read_only` Pack 的真实 source 二次检查 fail closed 并要求重试，Host 不回滚或归因成其他模块错误。
 
 ## 10. Disable、Uninstall 与 Purge
 
@@ -458,11 +429,12 @@ Disable 的语义只有：
 
 - 立即从新 Catalog selection 中移除 Pack Recipe；
 - 已签发 token 在 active check 时失效；
-- 不允许新 Workflow、Rework 或新 child scope 引用该 Pack；
+- 不允许新的顶层 Workflow launch 引用该 Pack；
 - 已创建 Run 继续使用 pinned Registry snapshot 和 execution bundle；
+- 已创建 Run 的恢复、重试和 child scope 继续受同一 exact Run pin 约束；
 - TaskSession、ExecutionLink、Timeline、Artifact metadata 和 audit 保持可读。
 
-如果当前实现无法让 active Run 脱离 Pack 源码目录执行，则 Disable 必须进入 `draining`，直到 active refs 归零，不能直接卸载目录。
+当前 Run 从 staging bundle 执行，不读取 Pack source。Disable 可以立即删除 active pointer；staging bundle 在 active Run pin 释放前不得 Purge。
 
 ### 10.2 Uninstall
 
@@ -522,7 +494,7 @@ Owner-specific 逻辑只处理：
 
 不要求三类 Release 强行使用同一张 polymorphic 表。可以继续使用 typed nullable owner columns 和 owner-specific active pointer 表，但 publication implementation、receipt 和 Catalog resolution 必须共享。
 
-Core 1.2 已经形成自包含 resource bundle，这是共享 Publisher 的输入基线；后续工作不是重新设计该 bundle，而是把当前专用 bootstrap SQL、collision/closure/snapshot 写入和 receipt 生成收敛到上述 primitives。迁移后仍保留 Core bootstrap authority 和 system-only policy，不把 Core System Recipe 变成 Pack。
+Core 1.2 的自包含 resource bundle 已通过共享 Publisher primitives 完成 collision、closure、snapshot、publication 和 receipt。Core bootstrap authority 与 system-only policy 保持独立，Core System Recipe 没有被转换成 Pack。
 
 ### 11.2 Temporary 不进入 Publisher
 
@@ -538,26 +510,13 @@ Workspace Draft
 
 只有显式 `Save as Personal Workflow` 才进入 Bundle Publisher。
 
-## 12. 数据模型调整
+## 12. 当前数据模型
 
-由于当前没有需要保留的历史业务 Workflow 数据，本方案使用 latest-only 替换，不保留旧 Feature/Pack 双模型兼容层。
+Runtime schema v16 只保留 Pack 模型：Registry owner 使用 exactly-one Core、Pack 或 Principal typed column；Pack Release、Release Resource 和 active pointer 使用 `workflow_pack_*` 表。Manifest 只有 `icarus.workflow-pack/1`。
 
-建议调整：
+Recipe visibility 为 `system_only | selectable`，公开 Catalog distribution 为 `pack | personal`。T0 的 Task Workspace 创建来源是 `task_workspace`，Pack Recipe actor 是 `human`。
 
-1. `owner_feature_id` 重命名为 `owner_pack_id`。
-2. `workflow_feature_releases` 重命名为 `workflow_pack_releases`。
-3. `workflow_feature_release_resources` 重命名为 `workflow_pack_release_resources`。
-4. `workflow_feature_active_releases` 重命名为 `workflow_pack_active_releases`。
-5. Manifest format 从 `icarus.feature-manifest/2` 替换为 `icarus.workflow-pack/1`。
-6. 删除 `extension_surfaces.api_entry/nav_entry/renderer_entry`。
-7. Registry resource ownership 保持 exactly-one typed columns：Core、Pack、Principal。
-8. Recipe publication metadata 增加 `catalog_visibility = system_only | selectable`。
-9. `recipe_kind` 替换为 `distribution_kind = pack | personal`。
-10. 删除 T0 `feature_ui` source；保留 `task_workspace`、`schedule`、`api`、`workflow_transition` 和确有调用者的 system source。
-11. 删除不再需要的 `feature_service` launch actor；Pack Recipe 从 Task Workspace 启动时 actor 仍是 `human`。
-12. 修正所有 Runtime TaskRecord/source union，使 `task_workspace` 与当前 T0/DDL 一致。
-
-开发 Store 使用精确、显式 reset/reinitialize 切换到 current schema，不新增旧 Feature schema migration 或双读逻辑。
+开发 Store 通过精确、显式 backup/reset/reinitialize 切换到 current schema。Store 不提供旧模型 migration、双读或兼容 view。
 
 ## 13. Host Capability 边界
 
@@ -587,45 +546,11 @@ Pack 只能引用已注册的 Host Capability，不能动态 import Host impleme
 
 如果某项能力只为一个 Pack 服务，adapter implementation 仍放在明确的 Host adapter 模块中，由 Core registry 静态注册；这表示它是受信任宿主能力，不伪装成可随意加载的 Pack 代码。
 
-## 14. 需要删除或替换的现有扩展面
+## 14. 当前扩展面
 
-### 14.1 后端
+Workflow Pack 只拥有 declarative Workflow source、execution resources、Manifest permission/effect ceiling 和 managed data root。Host module、arbitrary API、navigation、renderer、migration、background service 和 enabled-time Agent provisioning 都不属于 Pack surface。
 
-删除或替换：
-
-- `src/features/manifest.ts` 旧 Feature Manifest；
-- `src/features/runtime.ts` host/nav/renderer activation；
-- `src/features/context.ts` arbitrary Feature API/event/db context；
-- `src/features/registry.ts` API route 和 Navigation registry；
-- `src/features/migrations.ts` Feature 隐式 migration；
-- `src/features/provisioning.ts` enabled 即 provision 全局 Agent；
-- `/api/features/enabled`；
-- `/api/features/{id}/*` arbitrary Feature route dispatch；
-- `/features/{id}/renderer/*` static serving；
-- `feature_ui` launch source；
-- Feature renderer metadata 和 nav count management fields。
-
-保留并重构：
-
-- Feature data root 中仍有价值的 Pack-managed data root 能力；
-- container skill/agent/MCP/script/template 收集逻辑，但其输入改为 active Pack execution bundle；
-- permission、path containment 和 resource conflict validation；
-- Registry Feature Release 中可复用的 closure、retention 和 active-run safety；
-- owner-aware audit。
-
-### 14.2 Renderer
-
-删除：
-
-- `feature-runtime-screen`；
-- `feature-runtime-outlet`；
-- Feature nav dynamic injection；
-- renderer module import/mount/unmount cache；
-- Feature page loading status；
-- Feature renderer static URL；
-- Feature API/nav/renderer 详情展示。
-
-设置页改为 Workflow Pack 管理，只展示：
+Settings 通过固定 `/api/workflow-packs` route 集合展示：
 
 - Pack identity/version；
 - desired state；
@@ -648,70 +573,11 @@ Pack 只能引用已注册的 Host Capability，不能动态 import Host impleme
 
 历史设计由 Git 保留，不在 active source tree 维护两个相反方向。
 
-## 16. 实施阶段
+## 16. 实施记录
 
-### Phase 0：冻结术语和删除边界
+Phase 0-5 已完成：术语和 latest-only 边界已冻结；System Recipe 已隐藏；Bundle Publisher 已共享；Pack loader/reconciler、Settings API、execution bundle pin 和单一 active authority 已接入；旧 App/plugin surface 已移除；Disable、Uninstall、Purge 已分离。
 
-- 确认 Core System Recipe、Workflow Pack、Personal、Temporary 四类对象。
-- 确认 Core 无用户可选模板。
-- 确认第一版 Pack 只在启动时 reconcile，不热加载。
-- 确认当前开发 Store 可 latest-only reset。
-- 更新当前权威文档，归档冲突设计。
-
-退出条件：新代码和文档不再把 Feature 当作独立 App/UI。
-
-### Phase 1：Catalog 与 Core System Recipe
-
-- 已完成：Core 1.2 使用自包含 resource bundle，移除运行时对 compiler Golden fixture 的读取。
-- 增加 system-only Recipe visibility。
-- 从 Workspace Catalog 隐藏 `ad_hoc_personal_task`。
-- 新增 Host-only `resolveSystemRecipe()`，Temporary mode 通过有限 `purpose` 解析 exact System Recipe，不再调用公开 `listRecipes()`。
-- 限定 `refreshRecipeSelection()` 只处理公开、用户可选的 Pack/Personal Recipe。
-- 将 `recipe_kind` 调整为 `distribution_kind`。
-- 删除 `feature_ui` source 和遗留 source union 不一致。
-- 明确 `compiled_plan_pin.provenance = golden_corpus` 的合同语义；若它表示旧资源来源而非编译验证来源，则随 Core 1.2 更名并更新验证。
-
-退出条件：Selector 只显示 Temporary、Pack 和 Personal；Runtime 可在无 Pack/Personal 时正常运行。
-
-### Phase 2：统一 Bundle Publisher
-
-- 提取共享 Registry publication、closure、snapshot、compile 和 receipt primitives。
-- 将 Core 1.2 当前专用 bootstrap SQL 接入共享 primitives；Core System、Pack、Personal 使用共享实现。
-- 保留必要的 typed owner-specific activation policy。
-- 为 active Run 建立 self-contained execution bundle/pin 验证。
-
-退出条件：三类 Published owner 不再复制 Registry publication 主流程。
-
-### Phase 3：Workflow Pack Loader 与 Reconciler
-
-- 新增 `workflow-packs/{packId}/pack.json`。
-- 新增 `local/workflow-packs.json`。
-- Host 打开 Runtime Store 后执行 Pack reconciliation。
-- desired enabled 成功后才能形成 active Pack pointer。
-- Settings API 从 Runtime authority 返回状态。
-- disabled Pack 不再签发 selection token。
-
-退出条件：配置、Catalog 和执行资源只有一个 enable authority。
-
-### Phase 4：删除旧 Feature App Runtime
-
-- 删除 hostEntry、renderer、nav、arbitrary API、event bus、migration 和 required Agent provisioning。
-- 删除 Renderer Feature outlet 和动态页面加载。
-- 删除旧 `/api/features` 与 `/features/*` surfaces。
-- 将 container resource logic 改接 active Pack bundle。
-- 将 Feature management UI 改为 Pack management UI。
-
-退出条件：静态搜索不存在 Feature renderer/nav/API/runtime loader。
-
-### Phase 5：生命周期和清理
-
-- 实现 Disable、draining、Uninstall 和 Purge 分离。
-- 增加 active Run/retention/personal dependency preflight。
-- 删除旧 `deleteFeatureData()` 跨领域语义。
-- 使用 current schema 重建开发 Store。
-- 更新所有 active docs 和测试。
-
-退出条件：Pack 源码移除不会破坏已创建 Run，Purge 不会误删共享 Task 数据。
+`compiled_plan_pin.provenance = golden_corpus` 是现有 Compiler 合同中的“生产编译结果经过 golden corpus authority 验证”标签，不表示 Core bundle 在运行时读取 golden fixture。Core System bundle 的 Registry source、compiler snapshot 和 Plan bytes均为自包含发布内容。
 
 ## 17. 验收标准
 
@@ -740,7 +606,7 @@ Pack 只能引用已注册的 Host Capability，不能动态 import Host impleme
 - Disable 后新的 Catalog 请求不返回 Pack Recipe。
 - Disable 前签发的 token 返回 `selection_stale`。
 - 已创建 Run 可以使用 pinned bundle 收敛。
-- active Run 尚依赖源码时，Pack 只能进入 draining，不能直接卸载。
+- Uninstall 可以在 Disable 后归档源码，但 active Run pin 释放前不能 Purge staging bundle。
 - 历史 TaskSession、Timeline、Artifact metadata 和 Runtime detail 仍可读取。
 
 ### 17.4 Personal 与 Temporary
@@ -777,7 +643,7 @@ Pack 只能引用已注册的 Host Capability，不能动态 import Host impleme
 
 ### 风险 2：禁用 Pack 后活跃 Run 丢失脚本或 Skill
 
-处理：执行前发布 self-contained execution bundle并建立 active-run pin；完成前只 draining，不卸载资源。
+处理：执行前发布 self-contained execution bundle 并建立 active-run pin；Disable 只移除新启动权威，Purge 在 pin 释放前拒绝删除 staging 资源。
 
 ### 风险 3：为了去掉 hostEntry，把宿主能力重新塞进 Workflow Runtime
 

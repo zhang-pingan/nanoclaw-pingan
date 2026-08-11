@@ -2830,7 +2830,7 @@
           },
           {
             "ordinal": 5,
-            "name": "owner_feature_release_id",
+            "name": "owner_pack_release_id",
             "logical_type": "identifier",
             "sqlite_type_intent": "TEXT",
             "nullable": true,
@@ -2838,7 +2838,7 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "fk:value_ownerships:feature_release"
+              "fk:value_ownerships:pack_release"
             ],
             "external_reference": null
           },
@@ -2929,11 +2929,11 @@
             "deferrability": "deferred"
           },
           {
-            "relation_id": "fk:value_ownerships:feature_release",
+            "relation_id": "fk:value_ownerships:pack_release",
             "source_columns": [
-              "owner_feature_release_id"
+              "owner_pack_release_id"
             ],
-            "target_table": "workflow_feature_releases",
+            "target_table": "workflow_pack_releases",
             "target_columns": [
               "id"
             ],
@@ -2952,13 +2952,13 @@
             "expression_intent": "non-negative JavaScript safe integer"
           },
           {
-            "check_id": "ck:workflow_value_ownerships:owner_workflow_id:owner_graph_run_id:owner_registry_resource_id:owner_feature_release_id:system_owner_ref:exactly_one",
+            "check_id": "ck:workflow_value_ownerships:owner_workflow_id:owner_graph_run_id:owner_registry_resource_id:owner_pack_release_id:system_owner_ref:exactly_one",
             "kind": "exactly_one",
             "columns": [
               "owner_workflow_id",
               "owner_graph_run_id",
               "owner_registry_resource_id",
-              "owner_feature_release_id",
+              "owner_pack_release_id",
               "system_owner_ref"
             ],
             "expression_intent": "exactly one typed relation column is non-null"
@@ -3442,7 +3442,7 @@
           },
           {
             "ordinal": 6,
-            "name": "owner_feature_id",
+            "name": "owner_pack_id",
             "logical_type": "external_reference",
             "sqlite_type_intent": "TEXT",
             "nullable": true,
@@ -3450,11 +3450,11 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "ext:workflow_registry_resources:owner_feature_id"
+              "ext:workflow_registry_resources:owner_pack_id"
             ],
             "external_reference": {
-              "validator_owner": "feature_registry",
-              "reference_domain": "feature",
+              "validator_owner": "pack_registry",
+              "reference_domain": "pack",
               "immutable": true
             }
           },
@@ -3660,11 +3660,11 @@
             "expression_intent": "non-negative JavaScript safe integer"
           },
           {
-            "check_id": "ck:workflow_registry_resources:owner_core_ref:owner_feature_id:owner_principal_ref:exactly_one",
+            "check_id": "ck:workflow_registry_resources:owner_core_ref:owner_pack_id:owner_principal_ref:exactly_one",
             "kind": "exactly_one",
             "columns": [
               "owner_core_ref",
-              "owner_feature_id",
+              "owner_pack_id",
               "owner_principal_ref"
             ],
             "expression_intent": "exactly one typed relation column is non-null"
@@ -4245,7 +4245,7 @@
       },
       {
         "ordinal": 18,
-        "name": "workflow_feature_releases",
+        "name": "workflow_pack_releases",
         "source_section": "Registry, Release, Retention and Backup",
         "columns": [
           {
@@ -4262,7 +4262,7 @@
           },
           {
             "ordinal": 2,
-            "name": "feature_id",
+            "name": "pack_id",
             "logical_type": "external_reference",
             "sqlite_type_intent": "TEXT",
             "nullable": false,
@@ -4270,11 +4270,11 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "ext:workflow_feature_releases:feature_id"
+              "ext:workflow_pack_releases:pack_id"
             ],
             "external_reference": {
-              "validator_owner": "feature_registry",
-              "reference_domain": "feature",
+              "validator_owner": "pack_registry",
+              "reference_domain": "pack",
               "immutable": true
             }
           },
@@ -4288,11 +4288,11 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "ext:workflow_feature_releases:release_ref"
+              "ext:workflow_pack_releases:release_ref"
             ],
             "external_reference": {
-              "validator_owner": "feature_release_ref_validator",
-              "reference_domain": "feature_release",
+              "validator_owner": "pack_release_ref_validator",
+              "reference_domain": "pack_release",
               "immutable": true
             }
           },
@@ -4330,7 +4330,7 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "fk:feature_releases:execution_artifact"
+              "fk:pack_releases:execution_artifact"
             ],
             "external_reference": null
           },
@@ -4344,7 +4344,7 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "fk:feature_releases:execution_artifact"
+              "fk:pack_releases:execution_artifact"
             ],
             "external_reference": null
           },
@@ -4423,7 +4423,7 @@
         },
         "foreign_keys": [
           {
-            "relation_id": "fk:feature_releases:execution_artifact",
+            "relation_id": "fk:pack_releases:execution_artifact",
             "source_columns": [
               "execution_artifact_resource_id",
               "execution_artifact_hash"
@@ -4439,16 +4439,16 @@
         ],
         "unique_keys": [
           {
-            "key_id": "uk:feature_releases:feature_ref",
+            "key_id": "uk:pack_releases:pack_ref",
             "columns": [
-              "feature_id",
+              "pack_id",
               "release_ref",
               "release_version"
             ],
             "predicate_intent": null
           },
           {
-            "key_id": "uk:feature_releases:id_hash",
+            "key_id": "uk:pack_releases:id_hash",
             "columns": [
               "id",
               "release_hash"
@@ -4458,7 +4458,7 @@
         ],
         "checks": [
           {
-            "check_id": "ck:workflow_feature_releases:release_hash:hash",
+            "check_id": "ck:workflow_pack_releases:release_hash:hash",
             "kind": "hash_format",
             "columns": [
               "release_hash"
@@ -4466,7 +4466,7 @@
             "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
           },
           {
-            "check_id": "ck:workflow_feature_releases:execution_artifact_hash:hash",
+            "check_id": "ck:workflow_pack_releases:execution_artifact_hash:hash",
             "kind": "hash_format",
             "columns": [
               "execution_artifact_hash"
@@ -4474,7 +4474,7 @@
             "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
           },
           {
-            "check_id": "ck:workflow_feature_releases:status:enum",
+            "check_id": "ck:workflow_pack_releases:status:enum",
             "kind": "enum_membership",
             "columns": [
               "status"
@@ -4482,7 +4482,7 @@
             "expression_intent": "value belongs to the closed status catalog"
           },
           {
-            "check_id": "ck:workflow_feature_releases:staged_at_ms:safe_integer",
+            "check_id": "ck:workflow_pack_releases:staged_at_ms:safe_integer",
             "kind": "safe_integer",
             "columns": [
               "staged_at_ms"
@@ -4490,7 +4490,7 @@
             "expression_intent": "non-negative JavaScript safe integer"
           },
           {
-            "check_id": "ck:workflow_feature_releases:activated_at_ms:safe_integer",
+            "check_id": "ck:workflow_pack_releases:activated_at_ms:safe_integer",
             "kind": "safe_integer",
             "columns": [
               "activated_at_ms"
@@ -4498,7 +4498,7 @@
             "expression_intent": "non-negative JavaScript safe integer"
           },
           {
-            "check_id": "ck:workflow_feature_releases:disabled_at_ms:safe_integer",
+            "check_id": "ck:workflow_pack_releases:disabled_at_ms:safe_integer",
             "kind": "safe_integer",
             "columns": [
               "disabled_at_ms"
@@ -4506,7 +4506,7 @@
             "expression_intent": "non-negative JavaScript safe integer"
           },
           {
-            "check_id": "ck:workflow_feature_releases:row_version:safe_integer",
+            "check_id": "ck:workflow_pack_releases:row_version:safe_integer",
             "kind": "safe_integer",
             "columns": [
               "row_version"
@@ -4514,7 +4514,7 @@
             "expression_intent": "non-negative JavaScript safe integer"
           },
           {
-            "check_id": "ck:workflow_feature_releases:execution_artifact_resource_id:execution_artifact_hash:pair",
+            "check_id": "ck:workflow_pack_releases:execution_artifact_resource_id:execution_artifact_hash:pair",
             "kind": "all_or_none",
             "columns": [
               "execution_artifact_resource_id",
@@ -4527,7 +4527,7 @@
       },
       {
         "ordinal": 19,
-        "name": "workflow_feature_release_resources",
+        "name": "workflow_pack_release_resources",
         "source_section": "Registry, Release, Retention and Backup",
         "columns": [
           {
@@ -4540,7 +4540,7 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "fk:feature_release_resources:release"
+              "fk:pack_release_resources:release"
             ],
             "external_reference": null
           },
@@ -4554,7 +4554,7 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "fk:feature_release_resources:resource"
+              "fk:pack_release_resources:resource"
             ],
             "external_reference": null
           },
@@ -4568,7 +4568,7 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "fk:feature_release_resources:resource"
+              "fk:pack_release_resources:resource"
             ],
             "external_reference": null
           },
@@ -4594,11 +4594,11 @@
         },
         "foreign_keys": [
           {
-            "relation_id": "fk:feature_release_resources:release",
+            "relation_id": "fk:pack_release_resources:release",
             "source_columns": [
               "release_id"
             ],
-            "target_table": "workflow_feature_releases",
+            "target_table": "workflow_pack_releases",
             "target_columns": [
               "id"
             ],
@@ -4606,7 +4606,7 @@
             "deferrability": "deferred"
           },
           {
-            "relation_id": "fk:feature_release_resources:resource",
+            "relation_id": "fk:pack_release_resources:resource",
             "source_columns": [
               "resource_id",
               "content_hash"
@@ -4623,7 +4623,7 @@
         "unique_keys": [],
         "checks": [
           {
-            "check_id": "ck:workflow_feature_release_resources:content_hash:hash",
+            "check_id": "ck:workflow_pack_release_resources:content_hash:hash",
             "kind": "hash_format",
             "columns": [
               "content_hash"
@@ -4635,12 +4635,12 @@
       },
       {
         "ordinal": 20,
-        "name": "workflow_feature_active_releases",
+        "name": "workflow_pack_active_releases",
         "source_section": "Registry, Release, Retention and Backup",
         "columns": [
           {
             "ordinal": 1,
-            "name": "feature_id",
+            "name": "pack_id",
             "logical_type": "external_reference",
             "sqlite_type_intent": "TEXT",
             "nullable": false,
@@ -4648,11 +4648,11 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "ext:workflow_feature_active_releases:feature_id"
+              "ext:workflow_pack_active_releases:pack_id"
             ],
             "external_reference": {
-              "validator_owner": "feature_registry",
-              "reference_domain": "feature",
+              "validator_owner": "pack_registry",
+              "reference_domain": "pack",
               "immutable": true
             }
           },
@@ -4666,7 +4666,7 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "fk:feature_active_releases:release"
+              "fk:pack_active_releases:release"
             ],
             "external_reference": null
           },
@@ -4680,7 +4680,7 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "fk:feature_active_releases:release"
+              "fk:pack_active_releases:release"
             ],
             "external_reference": null
           },
@@ -4711,18 +4711,18 @@
         ],
         "primary_key": {
           "columns": [
-            "feature_id"
+            "pack_id"
           ],
           "auto_increment_intent": false
         },
         "foreign_keys": [
           {
-            "relation_id": "fk:feature_active_releases:release",
+            "relation_id": "fk:pack_active_releases:release",
             "source_columns": [
               "release_id",
               "release_hash"
             ],
-            "target_table": "workflow_feature_releases",
+            "target_table": "workflow_pack_releases",
             "target_columns": [
               "id",
               "release_hash"
@@ -4734,7 +4734,7 @@
         "unique_keys": [],
         "checks": [
           {
-            "check_id": "ck:workflow_feature_active_releases:release_hash:hash",
+            "check_id": "ck:workflow_pack_active_releases:release_hash:hash",
             "kind": "hash_format",
             "columns": [
               "release_hash"
@@ -4742,7 +4742,7 @@
             "expression_intent": "sha256:<64 lowercase hexadecimal characters>"
           },
           {
-            "check_id": "ck:workflow_feature_active_releases:row_version:safe_integer",
+            "check_id": "ck:workflow_pack_active_releases:row_version:safe_integer",
             "kind": "safe_integer",
             "columns": [
               "row_version"
@@ -4750,7 +4750,7 @@
             "expression_intent": "non-negative JavaScript safe integer"
           },
           {
-            "check_id": "ck:workflow_feature_active_releases:activated_at_ms:safe_integer",
+            "check_id": "ck:workflow_pack_active_releases:activated_at_ms:safe_integer",
             "kind": "safe_integer",
             "columns": [
               "activated_at_ms"
@@ -5861,7 +5861,7 @@
           },
           {
             "ordinal": 3,
-            "name": "feature_release_id",
+            "name": "pack_release_id",
             "logical_type": "identifier",
             "sqlite_type_intent": "TEXT",
             "nullable": true,
@@ -5869,7 +5869,7 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "fk:retention_handles:feature_release"
+              "fk:retention_handles:pack_release"
             ],
             "external_reference": null
           },
@@ -6007,11 +6007,11 @@
         },
         "foreign_keys": [
           {
-            "relation_id": "fk:retention_handles:feature_release",
+            "relation_id": "fk:retention_handles:pack_release",
             "source_columns": [
-              "feature_release_id"
+              "pack_release_id"
             ],
-            "target_table": "workflow_feature_releases",
+            "target_table": "workflow_pack_releases",
             "target_columns": [
               "id"
             ],
@@ -6059,13 +6059,13 @@
         ],
         "unique_keys": [
           {
-            "key_id": "uk:retention_handles:feature",
+            "key_id": "uk:retention_handles:pack",
             "columns": [
               "handle_kind",
-              "feature_release_id",
+              "pack_release_id",
               "closure_manifest_id"
             ],
-            "predicate_intent": "feature_release_id is non-null"
+            "predicate_intent": "pack_release_id is non-null"
           },
           {
             "key_id": "uk:retention_handles:run",
@@ -6145,10 +6145,10 @@
             "expression_intent": "non-negative JavaScript safe integer"
           },
           {
-            "check_id": "ck:workflow_registry_retention_handles:feature_release_id:graph_run_id:backup_id:external_actor_ref:exactly_one",
+            "check_id": "ck:workflow_registry_retention_handles:pack_release_id:graph_run_id:backup_id:external_actor_ref:exactly_one",
             "kind": "exactly_one",
             "columns": [
-              "feature_release_id",
+              "pack_release_id",
               "graph_run_id",
               "backup_id",
               "external_actor_ref"
@@ -6160,7 +6160,7 @@
             "kind": "closed_target_mapping",
             "columns": [
               "handle_kind",
-              "feature_release_id",
+              "pack_release_id",
               "graph_run_id",
               "backup_id",
               "external_actor_ref"
@@ -6797,7 +6797,6 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [
               "global_assistant",
-              "feature_ui",
               "schedule",
               "api",
               "task_workspace",
@@ -7587,7 +7586,7 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [
               "human",
-              "feature_service",
+              "pack_service",
               "automation",
               "system"
             ],
@@ -9708,7 +9707,7 @@
           },
           {
             "ordinal": 11,
-            "name": "controlling_feature_id",
+            "name": "controlling_pack_id",
             "logical_type": "external_reference",
             "sqlite_type_intent": "TEXT",
             "nullable": true,
@@ -9716,11 +9715,11 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "ext:workflows:controlling_feature_id"
+              "ext:workflows:controlling_pack_id"
             ],
             "external_reference": {
-              "validator_owner": "feature_registry",
-              "reference_domain": "feature",
+              "validator_owner": "pack_registry",
+              "reference_domain": "pack",
               "immutable": true
             }
           },
@@ -30766,7 +30765,7 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [
               "human",
-              "feature_service",
+              "pack_service",
               "automation",
               "system"
             ],
@@ -30805,7 +30804,7 @@
           },
           {
             "ordinal": 9,
-            "name": "source_feature_id",
+            "name": "source_pack_id",
             "logical_type": "external_reference",
             "sqlite_type_intent": "TEXT",
             "nullable": true,
@@ -30813,11 +30812,11 @@
             "safe_integer_intent": "not_applicable",
             "enum_values": [],
             "relation_ids": [
-              "ext:workflow_runtime_command_invocations:source_feature_id"
+              "ext:workflow_runtime_command_invocations:source_pack_id"
             ],
             "external_reference": {
-              "validator_owner": "feature_registry",
-              "reference_domain": "feature",
+              "validator_owner": "pack_registry",
+              "reference_domain": "pack",
               "immutable": true
             }
           },
@@ -31852,5 +31851,5 @@
       "generic_error_fields": "forbidden"
     }
   },
-  "hash": "sha256:fa6565b9b28f0df5a06ebe228c260fc0104c80262145b3a195777d1703da0f19"
+  "hash": "sha256:b28281a92888b94ee1d0e98d317b483ef8c4f86e29e82326fbb774e57571adfc"
 }

@@ -483,6 +483,17 @@ export function buildHostCoreDist(
   distRoot: string,
 ): void {
   const projectRoot = fs.realpathSync(projectRootInput);
+  const helperBuildScript = path.join(
+    projectRoot,
+    'scripts',
+    'build-anchored-file-helper.mjs',
+  );
+  const helperBuild = spawnSync(process.execPath, [helperBuildScript], {
+    cwd: projectRoot,
+    stdio: 'inherit',
+  });
+  if (helperBuild.status !== 0)
+    throw new Error('host_core_snapshot_anchored_helper_build_failed');
   const tsc = path.join(projectRoot, 'node_modules/typescript/bin/tsc');
   const result = spawnSync(
     process.execPath,
@@ -496,6 +507,13 @@ export function buildHostCoreDist(
     { cwd: projectRoot, stdio: 'inherit' },
   );
   if (result.status !== 0) throw new Error('host_core_snapshot_build_failed');
+  const helperCopy = spawnSync(
+    process.execPath,
+    [helperBuildScript, '--copy-dist', distRoot],
+    { cwd: projectRoot, stdio: 'inherit' },
+  );
+  if (helperCopy.status !== 0)
+    throw new Error('host_core_snapshot_anchored_helper_copy_failed');
 }
 
 export interface InstallHostCoreSnapshotOptions {

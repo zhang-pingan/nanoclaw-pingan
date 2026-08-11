@@ -34,6 +34,7 @@ import type {
   OnInboundMessage,
   RegisteredAgent,
 } from '../types.js';
+import { createWorkflowPackExecutionFileScopeAuthority } from '../workflow-packs/execution-file-scope-authority.js';
 import {
   WeComChannel,
   buildWeComSignature,
@@ -397,6 +398,78 @@ describe('WeComChannel', () => {
     expect(
       fs.readFileSync(path.join(attachmentsDir, storedName), 'utf-8'),
     ).toBe('file bytes');
+  });
+
+  it('keeps inbound attachment writes available during an overlapping read-only Pack Run', async () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-wecom-pack-isolation-'),
+    );
+    const shadow = path.join(root, 'shadow');
+    fs.mkdirSync(shadow, { recursive: true });
+    const authority = createWorkflowPackExecutionFileScopeAuthority({
+      parentDirectory: path.join(root, 'ipc'),
+      runId: 'wecom-overlap-run',
+      queryId: 'wecom-overlap-query',
+      agentFolder: 'wecom-agent',
+      isMain: false,
+      hostActions: [],
+      mappings: [
+        {
+          scope: 'attachments',
+          sourcePath: attachmentsDir,
+          shadowHostPath: shadow,
+        },
+      ],
+    });
+    authority.register();
+    const channel = createChannel();
+    axiosGetMock
+      .mockResolvedValueOnce({
+        data: {
+          errcode: 0,
+          access_token: 'access-token-overlap',
+          expires_in: 7200,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: Buffer.from('wecom-overlap-bytes'),
+        headers: {
+          'content-type': 'application/pdf',
+          'content-disposition': 'attachment; filename="overlap.pdf"',
+        },
+      });
+
+    try {
+      const downloaded = await (
+        channel as unknown as {
+          downloadTemporaryMedia: (input: {
+            mediaId: string;
+            msgType: string;
+            messageId: string;
+            agentFolder: string;
+            filename?: string;
+          }) => Promise<{
+            hostPath: string;
+            containerPath: string;
+          } | null>;
+        }
+      ).downloadTemporaryMedia({
+        mediaId: 'overlap-media',
+        msgType: 'file',
+        messageId: 'overlap-message',
+        agentFolder: 'wecom-agent',
+      });
+
+      expect(downloaded?.containerPath).toMatch(/^\/workspace\/attachments\//);
+      expect(fs.readFileSync(downloaded!.hostPath, 'utf8')).toBe(
+        'wecom-overlap-bytes',
+      );
+      expect(fs.readdirSync(shadow)).toEqual([]);
+    } finally {
+      await authority.deactivateAndDrain();
+      authority.cleanup();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('reports media download failures as inbound messages', async () => {

@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   parseMultipartBoundary,
@@ -87,6 +91,59 @@ const webAgentFixtures: Record<string, RegisteredAgent> = {
     added_at: '2026-08-04T00:00:00.000Z',
   },
 };
+
+describe('desktop capture output authority', () => {
+  it('writes Host capture output to the Run-provided directory', async () => {
+    const outputDirectory = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'icarus-desktop-shadow-'),
+    );
+    try {
+      const channel = createWebChannel();
+      const ws = { readyState: 1, send: vi.fn() };
+      const internal = channel as unknown as {
+        desktopCaptureClients: Map<unknown, unknown>;
+        pendingDesktopCaptures: Map<string, unknown>;
+        handleDesktopCaptureSuccess: (
+          socket: unknown,
+          message: Record<string, unknown>,
+        ) => void;
+      };
+      internal.desktopCaptureClients.set(ws, {
+        id: 'desktop-client',
+        supported: true,
+        updatedAt: Date.now(),
+      });
+
+      const resultPromise = channel.captureDesktop?.({
+        outputDirectory,
+        includeImage: true,
+      });
+      expect(resultPromise).toBeDefined();
+      const [requestId] = internal.pendingDesktopCaptures.keys();
+      internal.handleDesktopCaptureSuccess(ws, {
+        type: 'desktop_capture_result',
+        requestId,
+        imageBase64: Buffer.from('capture-bytes').toString('base64'),
+        mimeType: 'image/png',
+        width: 100,
+        height: 80,
+        displays: [],
+      });
+
+      const result = await resultPromise!;
+      expect(result.status).toBe('success');
+      expect(
+        result.image?.path.startsWith(`${outputDirectory}${path.sep}`),
+      ).toBe(true);
+      expect(result.image?.containerPath).toBe(
+        `/workspace/desktop-captures/${path.basename(result.image!.path)}`,
+      );
+      expect(fs.readFileSync(result.image!.path, 'utf8')).toBe('capture-bytes');
+    } finally {
+      fs.rmSync(outputDirectory, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('Agent list contracts', () => {
   it('serves the new /api/agents response and excludes reserved global config', async () => {
