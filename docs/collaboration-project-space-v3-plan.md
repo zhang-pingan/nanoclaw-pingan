@@ -1345,7 +1345,16 @@ State Execution/Action/Executor 不放进 Definition Inspector。Instance 运行
 ## 14. v3 Git 目录
 
 ```text
+README.md
 group.json
+
+tools/
+  project-analyst/
+    SKILL.md
+    agents/
+    contracts/
+    references/
+    scripts/
 
 members/
   {principal-id}/
@@ -1472,6 +1481,7 @@ artifacts/{turn}/                         -> artifacts/workflows/{instance}/{tur
 - Progress Update 和 Message 使用唯一 ID 追加，不覆盖旧内容；
 - Artifact 内容按 ID 分目录并保留原始文件名与格式，`metadata.json` 固定 `content_ref`、size/hash/uploader/ref；
 - 所有结构化 materialization 只写 JSON；Prompt 和人类文档写 Markdown，不把 Markdown 中的描述当作权威状态；
+- 新 Genesis 固定物化根级 `README.md` 和 `tools/project-analyst/` 完整便携 Skill；二者的精确路径、size 和 SHA-256 写入并受签名 `group_initialized` payload 的 `self_description` 约束；
 - `projections/` 可删除后重建；
 - 不提交全局 `activity.json`，避免每次评论争用同一文件；
 - 全局 Activity Feed 在本地 SQLite 从多个 Aggregate stream 投影。
@@ -1481,6 +1491,8 @@ artifacts/{turn}/                         -> artifacts/workflows/{instance}/{tur
 | 路径                                  | 合法写入者                          | 约束                                 |
 | ------------------------------------- | ----------------------------------- | ------------------------------------ |
 | `group.json`                          | Owner/Admin                         | Group event 物化                     |
+| `README.md`                           | Genesis Runtime                     | 仅 `group_initialized`；精确内容 hash/size |
+| `tools/project-analyst/`              | Genesis Runtime                     | 仅完整 build 产物；文件集、hash/size 精确匹配 |
 | `invites/{invite}.json`               | member approval authority           | 目标 Principal、有效期、一次性状态   |
 | `members/{principal}/member.json`     | 受限加入请求、Admin 状态管理        | 系统生成 Principal 与 Aggregate 一致 |
 | `members/{principal}/clients/`        | 受限加入/恢复、对应 Principal       | Client、Credential 与 Actor 一致     |
@@ -1500,6 +1512,14 @@ artifacts/{turn}/                         -> artifacts/workflows/{instance}/{tur
 | `projections/`                        | Runtime                             | 必须与合法事件归约一致               |
 
 Git signer 是成员不代表可以修改任意成员空间、Work Item 或 Workflow 路径。Validator 必须按 event type、actor、Aggregate 和具体路径逐项校验。
+
+### 15.1 群组 Git 自描述合同
+
+`README.md` 单独提供稳定的人类和通用 Agent 导览：说明 control branch、`group_id` 与 Remote locator 的区别，目录和业务格式，Principal/Client/Credential/Executor/Action/Work Item/Workflow/Discussion 关系，以及签名事件、Aggregate chain、verified head 和 Projection 的信任边界。Remote URL 只通过 clone 的 `origin` 定位，不写成签名仓库身份；同一 URL 被“初始化群组”改写后会出现新的孤立 Genesis 和 `group_id`。
+
+完整 Project Analyst Skill 固定在 `tools/project-analyst/`。第三方 clone `icarus/control` 后，可在仓库根目录直接运行 `node tools/project-analyst/scripts/repository-context.mjs --repository . --scope project --output ../icarus-project-analysis`；只需 Node.js 20+、Git 2.34+ 和 `ssh-keygen`，不依赖 Icarus checkout 或 npm 安装。输出必须位于群组仓库外，repository mode 只产生独立只读 Context、manifest、verification、catalog 和 Result，不建立 Host Analysis Run binding。
+
+Genesis `self_description` 是机器合同而不是任意文件上传入口。Validator 要求 README 路径、Skill 根目录和完整 bundle 文件集与 current build manifest 完全一致，逐文件校验 size/hash；拒绝路径穿越、符号链接、缺文件、内容/hash 篡改和额外文件。后续事件不能声明这些路径为业务 materialization。`createGroup` 和“初始化群组”使用同一构建器；新孤立 Genesis 在 push 前完成全历史和 materialization 验证，远端拒绝时继续保留旧远端 Group 与全部本地状态。
 
 ## 16. 事件与并发模型
 

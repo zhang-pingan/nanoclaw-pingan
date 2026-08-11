@@ -53,9 +53,55 @@ export const collaborationRelativePathSchema = z
     (value) =>
       !value.startsWith('/') &&
       !value.includes('\\') &&
-      !value.split('/').some((segment) => segment === '' || segment === '..'),
+      !value.includes('\0') &&
+      !value
+        .split('/')
+        .some(
+          (segment) => segment === '' || segment === '.' || segment === '..',
+        ),
     'must be a normalized repository-relative path',
   );
+
+export const collaborationMaterializedFileDigestSchema = z
+  .object({
+    path: collaborationRelativePathSchema,
+    size: z.number().int().nonnegative(),
+    sha256: collaborationSha256Schema,
+  })
+  .strict();
+
+export const collaborationGroupSelfDescriptionSchema = z
+  .object({
+    format: z.literal('icarus.collaboration-group-self-description/1'),
+    readme: collaborationMaterializedFileDigestSchema,
+    project_analyst: z
+      .object({
+        root: collaborationRelativePathSchema,
+        files: z
+          .array(collaborationMaterializedFileDigestSchema)
+          .min(1)
+          .max(100),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((description, context) => {
+    const paths = [
+      description.readme.path,
+      ...description.project_analyst.files.map(
+        (file) => `${description.project_analyst.root}/${file.path}`,
+      ),
+    ];
+    if (new Set(paths).size !== paths.length)
+      context.addIssue({
+        code: 'custom',
+        path: ['project_analyst', 'files'],
+        message: 'self-description materialized paths must be unique',
+      });
+  });
+export type CollaborationGroupSelfDescription = z.infer<
+  typeof collaborationGroupSelfDescriptionSchema
+>;
 
 export const collaborationEventBatchSchema = z
   .object({

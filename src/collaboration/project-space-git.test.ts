@@ -8,6 +8,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import os from 'node:os';
@@ -15,6 +16,11 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { buildCollaborationGenesisSelfDescription } from './group-self-description.js';
+import {
+  COLLABORATION_PROJECT_ANALYST_ROOT,
+  PROJECT_ANALYST_BUNDLE_RELATIVE_PATHS,
+} from './project-analyst-bundle.js';
 import {
   buildCollaborationVirtualTree,
   collaborationProjectSpaceEventPath,
@@ -134,6 +140,9 @@ function identityService(
 
 function genesis(identity: CollaborationEventSigningIdentity) {
   const eventId = 'evt_genesis';
+  const selfDescription = buildCollaborationGenesisSelfDescription({
+    groupId: 'group_signed',
+  });
   const payload = {
     group: {
       format: 'icarus.collaboration-group/3' as const,
@@ -198,6 +207,7 @@ function genesis(identity: CollaborationEventSigningIdentity) {
       revision: 1,
       updated_at_event: eventId,
     },
+    self_description: selfDescription.manifest,
   };
   const event = buildCollaborationEventV3({
     groupId: 'group_signed',
@@ -216,7 +226,11 @@ function genesis(identity: CollaborationEventSigningIdentity) {
     occurredAt: NOW,
     payload,
   });
-  return { event, projection: reduceCollaborationEventV3(null, event) };
+  return {
+    event,
+    projection: reduceCollaborationEventV3(null, event),
+    materializedFiles: selfDescription.materializedFiles,
+  };
 }
 
 describe('Collaboration project space v3 Git protocol', () => {
@@ -324,6 +338,7 @@ process.exit(128);
         identity: test.identity,
         genesisEvent: initial.event,
         genesisProjection: initial.projection,
+        genesisMaterializedFiles: initial.materializedFiles,
       }),
     ).rejects.toThrow(/repository does not exist/u);
     const attempts = readFileSync(logPath, 'utf8')
@@ -568,7 +583,7 @@ process.exit(128);
     }
   }, 30_000);
 
-  it('creates and replays a signed JSON-only Aggregate history', async () => {
+  it('creates and replays a signed self-describing Aggregate history', async () => {
     const test = fixture();
     const transport = new CollaborationProjectSpaceGitTransport();
     const initial = genesis(test.identity);
@@ -578,6 +593,7 @@ process.exit(128);
       identity: test.identity,
       genesisEvent: initial.event,
       genesisProjection: initial.projection,
+      genesisMaterializedFiles: initial.materializedFiles,
     });
     expect(history.projection.group.lifecycle).toBe('active');
     expect(history.eventRecords).toHaveLength(1);
@@ -591,13 +607,79 @@ process.exit(128);
     expect(files).toEqual(
       expect.arrayContaining([
         'group.json',
+        'README.md',
         `members/${test.identity.principalId}/member.json`,
         `members/${test.identity.principalId}/clients/${test.identity.clientId}.json`,
         `permissions/${test.identity.principalId}.json`,
         'projections/group.json',
+        ...PROJECT_ANALYST_BUNDLE_RELATIVE_PATHS.map(
+          (file) => `${COLLABORATION_PROJECT_ANALYST_ROOT}/${file}`,
+        ),
       ]),
     );
-    expect(files.some((file) => file.endsWith('.yaml'))).toBe(false);
+    expect(
+      files.some(
+        (file) =>
+          !file.startsWith(`${COLLABORATION_PROJECT_ANALYST_ROOT}/`) &&
+          file.endsWith('.yaml'),
+      ),
+    ).toBe(false);
+    const readme = run(test.cache, [
+      'git',
+      'show',
+      `${history.head}:README.md`,
+    ]);
+    expect(readme).toContain('Icarus is not required');
+    expect(readme).toContain('refs/heads/icarus/control');
+    expect(readme).toContain('group_signed');
+    expect(readme).toContain('git remote get-url origin');
+    expect(readme).toContain('Do not trust a file merely because it exists');
+    for (const repositoryPath of [
+      'events/',
+      'members/',
+      'permissions/',
+      'workspace/shared/',
+      'workspace/principals/',
+      'work-items/',
+      'discussions/',
+      'workflows/definitions/',
+      'workflows/instances/',
+      'artifacts/',
+      'projections/',
+    ])
+      expect(readme).toContain(`\`${repositoryPath}\``);
+    for (const concept of [
+      'Principal',
+      'Client',
+      'Credential',
+      'Executor',
+      'Action',
+      'Work Item',
+      'Workflow Definition',
+      'Workflow Instance',
+      'Turn',
+      'Discussion',
+      'Aggregate revision',
+      'verified head',
+      'Projection',
+    ])
+      expect(readme).toContain(concept);
+    for (const script of [
+      'check-runtime.mjs',
+      'repository-context.mjs',
+      'validate-result.mjs',
+      'verify-evidence.mjs',
+    ])
+      expect(readme).toContain(
+        `node ${COLLABORATION_PROJECT_ANALYST_ROOT}/scripts/${script}`,
+      );
+    for (const link of [
+      `${COLLABORATION_PROJECT_ANALYST_ROOT}/SKILL.md`,
+      `${COLLABORATION_PROJECT_ANALYST_ROOT}/references/repository-mode.md`,
+    ]) {
+      expect(readme).toContain(`](${link})`);
+      expect(files).toContain(link);
+    }
 
     const replayed = await transport.inspect({
       remoteUrl: test.remote,
@@ -605,6 +687,64 @@ process.exit(128);
       previousHead: history.head,
     });
     expect(replayed.projection).toEqual(history.projection);
+  }, 30_000);
+
+  it('rejects unsafe, incomplete, tampered, and extra Genesis self-description files before push', async () => {
+    const test = fixture();
+    const transport = new CollaborationProjectSpaceGitTransport();
+    const initial = genesis(test.identity);
+    const create = (
+      genesisMaterializedFiles: readonly {
+        readonly path: string;
+        readonly contents: string | Buffer;
+      }[],
+    ) =>
+      transport.create({
+        remoteUrl: test.remote,
+        repositoryPath: test.cache,
+        identity: test.identity,
+        genesisEvent: initial.event,
+        genesisProjection: initial.projection,
+        genesisMaterializedFiles,
+      });
+
+    await expect(create(initial.materializedFiles.slice(1))).rejects.toThrow(
+      /requires materialized content.*README\.md/u,
+    );
+    await expect(
+      create(
+        initial.materializedFiles.map((file) =>
+          file.path === 'README.md'
+            ? { ...file, contents: `${String(file.contents)}tampered\n` }
+            : file,
+        ),
+      ),
+    ).rejects.toThrow(/signed digest.*README\.md/u);
+    await expect(
+      create([
+        ...initial.materializedFiles,
+        {
+          path: `${COLLABORATION_PROJECT_ANALYST_ROOT}/EXTRA.md`,
+          contents: 'unauthorized\n',
+        },
+      ]),
+    ).rejects.toThrow(/cannot materialize unowned path/u);
+    await expect(
+      create([
+        ...initial.materializedFiles,
+        { path: '../escaped', contents: 'unsafe\n' },
+      ]),
+    ).rejects.toThrow(/Unsafe collaboration repository path/u);
+    expect(existsSync(path.join(test.root, 'escaped'))).toBe(false);
+    expect(
+      run(test.remote, [
+        'git',
+        'ls-remote',
+        '--heads',
+        test.remote,
+        'refs/heads/icarus/control',
+      ]),
+    ).toBe('');
   }, 30_000);
 
   it('materializes member exit revocations and terminal Group dissolution', async () => {
@@ -617,6 +757,7 @@ process.exit(128);
       identity: test.identity,
       genesisEvent: initial.event,
       genesisProjection: initial.projection,
+      genesisMaterializedFiles: initial.materializedFiles,
     });
     const bob: CollaborationEventSigningIdentity = {
       ...test.identity,
@@ -827,6 +968,7 @@ process.exit(128);
       identity: test.identity,
       genesisEvent: initial.event,
       genesisProjection: initial.projection,
+      genesisMaterializedFiles: initial.materializedFiles,
     });
     const executorId = 'executor_owner';
     const registeredEventId = 'evt_executor_registered';
@@ -1004,6 +1146,7 @@ process.exit(128);
       identity: test.identity,
       genesisEvent: initial.event,
       genesisProjection: initial.projection,
+      genesisMaterializedFiles: initial.materializedFiles,
     });
     const maliciousEvent = buildCollaborationEventV3({
       groupId: 'group_signed',
@@ -1107,6 +1250,7 @@ process.exit(result.status === null ? 1 : result.status);
       identity: test.identity,
       genesisEvent: initial.event,
       genesisProjection: initial.projection,
+      genesisMaterializedFiles: initial.materializedFiles,
     });
     writeFileSync(logPath, '');
 
@@ -1168,6 +1312,7 @@ process.exit(result.status === null ? 1 : result.status);
       identity: test.identity,
       genesisEvent: initial.event,
       genesisProjection: initial.projection,
+      genesisMaterializedFiles: initial.materializedFiles,
     });
     const contents = Buffer.from('%PDF-1.7\nproject contract\n', 'utf8');
     history = await transport.append({
@@ -1524,6 +1669,20 @@ process.exit(result.status === null ? 1 : result.status);
         observerAccess: 'allowed',
         groupId: 'group_signed',
       });
+      const oldReadme = run(test.remote, [
+        'git',
+        'show',
+        `${old.lastVerifiedHead!}:README.md`,
+      ]);
+      expect(oldReadme).toContain('Group `group_signed`');
+      expect(
+        run(test.remote, [
+          'git',
+          'cat-file',
+          '-e',
+          `${old.lastVerifiedHead!}:${COLLABORATION_PROJECT_ANALYST_ROOT}/scripts/repository-context.mjs`,
+        ]),
+      ).toBe('');
       run(test.remote, [
         'git',
         'update-ref',
@@ -1591,6 +1750,21 @@ process.exit(result.status === null ? 1 : result.status);
           }),
         ],
       });
+      const initializedReadme = run(test.remote, [
+        'git',
+        'show',
+        `${newHead}:README.md`,
+      ]);
+      expect(initializedReadme).toContain(`Group \`${initialized.groupId}\``);
+      expect(initializedReadme).not.toContain('Group `group_signed`');
+      expect(
+        run(test.remote, [
+          'git',
+          'cat-file',
+          '-e',
+          `${newHead}:${COLLABORATION_PROJECT_ANALYST_ROOT}/SKILL.md`,
+        ]),
+      ).toBe('');
       expect(
         run(test.remote, ['git', 'rev-list', '--parents', '-n', '1', newHead]),
       ).toBe(newHead);
@@ -1757,6 +1931,7 @@ exit 0
       identity: test.identity,
       genesisEvent: initial.event,
       genesisProjection: initial.projection,
+      genesisMaterializedFiles: initial.materializedFiles,
     });
     await expect(
       transport.append({
@@ -1911,6 +2086,7 @@ exit 0
       identity: test.identity,
       genesisEvent: initial.event,
       genesisProjection: initial.projection,
+      genesisMaterializedFiles: initial.materializedFiles,
     });
     const checkout = path.join(test.root, 'tamper');
     run(test.root, ['git', 'clone', '-q', test.remote, checkout]);
@@ -1953,5 +2129,60 @@ exit 0
         previousHead: history.head,
       }),
     ).rejects.toThrow(/exactly one v3 event|Unexpected file/u);
+  }, 30_000);
+
+  it('quarantines a symbolic link substituted for signed Genesis Skill content', async () => {
+    const test = fixture();
+    const transport = new CollaborationProjectSpaceGitTransport();
+    const initial = genesis(test.identity);
+    const history = await transport.create({
+      remoteUrl: test.remote,
+      repositoryPath: test.cache,
+      identity: test.identity,
+      genesisEvent: initial.event,
+      genesisProjection: initial.projection,
+      genesisMaterializedFiles: initial.materializedFiles,
+    });
+    const checkout = path.join(test.root, 'symlink-tamper');
+    run(test.root, ['git', 'clone', '-q', test.remote, checkout]);
+    run(checkout, [
+      'git',
+      'checkout',
+      '-q',
+      '-b',
+      'symlink-tamper',
+      'origin/icarus/control',
+    ]);
+    run(checkout, ['git', 'config', 'user.name', test.identity.principalId]);
+    run(checkout, [
+      'git',
+      'config',
+      'user.email',
+      `${test.identity.principalId}@icarus.local`,
+    ]);
+    const skillPath = path.join(
+      checkout,
+      COLLABORATION_PROJECT_ANALYST_ROOT,
+      'SKILL.md',
+    );
+    rmSync(skillPath);
+    symlinkSync('../../README.md', skillPath);
+    run(checkout, ['git', 'add', '--all']);
+    run(checkout, ['git', 'commit', '-q', '--no-gpg-sign', '-m', 'symlink']);
+    run(checkout, [
+      'git',
+      'push',
+      '-q',
+      'origin',
+      'HEAD:refs/heads/icarus/control',
+    ]);
+
+    await expect(
+      transport.inspect({
+        remoteUrl: test.remote,
+        repositoryPath: test.cache,
+        previousHead: history.head,
+      }),
+    ).rejects.toThrow(/non-regular entry/u);
   }, 30_000);
 });

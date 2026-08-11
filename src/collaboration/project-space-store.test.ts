@@ -11,6 +11,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { buildCollaborationGenesisSelfDescription } from './group-self-description.js';
 import {
   COLLABORATION_PROJECT_SPACE_STORE_FORMAT,
   CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION,
@@ -50,6 +51,7 @@ function temporaryPath(name: string): string {
 }
 
 function genesis(groupId = 'group_test') {
+  const selfDescription = buildCollaborationGenesisSelfDescription({ groupId });
   const payload = {
     group: {
       format: 'icarus.collaboration-group/3' as const,
@@ -115,6 +117,7 @@ function genesis(groupId = 'group_test') {
       revision: 1,
       updated_at_event: 'evt_genesis',
     },
+    self_description: selfDescription.manifest,
   };
   const event = buildCollaborationEventV3({
     groupId,

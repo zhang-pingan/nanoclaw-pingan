@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import {
   chmodSync,
+  cpSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -18,8 +19,12 @@ import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildProjectAnalystCapabilityFiles } from './analysis-capability.js';
-import { PROJECT_ANALYST_CAPABILITY_STATIC_FILES } from './analysis-capability-resources.generated.js';
+import {
+  PROJECT_ANALYST_BUNDLE_FILES,
+  PROJECT_ANALYST_CAPABILITY_STATIC_FILES,
+} from './analysis-capability-resources.generated.js';
 import type { CollaborationAnalysisInput } from './analysis-contracts.js';
+import { PROJECT_ANALYST_BUNDLE_RELATIVE_PATHS } from './project-analyst-bundle.js';
 import { CollaborationProjectSpaceGitTransport } from './project-space-git.js';
 import {
   CollaborationProjectSpaceIdentityService,
@@ -248,6 +253,13 @@ describe('project-analyst complete Skill', () => {
         'resources/catalog.json',
       ]),
     );
+    expect(PROJECT_ANALYST_BUNDLE_FILES.map((file) => file.path)).toEqual(
+      PROJECT_ANALYST_BUNDLE_RELATIVE_PATHS,
+    );
+    for (const file of PROJECT_ANALYST_BUNDLE_FILES)
+      expect(file.contents).toBe(
+        readFileSync(path.join(skillRoot, file.path), 'utf8'),
+      );
   });
 
   it('builds a self-consistent local context and upgrades only with a trusted anchor', () => {
@@ -760,5 +772,88 @@ describe('project-analyst complete Skill', () => {
       host_analysis_run_binding: false,
       repository_head: validHead,
     });
+  });
+
+  it('copies the Genesis-embedded Skill outside Icarus and closes the repository-mode validation loop', () => {
+    const cloneRoot = temporaryRoot('icarus-embedded-skill-clone-');
+    const groupRepository = path.join(cloneRoot, 'group');
+    run(cloneRoot, [
+      'git',
+      'clone',
+      '-q',
+      '--branch',
+      'icarus/control',
+      remote,
+      groupRepository,
+    ]);
+    const externalRoot = temporaryRoot('icarus-embedded-skill-external-');
+    const externalSkill = path.join(externalRoot, 'project-analyst');
+    cpSync(path.join(groupRepository, 'tools/project-analyst'), externalSkill, {
+      recursive: true,
+      errorOnExist: true,
+    });
+    expect(
+      invoke(
+        path.join(externalSkill, 'scripts/check-runtime.mjs'),
+        [],
+        externalRoot,
+      ).status,
+    ).toBe(0);
+
+    const output = path.join(externalRoot, 'repository-analysis');
+    const contextResult = invoke(
+      path.join(externalSkill, 'scripts/repository-context.mjs'),
+      [
+        '--repository',
+        groupRepository,
+        '--scope',
+        'project',
+        '--output',
+        output,
+        '--now',
+        NOW,
+      ],
+      externalRoot,
+    );
+    expect(contextResult.status).toBe(0);
+    expect(json(path.join(output, 'context.json'))).toMatchObject({
+      format: 'icarus.collaboration-repository-analysis-input/1',
+      repository: { repository_head: validHead },
+    });
+    expect(json(path.join(output, 'manifest.json'))).toMatchObject({
+      host_analysis_run_binding: false,
+      repository_head: validHead,
+    });
+    expect(json(path.join(output, 'resources/catalog.json'))).toHaveProperty(
+      'work_item:wi_release',
+    );
+
+    const analysisResult = path.join(output, 'analysis-result.json');
+    writeFileSync(
+      analysisResult,
+      readFileSync(path.join(output, 'result-template.json'), 'utf8'),
+    );
+    expect(
+      invoke(
+        path.join(externalSkill, 'scripts/validate-result.mjs'),
+        [
+          analysisResult,
+          '--context',
+          path.join(output, 'context.json'),
+          '--manifest',
+          path.join(output, 'manifest.json'),
+          '--catalog',
+          path.join(output, 'resources/catalog.json'),
+        ],
+        externalRoot,
+      ).status,
+    ).toBe(0);
+    expect(
+      invoke(
+        path.join(externalSkill, 'scripts/verify-evidence.mjs'),
+        [path.join(output, 'context.json'), analysisResult],
+        externalRoot,
+      ).status,
+    ).toBe(0);
   });
 });

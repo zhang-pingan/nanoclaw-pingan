@@ -178,6 +178,24 @@ function genesis(): CollaborationProjectionV3 {
         revision: 1,
         updated_at_event: 'evt_genesis',
       },
+      self_description: {
+        format: 'icarus.collaboration-group-self-description/1',
+        readme: {
+          path: 'README.md',
+          size: 0,
+          sha256: `sha256:${'0'.repeat(64)}`,
+        },
+        project_analyst: {
+          root: 'tools/project-analyst',
+          files: [
+            {
+              path: 'SKILL.md',
+              size: 0,
+              sha256: `sha256:${'0'.repeat(64)}`,
+            },
+          ],
+        },
+      },
     },
   });
 }

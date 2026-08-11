@@ -18,6 +18,11 @@ import type {
   ValidatedProjectSpaceHistory,
 } from './project-space-service.js';
 import {
+  COLLABORATION_GROUP_README_PATH,
+  COLLABORATION_PROJECT_ANALYST_ROOT,
+  PROJECT_ANALYST_BUNDLE_RELATIVE_PATHS,
+} from './project-analyst-bundle.js';
+import {
   collaborationEventHashV3,
   deterministicProjectionJsonV3,
   reduceCollaborationEventV3,
@@ -32,6 +37,7 @@ import {
 import {
   artifactMetadataV3Schema,
   collaborationEventBatchSchema,
+  collaborationGroupSelfDescriptionSchema,
   credentialDefinitionSchema,
   fileMetadataSchema,
   recoveryRequestSchema,
@@ -211,7 +217,10 @@ function normalizedRepositoryPath(value: string): string {
     value.length > 768 ||
     value.startsWith('/') ||
     value.includes('\\') ||
-    value.split('/').some((segment) => segment === '' || segment === '..')
+    value.includes('\0') ||
+    value
+      .split('/')
+      .some((segment) => segment === '' || segment === '.' || segment === '..')
   )
     throw new Error(`Unsafe collaboration repository path: ${value}`);
   return value;
@@ -930,6 +939,9 @@ function allowedExtraMaterializationPaths(
   event: CollaborationEventV3,
 ): Set<string> {
   const allowed = new Set<string>();
+  if (event.event_type === 'group_initialized')
+    for (const file of genesisSelfDescriptionFiles(event).keys())
+      allowed.add(file);
   if (
     event.event_type === 'shared_file_published' ||
     event.event_type === 'shared_file_revised' ||
@@ -981,10 +993,61 @@ function sha256(contents: Buffer | string): string {
   return `sha256:${crypto.createHash('sha256').update(contents).digest('hex')}`;
 }
 
+function genesisSelfDescriptionFiles(
+  event: CollaborationEventV3,
+): Map<
+  string,
+  { readonly path: string; readonly size: number; readonly sha256: string }
+> {
+  const description = collaborationGroupSelfDescriptionSchema.parse(
+    event.payload.self_description,
+  );
+  if (description.readme.path !== COLLABORATION_GROUP_README_PATH)
+    throw new Error('Genesis self-description README path is invalid');
+  if (description.project_analyst.root !== COLLABORATION_PROJECT_ANALYST_ROOT)
+    throw new Error('Genesis Project Analyst root is invalid');
+  const files = description.project_analyst.files;
+  if (
+    files.length !== PROJECT_ANALYST_BUNDLE_RELATIVE_PATHS.length ||
+    files.some(
+      (file, index) =>
+        file.path !== PROJECT_ANALYST_BUNDLE_RELATIVE_PATHS[index],
+    )
+  )
+    throw new Error('Genesis Project Analyst bundle file set is incomplete');
+  return new Map([
+    [description.readme.path, description.readme],
+    ...files.map(
+      (file) =>
+        [`${description.project_analyst.root}/${file.path}`, file] as const,
+    ),
+  ]);
+}
+
 function validateContentFiles(
   event: CollaborationEventV3,
   files: ReadonlyMap<string, string | Buffer | null>,
 ): void {
+  if (event.event_type === 'group_initialized') {
+    for (const [repositoryPath, metadata] of genesisSelfDescriptionFiles(
+      event,
+    )) {
+      const content = files.get(repositoryPath);
+      if (content == null)
+        throw new Error(
+          `Genesis self-description content is missing: ${repositoryPath}`,
+        );
+      const bytes =
+        typeof content === 'string' ? Buffer.from(content) : content;
+      if (
+        bytes.byteLength !== metadata.size ||
+        sha256(bytes) !== metadata.sha256
+      )
+        throw new Error(
+          `Genesis self-description content does not match its signed digest: ${repositoryPath}`,
+        );
+    }
+  }
   if (
     event.event_type === 'shared_file_published' ||
     event.event_type === 'shared_file_revised' ||
@@ -1220,6 +1283,7 @@ async function assertSafeTree(
 ): Promise<void> {
   const tree = await git(repositoryPath, ['ls-tree', '-r', head]);
   const allowedRoots = [
+    COLLABORATION_GROUP_README_PATH,
     'group.json',
     'invites/',
     'members/',
@@ -1232,6 +1296,7 @@ async function assertSafeTree(
     'artifacts/',
     'events/',
     'projections/',
+    `${COLLABORATION_PROJECT_ANALYST_ROOT}/`,
   ];
   for (const row of tree.stdout.split('\n').filter(Boolean)) {
     const match = /^(\d+)\s+blob\s+[0-9a-f]+\t(.+)$/u.exec(row);
@@ -1242,7 +1307,11 @@ async function assertSafeTree(
       );
     const file = match[2]!;
     normalizedRepositoryPath(file);
-    if (!allowedRoots.some((root) => file === root || file.startsWith(root)))
+    if (
+      !allowedRoots.some((root) =>
+        root.endsWith('/') ? file.startsWith(root) : file === root,
+      )
+    )
       throw new CollaborationProtocolError(
         'PROTOCOL_QUARANTINED',
         `Unexpected file in collaboration control tree: ${file}`,
@@ -1250,12 +1319,13 @@ async function assertSafeTree(
     if (
       !file.startsWith('workspace/') &&
       !file.startsWith('artifacts/') &&
+      !file.startsWith(`${COLLABORATION_PROJECT_ANALYST_ROOT}/`) &&
       !file.endsWith('.json') &&
       !file.endsWith('.md')
     )
       throw new CollaborationProtocolError(
         'PROTOCOL_QUARANTINED',
-        `Structured collaboration files must be JSON: ${file}`,
+        `Structured collaboration files must be JSON or authorized Skill content: ${file}`,
       );
   }
 }
@@ -1666,6 +1736,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     readonly identity: CollaborationEventSigningIdentity;
     readonly genesisEvent: CollaborationEventV3;
     readonly genesisProjection: CollaborationProjectionV3;
+    readonly genesisMaterializedFiles: readonly CollaborationProjectSpaceMaterializedFile[];
   }): Promise<ValidatedProjectSpaceHistory> {
     const checkoutPath = await this.temporaryCheckout('initialize');
     try {
@@ -1687,7 +1758,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         checkoutPath,
         input.genesisEvent,
         input.genesisProjection,
-        [],
+        input.genesisMaterializedFiles,
       );
       await this.commit(checkoutPath, input.genesisEvent);
       const head = (
@@ -1749,6 +1820,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     readonly identity: CollaborationEventSigningIdentity;
     readonly genesisEvent: CollaborationEventV3;
     readonly genesisProjection: CollaborationProjectionV3;
+    readonly genesisMaterializedFiles: readonly CollaborationProjectSpaceMaterializedFile[];
   }): Promise<ValidatedProjectSpaceHistory> {
     const candidates = normalizedGitSshKeyCandidates(input);
     const remoteHead = await executeWithGitSshCandidates(
@@ -1783,7 +1855,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         checkoutPath,
         input.genesisEvent,
         input.genesisProjection,
-        [],
+        input.genesisMaterializedFiles,
       );
       await this.commit(checkoutPath, input.genesisEvent);
       const push = await execute(
@@ -2068,6 +2140,7 @@ export const collaborationProjectSpaceGitTestables = {
   allowedExtraMaterializationPaths,
   mergeMaterializations,
   validateContentFiles,
+  genesisSelfDescriptionFiles,
   collaborationEventHashV3,
   deterministicProjectionJsonV3,
 };

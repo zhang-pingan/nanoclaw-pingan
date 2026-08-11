@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 
+import { buildCollaborationGenesisSelfDescription } from './group-self-description.js';
 import {
   CollaborationProjectSpaceIdentityService,
   type CollaborationEventSigningIdentity,
@@ -121,6 +122,10 @@ export interface CollaborationProjectSpaceTransport {
     readonly identity: CollaborationEventSigningIdentity;
     readonly genesisEvent: CollaborationEventV3;
     readonly genesisProjection: CollaborationProjectionV3;
+    readonly genesisMaterializedFiles: readonly {
+      readonly path: string;
+      readonly contents: string | Buffer;
+    }[];
   }): Promise<ValidatedProjectSpaceHistory>;
   reinitialize(input: {
     readonly remoteUrl: string;
@@ -129,6 +134,10 @@ export interface CollaborationProjectSpaceTransport {
     readonly identity: CollaborationEventSigningIdentity;
     readonly genesisEvent: CollaborationEventV3;
     readonly genesisProjection: CollaborationProjectionV3;
+    readonly genesisMaterializedFiles: readonly {
+      readonly path: string;
+      readonly contents: string | Buffer;
+    }[];
   }): Promise<ValidatedProjectSpaceHistory>;
   refreshAfterReinitialize(input: {
     readonly remoteUrl: string;
@@ -312,8 +321,15 @@ function buildGroupGenesis(input: {
 }): {
   readonly event: CollaborationEventV3;
   readonly projection: CollaborationProjectionV3;
+  readonly materializedFiles: readonly {
+    readonly path: string;
+    readonly contents: string | Buffer;
+  }[];
 } {
   const eventId = newId('evt');
+  const selfDescription = buildCollaborationGenesisSelfDescription({
+    groupId: input.groupId,
+  });
   const member: MemberDefinitionV3 = memberDefinitionV3Schema.parse({
     format: 'icarus.collaboration-member/3',
     principal_id: input.identity.principalId,
@@ -374,9 +390,14 @@ function buildGroupGenesis(input: {
       credential: sharedCredential(input.identity, eventId),
       recovery_credential: sharedCredential(input.recoveryIdentity, eventId),
       owner_permissions: ownerPermissions,
+      self_description: selfDescription.manifest,
     },
   });
-  return { event, projection: reduceCollaborationEventV3(null, event) };
+  return {
+    event,
+    projection: reduceCollaborationEventV3(null, event),
+    materializedFiles: selfDescription.materializedFiles,
+  };
 }
 
 function pathIsInside(root: string, candidate: string): boolean {
@@ -464,7 +485,7 @@ export class CollaborationProjectSpaceService {
     );
     const groupId = input.groupId ?? newId('group');
     const occurredAt = new Date(this.now()).toISOString();
-    const { event, projection } = buildGroupGenesis({
+    const { event, projection, materializedFiles } = buildGroupGenesis({
       groupId,
       name: input.name,
       displayName: input.displayName,
@@ -489,6 +510,7 @@ export class CollaborationProjectSpaceService {
       identity,
       genesisEvent: event,
       genesisProjection: projection,
+      genesisMaterializedFiles: materializedFiles,
     });
     this.registerLocalGroup({
       history,
@@ -623,6 +645,7 @@ export class CollaborationProjectSpaceService {
           identity,
           genesisEvent: genesis.event,
           genesisProjection: genesis.projection,
+          genesisMaterializedFiles: genesis.materializedFiles,
         });
         pushed = true;
         this.store.markGroupInitializationPushed(

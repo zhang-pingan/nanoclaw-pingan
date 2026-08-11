@@ -8,6 +8,7 @@ import {
   artifactMetadataV3Schema,
   clientDefinitionSchema,
   collaborationActionResultV3Schema,
+  collaborationGroupSelfDescriptionSchema,
   credentialDefinitionSchema,
   collaborationEventV3Schema,
   collaborationIdentifierSchema,
@@ -171,6 +172,7 @@ const genesisPayloadSchema = z
     credential: credentialDefinitionSchema,
     recovery_credential: credentialDefinitionSchema,
     owner_permissions: permissionGrantSchema,
+    self_description: collaborationGroupSelfDescriptionSchema,
   })
   .strict();
 const groupSettingsPayloadSchema = z

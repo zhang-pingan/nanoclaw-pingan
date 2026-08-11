@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildCollaborationAuditV3 } from './audit.js';
+import { buildCollaborationGenesisSelfDescription } from './group-self-description.js';
 import type {
   CollaborationActionExecutionV3,
   CollaborationNotificationV3,
@@ -22,6 +23,9 @@ const PUBLIC_KEY =
 const FINGERPRINT = collaborationCredentialFingerprintV3(PUBLIC_KEY);
 
 function history() {
+  const selfDescription = buildCollaborationGenesisSelfDescription({
+    groupId: 'group_test',
+  });
   const event = buildCollaborationEventV3({
     groupId: 'group_test',
     eventId: 'evt_genesis',
@@ -101,6 +105,7 @@ function history() {
         revision: 1,
         updated_at_event: 'evt_genesis',
       },
+      self_description: selfDescription.manifest,
     },
   });
   return { event, projection: reduceCollaborationEventV3(null, event) };
