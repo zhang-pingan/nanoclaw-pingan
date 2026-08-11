@@ -6,6 +6,7 @@ import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { RunOnceService } from './executors/run-once.js';
+import { CollaborationProjectSpaceService } from './project-space-service.js';
 import { CollaborationRuntime } from './runtime.js';
 
 const roots: string[] = [];
@@ -41,6 +42,7 @@ function runtime(storeDir: string): CollaborationRuntime {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const value of roots.splice(0))
     rmSync(value, { recursive: true, force: true });
 });
@@ -59,6 +61,41 @@ describe('CollaborationRuntime', () => {
     });
     await selected.stop();
     expect(selected.status().available).toBe(false);
+  });
+
+  it('runs initialization recovery on startup and waits for it before closing', async () => {
+    const storeDir = root();
+    let entered!: () => void;
+    const recoveryEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release!: () => void;
+    const recoveryReleased = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const recover = vi
+      .spyOn(
+        CollaborationProjectSpaceService.prototype,
+        'recoverInterruptedInitializations',
+      )
+      .mockImplementation(async () => {
+        entered();
+        await recoveryReleased;
+        return [];
+      });
+    const selected = runtime(storeDir);
+
+    expect(selected.start()).toBe(true);
+    await recoveryEntered;
+    expect(recover).toHaveBeenCalledOnce();
+    const closeStore = vi.spyOn(selected.store, 'close');
+    const stopping = selected.stop();
+    await Promise.resolve();
+    expect(closeStore).not.toHaveBeenCalled();
+
+    release();
+    await stopping;
+    expect(closeStore).toHaveBeenCalledOnce();
   });
 
   it('quiesces and restarts around a consistent local backup', async () => {

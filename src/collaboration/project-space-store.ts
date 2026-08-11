@@ -5,6 +5,7 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   statSync,
@@ -42,10 +43,11 @@ import type {
   CollaborationProposedAction,
 } from './analysis-contracts.js';
 import { assertCollaborationAnalysisTransition } from './analysis-contracts.js';
+import type { CollaborationEventSigningIdentity } from './project-space-identity.js';
 
-export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 10;
+export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 11;
 export const COLLABORATION_PROJECT_SPACE_STORE_FORMAT =
-  'icarus.collaboration-local-store/10';
+  'icarus.collaboration-local-store/11';
 
 export function deterministicCollaborationPollDelay(
   groupId: string,
@@ -80,7 +82,7 @@ export class CollaborationProjectSpaceStoreError extends Error {
   }
 }
 
-const SCHEMA_V10 = `
+const SCHEMA_V11 = `
 CREATE TABLE collaboration_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -559,6 +561,23 @@ CREATE TABLE collaboration_analysis_action_applications (
   FOREIGN KEY (analysis_id, finding_id)
     REFERENCES collaboration_analysis_findings(analysis_id, finding_id) ON DELETE CASCADE
 );
+CREATE TABLE collaboration_group_initializations (
+  operation_id TEXT PRIMARY KEY,
+  old_group_id TEXT NOT NULL UNIQUE,
+  new_group_id TEXT NOT NULL UNIQUE,
+  remote_url TEXT NOT NULL,
+  repository_path TEXT NOT NULL,
+  git_ssh_key_path TEXT NOT NULL,
+  poll_interval_ms INTEGER NOT NULL,
+  notifications_enabled INTEGER NOT NULL CHECK (notifications_enabled IN (0, 1)),
+  identity_json TEXT NOT NULL,
+  recovery_identity_json TEXT NOT NULL,
+  cleanup_json TEXT NOT NULL,
+  phase TEXT NOT NULL CHECK (phase IN ('prepared', 'pushed', 'local_replaced')),
+  new_head TEXT,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL
+);
 CREATE TABLE collaboration_process_locks (
   group_id TEXT PRIMARY KEY REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
   owner_id TEXT NOT NULL,
@@ -602,6 +621,7 @@ const REQUIRED_TABLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
     'remote_url',
     'principal_id',
     'credential_id',
+    'recovery_credential_id',
     'binding_state',
     'detach_reason',
     'cleanup_paths_json',
@@ -734,6 +754,13 @@ const REQUIRED_TABLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
     'operation_key',
     'analysis_id',
   ],
+  collaboration_group_initializations: [
+    'operation_id',
+    'old_group_id',
+    'new_group_id',
+    'phase',
+    'new_head',
+  ],
   collaboration_process_locks: ['group_id', 'owner_id'],
 };
 
@@ -775,7 +802,7 @@ function initialize(database: Database.Database): void {
     );
   if (version === 0)
     database.transaction(() => {
-      database.exec(SCHEMA_V10);
+      database.exec(SCHEMA_V11);
       database
         .prepare('INSERT INTO collaboration_meta (key, value) VALUES (?, ?)')
         .run('format', COLLABORATION_PROJECT_SPACE_STORE_FORMAT);
@@ -1092,6 +1119,59 @@ export interface CollaborationSyncAttemptV3 {
   readonly headAfter: string | null;
   readonly error: string | null;
   readonly errorClass: string | null;
+}
+
+export interface CollaborationGroupInitializationCleanup {
+  readonly credentialIds: readonly string[];
+  readonly stagedDirectories: readonly string[];
+}
+
+export interface CollaborationGroupInitializationOperation {
+  readonly operationId: string;
+  readonly oldGroupId: string;
+  readonly newGroupId: string;
+  readonly remoteUrl: string;
+  readonly repositoryPath: string;
+  readonly gitSshKeyPath: string;
+  readonly pollIntervalMs: number;
+  readonly notificationsEnabled: boolean;
+  readonly identity: CollaborationEventSigningIdentity;
+  readonly recoveryIdentity: CollaborationEventSigningIdentity;
+  readonly cleanup: CollaborationGroupInitializationCleanup;
+  readonly phase: 'prepared' | 'pushed' | 'local_replaced';
+  readonly newHead: string | null;
+  readonly createdAtMs: number;
+  readonly updatedAtMs: number;
+}
+
+function groupInitializationFromRow(
+  row: Record<string, unknown>,
+): CollaborationGroupInitializationOperation {
+  return {
+    operationId: String(row.operation_id),
+    oldGroupId: String(row.old_group_id),
+    newGroupId: String(row.new_group_id),
+    remoteUrl: String(row.remote_url),
+    repositoryPath: String(row.repository_path),
+    gitSshKeyPath: String(row.git_ssh_key_path),
+    pollIntervalMs: Number(row.poll_interval_ms),
+    notificationsEnabled: Number(row.notifications_enabled) === 1,
+    identity: JSON.parse(
+      String(row.identity_json),
+    ) as CollaborationEventSigningIdentity,
+    recoveryIdentity: JSON.parse(
+      String(row.recovery_identity_json),
+    ) as CollaborationEventSigningIdentity,
+    cleanup: JSON.parse(
+      String(row.cleanup_json),
+    ) as CollaborationGroupInitializationCleanup,
+    phase: String(
+      row.phase,
+    ) as CollaborationGroupInitializationOperation['phase'],
+    newHead: row.new_head == null ? null : String(row.new_head),
+    createdAtMs: Number(row.created_at_ms),
+    updatedAtMs: Number(row.updated_at_ms),
+  };
 }
 
 function groupFromRow(
@@ -1585,6 +1665,367 @@ export class CollaborationProjectSpaceStore {
       groupId,
       reason: 'local_remove',
     }).detached;
+  }
+
+  prepareGroupInitialization(input: {
+    readonly operationId: string;
+    readonly oldGroupId: string;
+    readonly newGroupId: string;
+    readonly principalId: string;
+    readonly clientId: string;
+    readonly credentialId: string;
+    readonly recoveryCredentialId: string;
+    readonly nowMs?: number;
+  }): CollaborationGroupInitializationOperation {
+    this.assertOpen();
+    const nowMs = input.nowMs ?? Date.now();
+    this.database.transaction(() => {
+      const group = this.database
+        .prepare(
+          `SELECT g.repository_path, g.git_ssh_key_path,
+                  g.local_credential_id, g.recovery_credential_id,
+                  s.remote_url, s.poll_interval_ms, s.notifications_enabled
+             FROM collaboration_groups g
+             JOIN collaboration_subscriptions s ON s.group_id = g.group_id
+            WHERE g.group_id = ?`,
+        )
+        .get(input.oldGroupId) as Record<string, unknown> | undefined;
+      if (!group)
+        throw new Error(`Collaboration Group not found: ${input.oldGroupId}`);
+      const credentialIds = new Set(
+        (
+          this.database
+            .prepare(
+              `SELECT credential_id FROM collaboration_credentials
+                WHERE group_id = ?`,
+            )
+            .all(input.oldGroupId) as Array<{ credential_id: string }>
+        ).map((row) => row.credential_id),
+      );
+      if (group.local_credential_id)
+        credentialIds.add(String(group.local_credential_id));
+      if (group.recovery_credential_id)
+        credentialIds.add(String(group.recovery_credential_id));
+      const stagedDirectories = [
+        ...new Set(
+          (
+            this.database
+              .prepare(
+                `SELECT staged_path FROM collaboration_staged_artifacts
+                  WHERE group_id = ?`,
+              )
+              .all(input.oldGroupId) as Array<{ staged_path: string }>
+          ).map((row) => path.dirname(row.staged_path)),
+        ),
+      ];
+      this.database
+        .prepare(
+          `INSERT INTO collaboration_group_initializations (
+             operation_id, old_group_id, new_group_id, remote_url,
+             repository_path, git_ssh_key_path, poll_interval_ms,
+             notifications_enabled, identity_json, recovery_identity_json,
+             cleanup_json, phase, new_head, created_at_ms, updated_at_ms
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'prepared', NULL, ?, ?)`,
+        )
+        .run(
+          input.operationId,
+          input.oldGroupId,
+          input.newGroupId,
+          group.remote_url,
+          group.repository_path,
+          group.git_ssh_key_path,
+          group.poll_interval_ms,
+          group.notifications_enabled,
+          JSON.stringify({
+            principalId: input.principalId,
+            clientId: input.clientId,
+            credentialId: input.credentialId,
+            privateKeyPath: '',
+            publicKey: '',
+            fingerprint: '',
+            purpose: 'event_signing',
+          } satisfies CollaborationEventSigningIdentity),
+          JSON.stringify({
+            principalId: input.principalId,
+            clientId: input.clientId,
+            credentialId: input.recoveryCredentialId,
+            privateKeyPath: '',
+            publicKey: '',
+            fingerprint: '',
+            purpose: 'group_recovery',
+          } satisfies CollaborationEventSigningIdentity),
+          JSON.stringify({
+            credentialIds: [...credentialIds],
+            stagedDirectories,
+          } satisfies CollaborationGroupInitializationCleanup),
+          nowMs,
+          nowMs,
+        );
+    })();
+    return this.getGroupInitialization(input.operationId)!;
+  }
+
+  beginGroupInitialization(input: {
+    readonly operationId: string;
+    readonly identity: CollaborationEventSigningIdentity;
+    readonly recoveryIdentity: CollaborationEventSigningIdentity;
+    readonly nowMs?: number;
+  }): CollaborationGroupInitializationOperation {
+    this.assertOpen();
+    const operation = this.getGroupInitialization(input.operationId);
+    if (!operation || operation.phase !== 'prepared')
+      throw new Error(
+        `Collaboration initialization not prepared: ${input.operationId}`,
+      );
+    if (
+      operation.identity.principalId !== input.identity.principalId ||
+      operation.identity.clientId !== input.identity.clientId ||
+      operation.identity.credentialId !== input.identity.credentialId ||
+      operation.recoveryIdentity.principalId !==
+        input.recoveryIdentity.principalId ||
+      operation.recoveryIdentity.clientId !== input.recoveryIdentity.clientId ||
+      operation.recoveryIdentity.credentialId !==
+        input.recoveryIdentity.credentialId
+    )
+      throw new Error(
+        `Collaboration initialization identity reservation changed: ${input.operationId}`,
+      );
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_group_initializations
+            SET identity_json = ?, recovery_identity_json = ?, updated_at_ms = ?
+          WHERE operation_id = ? AND phase = 'prepared'`,
+      )
+      .run(
+        JSON.stringify(input.identity),
+        JSON.stringify(input.recoveryIdentity),
+        input.nowMs ?? Date.now(),
+        input.operationId,
+      );
+    if (result.changes !== 1)
+      throw new Error(
+        `Collaboration initialization not prepared: ${input.operationId}`,
+      );
+    return this.getGroupInitialization(input.operationId)!;
+  }
+
+  getGroupInitialization(
+    operationId: string,
+  ): CollaborationGroupInitializationOperation | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT * FROM collaboration_group_initializations
+          WHERE operation_id = ?`,
+      )
+      .get(operationId) as Record<string, unknown> | undefined;
+    return row ? groupInitializationFromRow(row) : null;
+  }
+
+  listGroupInitializations(): CollaborationGroupInitializationOperation[] {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_group_initializations
+            ORDER BY created_at_ms, operation_id`,
+        )
+        .all() as Record<string, unknown>[]
+    ).map(groupInitializationFromRow);
+  }
+
+  markGroupInitializationPushed(
+    operationId: string,
+    newHead: string,
+    nowMs = Date.now(),
+  ): void {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_group_initializations
+            SET phase = 'pushed', new_head = ?, updated_at_ms = ?
+          WHERE operation_id = ? AND phase = 'prepared'`,
+      )
+      .run(newHead, nowMs, operationId);
+    if (result.changes !== 1)
+      throw new Error(
+        `Collaboration initialization not prepared: ${operationId}`,
+      );
+  }
+
+  replaceGroupAfterInitialization(input: {
+    readonly operationId: string;
+    readonly history: {
+      readonly head: string;
+      readonly projection: CollaborationProjectionV3;
+      readonly eventRecords: readonly CollaborationProjectSpaceEventRecord[];
+    };
+    readonly identity: CollaborationEventSigningIdentity | null;
+    readonly recoveryIdentity: CollaborationEventSigningIdentity | null;
+    readonly nowMs?: number;
+  }): CollaborationProjectSpaceGroupRecord | null {
+    this.assertOpen();
+    const operation = this.getGroupInitialization(input.operationId);
+    if (!operation)
+      throw new Error(
+        `Collaboration initialization not found: ${input.operationId}`,
+      );
+    const groupId = input.history.projection.groupId;
+    const useIdentity =
+      groupId === operation.newGroupId &&
+      input.identity?.principalId ===
+        input.history.projection.group.owner_principal_id;
+    const maySubscribe =
+      useIdentity ||
+      input.history.projection.group.visibility_policy.observer_access ===
+        'allowed';
+    if (useIdentity !== Boolean(input.recoveryIdentity))
+      throw new Error(
+        'Initialization Owner identity and recovery identity disagree',
+      );
+    const nowMs = input.nowMs ?? Date.now();
+    this.database.transaction(() => {
+      const replacedGroupIds = [
+        operation.oldGroupId,
+        ...(groupId === operation.newGroupId ? [] : [operation.newGroupId]),
+      ];
+      for (const replacedGroupId of replacedGroupIds) {
+        this.database
+          .prepare(
+            'DELETE FROM collaboration_action_executions WHERE group_id = ?',
+          )
+          .run(replacedGroupId);
+        this.database
+          .prepare('DELETE FROM collaboration_subscriptions WHERE group_id = ?')
+          .run(replacedGroupId);
+        this.database
+          .prepare(
+            'DELETE FROM collaboration_local_group_bindings WHERE group_id = ?',
+          )
+          .run(replacedGroupId);
+      }
+      if (maySubscribe && !this.getGroup(groupId)) {
+        this.registerGroup({
+          subscription: {
+            format: 'icarus.collaboration-subscription/1',
+            group_id: groupId,
+            remote_url: operation.remoteUrl,
+            subscription_mode: useIdentity ? 'member' : 'observer',
+            poll_interval_ms: operation.pollIntervalMs,
+            last_verified_head: input.history.head,
+            notifications_enabled: operation.notificationsEnabled,
+            created_at: new Date(nowMs).toISOString(),
+          },
+          name: input.history.projection.group.name,
+          lifecycle: input.history.projection.group.lifecycle,
+          ownerPrincipalId: input.history.projection.group.owner_principal_id,
+          repositoryPath: operation.repositoryPath,
+          gitSshKeyPath: operation.gitSshKeyPath,
+          localPrincipalId: useIdentity ? input.identity!.principalId : null,
+          localClientId: useIdentity ? input.identity!.clientId : null,
+          localCredentialId: useIdentity ? input.identity!.credentialId : null,
+          eventPrivateKeyPath: useIdentity
+            ? input.identity!.privateKeyPath
+            : null,
+          eventPublicKey: useIdentity ? input.identity!.publicKey : null,
+          eventFingerprint: useIdentity ? input.identity!.fingerprint : null,
+          recoveryCredentialId: useIdentity
+            ? input.recoveryIdentity!.credentialId
+            : null,
+          recoveryPrivateKeyPath: useIdentity
+            ? input.recoveryIdentity!.privateKeyPath
+            : null,
+          nowMs,
+        });
+        this.saveVerifiedProjection({
+          groupId,
+          verifiedHead: input.history.head,
+          projection: input.history.projection,
+          eventRecords: input.history.eventRecords,
+          nowMs,
+        });
+      }
+      this.database
+        .prepare(
+          `UPDATE collaboration_group_initializations
+              SET phase = 'local_replaced', new_head = ?, updated_at_ms = ?
+            WHERE operation_id = ?`,
+        )
+        .run(input.history.head, nowMs, input.operationId);
+    })();
+    return maySubscribe ? this.getGroup(groupId)! : null;
+  }
+
+  deleteGroupInitialization(operationId: string): boolean {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          'DELETE FROM collaboration_group_initializations WHERE operation_id = ?',
+        )
+        .run(operationId).changes === 1
+    );
+  }
+
+  credentialIdentityIsReferenced(
+    credentialId: string,
+    excludingOperationId?: string,
+  ): boolean {
+    this.assertOpen();
+    if (
+      this.database
+        .prepare(
+          `SELECT 1 FROM collaboration_groups
+            WHERE local_credential_id = ? OR recovery_credential_id = ?
+            LIMIT 1`,
+        )
+        .get(credentialId, credentialId) ||
+      this.database
+        .prepare(
+          `SELECT 1 FROM collaboration_credentials
+            WHERE credential_id = ? LIMIT 1`,
+        )
+        .get(credentialId) ||
+      this.database
+        .prepare(
+          `SELECT 1 FROM collaboration_local_group_bindings
+            WHERE credential_id = ? OR recovery_credential_id = ?
+            LIMIT 1`,
+        )
+        .get(credentialId, credentialId)
+    )
+      return true;
+    return this.listGroupInitializations().some(
+      (operation) =>
+        operation.operationId !== excludingOperationId &&
+        (operation.identity.credentialId === credentialId ||
+          operation.recoveryIdentity.credentialId === credentialId),
+    );
+  }
+
+  stopWritesAfterHistoryRewrite(groupId: string, message: string): void {
+    this.assertOpen();
+    this.database.transaction(() => {
+      this.database
+        .prepare(
+          `UPDATE collaboration_subscriptions SET subscription_mode = 'observer',
+                  last_error = ? WHERE group_id = ?`,
+        )
+        .run(message, groupId);
+      this.database
+        .prepare(
+          `UPDATE collaboration_groups
+              SET local_principal_id = NULL, local_client_id = NULL,
+                  local_credential_id = NULL, event_private_key_path = NULL,
+                  event_public_key = NULL, event_fingerprint = NULL,
+                  recovery_credential_id = NULL,
+                  recovery_private_key_path = NULL,
+                  protocol_status = 'PROTOCOL_QUARANTINED',
+                  protocol_error = ?, updated_at_ms = ?
+            WHERE group_id = ?`,
+        )
+        .run(message, Date.now(), groupId);
+    })();
   }
 
   listGroups(): CollaborationProjectSpaceGroupRecord[] {
@@ -4336,6 +4777,75 @@ export class CollaborationProjectSpaceStore {
       .all(groupId) as Array<Record<string, unknown>>;
   }
 
+  purgeManagedBackupsForGroup(groupId: string): number {
+    this.assertOpen();
+    const backupRoot = path.join(
+      path.dirname(this.databasePath),
+      'collaboration-backups',
+    );
+    if (!existsSync(backupRoot)) return 0;
+    const rootMetadata = lstatSync(backupRoot);
+    if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink())
+      throw new Error('Collaboration backup root is unsafe');
+    const candidates = readdirSync(backupRoot, { withFileTypes: true }).filter(
+      (entry) => entry.isDirectory() && !entry.isSymbolicLink(),
+    );
+    let processed = 0;
+    for (const entry of candidates) {
+      const directory = path.join(backupRoot, entry.name);
+      const manifestPath = path.join(directory, 'manifest.json');
+      if (!existsSync(manifestPath)) continue;
+      let manifest: CollaborationProjectSpaceBackupManifest;
+      try {
+        requireRegularFile(manifestPath, 'Collaboration backup manifest');
+        manifest = collaborationProjectSpaceBackupManifestSchema.parse(
+          strictParseJson(readFileSync(manifestPath, 'utf8')),
+        );
+      } catch {
+        continue;
+      }
+      const snapshotPath = path.join(directory, manifest.database_basename);
+      let snapshotMetadata: ReturnType<typeof lstatSync>;
+      try {
+        snapshotMetadata = requireRegularFile(
+          snapshotPath,
+          'Collaboration backup database',
+        );
+      } catch {
+        continue;
+      }
+      if (
+        snapshotMetadata.size !== manifest.file.size ||
+        fileSha256(snapshotPath) !== manifest.file.sha256
+      )
+        continue;
+      const snapshot = new Database(snapshotPath, {
+        readonly: true,
+        fileMustExist: true,
+      });
+      let containsGroup: boolean;
+      let containsOtherRestorableGroup: boolean;
+      try {
+        containsGroup = managedBackupContainsGroup(snapshot, groupId);
+        containsOtherRestorableGroup =
+          managedBackupContainsOtherRestorableGroup(snapshot, groupId);
+      } catch {
+        continue;
+      } finally {
+        snapshot.close();
+      }
+      if (!containsGroup) continue;
+      if (!containsOtherRestorableGroup) {
+        rmSync(directory, { recursive: true, force: true });
+        processed += 1;
+        continue;
+      }
+      sanitizeManagedBackupForGroup(directory, manifest, groupId);
+      processed += 1;
+    }
+    return processed;
+  }
+
   rawDatabaseForTests(): Database.Database {
     this.assertOpen();
     return this.database;
@@ -4469,6 +4979,304 @@ function artifactBackupRelativePath(row: BackupArtifactRow): string {
 function artifactPath(root: string, relativePath: string): string {
   const parsed = backupRelativePathSchema.parse(relativePath);
   return path.join(root, ...parsed.split('/'));
+}
+
+function verifiedStagedBackupFiles(
+  database: Database.Database,
+  backupDirectory: string,
+  manifest: CollaborationProjectSpaceBackupManifest,
+): Map<
+  string,
+  CollaborationProjectSpaceBackupManifest['staged_artifacts']['files'][number]
+> {
+  const rows = backupArtifactRows(database).filter(
+    (row) => row.state === 'staged',
+  );
+  const files = new Map(
+    manifest.staged_artifacts.files.map((file) => [file.artifact_id, file]),
+  );
+  if (rows.length !== files.size)
+    throw new Error(
+      'Collaboration backup staged Artifact inventory does not match the database',
+    );
+  const artifactRoot = path.join(
+    backupDirectory,
+    manifest.staged_artifacts.directory_basename,
+  );
+  if (existsSync(artifactRoot)) {
+    const details = lstatSync(artifactRoot);
+    if (!details.isDirectory() || details.isSymbolicLink())
+      throw new Error('Collaboration backup Artifact root is unsafe');
+  }
+  for (const row of rows) {
+    const relativePath = artifactBackupRelativePath(row);
+    const file = files.get(row.artifact_id);
+    if (
+      !file ||
+      file.relative_path !== relativePath ||
+      file.size !== row.size ||
+      file.sha256 !== backupSha256Schema.parse(row.sha256)
+    )
+      throw new Error(
+        `Collaboration backup staged Artifact metadata mismatch: ${row.artifact_id}`,
+      );
+    const source = artifactPath(artifactRoot, relativePath);
+    const details = requireRegularFile(
+      source,
+      `Backup Artifact ${row.artifact_id}`,
+    );
+    if (details.size !== file.size || fileSha256(source) !== file.sha256)
+      throw new Error(
+        `Collaboration backup Artifact integrity verification failed: ${row.artifact_id}`,
+      );
+  }
+  return files;
+}
+
+function quotedDatabaseIdentifier(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+function jsonContainsExactString(value: unknown, expected: string): boolean {
+  if (value === expected) return true;
+  if (Array.isArray(value))
+    return value.some((item) => jsonContainsExactString(item, expected));
+  if (value && typeof value === 'object')
+    return Object.values(value).some((item) =>
+      jsonContainsExactString(item, expected),
+    );
+  return false;
+}
+
+function initializationOperationsReferencingGroupInCleanup(
+  database: Database.Database,
+  groupId: string,
+): string[] {
+  return (
+    database
+      .prepare(
+        `SELECT operation_id, cleanup_json
+           FROM collaboration_group_initializations`,
+      )
+      .all() as Array<{ operation_id: string; cleanup_json: string }>
+  )
+    .filter((row) =>
+      jsonContainsExactString(strictParseJson(row.cleanup_json), groupId),
+    )
+    .map((row) => row.operation_id);
+}
+
+function managedGroupReferenceColumns(
+  database: Database.Database,
+): Array<{ table_name: string; column_name: string }> {
+  return database
+    .prepare(
+      `SELECT DISTINCT m.name AS table_name, p.name AS column_name
+         FROM sqlite_master m, pragma_table_info(m.name) p
+        WHERE m.type = 'table'
+          AND m.name LIKE 'collaboration_%'
+          AND p.name IN ('group_id', 'old_group_id', 'new_group_id')`,
+    )
+    .all() as Array<{ table_name: string; column_name: string }>;
+}
+
+function managedBackupContainsGroup(
+  database: Database.Database,
+  groupId: string,
+): boolean {
+  for (const reference of managedGroupReferenceColumns(database)) {
+    const table = quotedDatabaseIdentifier(reference.table_name);
+    const column = quotedDatabaseIdentifier(reference.column_name);
+    if (
+      database
+        .prepare(`SELECT 1 FROM ${table} WHERE ${column} = ? LIMIT 1`)
+        .get(groupId)
+    )
+      return true;
+  }
+  return (
+    initializationOperationsReferencingGroupInCleanup(database, groupId)
+      .length > 0
+  );
+}
+
+function managedBackupContainsOtherRestorableGroup(
+  database: Database.Database,
+  groupId: string,
+): boolean {
+  for (const tableName of [
+    'collaboration_subscriptions',
+    'collaboration_groups',
+    'collaboration_local_group_bindings',
+  ]) {
+    const table = quotedDatabaseIdentifier(tableName);
+    if (
+      database
+        .prepare(`SELECT 1 FROM ${table} WHERE group_id <> ? LIMIT 1`)
+        .get(groupId)
+    )
+      return true;
+  }
+  return false;
+}
+
+function sanitizeManagedBackupForGroup(
+  backupDirectory: string,
+  manifest: CollaborationProjectSpaceBackupManifest,
+  groupId: string,
+): void {
+  const backupRoot = path.dirname(backupDirectory);
+  const stagingDirectory = path.join(
+    backupRoot,
+    `.collaboration-backup-sanitize-${crypto.randomUUID()}`,
+  );
+  const displacedDirectory = path.join(
+    backupRoot,
+    `.collaboration-backup-displaced-${crypto.randomUUID()}`,
+  );
+  const sourceDatabase = path.join(backupDirectory, manifest.database_basename);
+  mkdirSync(stagingDirectory, { mode: 0o700 });
+  try {
+    const source = new Database(sourceDatabase, {
+      readonly: true,
+      fileMustExist: true,
+    });
+    let sourceFiles: ReturnType<typeof verifiedStagedBackupFiles>;
+    try {
+      sourceFiles = verifiedStagedBackupFiles(
+        source,
+        backupDirectory,
+        manifest,
+      );
+    } finally {
+      source.close();
+    }
+
+    const sanitizedDatabase = path.join(
+      stagingDirectory,
+      manifest.database_basename,
+    );
+    copyFileSync(sourceDatabase, sanitizedDatabase);
+    const sanitized = new Database(sanitizedDatabase);
+    let remainingRows: BackupArtifactRow[];
+    try {
+      sanitized.pragma('foreign_keys = ON');
+      sanitized.pragma('secure_delete = ON');
+      const cleanupReferencedOperations =
+        initializationOperationsReferencingGroupInCleanup(sanitized, groupId);
+      sanitized.transaction(() => {
+        sanitized
+          .prepare(
+            'DELETE FROM collaboration_action_executions WHERE group_id = ?',
+          )
+          .run(groupId);
+        sanitized
+          .prepare(
+            `DELETE FROM collaboration_group_initializations
+              WHERE old_group_id = ? OR new_group_id = ?`,
+          )
+          .run(groupId, groupId);
+        for (const operationId of cleanupReferencedOperations)
+          sanitized
+            .prepare(
+              `DELETE FROM collaboration_group_initializations
+                WHERE operation_id = ?`,
+            )
+            .run(operationId);
+        sanitized
+          .prepare(
+            'DELETE FROM collaboration_local_group_bindings WHERE group_id = ?',
+          )
+          .run(groupId);
+        sanitized
+          .prepare('DELETE FROM collaboration_subscriptions WHERE group_id = ?')
+          .run(groupId);
+        for (const reference of managedGroupReferenceColumns(sanitized)) {
+          const table = quotedDatabaseIdentifier(reference.table_name);
+          const column = quotedDatabaseIdentifier(reference.column_name);
+          sanitized
+            .prepare(`DELETE FROM ${table} WHERE ${column} = ?`)
+            .run(groupId);
+        }
+      })();
+      sanitized.exec('VACUUM');
+      if (managedBackupContainsGroup(sanitized, groupId))
+        throw new Error(
+          `Collaboration backup sanitization retained managed references for ${groupId}`,
+        );
+      remainingRows = backupArtifactRows(sanitized);
+    } finally {
+      sanitized.close();
+    }
+
+    const sourceArtifactRoot = path.join(
+      backupDirectory,
+      manifest.staged_artifacts.directory_basename,
+    );
+    const sanitizedArtifactRoot = path.join(
+      stagingDirectory,
+      manifest.staged_artifacts.directory_basename,
+    );
+    const files: CollaborationProjectSpaceBackupManifest['staged_artifacts']['files'] =
+      [];
+    for (const row of remainingRows) {
+      if (row.state !== 'staged') continue;
+      const file = sourceFiles.get(row.artifact_id);
+      if (!file)
+        throw new Error(
+          `Collaboration backup sanitization lost Artifact ${row.artifact_id}`,
+        );
+      const source = artifactPath(sourceArtifactRoot, file.relative_path);
+      const destination = artifactPath(
+        sanitizedArtifactRoot,
+        file.relative_path,
+      );
+      mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
+      copyFileSync(source, destination);
+      if (
+        statSync(destination).size !== file.size ||
+        fileSha256(destination) !== file.sha256
+      )
+        throw new Error(
+          `Collaboration backup sanitization failed Artifact verification: ${row.artifact_id}`,
+        );
+      files.push(file);
+    }
+
+    const sanitizedManifest =
+      collaborationProjectSpaceBackupManifestSchema.parse({
+        ...manifest,
+        file: {
+          size: statSync(sanitizedDatabase).size,
+          sha256: fileSha256(sanitizedDatabase),
+        },
+        staged_artifacts: {
+          ...manifest.staged_artifacts,
+          files,
+        },
+      });
+    writeFileSync(
+      path.join(stagingDirectory, 'manifest.json'),
+      prettyCollaborationJson(sanitizedManifest),
+      { mode: 0o600 },
+    );
+
+    renameSync(backupDirectory, displacedDirectory);
+    let installed = false;
+    try {
+      renameSync(stagingDirectory, backupDirectory);
+      installed = true;
+      rmSync(displacedDirectory, { recursive: true, force: true });
+    } catch (error) {
+      if (!installed && !existsSync(backupDirectory))
+        renameSync(displacedDirectory, backupDirectory);
+      throw error;
+    }
+  } catch (error) {
+    if (existsSync(stagingDirectory))
+      rmSync(stagingDirectory, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 export function createCollaborationProjectSpaceBackup(input: {

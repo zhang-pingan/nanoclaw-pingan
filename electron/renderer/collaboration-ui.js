@@ -54,6 +54,15 @@ export function collaborationCanMutate(group) {
   );
 }
 
+export function collaborationCanInitializeGroup(group) {
+  return Boolean(
+    collaborationHasActiveLocalIdentity(group) &&
+    group.localPrincipalId &&
+    group.localPrincipalId === group.ownerPrincipalId &&
+    ['active', 'archived'].includes(group.lifecycle),
+  );
+}
+
 function collaborationHasActiveLocalIdentity(group) {
   const localCredential = collaborationLocalCredential(group);
   return Boolean(

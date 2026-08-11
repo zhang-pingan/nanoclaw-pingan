@@ -642,6 +642,21 @@ export class CollaborationWebApi {
     }
     found = match(
       pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/initialize$`, 'u'),
+    );
+    if (found && method === 'POST') {
+      await jsonBody(req, z.object({}).strict());
+      const previousGroupId = found[1]!;
+      send(res, 200, {
+        previousGroupId,
+        group: publicGroup(
+          await this.runtime.groups.initializeGroup(previousGroupId),
+        ),
+      });
+      return;
+    }
+    found = match(
+      pathname,
       new RegExp(`^${API_PREFIX}/groups/([^/]+)/join-requests$`, 'u'),
     );
     if (found && method === 'POST') {

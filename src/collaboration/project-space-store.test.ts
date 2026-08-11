@@ -1,4 +1,10 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -43,12 +49,12 @@ function temporaryPath(name: string): string {
   return path.join(directory, name);
 }
 
-function genesis() {
+function genesis(groupId = 'group_test') {
   const payload = {
     group: {
       format: 'icarus.collaboration-group/3' as const,
       protocol_version: 3 as const,
-      group_id: 'group_test',
+      group_id: groupId,
       name: 'Test group',
       creator: {
         principal_id: PRINCIPAL,
@@ -60,6 +66,7 @@ function genesis() {
       visibility_policy: { observer_access: 'allowed' as const },
       created_at: NOW,
       archived_at: null,
+      dissolved_at: null,
     },
     member: {
       format: 'icarus.collaboration-member/3' as const,
@@ -110,10 +117,10 @@ function genesis() {
     },
   };
   const event = buildCollaborationEventV3({
-    groupId: 'group_test',
+    groupId,
     eventId: 'evt_genesis',
     aggregateType: 'group',
-    aggregateId: 'group_test',
+    aggregateId: groupId,
     aggregateRevision: 1,
     previousEventHash: null,
     eventType: 'group_initialized',
@@ -135,11 +142,19 @@ const ANALYSIS_PROMPT_HASH = `sha256:${'c'.repeat(64)}`;
 
 function registerMemberStore(name: string): CollaborationProjectSpaceStore {
   const store = new CollaborationProjectSpaceStore(temporaryPath(name));
+  registerTestGroup(store, 'group_test');
+  return store;
+}
+
+function registerTestGroup(
+  store: CollaborationProjectSpaceStore,
+  groupId: string,
+): void {
   store.registerGroup({
     subscription: {
       format: 'icarus.collaboration-subscription/1',
-      group_id: 'group_test',
-      remote_url: '/tmp/group.git',
+      group_id: groupId,
+      remote_url: `/tmp/${groupId}.git`,
       subscription_mode: 'member',
       poll_interval_ms: 60_000,
       last_verified_head: ANALYSIS_HEAD,
@@ -149,7 +164,7 @@ function registerMemberStore(name: string): CollaborationProjectSpaceStore {
     name: 'Test group',
     lifecycle: 'active',
     ownerPrincipalId: PRINCIPAL,
-    repositoryPath: '/tmp/cache.git',
+    repositoryPath: `/tmp/${groupId}-cache.git`,
     localPrincipalId: PRINCIPAL,
     localClientId: CLIENT,
     gitSshKeyPath: '/tmp/id_ed25519',
@@ -158,7 +173,6 @@ function registerMemberStore(name: string): CollaborationProjectSpaceStore {
     eventPublicKey: PUBLIC_KEY,
     eventFingerprint: FINGERPRINT,
   });
-  return store;
 }
 
 function createAnalysisRun(
@@ -274,7 +288,7 @@ function analysisResult(
 }
 
 describe('Collaboration project space v3 store', () => {
-  it('creates only the fresh v10 schema and rejects stale v9', () => {
+  it('creates only the fresh v11 schema and rejects stale v10', () => {
     const databasePath = temporaryPath('current.db');
     const store = new CollaborationProjectSpaceStore(databasePath);
     expect(
@@ -321,7 +335,7 @@ describe('Collaboration project space v3 store', () => {
 
     const stalePath = temporaryPath('stale.db');
     const stale = new Database(stalePath);
-    stale.pragma('user_version = 9');
+    stale.pragma('user_version = 10');
     stale.close();
     expect(() => new CollaborationProjectSpaceStore(stalePath)).toThrow(
       expect.objectContaining<Partial<CollaborationProjectSpaceStoreError>>({
@@ -402,7 +416,7 @@ describe('Collaboration project space v3 store', () => {
     expect(plan.detached).toBe(true);
     expect(plan.cleanupPaths).toEqual(
       expect.arrayContaining([
-        '/tmp/cache.git',
+        '/tmp/group_test-cache.git',
         path.dirname(staged.stagedPath),
       ]),
     );
@@ -410,7 +424,7 @@ describe('Collaboration project space v3 store', () => {
     expect(store.listGroups()).toEqual([]);
     expect(store.getLocalGroupBinding('group_test')).toMatchObject({
       groupId: 'group_test',
-      remoteUrl: '/tmp/group.git',
+      remoteUrl: '/tmp/group_test.git',
       principalId: PRINCIPAL,
       credentialId: CREDENTIAL,
       recoveryCredentialId: null,
@@ -1048,6 +1062,274 @@ describe('Collaboration project space v3 store', () => {
     store = new CollaborationProjectSpaceStore(databasePath);
     expect(store.readStagedArtifact(replacement.artifactId).contents).toEqual(
       Buffer.from('replacement'),
+    );
+    store.close();
+  });
+
+  it('deletes exclusive backups and sanitizes shared backups before restore', () => {
+    const databasePath = temporaryPath('managed-backups.db');
+    const backupRoot = path.join(
+      path.dirname(databasePath),
+      'collaboration-backups',
+    );
+    const exclusive = path.join(backupRoot, 'exclusive');
+    const shared = path.join(backupRoot, 'shared');
+    let store = new CollaborationProjectSpaceStore(databasePath);
+    registerTestGroup(store, 'group_old');
+    const oldGenesis = genesis('group_old');
+    store.saveVerifiedProjection({
+      groupId: 'group_old',
+      verifiedHead: '1'.repeat(40),
+      projection: oldGenesis.projection,
+      eventRecords: [
+        {
+          event: oldGenesis.event,
+          commitHash: '1'.repeat(40),
+          commitOrder: 1,
+        },
+      ],
+    });
+    store.addLocalAuditEvidence({
+      groupId: 'group_old',
+      evidenceType: 'old-audit',
+      resourceType: 'group',
+      resourceId: 'group_old',
+      evidence: { old: true },
+    });
+    const oldArtifact = store.stageArtifact({
+      artifactId: 'artifact_old_backup',
+      groupId: 'group_old',
+      scopeType: 'work_item',
+      scopeId: 'work_old',
+      principalId: PRINCIPAL,
+      clientId: CLIENT,
+      originalName: 'old.txt',
+      mediaType: 'text/plain',
+      contents: Buffer.from('old backup bytes'),
+    });
+    store.close();
+    createCollaborationProjectSpaceBackup({
+      databasePath,
+      backupDirectory: exclusive,
+    });
+
+    store = new CollaborationProjectSpaceStore(databasePath);
+    registerTestGroup(store, 'group_shared');
+    const sharedGenesis = genesis('group_shared');
+    store.saveVerifiedProjection({
+      groupId: 'group_shared',
+      verifiedHead: '2'.repeat(40),
+      projection: sharedGenesis.projection,
+      eventRecords: [
+        {
+          event: sharedGenesis.event,
+          commitHash: '2'.repeat(40),
+          commitOrder: 1,
+        },
+      ],
+    });
+    store.addLocalAuditEvidence({
+      groupId: 'group_shared',
+      evidenceType: 'shared-audit',
+      resourceType: 'group',
+      resourceId: 'group_shared',
+      evidence: { retained: true },
+    });
+    const sharedArtifact = store.stageArtifact({
+      artifactId: 'artifact_shared_backup',
+      groupId: 'group_shared',
+      scopeType: 'work_item',
+      scopeId: 'work_shared',
+      principalId: PRINCIPAL,
+      clientId: CLIENT,
+      originalName: 'shared.txt',
+      mediaType: 'text/plain',
+      contents: Buffer.from('shared backup bytes'),
+    });
+    store.close();
+    createCollaborationProjectSpaceBackup({
+      databasePath,
+      backupDirectory: shared,
+    });
+
+    store = new CollaborationProjectSpaceStore(databasePath);
+    expect(store.purgeManagedBackupsForGroup('group_old')).toBe(2);
+    expect(existsSync(exclusive)).toBe(false);
+    expect(existsSync(shared)).toBe(true);
+    store.close();
+
+    const sanitizedDatabase = path.join(shared, path.basename(databasePath));
+    expect(
+      readFileSync(sanitizedDatabase).includes(Buffer.from('group_old')),
+    ).toBe(false);
+    const restoredPath = temporaryPath('managed-backups.db');
+    restoreCollaborationProjectSpaceBackup({
+      databasePath: restoredPath,
+      backupDirectory: shared,
+    });
+    const restored = new CollaborationProjectSpaceStore(restoredPath);
+    expect(restored.getGroup('group_old')).toBeNull();
+    expect(restored.getLocalGroupBinding('group_old')).toBeNull();
+    expect(restored.listEventRecords('group_old')).toEqual([]);
+    expect(restored.listLocalAuditEvidence('group_old')).toEqual([]);
+    expect(restored.getStagedArtifact(oldArtifact.artifactId)).toBeNull();
+    expect(restored.getGroup('group_shared')).not.toBeNull();
+    expect(restored.getLocalGroupBinding('group_shared')).toMatchObject({
+      groupId: 'group_shared',
+      credentialId: CREDENTIAL,
+      bindingState: 'attached',
+    });
+    expect(restored.listEventRecords('group_shared')).toHaveLength(1);
+    expect(restored.listLocalAuditEvidence('group_shared')).toHaveLength(1);
+    expect(
+      restored.readStagedArtifact(sharedArtifact.artifactId).contents,
+    ).toEqual(Buffer.from('shared backup bytes'));
+    restored.close();
+  });
+
+  it('purges retained-only bindings and initialization references from managed backups', () => {
+    const databasePath = temporaryPath('retained-managed-backups.db');
+    const backupRoot = path.join(
+      path.dirname(databasePath),
+      'collaboration-backups',
+    );
+    const retainedOnly = path.join(backupRoot, 'retained-only');
+    const shared = path.join(backupRoot, 'retained-shared');
+    let store = new CollaborationProjectSpaceStore(databasePath);
+    registerTestGroup(store, 'group_retained_old');
+    const oldGenesis = genesis('group_retained_old');
+    store.saveVerifiedProjection({
+      groupId: 'group_retained_old',
+      verifiedHead: '3'.repeat(40),
+      projection: oldGenesis.projection,
+      eventRecords: [
+        {
+          event: oldGenesis.event,
+          commitHash: '3'.repeat(40),
+          commitOrder: 1,
+        },
+      ],
+    });
+    store.addLocalAuditEvidence({
+      groupId: 'group_retained_old',
+      evidenceType: 'retained-old-audit',
+      resourceType: 'group',
+      resourceId: 'group_retained_old',
+      evidence: { old: true },
+    });
+    store.detachLocalGroup({
+      groupId: 'group_retained_old',
+      reason: 'local_remove',
+    });
+    store.completeLocalGroupCleanup('group_retained_old');
+    store.close();
+    createCollaborationProjectSpaceBackup({
+      databasePath,
+      backupDirectory: retainedOnly,
+    });
+
+    store = new CollaborationProjectSpaceStore(databasePath);
+    registerTestGroup(store, 'group_retained_old');
+    const operation = store.prepareGroupInitialization({
+      operationId: 'initialization_retained_old',
+      oldGroupId: 'group_retained_old',
+      newGroupId: 'group_prepared_new',
+      principalId: 'principal_00000000-0000-4000-8000-000000000101',
+      clientId: 'client_00000000-0000-4000-8000-000000000101',
+      credentialId: 'credential_00000000-0000-4000-8000-000000000101',
+      recoveryCredentialId: 'credential_00000000-0000-4000-8000-000000000102',
+    });
+    const cleanup = {
+      ...operation.cleanup,
+      abandonedGroupId: 'group_retained_old',
+    };
+    store
+      .rawDatabaseForTests()
+      .prepare(
+        `INSERT INTO collaboration_group_initializations (
+           operation_id, old_group_id, new_group_id, remote_url,
+           repository_path, git_ssh_key_path, poll_interval_ms,
+           notifications_enabled, identity_json, recovery_identity_json,
+           cleanup_json, phase, new_head, created_at_ms, updated_at_ms
+         ) SELECT ?, ?, ?, remote_url, repository_path, git_ssh_key_path,
+                  poll_interval_ms, notifications_enabled, identity_json,
+                  recovery_identity_json, ?, phase, new_head,
+                  created_at_ms, updated_at_ms
+             FROM collaboration_group_initializations
+            WHERE operation_id = ?`,
+      )
+      .run(
+        'initialization_cleanup_only',
+        'group_unrelated_old',
+        'group_unrelated_new',
+        JSON.stringify(cleanup),
+        operation.operationId,
+      );
+    store.detachLocalGroup({
+      groupId: 'group_retained_old',
+      reason: 'local_remove',
+    });
+    store.completeLocalGroupCleanup('group_retained_old');
+    registerTestGroup(store, 'group_backup_survivor');
+    const survivorGenesis = genesis('group_backup_survivor');
+    store.saveVerifiedProjection({
+      groupId: 'group_backup_survivor',
+      verifiedHead: '4'.repeat(40),
+      projection: survivorGenesis.projection,
+      eventRecords: [
+        {
+          event: survivorGenesis.event,
+          commitHash: '4'.repeat(40),
+          commitOrder: 1,
+        },
+      ],
+    });
+    store.close();
+    createCollaborationProjectSpaceBackup({
+      databasePath,
+      backupDirectory: shared,
+    });
+
+    store = new CollaborationProjectSpaceStore(databasePath);
+    expect(store.purgeManagedBackupsForGroup('group_retained_old')).toBe(2);
+    expect(existsSync(retainedOnly)).toBe(false);
+    expect(existsSync(shared)).toBe(true);
+    store.close();
+
+    const restoredPath = temporaryPath('retained-managed-backups.db');
+    restoreCollaborationProjectSpaceBackup({
+      databasePath: restoredPath,
+      backupDirectory: shared,
+    });
+    const restored = new CollaborationProjectSpaceStore(restoredPath);
+    expect(restored.getGroup('group_backup_survivor')).not.toBeNull();
+    expect(restored.getLocalGroupBinding('group_retained_old')).toBeNull();
+    expect(restored.listEventRecords('group_retained_old')).toEqual([]);
+    expect(restored.listLocalAuditEvidence('group_retained_old')).toEqual([]);
+    expect(restored.listGroupInitializations()).toEqual([]);
+    expect(
+      readFileSync(path.join(shared, path.basename(databasePath))).includes(
+        Buffer.from('group_retained_old'),
+      ),
+    ).toBe(false);
+    restored.close();
+  });
+
+  it('retains a Credential identity referenced only by another Group binding', () => {
+    const store = new CollaborationProjectSpaceStore(
+      temporaryPath('binding-credential-reference.db'),
+    );
+    registerTestGroup(store, 'group_retained_binding');
+    store.detachLocalGroup({
+      groupId: 'group_retained_binding',
+      reason: 'local_remove',
+    });
+    store.completeLocalGroupCleanup('group_retained_binding');
+
+    expect(store.getGroup('group_retained_binding')).toBeNull();
+    expect(store.credentialIdentityIsReferenced(CREDENTIAL)).toBe(true);
+    expect(store.credentialIdentityIsReferenced(RECOVERY_CREDENTIAL)).toBe(
+      false,
     );
     store.close();
   });

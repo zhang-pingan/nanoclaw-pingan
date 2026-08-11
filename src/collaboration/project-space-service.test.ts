@@ -19,7 +19,10 @@ import {
   type CollaborationProjectSpaceTransport,
   type ValidatedProjectSpaceHistory,
 } from './project-space-service.js';
-import { CollaborationProjectSpaceStore } from './project-space-store.js';
+import {
+  CollaborationProjectSpaceStore,
+  type CollaborationProjectSpaceGroupRecord,
+} from './project-space-store.js';
 import { CollaborationScheduler } from './scheduler.js';
 import type { CollaborationRuntime } from './runtime.js';
 import { CollaborationWebApi } from './web-api.js';
@@ -119,7 +122,11 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
   readonly histories = new Map<string, ValidatedProjectSpaceHistory>();
   readonly files = new Map<string, Buffer>();
   appendCount = 0;
+  reinitializeCount = 0;
+  rejectReinitialize = false;
+  failRefreshAfterReinitialize = false;
   failNextAppend: Error | null = null;
+  readonly refreshAfterReinitializeErrors = new Map<string, Error>();
 
   async inspect(input: {
     remoteUrl: string;
@@ -146,6 +153,40 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
     };
     this.histories.set(input.remoteUrl, history);
     return history;
+  }
+
+  async reinitialize(input: {
+    remoteUrl: string;
+    genesisEvent: ValidatedProjectSpaceHistory['eventRecords'][number]['event'];
+    genesisProjection: ValidatedProjectSpaceHistory['projection'];
+  }): Promise<ValidatedProjectSpaceHistory> {
+    this.reinitializeCount += 1;
+    if (this.rejectReinitialize)
+      throw new Error('simulated Git server force-push rejection');
+    const head = `${this.histories.size + 10}`.padStart(40, '0');
+    const history: ValidatedProjectSpaceHistory = {
+      head,
+      projection: input.genesisProjection,
+      eventRecords: [
+        { event: input.genesisEvent, commitHash: head, commitOrder: 1 },
+      ],
+    };
+    this.histories.set(input.remoteUrl, history);
+    return history;
+  }
+
+  async refreshAfterReinitialize(input: {
+    remoteUrl: string;
+  }): Promise<ValidatedProjectSpaceHistory> {
+    const remoteError = this.refreshAfterReinitializeErrors.get(
+      input.remoteUrl,
+    );
+    if (remoteError) throw remoteError;
+    if (this.failRefreshAfterReinitialize) {
+      this.failRefreshAfterReinitialize = false;
+      throw new Error('simulated interruption after force push');
+    }
+    return this.inspect(input);
   }
 
   async append(input: {
@@ -201,6 +242,43 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
   }
 }
 
+class GatedReinitializeMemoryTransport extends MemoryTransport {
+  private reinitializeGate:
+    | {
+        readonly started: () => void;
+        readonly wait: Promise<void>;
+      }
+    | undefined;
+
+  pauseNextReinitialize(): {
+    readonly started: Promise<void>;
+    readonly release: () => void;
+  } {
+    let markStarted!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const wait = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.reinitializeGate = { started: markStarted, wait };
+    return { started, release };
+  }
+
+  override async reinitialize(
+    input: Parameters<MemoryTransport['reinitialize']>[0],
+  ): Promise<ValidatedProjectSpaceHistory> {
+    const gate = this.reinitializeGate;
+    if (gate) {
+      this.reinitializeGate = undefined;
+      gate.started();
+      await gate.wait;
+    }
+    return super.reinitialize(input);
+  }
+}
+
 class OverlapDetectingMemoryTransport extends MemoryTransport {
   private activeInspections = 0;
   maxConcurrentInspections = 0;
@@ -233,23 +311,51 @@ function service(
       principalId: string;
       purpose?: 'event_signing' | 'group_recovery';
       clientId?: string;
+      credentialId?: string;
     }) => Promise<CollaborationEventSigningIdentity>;
     loadCredentialIdentity?: (
       credentialId: string,
     ) => Promise<CollaborationEventSigningIdentity>;
+    deleteCredentialIdentity?: (credentialId: string) => Promise<boolean>;
   },
 ) {
   const store = new CollaborationProjectSpaceStore(path.join(root, 'store.db'));
   const identities = {
-    createPrincipalIdentity: async () => identity,
+    createPrincipalIdentity: async (input?: {
+      freshClient?: boolean;
+      principalId?: string;
+      clientId?: string;
+      credentialId?: string;
+    }) =>
+      input?.freshClient
+        ? {
+            ...identity,
+            principalId:
+              input.principalId ??
+              'principal_00000000-0000-4000-8000-000000000100',
+            clientId: input.clientId ?? `${identity.clientId}_initialized`,
+            credentialId:
+              input.credentialId ?? `${identity.credentialId}_initialized`,
+          }
+        : identity,
     createCredentialIdentity:
       options?.createCredentialIdentity ??
-      (async (input: { purpose?: string }) => ({
+      (async (input: {
+        principalId: string;
+        clientId?: string;
+        purpose?: string;
+        credentialId?: string;
+      }) => ({
         ...identity,
+        principalId: input.principalId,
+        clientId: input.clientId ?? identity.clientId,
         credentialId:
-          input.purpose === 'group_recovery'
-            ? `${identity.credentialId}_recovery`
-            : identity.credentialId,
+          input.credentialId ??
+          (input.purpose === 'group_recovery'
+            ? input.principalId === identity.principalId
+              ? `${identity.credentialId}_recovery`
+              : `credential_${input.principalId}_recovery`
+            : identity.credentialId),
         purpose:
           input.purpose === 'group_recovery'
             ? ('group_recovery' as const)
@@ -271,6 +377,8 @@ function service(
     resolveGitSshKeyCandidates: (value?: string) => [
       value || '/tmp/git-transport',
     ],
+    deleteCredentialIdentity:
+      options?.deleteCredentialIdentity ?? (async () => true),
   } as unknown as CollaborationProjectSpaceIdentityService;
   return {
     store,
@@ -283,6 +391,95 @@ function service(
       options?.cleanupLocalPaths,
     ),
   };
+}
+
+function registerOwnerSnapshot(
+  target: ReturnType<typeof service>,
+  group: CollaborationProjectSpaceGroupRecord,
+  history: ValidatedProjectSpaceHistory,
+  identity: CollaborationEventSigningIdentity,
+): void {
+  target.store.registerGroup({
+    subscription: {
+      format: 'icarus.collaboration-subscription/1',
+      group_id: group.groupId,
+      remote_url: group.remoteUrl,
+      subscription_mode: 'member',
+      poll_interval_ms: group.pollIntervalMs,
+      last_verified_head: history.head,
+      notifications_enabled: true,
+      created_at: '2026-08-06T12:00:00.000Z',
+    },
+    name: group.name,
+    lifecycle: group.lifecycle,
+    ownerPrincipalId: group.ownerPrincipalId,
+    repositoryPath: group.repositoryPath,
+    gitSshKeyPath: group.gitSshKeyPath,
+    localPrincipalId: identity.principalId,
+    localClientId: identity.clientId,
+    localCredentialId: identity.credentialId,
+    eventPrivateKeyPath: identity.privateKeyPath,
+    eventPublicKey: identity.publicKey,
+    eventFingerprint: identity.fingerprint,
+  });
+  target.store.saveVerifiedProjection({
+    groupId: group.groupId,
+    verifiedHead: history.head,
+    projection: history.projection,
+    eventRecords: history.eventRecords,
+  });
+}
+
+async function initializeThenLoseAfterLocalReplacement(
+  observerAccess: 'allowed' | 'members_only',
+) {
+  const transport = new GatedReinitializeMemoryTransport();
+  let failFirstCleanup = true;
+  const firstOwner = service(tempDirectory(), transport, ALICE, undefined, {
+    deleteCredentialIdentity: async () => {
+      if (failFirstCleanup) {
+        failFirstCleanup = false;
+        throw new Error('simulated Credential cleanup interruption');
+      }
+      return true;
+    },
+  });
+  const old = await firstOwner.service.createGroup({
+    remoteUrl: `/tmp/local-replaced-${observerAccess}.git`,
+    name: `Local replaced ${observerAccess}`,
+    displayName: 'Alice',
+    clientDisplayName: 'Alice MacBook',
+    membershipPolicy: 'approval',
+    observerAccess,
+    groupId: `group_local_replaced_${observerAccess}`,
+  });
+  const original = await transport.inspect({ remoteUrl: old.remoteUrl });
+  const secondOwner = service(tempDirectory(), transport, ALICE);
+  registerOwnerSnapshot(secondOwner, old, original, ALICE);
+
+  const gate = transport.pauseNextReinitialize();
+  const winningInitialization = secondOwner.service.initializeGroup(
+    old.groupId,
+  );
+  await gate.started;
+  await expect(firstOwner.service.initializeGroup(old.groupId)).rejects.toThrow(
+    /local replacement is pending/u,
+  );
+  const pending = firstOwner.store.listGroupInitializations()[0]!;
+  expect(pending.phase).toBe('local_replaced');
+  expect(firstOwner.store.getGroup(pending.newGroupId)).not.toBeNull();
+  expect(
+    firstOwner.store.getLocalGroupBinding(pending.newGroupId),
+  ).toMatchObject({ bindingState: 'attached' });
+  expect(
+    firstOwner.service.getCachedHistory(pending.newGroupId),
+  ).not.toBeNull();
+
+  gate.release();
+  const winner = await winningInitialization;
+  expect(winner.groupId).not.toBe(old.groupId);
+  expect(winner.groupId).not.toBe(pending.newGroupId);
+  return { firstOwner, secondOwner, old, pending, winner };
 }
 
 async function withServiceApi(
@@ -512,6 +709,709 @@ describe('Collaboration project space v3 Group and identity service', () => {
       /roleClaims|owner_role/u,
     );
     local.store.close();
+  });
+
+  it('initializes an Owner Group as a new identity and removes every old local row', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize.git',
+      name: 'Initialize project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'invite_only',
+      observerAccess: 'members_only',
+      groupId: 'group_initialize_old',
+    });
+    await owner.service.issueInvite({
+      groupId: old.groupId,
+      inviteId: 'invite_old',
+      expectedRevision: 0,
+    });
+    await owner.service.createWorkItem({
+      groupId: old.groupId,
+      workItemId: 'work_old',
+      type: 'task',
+      title: 'Old work',
+    });
+    await owner.service.createDiscussion({
+      groupId: old.groupId,
+      threadId: 'thread_old',
+      title: 'Old discussion',
+      scope: { type: 'group' },
+    });
+    await owner.service.proposeWorkflowDefinition({
+      groupId: old.groupId,
+      definitionId: 'old_delivery',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Old delivery',
+      launchPolicy: {
+        group_admin: true,
+        work_item_owner: false,
+        principals: [],
+      },
+      machine: DELIVERY_MACHINE,
+      layout: DELIVERY_LAYOUT,
+    });
+    owner.store.addLocalAuditEvidence({
+      groupId: old.groupId,
+      evidenceType: 'old-evidence',
+      resourceType: 'group',
+      resourceId: old.groupId,
+      evidence: { old: true },
+    });
+
+    const initialized = await owner.service.initializeGroup(old.groupId);
+
+    expect(initialized).toMatchObject({
+      remoteUrl: old.remoteUrl,
+      repositoryPath: old.repositoryPath,
+      gitSshKeyPath: old.gitSshKeyPath,
+      subscriptionMode: 'member',
+      name: old.name,
+    });
+    expect(initialized.groupId).not.toBe(old.groupId);
+    expect(initialized.localPrincipalId).not.toBe(old.localPrincipalId);
+    expect(initialized.localClientId).not.toBe(old.localClientId);
+    expect(initialized.localCredentialId).not.toBe(old.localCredentialId);
+    expect(initialized.projection?.group).toMatchObject({
+      control_branch: 'refs/heads/icarus/control',
+      membership_policy: { join: 'invite_only' },
+      visibility_policy: { observer_access: 'members_only' },
+    });
+    expect(initialized.projection).toMatchObject({
+      invites: {},
+      recoveryRequests: {},
+      executors: {},
+      progressUpdates: {},
+      files: {},
+      artifacts: {},
+      actions: {},
+      workItems: {},
+      discussions: {},
+      workflowDefinitions: {},
+      workflowInstances: {},
+      turns: {},
+      activity: [expect.objectContaining({ eventType: 'group_initialized' })],
+    });
+    expect(owner.store.listEventRecords(initialized.groupId)).toHaveLength(1);
+    expect(owner.store.getGroup(old.groupId)).toBeNull();
+    expect(owner.store.listGroupInitializations()).toEqual([]);
+    const database = owner.store.rawDatabaseForTests();
+    const groupTables = (
+      database
+        .prepare(
+          `SELECT DISTINCT m.name
+             FROM sqlite_master m, pragma_table_info(m.name) p
+            WHERE m.type = 'table' AND p.name = 'group_id'`,
+        )
+        .all() as Array<{ name: string }>
+    ).map((row) => row.name);
+    for (const table of groupTables)
+      expect(
+        (
+          database
+            .prepare(
+              `SELECT count(*) AS count FROM ${table} WHERE group_id = ?`,
+            )
+            .get(old.groupId) as { count: number }
+        ).count,
+        table,
+      ).toBe(0);
+    owner.store.close();
+  });
+
+  it('rejects Member and Observer attempts to initialize through the Service boundary', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-auth.git',
+      name: 'Initialize auth',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_auth',
+    });
+    const member = service(tempDirectory(), transport, BOB);
+    await member.service.joinGroup({
+      remoteUrl: '/tmp/initialize-auth.git',
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    const observer = service(tempDirectory(), transport, BOB);
+    await observer.service.observeGroup({
+      remoteUrl: '/tmp/initialize-auth.git',
+    });
+
+    await expect(
+      member.service.initializeGroup('group_initialize_auth'),
+    ).rejects.toThrow(/Only the current Group Owner/u);
+    await expect(
+      observer.service.initializeGroup('group_initialize_auth'),
+    ).rejects.toThrow(/Only the current Group Owner/u);
+    expect(
+      transport.histories.get('/tmp/initialize-auth.git')?.projection.groupId,
+    ).toBe('group_initialize_auth');
+    owner.store.close();
+    member.store.close();
+    observer.store.close();
+  });
+
+  it('allows the current active Owner identity to initialize an archived Group', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-archived.git',
+      name: 'Initialize archived',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_archived',
+    });
+    const archived = await owner.service.archiveGroup(
+      old.groupId,
+      'Archive before rebuilding',
+      1,
+    );
+    expect(archived.lifecycle).toBe('archived');
+
+    const initialized = await owner.service.initializeGroup(old.groupId);
+
+    expect(initialized.groupId).not.toBe(old.groupId);
+    expect(initialized.lifecycle).toBe('active');
+    expect(owner.store.getGroup(old.groupId)).toBeNull();
+    expect(transport.reinitializeCount).toBe(1);
+    owner.store.close();
+  });
+
+  it('syncs authorization and rejects an Owner device revoked by remote recovery without force push', async () => {
+    const transport = new MemoryTransport();
+    const staleOwner = service(tempDirectory(), transport, ALICE);
+    const old = await staleOwner.service.createGroup({
+      remoteUrl: '/tmp/initialize-stale-owner.git',
+      name: 'Stale Owner authorization',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_stale_owner',
+    });
+    const original = await transport.inspect({ remoteUrl: old.remoteUrl });
+    const approvingOwner = service(tempDirectory(), transport, ALICE);
+    registerOwnerSnapshot(approvingOwner, old, original, ALICE);
+    const recoveredIdentity = {
+      ...ALICE,
+      clientId: 'client_alice_recovered',
+      credentialId: 'credential_alice_recovered',
+    };
+    const recovering = service(tempDirectory(), transport, recoveredIdentity);
+    await recovering.service.observeGroup({ remoteUrl: old.remoteUrl });
+    const request = await recovering.service.requestIdentityRecovery({
+      groupId: old.groupId,
+      targetPrincipalId: ALICE.principalId,
+      type: 'owner_recovery',
+      clientDisplayName: 'Alice recovered device',
+      reason: 'The previous Owner device must no longer write',
+    });
+    const pending = await approvingOwner.service.sync(old.groupId);
+    const revision =
+      pending.projection.aggregateHeads[`recovery:${request.requestId}`]!
+        .revision;
+    await approvingOwner.service.decideRecovery({
+      groupId: old.groupId,
+      requestId: request.requestId,
+      expectedRevision: revision,
+      decision: 'approve',
+      reason: 'Verified recovered Owner identity',
+    });
+    expect(
+      transport.histories.get(old.remoteUrl)?.projection.credentials[
+        ALICE.principalId
+      ]?.[ALICE.credentialId],
+    ).toMatchObject({ status: 'revoked' });
+
+    const forcePushesBefore = transport.reinitializeCount;
+    await expect(
+      staleOwner.service.initializeGroup(old.groupId),
+    ).rejects.toThrow(/Only the current Group Owner/u);
+    expect(transport.reinitializeCount).toBe(forcePushesBefore);
+    expect(
+      staleOwner.store.getGroup(old.groupId)?.projection?.credentials[
+        ALICE.principalId
+      ]?.[ALICE.credentialId],
+    ).toMatchObject({ status: 'revoked' });
+    staleOwner.store.close();
+    approvingOwner.store.close();
+    recovering.store.close();
+  });
+
+  it('keeps the old local Group on force-push rejection and recovers a pushed rewrite', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-recovery.git',
+      name: 'Initialize recovery',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'approval',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_recovery',
+    });
+    transport.rejectReinitialize = true;
+    await expect(owner.service.initializeGroup(old.groupId)).rejects.toThrow(
+      /force-push rejection/u,
+    );
+    expect(owner.store.getGroup(old.groupId)?.lastVerifiedHead).toBe(
+      old.lastVerifiedHead,
+    );
+    expect(owner.store.listGroupInitializations()).toEqual([]);
+
+    transport.rejectReinitialize = false;
+    transport.failRefreshAfterReinitialize = true;
+    await expect(owner.service.initializeGroup(old.groupId)).rejects.toThrow(
+      /local replacement is pending/u,
+    );
+    expect(owner.store.getGroup(old.groupId)).not.toBeNull();
+    expect(owner.store.listGroupInitializations()).toHaveLength(1);
+    const [recovered] = await owner.service.recoverInterruptedInitializations();
+    expect(recovered?.groupId).not.toBe(old.groupId);
+    expect(owner.store.getGroup(old.groupId)).toBeNull();
+    expect(owner.store.listGroupInitializations()).toEqual([]);
+    owner.store.close();
+  });
+
+  it('cleans the reserved event Credential when recovery Credential creation fails', async () => {
+    const deletedCredentialIds: string[] = [];
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE, undefined, {
+      createCredentialIdentity: async (input) => {
+        if (input.principalId !== ALICE.principalId)
+          throw new Error('recovery Credential creation failed');
+        return {
+          ...ALICE,
+          credentialId: `${ALICE.credentialId}_recovery`,
+          purpose: 'group_recovery',
+        };
+      },
+      deleteCredentialIdentity: async (credentialId) => {
+        deletedCredentialIds.push(credentialId);
+        return true;
+      },
+    });
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-recovery-identity-failure.git',
+      name: 'Recovery identity failure',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_recovery_identity_failure',
+    });
+
+    await expect(owner.service.initializeGroup(old.groupId)).rejects.toThrow(
+      /recovery Credential creation failed/u,
+    );
+
+    expect(owner.store.getGroup(old.groupId)).not.toBeNull();
+    expect(owner.store.listGroupInitializations()).toEqual([]);
+    expect(deletedCredentialIds).toHaveLength(2);
+    expect(
+      deletedCredentialIds.every((credentialId) =>
+        /^credential_[0-9a-f-]{36}$/u.test(credentialId),
+      ),
+    ).toBe(true);
+    expect(transport.reinitializeCount).toBe(0);
+    owner.store.close();
+  });
+
+  it('cleans both generated Credentials when initialization materialization fails', async () => {
+    const deletedCredentialIds: string[] = [];
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE, undefined, {
+      deleteCredentialIdentity: async (credentialId) => {
+        deletedCredentialIds.push(credentialId);
+        return true;
+      },
+    });
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-begin-failure.git',
+      name: 'Begin initialization failure',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_begin_failure',
+    });
+    vi.spyOn(owner.store, 'beginGroupInitialization').mockImplementationOnce(
+      () => {
+        throw new Error('begin initialization failed');
+      },
+    );
+
+    await expect(owner.service.initializeGroup(old.groupId)).rejects.toThrow(
+      /begin initialization failed/u,
+    );
+
+    expect(owner.store.getGroup(old.groupId)).not.toBeNull();
+    expect(owner.store.listGroupInitializations()).toEqual([]);
+    expect(deletedCredentialIds).toHaveLength(2);
+    expect(transport.reinitializeCount).toBe(0);
+    owner.store.close();
+  });
+
+  it('retains cleanup responsibility when generated Credential deletion fails', async () => {
+    let rejectDeletion = true;
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE, undefined, {
+      deleteCredentialIdentity: async () => {
+        if (rejectDeletion) throw new Error('Credential directory is busy');
+        return true;
+      },
+    });
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-cleanup-retry.git',
+      name: 'Initialization cleanup retry',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_cleanup_retry',
+    });
+    vi.spyOn(owner.store, 'beginGroupInitialization').mockImplementationOnce(
+      () => {
+        throw new Error('begin initialization failed');
+      },
+    );
+
+    await expect(owner.service.initializeGroup(old.groupId)).rejects.toThrow(
+      /generated Credential cleanup remains pending/u,
+    );
+    expect(owner.store.listGroupInitializations()).toEqual([
+      expect.objectContaining({
+        oldGroupId: old.groupId,
+        phase: 'prepared',
+      }),
+    ]);
+    expect(owner.store.getGroup(old.groupId)).not.toBeNull();
+    expect(transport.reinitializeCount).toBe(0);
+
+    rejectDeletion = false;
+    await expect(
+      owner.service.recoverInterruptedInitializations(),
+    ).resolves.toEqual([]);
+    expect(owner.store.listGroupInitializations()).toEqual([]);
+    expect(owner.store.getGroup(old.groupId)).not.toBeNull();
+    owner.store.close();
+  });
+
+  it('recovers as an Observer when another Owner force push wins later', async () => {
+    const transport = new MemoryTransport();
+    const firstOwner = service(tempDirectory(), transport, ALICE);
+    const old = await firstOwner.service.createGroup({
+      remoteUrl: '/tmp/initialize-concurrent.git',
+      name: 'Concurrent initialization',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_concurrent',
+    });
+    const secondOwner = service(tempDirectory(), transport, ALICE);
+    await secondOwner.service.observeGroup({ remoteUrl: old.remoteUrl });
+    secondOwner.store.updateLocalIdentity({
+      groupId: old.groupId,
+      subscriptionMode: 'member',
+      localPrincipalId: ALICE.principalId,
+      localClientId: ALICE.clientId,
+      localCredentialId: ALICE.credentialId,
+      eventPrivateKeyPath: ALICE.privateKeyPath,
+      eventPublicKey: ALICE.publicKey,
+      eventFingerprint: ALICE.fingerprint,
+    });
+
+    transport.failRefreshAfterReinitialize = true;
+    const [firstResult, secondResult] = await Promise.allSettled([
+      firstOwner.service.initializeGroup(old.groupId),
+      secondOwner.service.initializeGroup(old.groupId),
+    ]);
+    if (firstResult.status !== 'rejected')
+      throw new Error('The first initialization unexpectedly completed');
+    expect(firstResult.reason).toBeInstanceOf(Error);
+    expect((firstResult.reason as Error).message).toMatch(
+      /local replacement is pending/u,
+    );
+    if (secondResult.status !== 'fulfilled') throw secondResult.reason;
+    const [pending] = firstOwner.store.listGroupInitializations();
+    expect(pending?.phase).toBe('pushed');
+
+    const winner = secondResult.value;
+    expect(winner.groupId).not.toBe(old.groupId);
+    expect(winner.groupId).not.toBe(pending?.newGroupId);
+
+    const [recovered] =
+      await firstOwner.service.recoverInterruptedInitializations();
+    expect(recovered).toMatchObject({
+      groupId: winner.groupId,
+      remoteUrl: old.remoteUrl,
+      subscriptionMode: 'observer',
+      localPrincipalId: null,
+      localClientId: null,
+      localCredentialId: null,
+      recoveryCredentialId: null,
+    });
+    expect(firstOwner.store.getGroup(old.groupId)).toBeNull();
+    expect(firstOwner.store.getGroup(pending!.newGroupId)).toBeNull();
+    expect(firstOwner.store.listGroupInitializations()).toEqual([]);
+    firstOwner.store.close();
+    secondOwner.store.close();
+  });
+
+  it('does not subscribe the losing initializer to a members-only winner', async () => {
+    const transport = new MemoryTransport();
+    const firstOwner = service(tempDirectory(), transport, ALICE);
+    const old = await firstOwner.service.createGroup({
+      remoteUrl: '/tmp/initialize-concurrent-private.git',
+      name: 'Concurrent private initialization',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'approval',
+      observerAccess: 'members_only',
+      groupId: 'group_initialize_concurrent_private',
+    });
+    const original = await transport.inspect({ remoteUrl: old.remoteUrl });
+    const secondOwner = service(tempDirectory(), transport, ALICE);
+    registerOwnerSnapshot(secondOwner, old, original, ALICE);
+
+    transport.failRefreshAfterReinitialize = true;
+    const [firstResult, secondResult] = await Promise.allSettled([
+      firstOwner.service.initializeGroup(old.groupId),
+      secondOwner.service.initializeGroup(old.groupId),
+    ]);
+    if (firstResult.status !== 'rejected')
+      throw new Error('The first initialization unexpectedly completed');
+    if (secondResult.status !== 'fulfilled') throw secondResult.reason;
+    const [pending] = firstOwner.store.listGroupInitializations();
+    const winner = secondResult.value;
+    expect(winner.projection?.group.visibility_policy.observer_access).toBe(
+      'members_only',
+    );
+
+    const recovered =
+      await firstOwner.service.recoverInterruptedInitializations();
+    expect(recovered).toEqual([]);
+    expect(firstOwner.store.getGroup(old.groupId)).toBeNull();
+    expect(firstOwner.store.getGroup(pending!.newGroupId)).toBeNull();
+    expect(firstOwner.store.getGroup(winner.groupId)).toBeNull();
+    expect(firstOwner.store.listGroups()).toEqual([]);
+    expect(firstOwner.store.listGroupInitializations()).toEqual([]);
+    expect(firstOwner.service.getCachedHistory(old.groupId)).toBeNull();
+    expect(firstOwner.service.getCachedHistory(winner.groupId)).toBeNull();
+    await expect(firstOwner.service.sync(winner.groupId)).rejects.toThrow(
+      /Group not found/u,
+    );
+    firstOwner.store.close();
+    secondOwner.store.close();
+  });
+
+  it('removes an abandoned locally replaced Group before observing the later winner', async () => {
+    const { firstOwner, secondOwner, old, pending, winner } =
+      await initializeThenLoseAfterLocalReplacement('allowed');
+
+    const [recovered] =
+      await firstOwner.service.recoverInterruptedInitializations();
+    expect(recovered).toMatchObject({
+      groupId: winner.groupId,
+      subscriptionMode: 'observer',
+      localPrincipalId: null,
+      localCredentialId: null,
+    });
+    expect(firstOwner.store.getGroup(old.groupId)).toBeNull();
+    expect(firstOwner.store.getLocalGroupBinding(old.groupId)).toBeNull();
+    expect(firstOwner.store.getGroup(pending.newGroupId)).toBeNull();
+    expect(
+      firstOwner.store.getLocalGroupBinding(pending.newGroupId),
+    ).toBeNull();
+    expect(firstOwner.service.getCachedHistory(old.groupId)).toBeNull();
+    expect(firstOwner.service.getCachedHistory(pending.newGroupId)).toBeNull();
+    expect(firstOwner.store.getGroup(winner.groupId)).toMatchObject({
+      subscriptionMode: 'observer',
+    });
+    expect(firstOwner.store.listGroupInitializations()).toEqual([]);
+    firstOwner.store.close();
+    secondOwner.store.close();
+  });
+
+  it('removes an abandoned locally replaced Group without subscribing to a members-only winner', async () => {
+    const { firstOwner, secondOwner, old, pending, winner } =
+      await initializeThenLoseAfterLocalReplacement('members_only');
+
+    await expect(
+      firstOwner.service.recoverInterruptedInitializations(),
+    ).resolves.toEqual([]);
+    expect(firstOwner.store.getGroup(old.groupId)).toBeNull();
+    expect(firstOwner.store.getLocalGroupBinding(old.groupId)).toBeNull();
+    expect(firstOwner.store.getGroup(pending.newGroupId)).toBeNull();
+    expect(
+      firstOwner.store.getLocalGroupBinding(pending.newGroupId),
+    ).toBeNull();
+    expect(firstOwner.store.getGroup(winner.groupId)).toBeNull();
+    expect(firstOwner.store.getLocalGroupBinding(winner.groupId)).toBeNull();
+    expect(firstOwner.store.listGroups()).toEqual([]);
+    expect(firstOwner.service.getCachedHistory(old.groupId)).toBeNull();
+    expect(firstOwner.service.getCachedHistory(pending.newGroupId)).toBeNull();
+    expect(firstOwner.service.getCachedHistory(winner.groupId)).toBeNull();
+    expect(firstOwner.store.listGroupInitializations()).toEqual([]);
+    firstOwner.store.close();
+    secondOwner.store.close();
+  });
+
+  it('continues recovering later initialization operations when the first remains unavailable', async () => {
+    const transport = new MemoryTransport();
+    let nowMs = Date.parse('2026-08-06T12:00:00.000Z');
+    const owner = service(tempDirectory(), transport, ALICE, () => nowMs++);
+    const first = await owner.service.createGroup({
+      remoteUrl: '/tmp/recover-first-pending.git',
+      name: 'First pending',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_recover_first_pending',
+    });
+    const second = await owner.service.createGroup({
+      remoteUrl: '/tmp/recover-second-pending.git',
+      name: 'Second pending',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_recover_second_pending',
+    });
+
+    transport.failRefreshAfterReinitialize = true;
+    await expect(owner.service.initializeGroup(first.groupId)).rejects.toThrow(
+      /local replacement is pending/u,
+    );
+    transport.failRefreshAfterReinitialize = true;
+    await expect(owner.service.initializeGroup(second.groupId)).rejects.toThrow(
+      /local replacement is pending/u,
+    );
+    const operations = owner.store.listGroupInitializations();
+    const firstOperation = operations.find(
+      (operation) => operation.oldGroupId === first.groupId,
+    )!;
+    const secondOperation = operations.find(
+      (operation) => operation.oldGroupId === second.groupId,
+    )!;
+    transport.refreshAfterReinitializeErrors.set(
+      first.remoteUrl,
+      new Error('first remote remains unavailable'),
+    );
+
+    await expect(
+      owner.service.recoverInterruptedInitializations(),
+    ).rejects.toThrow(/1 Collaboration Group initialization recovery/u);
+    expect(owner.store.listGroupInitializations()).toEqual([
+      expect.objectContaining({ operationId: firstOperation.operationId }),
+    ]);
+    expect(owner.store.getGroup(first.groupId)).not.toBeNull();
+    expect(owner.store.getGroup(firstOperation.newGroupId)).toBeNull();
+    expect(owner.store.getGroup(second.groupId)).toBeNull();
+    expect(owner.store.getGroup(secondOperation.newGroupId)).toMatchObject({
+      subscriptionMode: 'member',
+    });
+    owner.store.close();
+  });
+
+  it('does not delete a Credential retained by another local Group binding', async () => {
+    const transport = new MemoryTransport();
+    const deletedCredentialIds: string[] = [];
+    const owner = service(tempDirectory(), transport, ALICE, undefined, {
+      deleteCredentialIdentity: async (credentialId) => {
+        deletedCredentialIds.push(credentialId);
+        return true;
+      },
+    });
+    const initializedGroup = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-shared-credential.git',
+      name: 'Initialize shared Credential',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_shared_credential',
+    });
+    const retainedGroup = await owner.service.createGroup({
+      remoteUrl: '/tmp/retained-shared-credential.git',
+      name: 'Retained shared Credential',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_retained_shared_credential',
+    });
+    owner.store.detachLocalGroup({
+      groupId: retainedGroup.groupId,
+      reason: 'local_remove',
+    });
+    owner.store.completeLocalGroupCleanup(retainedGroup.groupId);
+
+    await owner.service.initializeGroup(initializedGroup.groupId);
+
+    expect(
+      owner.store.getLocalGroupBinding(retainedGroup.groupId),
+    ).toMatchObject({
+      bindingState: 'retained',
+      credentialId: ALICE.credentialId,
+      recoveryCredentialId: `${ALICE.credentialId}_recovery`,
+    });
+    expect(deletedCredentialIds).toEqual([]);
+    owner.store.close();
+  });
+
+  it('stops the old identity from writing after another device rewrites history', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-other-device.git',
+      name: 'Other device initialization',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_other_device',
+    });
+    const rewrite = new Error(
+      'The remote control history now belongs to a new Group; observe or join it',
+    );
+    rewrite.name = 'CollaborationProjectSpaceHistoryRewrittenError';
+    vi.spyOn(transport, 'inspect').mockRejectedValue(rewrite);
+
+    await expect(owner.service.sync('group_other_device')).rejects.toBe(
+      rewrite,
+    );
+    expect(owner.store.getGroup('group_other_device')).toMatchObject({
+      subscriptionMode: 'observer',
+      localPrincipalId: null,
+      localClientId: null,
+      localCredentialId: null,
+      protocolStatus: 'PROTOCOL_QUARANTINED',
+      protocolError: expect.stringMatching(/observe or join/u),
+    });
+    await expect(
+      owner.service.createWorkItem({
+        groupId: 'group_other_device',
+        workItemId: 'must_not_write',
+        type: 'task',
+        title: 'Must not write with the old identity',
+      }),
+    ).rejects.toThrow(/Observer subscriptions cannot issue/u);
+    expect(transport.appendCount).toBe(0);
+    owner.store.close();
   });
 
   it('keeps local state on remote dissolution failure and hides it before cleanup retry', async () => {

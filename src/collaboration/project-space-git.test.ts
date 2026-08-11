@@ -2,9 +2,11 @@ import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -1170,6 +1172,278 @@ process.exit(result.status === null ? 1 : result.status);
       expect(
         retired.projection?.workflowDefinitions['delivery@1'].definition.status,
       ).toBe('retired');
+    } finally {
+      store.close();
+    }
+  }, 30_000);
+
+  it('unconditionally rewrites control to one validated Genesis and leaves unrelated refs untouched', async () => {
+    const test = fixture();
+    const logPath = path.join(test.root, 'git-initialize.jsonl');
+    const wrapperPath = path.join(test.root, 'git-initialize.cjs');
+    const realGit = run(test.root, ['which', 'git']);
+    writeFileSync(
+      wrapperPath,
+      `#!/usr/bin/env node
+const { appendFileSync } = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(args) + '\\n');
+const result = spawnSync(${JSON.stringify(realGit)}, args, {
+  env: process.env,
+  stdio: 'inherit',
+});
+if (result.error) throw result.error;
+process.exit(result.status === null ? 1 : result.status);
+`,
+      { mode: 0o700 },
+    );
+    chmodSync(wrapperPath, 0o700);
+    const storeDirectory = path.join(test.root, 'store');
+    const store = new CollaborationProjectSpaceStore(
+      path.join(storeDirectory, 'collaboration.db'),
+    );
+    const identities = new CollaborationProjectSpaceIdentityService(
+      storeDirectory,
+      test.identity.privateKeyPath,
+    );
+    const transport = new CollaborationProjectSpaceGitTransport(wrapperPath);
+    const service = new CollaborationProjectSpaceService(
+      store,
+      transport,
+      path.join(storeDirectory, 'repositories'),
+      identities,
+      () => Date.parse(NOW),
+    );
+    try {
+      const old = await service.createGroup({
+        remoteUrl: test.remote,
+        name: 'Signed project',
+        gitSshKeyPath: test.identity.privateKeyPath,
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'approval',
+        observerAccess: 'allowed',
+        groupId: 'group_signed',
+      });
+      run(test.remote, [
+        'git',
+        'update-ref',
+        'refs/heads/unrelated',
+        old.lastVerifiedHead!,
+      ]);
+      run(test.remote, [
+        'git',
+        'update-ref',
+        'refs/tags/keep-history',
+        old.lastVerifiedHead!,
+      ]);
+      await service.createWorkItem({
+        groupId: old.groupId,
+        workItemId: 'confirmation_race',
+        type: 'task',
+        title: 'Written after confirmation',
+      });
+      const oldCredentialIds = [
+        old.localCredentialId!,
+        old.recoveryCredentialId!,
+      ];
+      for (const credentialId of oldCredentialIds)
+        expect(
+          existsSync(path.join(identities.credentialDirectory, credentialId)),
+        ).toBe(true);
+      const competingHead = run(test.remote, [
+        'git',
+        'rev-parse',
+        'refs/heads/icarus/control',
+      ]);
+
+      const initialized = await service.initializeGroup(old.groupId);
+      const newHead = run(test.remote, [
+        'git',
+        'rev-parse',
+        'refs/heads/icarus/control',
+      ]);
+      const remoteHistory = await transport.inspect({
+        remoteUrl: test.remote,
+        repositoryPath: initialized.repositoryPath,
+        gitSshKeyPath: test.identity.privateKeyPath,
+      });
+
+      expect(initialized.remoteUrl).toBe(old.remoteUrl);
+      expect(initialized.groupId).not.toBe(old.groupId);
+      expect(initialized.localPrincipalId).not.toBe(old.localPrincipalId);
+      expect(initialized.localClientId).not.toBe(old.localClientId);
+      expect(initialized.localCredentialId).not.toBe(old.localCredentialId);
+      expect(remoteHistory).toMatchObject({
+        head: newHead,
+        projection: {
+          groupId: initialized.groupId,
+          workItems: {},
+          workflowInstances: {},
+          turns: {},
+          activity: [
+            expect.objectContaining({ eventType: 'group_initialized' }),
+          ],
+        },
+        eventRecords: [
+          expect.objectContaining({
+            commitHash: newHead,
+            commitOrder: 1,
+          }),
+        ],
+      });
+      expect(
+        run(test.remote, ['git', 'rev-list', '--parents', '-n', '1', newHead]),
+      ).toBe(newHead);
+      expect(
+        run(test.remote, [
+          'git',
+          'rev-list',
+          '--count',
+          'refs/heads/icarus/control',
+        ]),
+      ).toBe('1');
+      expect(
+        run(test.remote, [
+          'git',
+          'for-each-ref',
+          '--format=%(refname) %(objectname)',
+          'refs/heads/icarus',
+        ]),
+      ).toBe(`refs/heads/icarus/control ${newHead}`);
+      expect(
+        run(initialized.repositoryPath, [
+          'git',
+          'for-each-ref',
+          '--format=%(refname) %(objectname)',
+          'refs/heads/icarus',
+          'refs/remotes/origin/icarus',
+        ]),
+      ).toBe(
+        [
+          `refs/heads/icarus/control ${newHead}`,
+          `refs/remotes/origin/icarus/control ${newHead}`,
+        ].join('\n'),
+      );
+      expect(
+        run(initialized.repositoryPath, [
+          'git',
+          'rev-list',
+          '--count',
+          'icarus/control',
+        ]),
+      ).toBe('1');
+      expect(
+        run(test.remote, ['git', 'rev-parse', 'refs/heads/unrelated']),
+      ).toBe(old.lastVerifiedHead);
+      expect(
+        run(test.remote, ['git', 'rev-parse', 'refs/tags/keep-history']),
+      ).toBe(old.lastVerifiedHead);
+      expect(competingHead).not.toBe(newHead);
+      expect(() =>
+        execFileSync('git', ['cat-file', '-e', competingHead], {
+          cwd: initialized.repositoryPath,
+          stdio: 'ignore',
+        }),
+      ).toThrow();
+      const commands = readFileSync(logPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as string[]);
+      expect(commands).toContainEqual([
+        'push',
+        'origin',
+        '+HEAD:refs/heads/icarus/control',
+      ]);
+      expect(commands.flat()).not.toContain('--force-with-lease');
+      for (const credentialId of oldCredentialIds)
+        expect(
+          existsSync(path.join(identities.credentialDirectory, credentialId)),
+        ).toBe(false);
+      for (const credentialId of [
+        initialized.localCredentialId!,
+        initialized.recoveryCredentialId!,
+      ])
+        expect(
+          existsSync(path.join(identities.credentialDirectory, credentialId)),
+        ).toBe(true);
+      expect(existsSync(test.identity.privateKeyPath)).toBe(true);
+    } finally {
+      store.close();
+    }
+  }, 30_000);
+
+  it('preserves the complete old local Group when the Git server rejects force push', async () => {
+    const test = fixture();
+    const storeDirectory = path.join(test.root, 'rejected-store');
+    const store = new CollaborationProjectSpaceStore(
+      path.join(storeDirectory, 'collaboration.db'),
+    );
+    const identities = new CollaborationProjectSpaceIdentityService(
+      storeDirectory,
+      test.identity.privateKeyPath,
+    );
+    const service = new CollaborationProjectSpaceService(
+      store,
+      new CollaborationProjectSpaceGitTransport(),
+      path.join(storeDirectory, 'repositories'),
+      identities,
+      () => Date.parse(NOW),
+    );
+    try {
+      const old = await service.createGroup({
+        remoteUrl: test.remote,
+        name: 'Protected project',
+        gitSshKeyPath: test.identity.privateKeyPath,
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'open',
+        observerAccess: 'allowed',
+        groupId: 'group_protected',
+      });
+      await service.createWorkItem({
+        groupId: old.groupId,
+        workItemId: 'must_survive',
+        type: 'task',
+        title: 'Must survive rejection',
+      });
+      const oldHead = store.getGroup(old.groupId)!.lastVerifiedHead!;
+      const credentialRoot = identities.credentialDirectory;
+      const credentialsBefore = readdirSync(credentialRoot).sort();
+      const hooks = path.join(test.remote, 'hooks');
+      mkdirSync(hooks, { recursive: true });
+      writeFileSync(
+        path.join(hooks, 'pre-receive'),
+        `#!/bin/sh
+while read old new ref; do
+  if [ "$ref" = "refs/heads/icarus/control" ] && [ "$old" != "0000000000000000000000000000000000000000" ]; then
+    echo "force push prohibited" >&2
+    exit 1
+  fi
+done
+exit 0
+`,
+        { mode: 0o700 },
+      );
+
+      await expect(service.initializeGroup(old.groupId)).rejects.toThrow(
+        /force push was rejected by the Git server|force push prohibited/u,
+      );
+
+      expect(run(test.remote, ['git', 'rev-parse', 'icarus/control'])).toBe(
+        oldHead,
+      );
+      expect(store.getGroup(old.groupId)).toMatchObject({
+        groupId: old.groupId,
+        lastVerifiedHead: oldHead,
+        projection: {
+          workItems: { must_survive: expect.any(Object) },
+        },
+      });
+      expect(store.listGroupInitializations()).toEqual([]);
+      expect(readdirSync(credentialRoot).sort()).toEqual(credentialsBefore);
+      expect(existsSync(test.identity.privateKeyPath)).toBe(true);
     } finally {
       store.close();
     }
