@@ -29,6 +29,8 @@ import {
 import {
   collaborationPermissionSchema,
   machineDefinitionV3Schema,
+  memberNotificationScopeV3Schema,
+  principalIdSchema,
   workflowLayoutSchema,
   workItemStatusSchema,
 } from './protocol/v3-schema.js';
@@ -1276,6 +1278,34 @@ export class CollaborationWebApi {
       url.pathname,
       new RegExp(`^${API_PREFIX}/groups/([^/]+)/notifications$`, 'u'),
     );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            notificationId: identifier.optional(),
+            recipientPrincipalIds: z.array(principalIdSchema).min(1).max(100),
+            bodyMarkdown: z
+              .string()
+              .min(1)
+              .max(64_000)
+              .refine((value) => value.trim().length > 0),
+            scope: memberNotificationScopeV3Schema,
+            executorId: identifier.nullable().optional(),
+            origin: z.enum(['human', 'agent', 'workflow']).optional(),
+          })
+          .strict(),
+      );
+      send(res, 201, {
+        group: publicGroup(
+          await this.runtime.groups.sendMemberNotification({
+            groupId: found[1]!,
+            ...body,
+          }),
+        ),
+      });
+      return true;
+    }
     if (found && method === 'GET') {
       const group = this.runtime.store.getGroup(found[1]!);
       if (!group) throw new Error('Collaboration Group not found');
@@ -2059,6 +2089,14 @@ export class CollaborationWebApi {
           .object({
             threadId: identifier.optional(),
             title: z.string().min(1),
+            body: z
+              .string()
+              .min(1)
+              .max(64_000)
+              .refine((value) => value.trim().length > 0)
+              .optional(),
+            mentions: z.array(principalIdSchema).max(100).optional(),
+            refs: z.array(z.string()).max(100).optional(),
             scope: z.union([
               z.object({ type: z.literal('group') }).strict(),
               z
@@ -2073,10 +2111,18 @@ export class CollaborationWebApi {
       );
       send(res, 201, {
         group: publicGroup(
-          await this.runtime.groups.createDiscussion({
-            groupId: found[1]!,
-            ...body,
-          }),
+          await (body.body
+            ? this.runtime.groups.createDiscussionWithMessage({
+                groupId: found[1]!,
+                ...body,
+                body: body.body,
+              })
+            : this.runtime.groups.createDiscussion({
+                groupId: found[1]!,
+                threadId: body.threadId,
+                title: body.title,
+                scope: body.scope,
+              })),
         ),
       });
       return true;

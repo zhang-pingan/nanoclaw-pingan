@@ -587,6 +587,57 @@ process.exit(128);
         expect.stringMatching(/^events\/members\/.+\/00000001-/u),
         expect.stringMatching(/^events\/members\/.+\/00000002-/u),
       ]);
+
+      await owner.sync('group_signed');
+      const sent = await owner.sendMemberNotification({
+        groupId: 'group_signed',
+        notificationId: 'notification_materialized',
+        recipientPrincipalIds: [bobIdentity.principalId],
+        bodyMarkdown: 'Review the signed **notification**.',
+        scope: { type: 'group', ref: 'group_signed' },
+      });
+      expect(
+        sent.projection?.notifications.notification_materialized,
+      ).toMatchObject({
+        recipient_principal_ids: [bobIdentity.principalId],
+        body_markdown: 'Review the signed **notification**.',
+      });
+      await bob.sync('group_signed');
+      const received = bobStore.getGroup('group_signed');
+      if (!received) throw new Error('Bob synced Group is missing');
+      const notificationFiles = run(received.repositoryPath, [
+        'git',
+        'ls-tree',
+        '-r',
+        '--name-only',
+        received.lastVerifiedHead!,
+      ]).split('\n');
+      expect(notificationFiles).toEqual(
+        expect.arrayContaining([
+          'notifications/notification_materialized/notification.json',
+          'projections/notifications/notification_materialized.json',
+        ]),
+      );
+      expect(
+        notificationFiles.some((file) =>
+          file.startsWith(
+            'events/notifications/notification_materialized/00000001-',
+          ),
+        ),
+      ).toBe(true);
+      expect(
+        bobStore.listPendingNotifications({
+          groupId: 'group_signed',
+          principalId: bobIdentity.principalId,
+          clientId: bobIdentity.clientId,
+        }),
+      ).toEqual([
+        expect.objectContaining({
+          kind: 'member_communication',
+          resourceType: 'group',
+          resourceId: 'group_signed',
+        }),
+      ]);
     } finally {
       ownerStore.close();
       bobStore.close();

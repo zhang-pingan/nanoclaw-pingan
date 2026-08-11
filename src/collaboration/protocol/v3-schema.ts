@@ -45,6 +45,10 @@ export function collaborationCredentialFingerprintV3(
     .replace(/=+$/u, '')}`;
 }
 
+export function collaborationContentHashV3(contents: string | Buffer): string {
+  return `sha256:${crypto.createHash('sha256').update(contents).digest('hex')}`;
+}
+
 export const collaborationRelativePathSchema = z
   .string()
   .min(1)
@@ -666,6 +670,62 @@ export const discussionMessageSchema = z
   .strict();
 export type DiscussionMessage = z.infer<typeof discussionMessageSchema>;
 
+export const memberNotificationScopeV3Schema = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('group'),
+      ref: collaborationIdentifierSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.enum([
+        'work_item',
+        'discussion',
+        'workflow_definition',
+        'workflow_instance',
+        'turn',
+        'file',
+      ]),
+      ref: collaborationIdentifierSchema,
+    })
+    .strict(),
+]);
+export type MemberNotificationScopeV3 = z.infer<
+  typeof memberNotificationScopeV3Schema
+>;
+
+export const memberNotificationV3Schema = z
+  .object({
+    format: z.literal('icarus.collaboration-member-notification/1'),
+    notification_id: collaborationIdentifierSchema,
+    sender_principal_id: principalIdSchema,
+    recipient_principal_ids: z.array(principalIdSchema).min(1).max(100),
+    body_markdown: z
+      .string()
+      .min(1)
+      .max(64_000)
+      .refine((body) => body.trim().length > 0, 'message body cannot be blank'),
+    body_sha256: collaborationSha256Schema,
+    scope: memberNotificationScopeV3Schema,
+    actor_client_id: clientIdSchema,
+    executor_id: collaborationIdentifierSchema.nullable().default(null),
+    origin: actorOriginSchema,
+    created_at: collaborationIsoTimeSchema,
+    extensions: extensionsSchema,
+  })
+  .strict()
+  .refine(
+    (notification) =>
+      new Set(notification.recipient_principal_ids).size ===
+      notification.recipient_principal_ids.length,
+    {
+      path: ['recipient_principal_ids'],
+      message: 'notification recipients must be unique',
+    },
+  );
+export type MemberNotificationV3 = z.infer<typeof memberNotificationV3Schema>;
+
 export const timeoutPolicyV3Schema = z
   .object({
     start_timeout_ms: z.number().int().positive().nullable().default(null),
@@ -1215,6 +1275,7 @@ export const collaborationAggregateTypeSchema = z.enum([
   'workspace',
   'work_item',
   'discussion',
+  'notification',
   'workflow_definition',
   'workflow_instance',
 ]);
@@ -1271,6 +1332,7 @@ export const collaborationEventTypesV3 = [
   'message_tombstoned',
   'discussion_resolved',
   'discussion_reopened',
+  'member_notified',
   'workflow_definition_proposed',
   'workflow_definition_published',
   'workflow_definition_retired',

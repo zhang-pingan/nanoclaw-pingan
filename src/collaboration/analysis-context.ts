@@ -38,6 +38,8 @@ export function buildCollaborationAnalysisResourceCatalog(
     for (const [id, message] of Object.entries(entry.messages))
       catalog[`message:${id}`] = message;
   }
+  for (const [id, notification] of Object.entries(projection.notifications))
+    catalog[`notification:${id}`] = notification;
   for (const [id, instance] of Object.entries(projection.workflowInstances)) {
     const definition =
       projection.workflowDefinitions[
@@ -257,6 +259,10 @@ function aggregateResourceRef(
     case 'discussion':
       return projection.discussions[aggregateId]
         ? `discussion:${aggregateId}`
+        : null;
+    case 'notification':
+      return projection.notifications[aggregateId]
+        ? `notification:${aggregateId}`
         : null;
     case 'workflow_instance':
       return projection.workflowInstances[aggregateId]

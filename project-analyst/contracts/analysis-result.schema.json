@@ -132,7 +132,7 @@
               "type": "string",
               "minLength": 3,
               "maxLength": 1200,
-              "pattern": "^(?:work_item|workflow_instance|turn|discussion|message|event|file|principal|recovery|group):[^\\s]+$"
+              "pattern": "^(?:work_item|workflow_instance|turn|discussion|message|notification|event|file|principal|recovery|group):[^\\s]+$"
             }
           },
           "evidence_refs": {
@@ -143,7 +143,7 @@
               "type": "string",
               "minLength": 3,
               "maxLength": 1200,
-              "pattern": "^(?:work_item|workflow_instance|turn|discussion|message|event|file|principal|recovery|group):[^\\s]+$"
+              "pattern": "^(?:work_item|workflow_instance|turn|discussion|message|notification|event|file|principal|recovery|group):[^\\s]+$"
             }
           },
           "recommendations": {
@@ -515,7 +515,7 @@
                             "type": "string",
                             "minLength": 3,
                             "maxLength": 1200,
-                            "pattern": "^(?:work_item|workflow_instance|turn|discussion|message|event|file|principal|recovery|group):[^\\s]+$"
+                            "pattern": "^(?:work_item|workflow_instance|turn|discussion|message|notification|event|file|principal|recovery|group):[^\\s]+$"
                           }
                         },
                         "mentions": {

@@ -9,6 +9,7 @@ import {
   clientDefinitionSchema,
   collaborationActionResultV3Schema,
   collaborationGroupSelfDescriptionSchema,
+  collaborationContentHashV3,
   credentialDefinitionSchema,
   collaborationEventV3Schema,
   collaborationIdentifierSchema,
@@ -23,6 +24,7 @@ import {
   inviteDefinitionV3Schema,
   machineDefinitionV3Schema,
   memberDefinitionV3Schema,
+  memberNotificationV3Schema,
   permissionGrantSchema,
   progressUpdateSchema,
   recoveryRequestSchema,
@@ -51,6 +53,7 @@ import {
   type InviteDefinitionV3,
   type MachineDefinitionV3,
   type MemberDefinitionV3,
+  type MemberNotificationV3,
   type PermissionGrant,
   type ProgressUpdate,
   type RecoveryRequest,
@@ -232,6 +235,9 @@ const messagePayloadSchema = z
 const messageIdPayloadSchema = z
   .object({ message_id: id, reason: z.string().max(4000).default('') })
   .strict();
+const memberNotificationPayloadSchema = z
+  .object({ notification: memberNotificationV3Schema })
+  .strict();
 const workflowDefinitionPayloadSchema = z
   .object({
     definition: workflowDefinitionSchema,
@@ -381,6 +387,7 @@ const payloadSchemas: Record<CollaborationEventTypeV3, z.ZodType> = {
   message_tombstoned: messageIdPayloadSchema,
   discussion_resolved: emptyPayloadSchema,
   discussion_reopened: emptyPayloadSchema,
+  member_notified: memberNotificationPayloadSchema,
   workflow_definition_proposed: workflowDefinitionPayloadSchema,
   workflow_definition_published: workflowDefinitionPayloadSchema,
   workflow_definition_retired: reasonPayloadSchema,
@@ -454,6 +461,7 @@ export interface CollaborationProjectionV3 {
   workItems: Record<string, WorkItem>;
   workItemUpdates: Record<string, WorkItemProgress[]>;
   discussions: Record<string, DiscussionProjectionV3>;
+  notifications: Record<string, MemberNotificationV3>;
   workflowDefinitions: Record<string, WorkflowDefinitionProjectionV3>;
   latestWorkflowDefinitionVersions: Record<string, number>;
   workflowInstances: Record<string, WorkflowInstance>;
@@ -1091,6 +1099,7 @@ function reduceGenesis(event: CollaborationEventV3): CollaborationProjectionV3 {
     workItems: {},
     workItemUpdates: {},
     discussions: {},
+    notifications: {},
     workflowDefinitions: {},
     latestWorkflowDefinitionVersions: {},
     workflowInstances: {},
@@ -2245,6 +2254,56 @@ export function reduceCollaborationEventV3(
       thread.discussion.resolved_at =
         event.event_type === 'discussion_resolved' ? event.occurred_at : null;
       thread.discussion.revision = event.aggregate_revision;
+      break;
+    }
+    case 'member_notified': {
+      const { notification } = memberNotificationPayloadSchema.parse(payload);
+      if (
+        event.aggregate_type !== 'notification' ||
+        notification.notification_id !== event.aggregate_id ||
+        event.aggregate_revision !== 1 ||
+        next.notifications[notification.notification_id]
+      )
+        conflict('Member Notification genesis is invalid');
+      if (
+        notification.sender_principal_id !== event.actor.principal_id ||
+        notification.actor_client_id !== event.actor.client_id ||
+        notification.executor_id !== event.actor.executor_id ||
+        notification.created_at !== event.occurred_at
+      )
+        conflict('Member Notification source does not match its event actor');
+      if (
+        !hasCollaborationPermissionV3(
+          next,
+          event.actor.principal_id,
+          'notification:send',
+        )
+      )
+        unauthorized('Actor cannot notify Group members');
+      if (
+        notification.recipient_principal_ids.includes(event.actor.principal_id)
+      )
+        conflict('Member Notifications cannot target their sender');
+      assertActivePrincipals(next, notification.recipient_principal_ids);
+      if (
+        collaborationContentHashV3(notification.body_markdown) !==
+        notification.body_sha256
+      )
+        conflict('Member Notification Markdown hash does not match its body');
+      const { scope } = notification;
+      const scopeExists =
+        (scope.type === 'group' && scope.ref === next.groupId) ||
+        (scope.type === 'work_item' && Boolean(next.workItems[scope.ref])) ||
+        (scope.type === 'discussion' && Boolean(next.discussions[scope.ref])) ||
+        (scope.type === 'workflow_definition' &&
+          Boolean(next.latestWorkflowDefinitionVersions[scope.ref])) ||
+        (scope.type === 'workflow_instance' &&
+          Boolean(next.workflowInstances[scope.ref])) ||
+        (scope.type === 'turn' && Boolean(next.turns[scope.ref])) ||
+        (scope.type === 'file' && Boolean(next.files[scope.ref]));
+      if (!scopeExists)
+        conflict('Member Notification scope does not exist in the Group');
+      next.notifications[notification.notification_id] = notification;
       break;
     }
     case 'workflow_definition_proposed':

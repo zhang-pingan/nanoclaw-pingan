@@ -30,6 +30,7 @@ import {
   buildCollaborationAssignmentDecisionRequest,
   buildCollaborationCompleteTurnRequest,
   buildCollaborationDiscussionMessageRequest,
+  buildCollaborationMemberNotificationRequest,
   buildCollaborationReasonRequest,
   buildCollaborationActionMutationRequest,
   buildCollaborationExecutorRegistrationRequest,
@@ -63,11 +64,13 @@ import {
   collaborationDiscussionMessageActionAllowed,
   collaborationEligibleTurnExecutors,
   collaborationElapsed,
+  collaborationFileById,
   collaborationFindingActionDraft,
   collaborationFindingActionTypes,
   collaborationIsObserver,
   collaborationLocalMembershipStatus,
   collaborationLocalCredential,
+  collaborationNotificationScope,
   collaborationOutcomeRoutes,
   collaborationOwnedActions,
   collaborationPrincipalName,
@@ -219,6 +222,70 @@ function field(label, name, value = '', options = {}) {
   return `<label class="collaboration-field"><span>${html(label)}</span>${control}${options.hint ? `<small>${html(options.hint)}</small>` : ''}</label>`;
 }
 
+function collaborationActiveNotificationMembers(group) {
+  return Object.values(group?.projection?.members || {})
+    .filter(
+      (member) =>
+        member.status === 'active' &&
+        member.principal_id !== group.localPrincipalId,
+    )
+    .sort(
+      (left, right) =>
+        left.display_name.localeCompare(right.display_name) ||
+        left.principal_id.localeCompare(right.principal_id),
+    );
+}
+
+function memberPicker(group, options = {}) {
+  const members = collaborationActiveNotificationMembers(group);
+  const selected = new Set(options.selected || []);
+  const name = options.name || 'recipientPrincipalIds';
+  return `<fieldset class="collaboration-member-picker" data-member-picker><legend>${html(options.legend || '选择成员')}</legend><div class="collaboration-member-picker-tools"><label><span class="sr-only">搜索成员</span><input type="search" placeholder="搜索名称或短 ID" data-member-picker-search></label><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-member-picker-action="all">全选</button><button type="button" class="btn-ghost" data-member-picker-action="clear">清除</button></div></div><div class="collaboration-member-picker-list">${members
+    .map(
+      (member) =>
+        `<label data-member-picker-option data-member-search="${attr(`${member.display_name} ${collaborationShortId(member.principal_id)}`.toLowerCase())}"><input type="checkbox" name="${attr(name)}" value="${attr(member.principal_id)}" ${selected.has(member.principal_id) ? 'checked' : ''}><span><strong>${html(member.display_name)}</strong><small>${html(collaborationShortId(member.principal_id))}</small></span></label>`,
+    )
+    .join('') || empty('没有可选择的 Active Member')}</div><small class="collaboration-member-picker-count" data-member-picker-count></small></fieldset>`;
+}
+
+function bindMemberPicker(root) {
+  root.querySelectorAll('[data-member-picker]').forEach((picker) => {
+    const options = [...picker.querySelectorAll('[data-member-picker-option]')];
+    const count = picker.querySelector('[data-member-picker-count]');
+    const updateCount = () => {
+      const selected = options.filter(
+        (option) => option.querySelector('input')?.checked,
+      ).length;
+      if (count) count.textContent = `已选择 ${selected} / ${options.length}`;
+    };
+    picker
+      .querySelector('[data-member-picker-search]')
+      ?.addEventListener('input', (event) => {
+        const query = String(event.target.value || '')
+          .trim()
+          .toLowerCase();
+        options.forEach((option) =>
+          option.classList.toggle(
+            'hidden',
+            Boolean(query && !option.dataset.memberSearch.includes(query)),
+          ),
+        );
+      });
+    picker.addEventListener('click', (event) => {
+      const action = event.target.closest('[data-member-picker-action]')
+        ?.dataset.memberPickerAction;
+      if (!action) return;
+      options.forEach((option) => {
+        const input = option.querySelector('input');
+        if (input) input.checked = action === 'all';
+      });
+      updateCount();
+    });
+    picker.addEventListener('change', updateCount);
+    updateCount();
+  });
+}
+
 function metric(label, value, tone = '') {
   return `<div class="collaboration-metric ${tone}"><span>${html(label)}</span><strong>${html(value)}</strong></div>`;
 }
@@ -255,6 +322,7 @@ function renderTreeNode(node) {
 export function createCollaborationWorkspace(options) {
   const state = options.state;
   state.selectedAnalysisId ||= '';
+  state.selectedFileId ||= '';
   state.overviewOnlyMine ??= false;
   state.overviewRiskOnly ??= false;
   state.notificationSeverity ||= '';
@@ -269,6 +337,7 @@ export function createCollaborationWorkspace(options) {
     title: document.getElementById('collaboration-title'),
     lifecycle: document.getElementById('collaboration-lifecycle'),
     meta: document.getElementById('collaboration-detail-meta'),
+    notify: document.getElementById('collaboration-notify-btn'),
     content: document.getElementById('collaboration-content'),
     dialog: document.getElementById('collaboration-dialog'),
     dialogForm: document.getElementById('collaboration-dialog-form'),
@@ -422,6 +491,7 @@ export function createCollaborationWorkspace(options) {
     elements.title.textContent = group.name;
     elements.lifecycle.className = `collaboration-status ${statusTone(group.lifecycle)}`;
     elements.lifecycle.textContent = collaborationStatusLabel(group.lifecycle);
+    elements.notify?.classList.toggle('hidden', !groupAction('notifyMembers'));
     const membershipStatus = collaborationLocalMembershipStatus(group);
     elements.meta.innerHTML = `<span>${html(group.groupId)}</span><span>${html(group.subscriptionMode === 'member' ? `成员 · ${collaborationStatusLabel(membershipStatus)}` : '观察者')}</span><span>${html(collaborationStatusLabel(group.protocolStatus))}</span><span>${html(localDate(group.lastSyncAtMs))}</span>`;
     elements.tabs.forEach((button) =>
@@ -499,10 +569,22 @@ export function createCollaborationWorkspace(options) {
     ].sort();
     return `<div class="collaboration-filter-row"><label><span>严重程度</span><select data-collaboration-change="notification-severity"><option value="">全部</option>${['critical', 'high', 'medium', 'low', 'info'].map((value) => `<option value="${value}" ${state.notificationSeverity === value ? 'selected' : ''}>${html(collaborationLabel(value))}</option>`).join('')}</select></label><label><span>资源</span><select data-collaboration-change="notification-resource"><option value="">全部</option>${resourceTypes.map((value) => `<option value="${attr(value)}" ${state.notificationResourceType === value ? 'selected' : ''}>${html(collaborationLabel(value))}</option>`).join('')}</select></label></div><div class="collaboration-record-list">${
       visible
-        .map(
-          (entry) =>
-            `<article class="collaboration-record collaboration-notification ${entry.readAtMs ? 'read' : ''}"><button type="button" class="collaboration-record-main collaboration-record-link" data-collaboration-action="open-notification" data-notification-id="${attr(entry.notificationId)}" data-resource-type="${attr(entry.resourceType)}" data-resource-id="${attr(entry.resourceId)}"><span class="collaboration-record-title"><strong>${html(collaborationLabel(entry.kind))}</strong>${status(entry.severity)}</span><p>${html(collaborationLabel(entry.reason))}</p><small>${html(localDate(entry.updatedAtMs))} · ${html(collaborationLabel(entry.resourceType))}${entry.payload?.status || entry.payload?.current_status || entry.payload?.state ? ` · ${html(collaborationStatusLabel(entry.payload.status || entry.payload.current_status || entry.payload.state))}` : ''}</small></button><div class="collaboration-record-actions">${entry.readAtMs ? '' : `<button type="button" class="btn-ghost" data-collaboration-action="read-notification" data-notification-id="${attr(entry.notificationId)}">已读</button>`}<button type="button" class="btn-ghost" data-collaboration-action="handle-notification" data-notification-id="${attr(entry.notificationId)}">处理</button></div></article>`,
-        )
+        .map((entry) => {
+          const communication = entry.kind === 'member_communication';
+          const sender = communication
+            ? collaborationPrincipalName(
+                selectedGroup()?.projection,
+                entry.payload?.sender_principal_id,
+              )
+            : '';
+          const title = communication
+            ? `${sender} ${entry.reason === 'mentioned' ? '@了你' : '通知了你'}`
+            : collaborationLabel(entry.kind);
+          const message = communication
+            ? entry.payload?.body_markdown || ''
+            : collaborationLabel(entry.reason);
+          return `<article class="collaboration-record collaboration-notification ${entry.readAtMs ? 'read' : ''}"><button type="button" class="collaboration-record-main collaboration-record-link" data-collaboration-action="open-notification" data-notification-id="${attr(entry.notificationId)}" data-resource-type="${attr(entry.resourceType)}" data-resource-id="${attr(entry.resourceId)}"><span class="collaboration-record-title"><strong>${html(title)}</strong>${status(entry.severity)}</span><p class="${communication ? 'collaboration-markdown-body' : ''}">${html(message)}</p><small>${html(localDate(entry.updatedAtMs))} · ${html(collaborationLabel(entry.resourceType))}${entry.payload?.status || entry.payload?.current_status || entry.payload?.state ? ` · ${html(collaborationStatusLabel(entry.payload.status || entry.payload.current_status || entry.payload.state))}` : ''}</small></button><div class="collaboration-record-actions">${entry.readAtMs ? '' : `<button type="button" class="btn-ghost" data-collaboration-action="read-notification" data-notification-id="${attr(entry.notificationId)}">已读</button>`}<button type="button" class="btn-ghost" data-collaboration-action="handle-notification" data-notification-id="${attr(entry.notificationId)}">处理</button></div></article>`;
+        })
         .join('') || empty('没有未处理通知')
     }</div>`;
   };
@@ -699,7 +781,7 @@ export function createCollaborationWorkspace(options) {
         selected.discussion.thread_id,
         statusAction,
       );
-      return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-discussion">返回</button><div class="collaboration-record-actions">${canChangeStatus ? `<button type="button" class="btn-ghost" data-collaboration-action="${statusAction}-discussion">${statusAction === 'resolve' ? '标记为已解决' : '重新打开'}</button>` : ''}${canPost ? '<button type="button" class="btn-primary" data-collaboration-action="new-message">回复</button>' : ''}</div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(selected.discussion.title)}</h3>${status(selected.discussion.status)}</div><div class="collaboration-discussion-stream">${
+      return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-discussion">返回</button><div class="collaboration-record-actions">${canChangeStatus ? `<button type="button" class="btn-ghost" data-collaboration-action="${statusAction}-discussion">${statusAction === 'resolve' ? '解决讨论' : '重新打开'}</button>` : ''}${canPost ? '<button type="button" class="btn-primary" data-collaboration-action="new-message">回复</button>' : ''}</div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(selected.discussion.title)}</h3>${status(selected.discussion.status)}</div>${selected.discussion.status === 'resolved' ? '<div class="collaboration-discussion-state"><strong>讨论已解决</strong><span>重新打开后才可回复或编辑消息。</span></div>' : ''}<div class="collaboration-discussion-stream">${
         messages
           .map((message) => {
             const canRevise = collaborationDiscussionMessageActionAllowed(
@@ -714,7 +796,7 @@ export function createCollaborationWorkspace(options) {
               message.message_id,
               'tombstone',
             );
-            return `<article><header><strong>${html(collaborationPrincipalName(group.projection, message.author_principal_id))}</strong><small>${html(timestamp(message.updated_at || message.created_at))}</small></header><p>${message.tombstoned ? '<em>消息已移除</em>' : html(message.body)}</p>${canRevise || canTombstone ? `<div class="collaboration-record-actions">${canRevise ? `<button type="button" class="btn-ghost" data-collaboration-action="revise-message" data-message-id="${attr(message.message_id)}">修改</button>` : ''}${canTombstone ? `<button type="button" class="btn-danger-soft" data-collaboration-action="tombstone-message" data-message-id="${attr(message.message_id)}">移除</button>` : ''}</div>` : ''}</article>`;
+            return `<article><header><strong>${html(collaborationPrincipalName(group.projection, message.author_principal_id))}</strong><small>${html(timestamp(message.updated_at || message.created_at))}</small></header><p class="collaboration-markdown-body">${message.tombstoned ? '<em>消息已删除</em>' : html(message.body)}</p>${canRevise || canTombstone ? `<div class="collaboration-record-actions">${canRevise ? `<button type="button" class="btn-ghost" data-collaboration-action="revise-message" data-message-id="${attr(message.message_id)}">编辑</button>` : ''}${canTombstone ? `<button type="button" class="btn-danger-soft" data-collaboration-action="tombstone-message" data-message-id="${attr(message.message_id)}">删除</button>` : ''}</div>` : ''}</article>`;
           })
           .join('') || empty('暂无消息')
       }</div></section>`;
@@ -1038,6 +1120,32 @@ export function createCollaborationWorkspace(options) {
     )();
   };
 
+  const previewFile = async (file) => {
+    if (!file?.repositoryPath) return false;
+    const group = selectedGroup();
+    const url = options.fileUrl(
+      `/api/collaboration/groups/${encodeURIComponent(group.groupId)}/files/content?path=${encodeURIComponent(file.repositoryPath)}`,
+    );
+    const textMedia = /^(?:text\/|application\/(?:json|xml))/u.test(
+      file.metadata?.media_type || '',
+    );
+    let text = '';
+    if (textMedia) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('File content is unavailable');
+      text = await response.text();
+    }
+    state.selectedFileId = file.metadata?.file_id || '';
+    state.filePreview = {
+      fileId: state.selectedFileId,
+      name: file.virtualPath || file.repositoryPath,
+      mediaType: file.metadata?.media_type,
+      url,
+      text,
+    };
+    return true;
+  };
+
   const loadTabData = async () => {
     const groupId = state.selectedGroupId;
     if (!groupId) return;
@@ -1074,6 +1182,22 @@ export function createCollaborationWorkspace(options) {
         `/groups/${encodeURIComponent(groupId)}/files`,
       );
       state.tabData.files = data.files || [];
+      if (state.selectedFileId) {
+        const selected = collaborationFileById(
+          state.tabData.files,
+          state.selectedFileId,
+        );
+        state.selectedFileId = '';
+        state.filePreview = null;
+        if (selected) {
+          try {
+            await previewFile(selected);
+          } catch {
+            state.filePreview = null;
+            options.showToast('目标文件不可用，已返回文件列表');
+          }
+        }
+      }
     } else if (state.activeTab === 'members')
       state.tabData.members = await options.request(
         `/groups/${encodeURIComponent(groupId)}/members`,
@@ -1178,6 +1302,50 @@ export function createCollaborationWorkspace(options) {
     }
     await loadDetail(groupId, false);
     options.showToast('群组同步完成');
+  };
+
+  const notificationScopeLabel = (group, scope) => {
+    const projection = group.projection;
+    const labels = {
+      group: group.name,
+      work_item: projection.workItems?.[scope.ref]?.title,
+      discussion: projection.discussions?.[scope.ref]?.discussion?.title,
+      workflow_definition:
+        projection.workflowDefinitions?.[
+          `${scope.ref}@${projection.latestWorkflowDefinitionVersions?.[scope.ref]}`
+        ]?.definition?.name,
+      workflow_instance: scope.ref,
+      turn: projection.turns?.[scope.ref]?.state_id,
+      file: projection.files?.[scope.ref]?.original_filename,
+    };
+    return `${collaborationLabel(scope.type)} · ${labels[scope.type] || collaborationShortId(scope.ref)}`;
+  };
+
+  const openNotificationComposer = () => {
+    const group = selectedGroup();
+    const members = collaborationActiveNotificationMembers(group);
+    if (!members.length) throw new Error('群组中没有其他 Active Member');
+    const scope = collaborationNotificationScope(group, state);
+    openDialog({
+      title: '通知成员',
+      submitText: '发送通知',
+      body: `<div class="collaboration-form-grid collaboration-form-grid-single"><div class="collaboration-context-summary"><span>通知上下文</span><strong>${html(notificationScopeLabel(group, scope))}</strong></div>${memberPicker(group, { legend: '接收成员' })}${field('Markdown 消息', 'bodyMarkdown', '', { multiline: true, hint: '消息会随签名事件写入群组 Git 历史。' })}</div>`,
+      onOpen: () => bindMemberPicker(elements.dialogBody),
+      onSubmit: async (formData) => {
+        const request = buildCollaborationMemberNotificationRequest({
+          recipientPrincipalIds: formData.getAll('recipientPrincipalIds'),
+          bodyMarkdown: formData.get('bodyMarkdown'),
+          scope,
+        });
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/notifications`,
+          { method: 'POST', body: JSON.stringify(request) },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+        options.showToast(`已通知 ${request.recipientPrincipalIds.length} 名成员`);
+      },
+    });
   };
 
   const openCreate = () =>
@@ -2017,24 +2185,54 @@ export function createCollaborationWorkspace(options) {
     });
   };
 
+  const submitDiscussionMutation = async (groupId, operation) => {
+    try {
+      await operation();
+    } catch (error) {
+      if (/revision conflict|stale/iu.test(String(error))) {
+        await loadDetail(groupId, false);
+        throw new Error('讨论已在其他客户端更新，页面已刷新；请核对后重试');
+      }
+      throw error;
+    }
+    closeDialog();
+    await loadDetail(groupId, false);
+  };
+
   const newDiscussion = () => {
     const group = selectedGroup();
+    const canPost = groupAction('postDiscussion');
     openDialog({
       title: '新建讨论',
-      body: field('标题', 'title'),
+      submitText: '创建讨论',
+      body: `<div class="collaboration-form-grid collaboration-form-grid-single">${field('标题', 'title')}${canPost ? `${field('首条消息（可选）', 'body', '', { multiline: true, required: false })}${memberPicker(group, { name: 'mentions', legend: '@成员（可选）' })}` : ''}</div>`,
+      onOpen: () => {
+        if (canPost) bindMemberPicker(elements.dialogBody);
+      },
       onSubmit: async (formData) => {
-        await options.request(
-          `/groups/${encodeURIComponent(group.groupId)}/discussions`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              title: formData.get('title'),
-              scope: { type: 'group' },
-            }),
-          },
+        const body = String(formData.get('body') || '').trim();
+        const request = {
+          title: formData.get('title'),
+          scope: { type: 'group' },
+        };
+        if (canPost && body) {
+          const message = buildCollaborationDiscussionMessageRequest({
+            expectedRevision: 0,
+            body,
+            mentions: formData.getAll('mentions'),
+          });
+          request.body = message.body;
+          request.mentions = message.mentions;
+        }
+        await submitDiscussionMutation(group.groupId, () =>
+          options.request(
+            `/groups/${encodeURIComponent(group.groupId)}/discussions`,
+            {
+              method: 'POST',
+              body: JSON.stringify(request),
+            },
+          ),
         );
-        closeDialog();
-        await loadDetail(group.groupId, false);
       },
     });
   };
@@ -2042,32 +2240,31 @@ export function createCollaborationWorkspace(options) {
   const newMessage = () => {
     const group = selectedGroup();
     const thread = group.projection.discussions[state.selectedDiscussionId];
-    const members = Object.values(group.projection?.members || {}).filter(
-      (member) => member.status === 'active',
-    );
     openDialog({
       title: '回复讨论',
-      body: `<div class="collaboration-form-grid collaboration-form-grid-single">${field('消息内容', 'body', '', { multiline: true })}<fieldset class="collaboration-mention-picker"><legend>提及成员</legend>${members.map((member) => `<label><input type="checkbox" name="mentions" value="${attr(member.principal_id)}"><span>${html(member.display_name)}</span><small>${html(collaborationShortId(member.principal_id))}</small></label>`).join('') || empty('没有可提及的成员')}</fieldset></div>`,
+      submitText: '发布回复',
+      body: `<div class="collaboration-form-grid collaboration-form-grid-single">${field('Markdown 消息', 'body', '', { multiline: true })}${memberPicker(group, { name: 'mentions', legend: '@成员（可选）' })}</div>`,
+      onOpen: () => bindMemberPicker(elements.dialogBody),
       onSubmit: async (formData) => {
-        await options.request(
-          `/groups/${encodeURIComponent(group.groupId)}/discussions/${encodeURIComponent(state.selectedDiscussionId)}/messages`,
-          {
-            method: 'POST',
-            body: JSON.stringify(
-              buildCollaborationDiscussionMessageRequest({
-                expectedRevision: aggregateRevision(
-                  group.projection,
-                  'discussion',
-                  thread.discussion.thread_id,
-                ),
-                body: formData.get('body'),
-                mentions: formData.getAll('mentions'),
-              }),
-            ),
-          },
+        await submitDiscussionMutation(group.groupId, () =>
+          options.request(
+            `/groups/${encodeURIComponent(group.groupId)}/discussions/${encodeURIComponent(state.selectedDiscussionId)}/messages`,
+            {
+              method: 'POST',
+              body: JSON.stringify(
+                buildCollaborationDiscussionMessageRequest({
+                  expectedRevision: aggregateRevision(
+                    group.projection,
+                    'discussion',
+                    thread.discussion.thread_id,
+                  ),
+                  body: formData.get('body'),
+                  mentions: formData.getAll('mentions'),
+                }),
+              ),
+            },
+          ),
         );
-        closeDialog();
-        await loadDetail(group.groupId, false);
       },
     });
   };
@@ -2077,29 +2274,31 @@ export function createCollaborationWorkspace(options) {
     const thread = group.projection.discussions[state.selectedDiscussionId];
     const message = thread.messages[messageId];
     openDialog({
-      title: '修改消息',
-      body: field('消息内容', 'body', message.body, { multiline: true }),
+      title: '编辑消息',
+      submitText: '保存修改',
+      body: `<div class="collaboration-form-grid collaboration-form-grid-single">${field('Markdown 消息', 'body', message.body, { multiline: true })}${memberPicker(group, { name: 'mentions', legend: '@成员（可选）', selected: message.mentions || [] })}</div>`,
+      onOpen: () => bindMemberPicker(elements.dialogBody),
       onSubmit: async (formData) => {
-        await options.request(
-          `/groups/${encodeURIComponent(group.groupId)}/discussions/${encodeURIComponent(thread.discussion.thread_id)}/messages/${encodeURIComponent(messageId)}`,
-          {
-            method: 'PATCH',
-            body: JSON.stringify(
-              buildCollaborationDiscussionMessageRequest({
-                expectedRevision: aggregateRevision(
-                  group.projection,
-                  'discussion',
-                  thread.discussion.thread_id,
-                ),
-                body: formData.get('body'),
-                mentions: message.mentions || [],
-                refs: message.refs || [],
-              }),
-            ),
-          },
+        await submitDiscussionMutation(group.groupId, () =>
+          options.request(
+            `/groups/${encodeURIComponent(group.groupId)}/discussions/${encodeURIComponent(thread.discussion.thread_id)}/messages/${encodeURIComponent(messageId)}`,
+            {
+              method: 'PATCH',
+              body: JSON.stringify(
+                buildCollaborationDiscussionMessageRequest({
+                  expectedRevision: aggregateRevision(
+                    group.projection,
+                    'discussion',
+                    thread.discussion.thread_id,
+                  ),
+                  body: formData.get('body'),
+                  mentions: formData.getAll('mentions'),
+                  refs: message.refs || [],
+                }),
+              ),
+            },
+          ),
         );
-        closeDialog();
-        await loadDetail(group.groupId, false);
       },
     });
   };
@@ -2108,59 +2307,67 @@ export function createCollaborationWorkspace(options) {
     const group = selectedGroup();
     const thread = group.projection.discussions[state.selectedDiscussionId];
     openDialog({
-      title: '移除消息',
-      submitText: '确认移除',
+      title: '删除消息',
+      submitText: '确认删除',
       danger: true,
-      body: field('原因', 'reason', '', { multiline: true, required: false }),
+      body: `<p class="collaboration-muted-note">消息正文会被软删除，签名事件和审计历史仍会保留。</p>${field('删除原因（可选）', 'reason', '', { multiline: true, required: false })}`,
       onSubmit: async (formData) => {
-        await options.request(
-          `/groups/${encodeURIComponent(group.groupId)}/discussions/${encodeURIComponent(thread.discussion.thread_id)}/messages/${encodeURIComponent(messageId)}`,
-          {
-            method: 'DELETE',
-            body: JSON.stringify({
-              expectedRevision: aggregateRevision(
-                group.projection,
-                'discussion',
-                thread.discussion.thread_id,
-              ),
-              reason: String(formData.get('reason') || '').trim(),
-            }),
-          },
+        await submitDiscussionMutation(group.groupId, () =>
+          options.request(
+            `/groups/${encodeURIComponent(group.groupId)}/discussions/${encodeURIComponent(thread.discussion.thread_id)}/messages/${encodeURIComponent(messageId)}`,
+            {
+              method: 'DELETE',
+              body: JSON.stringify({
+                expectedRevision: aggregateRevision(
+                  group.projection,
+                  'discussion',
+                  thread.discussion.thread_id,
+                ),
+                reason: String(formData.get('reason') || '').trim(),
+              }),
+            },
+          ),
         );
-        closeDialog();
-        await loadDetail(group.groupId, false);
       },
     });
   };
 
-  const changeDiscussionStatus = async (resolved) => {
+  const changeDiscussionStatus = (resolved) => {
     const group = selectedGroup();
     const thread = group.projection.discussions[state.selectedDiscussionId];
-    await options.request(
-      `/groups/${encodeURIComponent(group.groupId)}/discussions/${encodeURIComponent(thread.discussion.thread_id)}/${resolved ? 'resolve' : 'reopen'}`,
-      {
-        method: 'POST',
-        body: JSON.stringify(
-          resolved
-            ? {
-                expectedRevision: aggregateRevision(
-                  group.projection,
-                  'discussion',
-                  thread.discussion.thread_id,
-                ),
-                resolved: true,
-              }
-            : {
-                expectedRevision: aggregateRevision(
-                  group.projection,
-                  'discussion',
-                  thread.discussion.thread_id,
-                ),
-              },
-        ),
+    openDialog({
+      title: resolved ? '解决讨论' : '重新打开讨论',
+      submitText: resolved ? '确认解决' : '确认重新打开',
+      body: `<p class="collaboration-muted-note">${resolved ? '解决后将停止回复和消息编辑；有后续事项时可以重新打开。' : '重新打开后，具备参与权限的成员可以继续回复和编辑自己的消息。'}</p>`,
+      onSubmit: async () => {
+        await submitDiscussionMutation(group.groupId, () =>
+          options.request(
+            `/groups/${encodeURIComponent(group.groupId)}/discussions/${encodeURIComponent(thread.discussion.thread_id)}/${resolved ? 'resolve' : 'reopen'}`,
+            {
+              method: 'POST',
+              body: JSON.stringify(
+                resolved
+                  ? {
+                      expectedRevision: aggregateRevision(
+                        group.projection,
+                        'discussion',
+                        thread.discussion.thread_id,
+                      ),
+                      resolved: true,
+                    }
+                  : {
+                      expectedRevision: aggregateRevision(
+                        group.projection,
+                        'discussion',
+                        thread.discussion.thread_id,
+                      ),
+                    },
+              ),
+            },
+          ),
+        );
       },
-    );
-    await loadDetail(group.groupId, false);
+    });
   };
 
   const uploadFile = () => {
@@ -3321,6 +3528,8 @@ export function createCollaborationWorkspace(options) {
     state.selectedDiscussionId = navigation.selectedDiscussionId || '';
     state.selectedInstanceId = navigation.selectedInstanceId || '';
     state.selectedAnalysisId = navigation.selectedAnalysisId || '';
+    state.selectedFileId = navigation.selectedFileId || '';
+    if (navigation.tab === 'files') state.filePreview = null;
     updateRoute();
     renderShell();
     await loadTabData();
@@ -3962,20 +4171,12 @@ export function createCollaborationWorkspace(options) {
       const indexed = (state.tabData.files || []).find(
         (file) => file.repositoryPath === path,
       );
-      const url = options.fileUrl(
-        `/api/collaboration/groups/${encodeURIComponent(group.groupId)}/files/content?path=${encodeURIComponent(path)}`,
-      );
-      const textMedia = /^(?:text\/|application\/(?:json|xml))/u.test(
-        indexed?.metadata?.media_type || '',
-      );
-      state.filePreview = {
-        name: indexed?.virtualPath || path,
-        mediaType: indexed?.metadata?.media_type,
-        url,
-        text: textMedia
-          ? await fetch(url).then((response) => response.text())
-          : '',
-      };
+      if (!indexed) {
+        state.selectedFileId = '';
+        state.filePreview = null;
+        return renderContent();
+      }
+      await previewFile(indexed);
       return renderContent();
     }
     if (action === 'new-workflow') return openWorkflowEditor();
@@ -4139,6 +4340,7 @@ export function createCollaborationWorkspace(options) {
     selectGroup,
     selectTab,
     syncSelected,
+    openNotificationComposer,
     openCreate,
     openObserve,
     handleAction,

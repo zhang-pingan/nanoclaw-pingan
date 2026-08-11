@@ -13,6 +13,7 @@ export const COLLABORATION_PERMISSIONS = [
   'discussion:create',
   'discussion:post',
   'discussion:moderate',
+  'notification:send',
   'workflow_definition:propose',
   'workflow_definition:publish',
   'workflow_instance:start_allowed',
@@ -43,6 +44,10 @@ const permissionDescriptions: Readonly<
   'discussion:create': ['创建讨论', '创建群组或资源讨论'],
   'discussion:post': ['参与讨论', '在开放讨论中发布消息'],
   'discussion:moderate': ['管理讨论', '解决讨论并移除不适用消息'],
+  'notification:send': [
+    '通知成员',
+    '向群组 Active Member 发送带资源上下文的消息',
+  ],
   'workflow_definition:propose': [
     '设计 Workflow',
     '创建和修改 Workflow Definition 提案',
@@ -98,6 +103,7 @@ export const COLLABORATION_PERMISSION_TEMPLATES = Object.freeze([
       'work_item:manage_owned',
       'discussion:create',
       'discussion:post',
+      'notification:send',
     ],
   },
   {
@@ -112,6 +118,7 @@ export const COLLABORATION_PERMISSION_TEMPLATES = Object.freeze([
       'work_item:manage_owned',
       'discussion:create',
       'discussion:post',
+      'notification:send',
     ],
   },
   {
@@ -128,6 +135,7 @@ export const COLLABORATION_PERMISSION_TEMPLATES = Object.freeze([
       'discussion:create',
       'discussion:post',
       'discussion:moderate',
+      'notification:send',
       'workflow_instance:start_allowed',
     ],
   },
@@ -142,6 +150,7 @@ export const COLLABORATION_PERMISSION_TEMPLATES = Object.freeze([
       'work_item:manage_owned',
       'discussion:create',
       'discussion:post',
+      'notification:send',
       'workflow_definition:propose',
       'workflow_definition:publish',
       'workflow_instance:start_allowed',

@@ -497,6 +497,37 @@ export function buildCollaborationDiscussionMessageRequest(input) {
   };
 }
 
+export function buildCollaborationMemberNotificationRequest(input) {
+  const bodyMarkdown = String(input.bodyMarkdown || '').trim();
+  if (!bodyMarkdown) throw new Error('通知内容不能为空');
+  const recipientPrincipalIds = collaborationUniqueIdentifiers(
+    input.recipientPrincipalIds || [],
+    100,
+    '通知成员',
+  );
+  if (!recipientPrincipalIds.length) throw new Error('请至少选择一名成员');
+  const scope = input.scope || {};
+  const scopeTypes = new Set([
+    'group',
+    'work_item',
+    'discussion',
+    'workflow_definition',
+    'workflow_instance',
+    'turn',
+    'file',
+  ]);
+  const type = String(scope.type || '').trim();
+  const ref = String(scope.ref || '').trim();
+  if (!scopeTypes.has(type) || !ref)
+    throw new Error('通知资源上下文无效，请刷新后重试');
+  return {
+    recipientPrincipalIds,
+    bodyMarkdown,
+    scope: { type, ref },
+    origin: 'human',
+  };
+}
+
 export function buildCollaborationWorkItemDetailsRequest(input) {
   const title = String(input.title || '').trim();
   if (!title) throw new Error('工作项标题不能为空');
@@ -1208,6 +1239,36 @@ export function collaborationPendingNotifications(detail) {
   );
 }
 
+export function collaborationNotificationScope(group, view = {}) {
+  const projection = group?.projection;
+  if (
+    view.activeTab === 'work-items' &&
+    projection?.workItems?.[view.selectedWorkItemId]
+  )
+    return { type: 'work_item', ref: view.selectedWorkItemId };
+  if (
+    view.activeTab === 'discussions' &&
+    projection?.discussions?.[view.selectedDiscussionId]
+  )
+    return { type: 'discussion', ref: view.selectedDiscussionId };
+  if (
+    view.activeTab === 'files' &&
+    view.filePreview?.fileId &&
+    projection?.files?.[view.filePreview.fileId]
+  )
+    return { type: 'file', ref: view.filePreview.fileId };
+  if (
+    view.activeTab === 'workflows' &&
+    projection?.workflowInstances?.[view.selectedInstanceId]
+  ) {
+    const instance = projection.workflowInstances[view.selectedInstanceId];
+    if (instance.active_turn_id && projection.turns?.[instance.active_turn_id])
+      return { type: 'turn', ref: instance.active_turn_id };
+    return { type: 'workflow_instance', ref: instance.instance_id };
+  }
+  return { type: 'group', ref: group?.groupId || projection?.groupId || '' };
+}
+
 export function collaborationResourceTarget(
   resourceType,
   resourceId,
@@ -1222,21 +1283,21 @@ export function collaborationResourceTarget(
       tab: 'work-items',
       resourceType: type,
       resourceId: id,
-      selectedWorkItemId: id,
+      selectedWorkItemId: projection?.workItems?.[id] ? id : '',
     };
   if (type === 'discussion')
     return {
       tab: 'discussions',
       resourceType: type,
       resourceId: id,
-      selectedDiscussionId: id,
+      selectedDiscussionId: projection?.discussions?.[id] ? id : '',
     };
   if (type === 'workflow_instance')
     return {
       tab: 'workflows',
       resourceType: type,
       resourceId: id,
-      selectedInstanceId: id,
+      selectedInstanceId: projection?.workflowInstances?.[id] ? id : '',
     };
   if (type === 'turn') {
     const turn = projection?.turns?.[id];
@@ -1255,7 +1316,12 @@ export function collaborationResourceTarget(
       selectedAnalysisId: id,
     };
   if (type === 'file')
-    return { tab: 'files', resourceType: type, resourceId: id };
+    return {
+      tab: 'files',
+      resourceType: type,
+      resourceId: id,
+      selectedFileId: projection?.files?.[id] ? id : '',
+    };
   if (type === 'event')
     return { tab: 'audit', resourceType: type, resourceId: id };
   if (type === 'message') {
@@ -1283,9 +1349,17 @@ export function collaborationResourceTarget(
     return { tab: 'members', resourceType: type, resourceId: id };
   if (type === 'principal')
     return { tab: 'members', resourceType: type, resourceId: id };
-  if (['protocol', 'integrity', 'sync', 'group'].includes(type))
+  if (type === 'group')
+    return { tab: 'overview', resourceType: type, resourceId: id };
+  if (['protocol', 'integrity', 'sync'].includes(type))
     return { tab: 'diagnostics', resourceType: type, resourceId: id };
   return { tab: 'overview', resourceType: type, resourceId: id };
+}
+
+export function collaborationFileById(files, fileId) {
+  const id = String(fileId || '').trim();
+  if (!id || !Array.isArray(files)) return null;
+  return files.find((file) => file?.metadata?.file_id === id) ?? null;
 }
 
 export function collaborationNotificationTarget(

@@ -42,6 +42,7 @@ import {
   actionDefinitionV3Schema,
   artifactMetadataV3Schema,
   collaborationBasenameSchema,
+  collaborationContentHashV3,
   clientDefinitionSchema,
   credentialDefinitionSchema,
   discussionMessageSchema,
@@ -49,6 +50,7 @@ import {
   executorDescriptorSchema,
   machineDefinitionV3Schema,
   memberDefinitionV3Schema,
+  memberNotificationV3Schema,
   permissionGrantSchema,
   recoveryRequestSchema,
   handoffEnvelopeV3Schema,
@@ -71,6 +73,7 @@ import {
   type FileMetadata,
   type MachineDefinitionV3,
   type MemberDefinitionV3,
+  type MemberNotificationScopeV3,
   type ObserverSubscription,
   type HandoffEnvelopeV3,
   type ExecutionModeV3,
@@ -2496,6 +2499,41 @@ export class CollaborationProjectSpaceService {
     });
   }
 
+  async sendMemberNotification(input: {
+    readonly groupId: string;
+    readonly notificationId?: string;
+    readonly recipientPrincipalIds: readonly string[];
+    readonly bodyMarkdown: string;
+    readonly scope: MemberNotificationScopeV3;
+    readonly executorId?: string | null;
+    readonly origin?: 'human' | 'agent' | 'workflow';
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const createdAt = new Date(this.now()).toISOString();
+    const notification = memberNotificationV3Schema.parse({
+      format: 'icarus.collaboration-member-notification/1',
+      notification_id: input.notificationId ?? newId('notification'),
+      sender_principal_id: group.localPrincipalId,
+      recipient_principal_ids: [...new Set(input.recipientPrincipalIds)],
+      body_markdown: input.bodyMarkdown,
+      body_sha256: collaborationContentHashV3(input.bodyMarkdown),
+      scope: input.scope,
+      actor_client_id: group.localClientId,
+      executor_id: input.executorId ?? null,
+      origin: input.origin ?? 'human',
+      created_at: createdAt,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'notification',
+      aggregateId: notification.notification_id,
+      expectedRevision: 0,
+      eventType: 'member_notified',
+      payload: { notification },
+      executorId: input.executorId ?? null,
+      occurredAt: createdAt,
+    });
+  }
+
   async proposeWorkflowDefinition(input: {
     readonly groupId: string;
     readonly definitionId: string;
@@ -4357,6 +4395,54 @@ export class CollaborationProjectSpaceService {
       !group.localClientId
     )
       return;
+    const enqueueCommunicationNotification = (input: {
+      readonly eventId: string;
+      readonly kind: 'notified' | 'mentioned';
+      readonly resourceType: string;
+      readonly resourceId: string;
+      readonly senderPrincipalId: string;
+      readonly senderClientId: string;
+      readonly executorId: string | null;
+      readonly origin: 'human' | 'agent' | 'workflow';
+      readonly bodyMarkdown: string;
+      readonly bodySha256: string;
+      readonly scope: Record<string, unknown>;
+      readonly createdAt: string;
+      readonly messageId?: string;
+    }): void => {
+      if (input.senderPrincipalId === group.localPrincipalId) return;
+      this.store.enqueueNotification({
+        groupId,
+        recipientPrincipalId: group.localPrincipalId!,
+        recipientClientId: group.localClientId!,
+        kind: 'member_communication',
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+        reason: input.kind,
+        dedupeKey: [
+          'communication',
+          input.eventId,
+          input.resourceType,
+          input.resourceId,
+          group.localPrincipalId,
+          group.localClientId,
+        ].join(':'),
+        severity: 'info',
+        payload: {
+          event_id: input.eventId,
+          sender_principal_id: input.senderPrincipalId,
+          sender_client_id: input.senderClientId,
+          executor_id: input.executorId,
+          origin: input.origin,
+          body_markdown: input.bodyMarkdown,
+          body_sha256: input.bodySha256,
+          scope: input.scope,
+          created_at: input.createdAt,
+          ...(input.messageId ? { message_id: input.messageId } : {}),
+        },
+        nowMs: this.now(),
+      });
+    };
     for (const record of history.eventRecords) {
       if (knownEventIds.has(record.event.event_id)) continue;
       if (
@@ -4680,6 +4766,31 @@ export class CollaborationProjectSpaceService {
         });
         continue;
       }
+      if (record.event.event_type === 'member_notified') {
+        const parsed = memberNotificationV3Schema.safeParse(
+          record.event.payload.notification,
+        );
+        if (
+          !parsed.success ||
+          !parsed.data.recipient_principal_ids.includes(group.localPrincipalId)
+        )
+          continue;
+        enqueueCommunicationNotification({
+          eventId: record.event.event_id,
+          kind: 'notified',
+          resourceType: parsed.data.scope.type,
+          resourceId: parsed.data.scope.ref,
+          senderPrincipalId: parsed.data.sender_principal_id,
+          senderClientId: parsed.data.actor_client_id,
+          executorId: parsed.data.executor_id,
+          origin: parsed.data.origin,
+          bodyMarkdown: parsed.data.body_markdown,
+          bodySha256: parsed.data.body_sha256,
+          scope: parsed.data.scope,
+          createdAt: parsed.data.created_at,
+        });
+        continue;
+      }
       if (
         !['discussion_created', 'message_posted', 'message_revised'].includes(
           record.event.event_type,
@@ -4691,24 +4802,23 @@ export class CollaborationProjectSpaceService {
       );
       if (
         !parsed.success ||
-        parsed.data.author_principal_id === group.localPrincipalId ||
         !parsed.data.mentions.includes(group.localPrincipalId)
       )
         continue;
-      this.store.enqueueNotification({
-        groupId,
-        recipientPrincipalId: group.localPrincipalId,
-        recipientClientId: group.localClientId,
-        kind: 'discussion_mention',
+      enqueueCommunicationNotification({
+        eventId: record.event.event_id,
+        kind: 'mentioned',
         resourceType: 'discussion',
         resourceId: parsed.data.thread_id,
-        reason: 'mentioned',
-        dedupeKey: `discussion-mention:${groupId}:${parsed.data.message_id}:${String(parsed.data.revision)}:${group.localPrincipalId}`,
-        payload: {
-          message_id: parsed.data.message_id,
-          author_principal_id: parsed.data.author_principal_id,
-        },
-        nowMs: this.now(),
+        senderPrincipalId: parsed.data.author_principal_id,
+        senderClientId: parsed.data.actor_client_id,
+        executorId: parsed.data.executor_id,
+        origin: parsed.data.origin,
+        bodyMarkdown: parsed.data.body,
+        bodySha256: collaborationContentHashV3(parsed.data.body),
+        scope: { type: 'discussion', ref: parsed.data.thread_id },
+        createdAt: parsed.data.updated_at,
+        messageId: parsed.data.message_id,
       });
     }
     for (const item of Object.values(history.projection.workItems)) {

@@ -981,6 +981,8 @@ export function projectCollaborationAllowedActionsV3(input: {
       ),
       createWorkItem: permission('work_item:create'),
       createDiscussion: permission('discussion:create'),
+      postDiscussion: permission('discussion:post'),
+      notifyMembers: permission('notification:send'),
       postOwnedWorkspace: permission('workspace:publish_owned'),
       publishOwnedAction: permission('workspace:publish_owned'),
       registerOwnExecutor: boundary,
