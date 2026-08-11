@@ -179,12 +179,16 @@ function parseArguments(argv: readonly string[]): CliOptions {
   };
 }
 
-function git(repositoryPath: string, args: readonly string[]): string {
+function gitOutput(repositoryPath: string, args: readonly string[]): string {
   return execFileSync('git', ['-C', repositoryPath, ...args], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     maxBuffer: 64 * 1024 * 1024,
-  }).trim();
+  });
+}
+
+function git(repositoryPath: string, args: readonly string[]): string {
+  return gitOutput(repositoryPath, args).trim();
 }
 
 function safeSourceLabel(value: string, local: boolean): string {
@@ -487,11 +491,21 @@ function showJson(
 }
 
 function projectionFiles(repositoryPath: string, head: string): string[] {
-  return git(repositoryPath, ['ls-tree', '-r', '--name-only', head])
-    .split('\n')
-    .filter(
-      (file) => file.startsWith('projections/') && file.endsWith('.json'),
-    );
+  return repositoryFiles(repositoryPath, head).filter(
+    (file) => file.startsWith('projections/') && file.endsWith('.json'),
+  );
+}
+
+function repositoryFiles(repositoryPath: string, head: string): string[] {
+  const fields = gitOutput(repositoryPath, [
+    'ls-tree',
+    '-r',
+    '-z',
+    '--name-only',
+    head,
+  ]).split('\0');
+  if (fields.at(-1) === '') fields.pop();
+  return fields;
 }
 
 function loadProjectionOnly(
@@ -588,9 +602,7 @@ function loadProjectionOnly(
         projection.turns[turn.turn_id] = turn;
     }
   }
-  const files = git(repositoryPath, ['ls-tree', '-r', '--name-only', head])
-    .split('\n')
-    .filter(Boolean);
+  const files = repositoryFiles(repositoryPath, head);
   for (const file of files) {
     const metadataMatch =
       /^(workspace\/(?:shared\/documents|principals\/([^/]+)\/files)\/([^/]+))\/metadata\.json$/u.exec(

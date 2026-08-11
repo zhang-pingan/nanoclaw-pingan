@@ -171,6 +171,15 @@ beforeAll(async () => {
       acceptanceCriteria: ['Attach release evidence'],
     });
     validHead = group.lastVerifiedHead!;
+    const withUnicodeFile = await service.publishSharedFile({
+      groupId: 'group_analyst_fixture',
+      expectedRevision: 0,
+      fileId: 'file_automation_rules',
+      fileName: '方案实施中控自动化规则.md',
+      mediaType: 'text/markdown',
+      contents: Buffer.from('# 自动化规则\n', 'utf8'),
+    });
+    validHead = withUnicodeFile.lastVerifiedHead!;
     const idleKey = path.join(fixtureRoot, 'idle-signing-key');
     run(fixtureRoot, [
       'ssh-keygen',
@@ -271,6 +280,7 @@ describe('project-analyst complete Skill', () => {
       scope: { type: 'project' },
     });
     expect(context.resource_index).toContain('work_item:wi_release');
+    expect(context.resource_index).toContain('file:file_automation_rules');
     expect(context.rule_signals).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ rule_id: 'work_item_overdue' }),
@@ -620,6 +630,9 @@ describe('project-analyst complete Skill', () => {
         },
       },
     );
+    expect(
+      json(path.join(fallback.output, 'context.json')).resource_index,
+    ).toContain('file:file_automation_rules');
   });
 
   it('validates independent repository and package results without Ajv', () => {

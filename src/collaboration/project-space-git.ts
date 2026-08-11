@@ -45,6 +45,9 @@ import {
   CollaborationProtocolError,
 } from './protocol/version.js';
 import type { CollaborationEventSigningIdentity } from './project-space-identity.js';
+import { CollaborationProjectSpaceHistoryRewrittenError } from './project-space-errors.js';
+
+export { CollaborationProjectSpaceHistoryRewrittenError } from './project-space-errors.js';
 
 const execFileAsync = promisify(execFile);
 const CONTROL_REMOTE_REF = 'refs/remotes/origin/icarus/control';
@@ -69,16 +72,6 @@ export class CollaborationProjectSpaceGitConflictError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'CollaborationProjectSpaceGitConflictError';
-  }
-}
-
-export class CollaborationProjectSpaceHistoryRewrittenError extends Error {
-  constructor(
-    message: string,
-    readonly replacementGroupId: string | null,
-  ) {
-    super(message);
-    this.name = 'CollaborationProjectSpaceHistoryRewrittenError';
   }
 }
 
@@ -211,6 +204,7 @@ function normalizedRepositoryPath(value: string): string {
     value.length > 768 ||
     value.startsWith('/') ||
     value.includes('\\') ||
+    /[\u0000-\u001f\u007f]/u.test(value) ||
     value.split('/').some((segment) => segment === '' || segment === '..')
   )
     throw new Error(`Unsafe collaboration repository path: ${value}`);
@@ -1035,16 +1029,37 @@ async function changedFilesForCommit(
     ...(root ? ['--root'] : []),
     '--no-commit-id',
     '--name-status',
+    '-z',
     '-r',
     commit,
   ]);
-  return output.stdout
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      const [status, ...parts] = line.split('\t');
-      return { status: status ?? '', file: parts.at(-1) ?? '' };
-    });
+  const fields = output.stdout.split('\0');
+  if (fields.at(-1) === '') fields.pop();
+  const changes: Array<{ status: string; file: string }> = [];
+  for (let index = 0; index < fields.length; ) {
+    const status = fields[index++] ?? '';
+    const sourceFile = fields[index++];
+    if (!/^[A-Z][0-9]*$/u.test(status) || sourceFile === undefined)
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Commit ${commit} has malformed NUL-delimited name-status output`,
+      );
+    if (status.startsWith('R') || status.startsWith('C')) {
+      const destinationFile = fields[index++];
+      if (destinationFile === undefined)
+        throw new CollaborationProtocolError(
+          'PROTOCOL_QUARANTINED',
+          `Commit ${commit} has incomplete rename or copy status output`,
+        );
+      changes.push(
+        { status, file: normalizedRepositoryPath(sourceFile) },
+        { status, file: normalizedRepositoryPath(destinationFile) },
+      );
+      continue;
+    }
+    changes.push({ status, file: normalizedRepositoryPath(sourceFile) });
+  }
+  return changes;
 }
 
 async function eventFilesFromChanges(
@@ -1218,7 +1233,7 @@ async function assertSafeTree(
   repositoryPath: string,
   head: string,
 ): Promise<void> {
-  const tree = await git(repositoryPath, ['ls-tree', '-r', head]);
+  const tree = await git(repositoryPath, ['ls-tree', '-r', '-z', head]);
   const allowedRoots = [
     'group.json',
     'invites/',
@@ -1233,14 +1248,18 @@ async function assertSafeTree(
     'events/',
     'projections/',
   ];
-  for (const row of tree.stdout.split('\n').filter(Boolean)) {
-    const match = /^(\d+)\s+blob\s+[0-9a-f]+\t(.+)$/u.exec(row);
-    if (!match || (match[1] !== '100644' && match[1] !== '100755'))
+  const rows = tree.stdout.split('\0');
+  if (rows.at(-1) === '') rows.pop();
+  for (const row of rows) {
+    const separator = row.indexOf('\t');
+    const metadata = separator === -1 ? row : row.slice(0, separator);
+    const file = separator === -1 ? '' : row.slice(separator + 1);
+    const match = /^(\d+)\s+blob\s+[0-9a-f]+$/u.exec(metadata);
+    if (!match || !file || (match[1] !== '100644' && match[1] !== '100755'))
       throw new CollaborationProtocolError(
         'PROTOCOL_QUARANTINED',
         `Collaboration tree contains a non-regular entry: ${row}`,
       );
-    const file = match[2]!;
     normalizedRepositoryPath(file);
     if (!allowedRoots.some((root) => file === root || file.startsWith(root)))
       throw new CollaborationProtocolError(

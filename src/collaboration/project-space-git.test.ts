@@ -334,6 +334,135 @@ process.exit(128);
     expect(attempts[0]!.ssh).toContain(primaryKey);
   });
 
+  it('appends and replays a Unicode business file with core.quotePath enabled', async () => {
+    const test = fixture();
+    const store = new CollaborationProjectSpaceStore(
+      path.join(test.root, 'unicode.db'),
+    );
+    const transport = new CollaborationProjectSpaceGitTransport();
+    const service = new CollaborationProjectSpaceService(
+      store,
+      transport,
+      path.join(test.root, 'unicode-repositories'),
+      identityService(test.identity),
+      () => Date.parse(NOW),
+    );
+    try {
+      const created = await service.createGroup({
+        remoteUrl: test.remote,
+        name: 'Unicode project',
+        gitSshKeyPath: test.identity.privateKeyPath,
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'open',
+        observerAccess: 'allowed',
+        groupId: 'group_signed',
+      });
+      run(created.repositoryPath, ['git', 'config', 'core.quotePath', 'true']);
+      const contents = Buffer.from('# 方案实施中控自动化规则\n', 'utf8');
+      const published = await service.publishSharedFile({
+        groupId: created.groupId,
+        expectedRevision: 0,
+        fileId: 'file_automation_rules',
+        fileName: '方案实施中控自动化规则',
+        mediaType: 'text/plain',
+        contents,
+      });
+      const repositoryFile =
+        'workspace/shared/documents/file_automation_rules/方案实施中控自动化规则';
+
+      await expect(
+        service.readVerifiedFile({
+          groupId: published.groupId,
+          repositoryFile,
+        }),
+      ).resolves.toEqual(contents);
+      const replayed = await transport.inspect({
+        remoteUrl: test.remote,
+        repositoryPath: published.repositoryPath,
+        previousHead: created.lastVerifiedHead,
+        gitSshKeyPath: test.identity.privateKeyPath,
+      });
+      expect(replayed.head).toBe(published.lastVerifiedHead);
+      expect(replayed.projection.files.file_automation_rules).toMatchObject({
+        original_filename: '方案实施中控自动化规则',
+        content_ref: '方案实施中控自动化规则',
+      });
+      expect(
+        replayed.eventRecords.map((record) => record.event.event_type),
+      ).toEqual(['group_initialized', 'shared_file_published']);
+    } finally {
+      store.close();
+    }
+  }, 30_000);
+
+  it.each([
+    ['Tab', '\t'],
+    ['newline', '\n'],
+  ])(
+    'rejects a repository path containing a %s control character',
+    async (_label, controlCharacter) => {
+      const test = fixture();
+      const transport = new CollaborationProjectSpaceGitTransport();
+      const initial = genesis(test.identity);
+      const history = await transport.create({
+        remoteUrl: test.remote,
+        repositoryPath: test.cache,
+        identity: test.identity,
+        genesisEvent: initial.event,
+        genesisProjection: initial.projection,
+      });
+      const checkout = path.join(test.root, 'unsafe-control-path');
+      run(test.root, ['git', 'clone', '-q', test.remote, checkout]);
+      run(checkout, [
+        'git',
+        'checkout',
+        '-q',
+        '-b',
+        'unsafe-control-path',
+        'origin/icarus/control',
+      ]);
+      run(checkout, ['git', 'config', 'user.name', 'Unsafe path test']);
+      run(checkout, [
+        'git',
+        'config',
+        'user.email',
+        'unsafe-path@example.invalid',
+      ]);
+      const repositoryFile = `workspace/shared/documents/file_bad/control${controlCharacter}name.txt`;
+      mkdirSync(path.join(checkout, path.dirname(repositoryFile)), {
+        recursive: true,
+      });
+      writeFileSync(path.join(checkout, repositoryFile), 'unsafe path\n');
+      run(checkout, ['git', 'add', '--', repositoryFile]);
+      run(checkout, [
+        'git',
+        'commit',
+        '-q',
+        '--no-gpg-sign',
+        '-m',
+        'add unsafe control path',
+      ]);
+      run(checkout, [
+        'git',
+        'push',
+        '-q',
+        'origin',
+        'HEAD:refs/heads/icarus/control',
+      ]);
+      run(test.cache, ['git', 'config', 'core.quotePath', 'true']);
+
+      await expect(
+        transport.inspect({
+          remoteUrl: test.remote,
+          repositoryPath: test.cache,
+          previousHead: history.head,
+        }),
+      ).rejects.toThrow(/Unsafe collaboration repository path/u);
+    },
+    30_000,
+  );
+
   it('materializes and replays unbound Invite issuance and consumption', async () => {
     const test = fixture();
     const bobKey = path.join(test.root, 'bob-signing-key');
