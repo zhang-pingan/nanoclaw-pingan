@@ -13,7 +13,11 @@ import {
 
 import type { CollaborationEventSigningIdentity } from './project-space-identity.js';
 import { CollaborationProjectSpaceIdentityService } from './project-space-identity.js';
-import { CollaborationProjectSpaceHistoryRewrittenError } from './project-space-errors.js';
+import {
+  CollaborationProjectSpaceGitOperationError,
+  CollaborationProjectSpaceHistoryRewrittenError,
+  CollaborationProjectSpaceValidationError,
+} from './project-space-errors.js';
 import {
   CollaborationProjectSpaceService,
   type CollaborationProjectSpaceAppendEvent,
@@ -35,7 +39,6 @@ import {
   reduceCollaborationEventV3,
 } from './protocol/v3-reducer.js';
 import { collaborationCredentialFingerprintV3 } from './protocol/v3-schema.js';
-import { CollaborationProtocolError } from './protocol/version.js';
 
 const temporaryDirectories: string[] = [];
 const ALICE: CollaborationEventSigningIdentity = {
@@ -1290,7 +1293,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
       type: 'task',
       title: 'Old quarantined work',
     });
-    transport.failNextInspect = new CollaborationProtocolError(
+    transport.failNextInspect = new CollaborationProjectSpaceValidationError(
       'PROTOCOL_QUARANTINED',
       'Remote materialized content does not match verified replay',
     );
@@ -1356,6 +1359,31 @@ describe('Collaboration project space v3 Group and identity service', () => {
 
     await expect(owner.service.initializeGroup(old.groupId)).rejects.toBe(
       transportError,
+    );
+    expect(transport.reinitializeCount).toBe(0);
+    expect(owner.store.getGroup(old.groupId)?.groupId).toBe(old.groupId);
+    owner.store.close();
+  });
+
+  it('does not initialize or force push when a Git operation fails', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-git-operation-failure.git',
+      name: 'Git operation failure project',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_git_operation_failure',
+    });
+    const gitError = new CollaborationProjectSpaceGitOperationError(
+      'Git protocol operation failed: git rev-parse',
+    );
+    transport.failNextInspect = gitError;
+
+    await expect(owner.service.initializeGroup(old.groupId)).rejects.toBe(
+      gitError,
     );
     expect(transport.reinitializeCount).toBe(0);
     expect(owner.store.getGroup(old.groupId)?.groupId).toBe(old.groupId);

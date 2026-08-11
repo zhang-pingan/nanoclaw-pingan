@@ -6,7 +6,10 @@ import {
   CollaborationProjectSpaceIdentityService,
   type CollaborationEventSigningIdentity,
 } from './project-space-identity.js';
-import { CollaborationProjectSpaceHistoryRewrittenError } from './project-space-errors.js';
+import {
+  CollaborationProjectSpaceHistoryRewrittenError,
+  CollaborationProjectSpaceValidationError,
+} from './project-space-errors.js';
 import {
   CollaborationProjectSpaceStore,
   type CollaborationLocalGroupBinding,
@@ -523,7 +526,8 @@ export class CollaborationProjectSpaceService {
           this.store.getGroup(groupId),
         );
       } catch (error) {
-        if (!(error instanceof CollaborationProtocolError)) throw error;
+        if (!(error instanceof CollaborationProjectSpaceValidationError))
+          throw error;
       }
       const {
         group,
