@@ -26,31 +26,33 @@ import {
   PROJECT_ANALYST_BUNDLE_RELATIVE_PATHS,
 } from './project-analyst-bundle.js';
 import {
-  collaborationEventHashV3,
-  deterministicProjectionJsonV3,
-  reduceCollaborationEventV3,
-  validateCollaborationEventV3,
+  collaborationEventHashV4,
+  deterministicProjectionJsonV4,
+  reduceCollaborationEventV4,
+  validateCollaborationEventV4,
   workflowDefinitionVersionKey,
-  type CollaborationProjectionV3,
-} from './protocol/v3-reducer.js';
+  type CollaborationProjectionV4,
+} from './protocol/v4-reducer.js';
 import {
   canonicalJsonStringify,
   prettyCollaborationJson,
   strictParseJsonBytes,
 } from './protocol/canonical-json.js';
 import {
-  artifactMetadataV3Schema,
+  artifactMetadataV4Schema,
   collaborationEventBatchSchema,
   collaborationGroupSelfDescriptionSchema,
   credentialDefinitionSchema,
   fileMetadataSchema,
   recoveryRequestSchema,
-  type ArtifactMetadataV3,
-  type CollaborationEventV3,
+  workspaceLinkSchema,
+  type ArtifactMetadataV4,
+  type CollaborationEventV4,
   type CollaborationGroupSelfDescription,
   type CredentialDefinition,
   type FileMetadata,
-} from './protocol/v3-schema.js';
+  type WorkspaceLink,
+} from './protocol/v4-schema.js';
 import {
   COLLABORATION_CONTROL_BRANCH,
   CollaborationProtocolError,
@@ -296,7 +298,7 @@ const EVENT_DIRECTORIES = {
 } as const;
 
 export function collaborationProjectSpaceEventPath(
-  event: CollaborationEventV3,
+  event: CollaborationEventV4,
 ): string {
   const root = EVENT_DIRECTORIES[event.aggregate_type];
   const aggregate =
@@ -305,12 +307,12 @@ export function collaborationProjectSpaceEventPath(
 }
 
 function collaborationProjectSpaceEventBatchPath(
-  events: readonly CollaborationEventV3[],
+  events: readonly CollaborationEventV4[],
 ): string {
   return `events/batches/${events[0]!.event_id}.json`;
 }
 
-function aggregateProjectionPath(event: CollaborationEventV3): string {
+function aggregateProjectionPath(event: CollaborationEventV4): string {
   switch (event.aggregate_type) {
     case 'group':
       return 'projections/group.json';
@@ -336,8 +338,8 @@ function aggregateProjectionPath(event: CollaborationEventV3): string {
 }
 
 function aggregateProjectionValue(
-  event: CollaborationEventV3,
-  projection: CollaborationProjectionV3,
+  event: CollaborationEventV4,
+  projection: CollaborationProjectionV4,
 ): unknown {
   switch (event.aggregate_type) {
     case 'group':
@@ -358,7 +360,7 @@ function aggregateProjectionValue(
       return projection.recoveryRequests[event.aggregate_id] ?? null;
     case 'workspace':
       return {
-        format: 'icarus.collaboration-workspace-projection/1',
+        format: 'icarus.collaboration-workspace-projection/2',
         principal_id: event.aggregate_id,
         updates: Object.values(projection.progressUpdates).filter(
           (update) => update.principal_id === event.aggregate_id,
@@ -366,13 +368,19 @@ function aggregateProjectionValue(
         files: Object.values(projection.files).filter(
           (file) => file.uploader_principal_id === event.aggregate_id,
         ),
+        links: Object.values(projection.links).filter((link) =>
+          event.aggregate_id === 'shared'
+            ? link.scope === 'shared'
+            : link.scope === 'principal' &&
+              link.owner_principal_id === event.aggregate_id,
+        ),
         actions: Object.values(projection.actions).filter(
           (action) => action.owner_principal_id === event.aggregate_id,
         ),
       };
     case 'work_item':
       return {
-        format: 'icarus.collaboration-work-item-projection/1',
+        format: 'icarus.collaboration-work-item-projection/2',
         item: projection.workItems[event.aggregate_id] ?? null,
         updates: projection.workItemUpdates[event.aggregate_id] ?? [],
       };
@@ -409,7 +417,7 @@ function aggregateProjectionValue(
 }
 
 function fileDirectory(
-  event: CollaborationEventV3,
+  event: CollaborationEventV4,
   metadata: FileMetadata,
 ): string {
   return event.event_type.startsWith('shared_')
@@ -417,27 +425,33 @@ function fileDirectory(
     : `workspace/principals/${event.actor.principal_id}/files/${metadata.file_id}`;
 }
 
-function artifactDirectory(metadata: ArtifactMetadataV3): string {
+function linkDirectory(event: CollaborationEventV4, linkId: string): string {
+  return event.event_type.startsWith('shared_')
+    ? `workspace/shared/links/${linkId}`
+    : `workspace/principals/${event.actor.principal_id}/links/${linkId}`;
+}
+
+function artifactDirectory(metadata: ArtifactMetadataV4): string {
   return metadata.scope.type === 'work_item'
     ? `artifacts/work-items/${metadata.scope.work_item_id}/${metadata.artifact_id}`
     : `artifacts/workflows/${metadata.scope.workflow_instance_id}/${metadata.scope.turn_id}/${metadata.artifact_id}`;
 }
 
-function eventArtifacts(event: CollaborationEventV3): ArtifactMetadataV3[] {
+function eventArtifacts(event: CollaborationEventV4): ArtifactMetadataV4[] {
   if (
     event.event_type !== 'work_item_progress_posted' &&
     event.event_type !== 'turn_completed'
   )
     return [];
-  return artifactMetadataV3Schema
+  return artifactMetadataV4Schema
     .array()
     .max(20)
     .parse(event.payload.artifacts);
 }
 
 function automaticMaterialization(
-  event: CollaborationEventV3,
-  projection: CollaborationProjectionV3,
+  event: CollaborationEventV4,
+  projection: CollaborationProjectionV4,
 ): Map<string, string | Buffer | null> {
   const files = new Map<string, string | Buffer | null>();
   files.set(
@@ -725,6 +739,23 @@ function automaticMaterialization(
       );
       break;
     }
+    case 'shared_link_published':
+    case 'shared_link_revised':
+    case 'principal_link_published':
+    case 'principal_link_revised': {
+      const link = workspaceLinkSchema.parse(event.payload.link);
+      files.set(
+        `${linkDirectory(event, link.link_id)}/metadata.json`,
+        prettyCollaborationJson(link),
+      );
+      break;
+    }
+    case 'shared_link_removed':
+    case 'principal_link_removed': {
+      const linkId = String(event.payload.link_id);
+      files.set(`${linkDirectory(event, linkId)}/metadata.json`, null);
+      break;
+    }
     case 'action_published':
     case 'action_revised': {
       const action = event.payload.action as {
@@ -976,7 +1007,7 @@ function automaticMaterialization(
 }
 
 function allowedExtraMaterializationPaths(
-  event: CollaborationEventV3,
+  event: CollaborationEventV4,
 ): Set<string> {
   const allowed = new Set<string>();
   if (event.event_type === 'group_initialized')
@@ -1004,8 +1035,8 @@ function allowedExtraMaterializationPaths(
 }
 
 function mergeMaterializations(
-  event: CollaborationEventV3,
-  projection: CollaborationProjectionV3,
+  event: CollaborationEventV4,
+  projection: CollaborationProjectionV4,
   extra: readonly CollaborationProjectSpaceMaterializedFile[],
   canonicalGenesisSelfDescription: CollaborationCanonicalGenesisSelfDescriptionProvider,
 ): Map<string, string | Buffer | null> {
@@ -1063,7 +1094,7 @@ function selfDescriptionFiles(
 }
 
 function genesisSelfDescriptionFiles(
-  event: CollaborationEventV3,
+  event: CollaborationEventV4,
 ): Map<
   string,
   { readonly path: string; readonly size: number; readonly sha256: string }
@@ -1076,7 +1107,7 @@ function genesisSelfDescriptionFiles(
 }
 
 function canonicalGenesisSelfDescriptionFiles(
-  event: CollaborationEventV3,
+  event: CollaborationEventV4,
   provider: CollaborationCanonicalGenesisSelfDescriptionProvider | undefined,
 ): ReadonlyMap<string, string | Buffer> {
   if (!provider)
@@ -1137,7 +1168,7 @@ function canonicalGenesisSelfDescriptionFiles(
 }
 
 function validateContentFiles(
-  event: CollaborationEventV3,
+  event: CollaborationEventV4,
   files: ReadonlyMap<string, string | Buffer | null>,
   canonicalGenesisSelfDescription?: CollaborationCanonicalGenesisSelfDescriptionProvider,
 ): void {
@@ -1308,8 +1339,8 @@ async function eventFilesFromChanges(
 }
 
 function candidateCredential(
-  event: CollaborationEventV3,
-  projection: CollaborationProjectionV3 | null,
+  event: CollaborationEventV4,
+  projection: CollaborationProjectionV4 | null,
 ): CredentialDefinition | null {
   if (event.event_type === 'group_initialized')
     return credentialDefinitionSchema.parse(event.payload.credential);
@@ -1342,8 +1373,8 @@ function candidateCredential(
 async function verifyCommitSigner(
   repositoryPath: string,
   commit: string,
-  event: CollaborationEventV3,
-  projection: CollaborationProjectionV3 | null,
+  event: CollaborationEventV4,
+  projection: CollaborationProjectionV4 | null,
 ): Promise<void> {
   const candidate = candidateCredential(event, projection);
   if (
@@ -1357,7 +1388,7 @@ async function verifyCommitSigner(
       'PROTOCOL_QUARANTINED',
       `No active Credential matches event actor at ${commit}`,
     );
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'icarus-v3-signers-'));
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'icarus-v4-signers-'));
   const allowedSignersPath = path.join(directory, 'allowed_signers');
   try {
     await writeFile(
@@ -1513,8 +1544,8 @@ async function verifyMaterializedCommit(
   commit: string,
   eventFiles: readonly string[],
   entries: readonly {
-    readonly event: CollaborationEventV3;
-    readonly projection: CollaborationProjectionV3;
+    readonly event: CollaborationEventV4;
+    readonly projection: CollaborationProjectionV4;
   }[],
   batchFile: string | null,
   changes: readonly { readonly status: string; readonly file: string }[],
@@ -1615,9 +1646,9 @@ async function validateCollaborationProjectSpaceHistoryUnchecked(input: {
   }
   await assertSafeTree(input.repositoryPath, input.head);
   const commits = await assertLinearHistory(input.repositoryPath, input.head);
-  let projection: CollaborationProjectionV3 | null = null;
+  let projection: CollaborationProjectionV4 | null = null;
   const eventRecords: Array<{
-    event: CollaborationEventV3;
+    event: CollaborationEventV4;
     commitHash: string;
     commitOrder: number;
   }> = [];
@@ -1633,11 +1664,11 @@ async function validateCollaborationProjectSpaceHistoryUnchecked(input: {
       changes,
     );
     const entries: Array<{
-      event: CollaborationEventV3;
-      projection: CollaborationProjectionV3;
+      event: CollaborationEventV4;
+      projection: CollaborationProjectionV4;
     }> = [];
     for (const eventFile of eventFiles) {
-      const event = validateCollaborationEventV3(
+      const event = validateCollaborationEventV4(
         await showJson(input.repositoryPath, commit, eventFile),
       );
       if (eventFile !== collaborationProjectSpaceEventPath(event))
@@ -1646,7 +1677,7 @@ async function validateCollaborationProjectSpaceHistoryUnchecked(input: {
           `Event path does not match Aggregate revision and id: ${eventFile}`,
         );
       await verifyCommitSigner(input.repositoryPath, commit, event, projection);
-      projection = reduceCollaborationEventV3(projection, event, {
+      projection = reduceCollaborationEventV4(projection, event, {
         previousEventInAtomicBatch: entries.at(-1)?.event,
       });
       entries.push({ event, projection });
@@ -1715,14 +1746,14 @@ export async function validateCollaborationProjectSpaceHistory(input: {
 export interface CollaborationVirtualTreeNode {
   readonly id: string;
   readonly name: string;
-  readonly type: 'directory' | 'file' | 'structured';
+  readonly type: 'directory' | 'file' | 'link' | 'structured';
   readonly repositoryPath: string | null;
   readonly rawId: string | null;
   readonly children?: readonly CollaborationVirtualTreeNode[];
 }
 
 function principalDisplayName(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
   principalId: string,
 ): string {
   const display = projection.members[principalId]?.display_name ?? principalId;
@@ -1730,11 +1761,14 @@ function principalDisplayName(
 }
 
 export function buildCollaborationVirtualTree(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
 ): readonly CollaborationVirtualTreeNode[] {
   const sharedFiles = Object.values(projection.files).filter(
     (metadata) =>
       projection.fileLocations[metadata.file_id]?.scope === 'shared',
+  );
+  const sharedLinks = Object.values(projection.links).filter(
+    (link) => link.scope === 'shared',
   );
   const memberNodes = Object.values(projection.members)
     .sort((left, right) =>
@@ -1747,6 +1781,11 @@ export function buildCollaborationVirtualTree(
         (metadata) =>
           metadata.uploader_principal_id === member.principal_id &&
           projection.fileLocations[metadata.file_id]?.scope === 'principal',
+      );
+      const principalLinks = Object.values(projection.links).filter(
+        (link) =>
+          link.scope === 'principal' &&
+          link.owner_principal_id === member.principal_id,
       );
       return {
         id: `principal:${member.principal_id}`,
@@ -1771,6 +1810,13 @@ export function buildCollaborationVirtualTree(
               : null,
             rawId: metadata.file_id,
           })),
+          ...principalLinks.map((link) => ({
+            id: `link:${link.link_id}`,
+            name: link.title,
+            type: 'link' as const,
+            repositoryPath: `${projection.linkLocations[link.link_id]?.repositoryDirectory}/metadata.json`,
+            rawId: link.link_id,
+          })),
           {
             id: `principal:${member.principal_id}:automations`,
             name: 'Automations',
@@ -1788,15 +1834,24 @@ export function buildCollaborationVirtualTree(
       type: 'directory',
       repositoryPath: 'workspace/shared',
       rawId: null,
-      children: sharedFiles.map((metadata) => ({
-        id: `file:${metadata.file_id}`,
-        name: metadata.original_filename,
-        type: 'file',
-        repositoryPath: metadata.content_ref
-          ? `${projection.fileLocations[metadata.file_id]?.repositoryDirectory}/${metadata.content_ref}`
-          : null,
-        rawId: metadata.file_id,
-      })),
+      children: [
+        ...sharedFiles.map((metadata) => ({
+          id: `file:${metadata.file_id}`,
+          name: metadata.original_filename,
+          type: 'file' as const,
+          repositoryPath: metadata.content_ref
+            ? `${projection.fileLocations[metadata.file_id]?.repositoryDirectory}/${metadata.content_ref}`
+            : null,
+          rawId: metadata.file_id,
+        })),
+        ...sharedLinks.map((link) => ({
+          id: `link:${link.link_id}`,
+          name: link.title,
+          type: 'link' as const,
+          repositoryPath: `${projection.linkLocations[link.link_id]?.repositoryDirectory}/metadata.json`,
+          rawId: link.link_id,
+        })),
+      ],
     },
     {
       id: 'members',
@@ -1920,8 +1975,8 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     readonly repositoryPath: string;
     readonly gitSshKeyPath: string;
     readonly identity: CollaborationEventSigningIdentity;
-    readonly genesisEvent: CollaborationEventV3;
-    readonly genesisProjection: CollaborationProjectionV3;
+    readonly genesisEvent: CollaborationEventV4;
+    readonly genesisProjection: CollaborationProjectionV4;
     readonly genesisMaterializedFiles: readonly CollaborationProjectSpaceMaterializedFile[];
   }): Promise<ValidatedProjectSpaceHistory> {
     const checkoutPath = await this.temporaryCheckout('initialize');
@@ -2005,8 +2060,8 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     readonly gitSshKeyPath?: string;
     readonly gitSshKeyPaths?: readonly string[];
     readonly identity: CollaborationEventSigningIdentity;
-    readonly genesisEvent: CollaborationEventV3;
-    readonly genesisProjection: CollaborationProjectionV3;
+    readonly genesisEvent: CollaborationEventV4;
+    readonly genesisProjection: CollaborationProjectionV4;
     readonly genesisMaterializedFiles: readonly CollaborationProjectSpaceMaterializedFile[];
   }): Promise<ValidatedProjectSpaceHistory> {
     const candidates = normalizedGitSshKeyCandidates(input);
@@ -2095,8 +2150,8 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
       throw new Error('Atomic collaboration append requires 1 to 32 events');
     let projection = history.projection;
     const entries: Array<{
-      event: CollaborationEventV3;
-      projection: CollaborationProjectionV3;
+      event: CollaborationEventV4;
+      projection: CollaborationProjectionV4;
       materializedFiles: readonly CollaborationProjectSpaceMaterializedFile[];
     }> = [];
     const files = new Map<string, string | Buffer | null>();
@@ -2109,7 +2164,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         input.identity.credentialId !== event.actor.credential_id
       )
         throw new Error('Local signing identity does not match event actor');
-      projection = reduceCollaborationEventV3(projection, event, {
+      projection = reduceCollaborationEventV4(projection, event, {
         previousEventInAtomicBatch: entries.at(-1)?.event,
       });
       for (const [file, contents] of mergeMaterializations(
@@ -2192,8 +2247,8 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
 
   private materialize(
     checkoutPath: string,
-    event: CollaborationEventV3,
-    projection: CollaborationProjectionV3,
+    event: CollaborationEventV4,
+    projection: CollaborationProjectionV4,
     extra: readonly CollaborationProjectSpaceMaterializedFile[],
   ): void {
     const files = mergeMaterializations(
@@ -2214,7 +2269,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
 
   private materializeBatch(
     checkoutPath: string,
-    events: readonly CollaborationEventV3[],
+    events: readonly CollaborationEventV4[],
     files: ReadonlyMap<string, string | Buffer | null>,
   ): void {
     for (const event of events)
@@ -2254,7 +2309,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
 
   private async commit(
     checkoutPath: string,
-    eventOrEvents: CollaborationEventV3 | readonly CollaborationEventV3[],
+    eventOrEvents: CollaborationEventV4 | readonly CollaborationEventV4[],
   ): Promise<void> {
     const events = Array.isArray(eventOrEvents)
       ? eventOrEvents
@@ -2275,7 +2330,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     return mkdtemp(
       path.join(
         os.tmpdir(),
-        `icarus-collaboration-v3-${purpose}-${crypto.randomUUID()}-`,
+        `icarus-collaboration-v4-${purpose}-${crypto.randomUUID()}-`,
       ),
     );
   }
@@ -2338,6 +2393,6 @@ export const collaborationProjectSpaceGitTestables = {
   mergeMaterializations,
   validateContentFiles,
   genesisSelfDescriptionFiles,
-  collaborationEventHashV3,
-  deterministicProjectionJsonV3,
+  collaborationEventHashV4,
+  deterministicProjectionJsonV4,
 };

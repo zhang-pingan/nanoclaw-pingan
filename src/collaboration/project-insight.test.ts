@@ -6,8 +6,8 @@ import {
   buildProjectSignals,
   collaborationAnalysisResourceIndex,
 } from './project-insight.js';
-import type { CollaborationProjectionV3 } from './protocol/v3-reducer.js';
-import type { CollaborationTurnV3, WorkItem } from './protocol/v3-schema.js';
+import type { CollaborationProjectionV4 } from './protocol/v4-reducer.js';
+import type { CollaborationTurnV4, WorkItem } from './protocol/v4-schema.js';
 
 const NOW = Date.parse('2026-08-08T12:00:00.000Z');
 const HEAD = 'a'.repeat(40);
@@ -48,7 +48,7 @@ function workItem(id: string, overrides: Partial<WorkItem> = {}): WorkItem {
   };
 }
 
-function turn(overrides: Partial<CollaborationTurnV3> = {}) {
+function turn(overrides: Partial<CollaborationTurnV4> = {}) {
   return {
     format: 'icarus.collaboration-turn/1',
     turn_id: 'turn_due',
@@ -84,10 +84,10 @@ function turn(overrides: Partial<CollaborationTurnV3> = {}) {
     completion_hash: null,
     recovery_reason: null,
     ...overrides,
-  } satisfies CollaborationTurnV3;
+  } satisfies CollaborationTurnV4;
 }
 
-function projection(): CollaborationProjectionV3 {
+function projection(): CollaborationProjectionV4 {
   const workItems = {
     wi_overdue: workItem('wi_overdue', {
       priority: 'high',
@@ -128,8 +128,8 @@ function projection(): CollaborationProjectionV3 {
     }),
   };
   return {
-    format: 'icarus.collaboration-projection/3',
-    protocolVersion: 3,
+    format: 'icarus.collaboration-projection/4',
+    protocolVersion: 4,
     groupId: 'group_test',
     group: {
       group_id: 'group_test',
@@ -158,8 +158,11 @@ function projection(): CollaborationProjectionV3 {
     permissionGrants: {},
     progressUpdates: {},
     files: { file_report: {} },
+    links: {},
     artifacts: {},
     fileLocations: {},
+    linkLocations: {},
+    removedLinkIds: [],
     actions: {},
     workItems,
     workItemUpdates: {},
@@ -244,7 +247,7 @@ function projection(): CollaborationProjectionV3 {
     ],
     integrityStatus: 'OK',
     integrityMessage: null,
-  } as unknown as CollaborationProjectionV3;
+  } as unknown as CollaborationProjectionV4;
 }
 
 const localGroup = {

@@ -374,7 +374,7 @@ export function buildCollaborationWorkflowRequest(input) {
       principals: [],
     },
     machine: {
-      format: 'icarus.collaboration-machine/3',
+      format: 'icarus.collaboration-machine/4',
       initial_state: initialState,
       states: machineStates,
     },

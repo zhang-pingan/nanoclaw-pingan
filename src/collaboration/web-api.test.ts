@@ -4,27 +4,27 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { CollaborationAnalysisRunDetail } from './analysis-service.js';
 import type {
-  CollaborationActionExecutionV3,
-  CollaborationExecutorBindingV3,
+  CollaborationActionExecutionV4,
+  CollaborationExecutorBindingV4,
   CollaborationProjectSpaceGroupRecord,
 } from './project-space-store.js';
 import { CollaborationProjectSpaceGitConflictError } from './project-space-git.js';
-import type { CollaborationProjectionV3 } from './protocol/v3-reducer.js';
+import type { CollaborationProjectionV4 } from './protocol/v4-reducer.js';
 import type { CollaborationRuntime } from './runtime.js';
 import { CollaborationProtocolError } from './protocol/version.js';
 import { CollaborationWebApi } from './web-api.js';
 
 const hash = (value: string) => `sha256:${value.repeat(64)}`;
 
-function projection(): CollaborationProjectionV3 {
+function projection(): CollaborationProjectionV4 {
   return {
-    format: 'icarus.collaboration-projection/3',
-    protocolVersion: 3,
+    format: 'icarus.collaboration-projection/4',
+    protocolVersion: 4,
     groupId: 'group_test',
     aggregateHeads: {},
     invites: {},
     workItems: {
-      work_1: { work_item_id: 'work_1', title: 'Ship v3', revision: 2 },
+      work_1: { work_item_id: 'work_1', title: 'Ship v4', revision: 2 },
     },
     workItemUpdates: { work_1: [] },
     discussions: {},
@@ -74,7 +74,7 @@ function projection(): CollaborationProjectionV3 {
     },
     executors: {},
     permissionGrants: {},
-  } as unknown as CollaborationProjectionV3;
+  } as unknown as CollaborationProjectionV4;
 }
 
 function group(
@@ -113,7 +113,7 @@ function group(
   };
 }
 
-function binding(): CollaborationExecutorBindingV3 {
+function binding(): CollaborationExecutorBindingV4 {
   return {
     groupId: 'group_test',
     instanceId: 'instance_1',
@@ -137,7 +137,7 @@ function binding(): CollaborationExecutorBindingV3 {
   };
 }
 
-function execution(): CollaborationActionExecutionV3 {
+function execution(): CollaborationActionExecutionV4 {
   return {
     executionId: 'execution_1',
     groupId: 'group_test',
@@ -284,7 +284,7 @@ function runtime(
   return {
     status: vi.fn(() => ({
       available: true,
-      protocolVersion: 3,
+      protocolVersion: 4,
       error: null,
       scheduler: { running: true },
     })),
@@ -322,7 +322,7 @@ async function withApiServer(
   }
 }
 
-describe('Collaboration project-space v3 Web API', () => {
+describe('Collaboration project-space v4 Web API', () => {
   it('returns current-only status and redacts local/provider secrets', async () => {
     const selected = runtime({
       store: {
@@ -333,7 +333,7 @@ describe('Collaboration project-space v3 Web API', () => {
     await withApiServer(new CollaborationWebApi(selected), async (baseUrl) => {
       const status = await fetch(`${baseUrl}/api/collaboration/status`);
       expect(await status.json()).toMatchObject({
-        collaboration: { available: true, protocolVersion: 3 },
+        collaboration: { available: true, protocolVersion: 4 },
       });
 
       const response = await fetch(
@@ -1083,6 +1083,209 @@ describe('Collaboration project-space v3 Web API', () => {
     );
   });
 
+  it('exposes strict Shared and owned Workspace link routes without client ids', async () => {
+    const publishSharedLink = vi.fn(async () => group());
+    const publishPrincipalLink = vi.fn(async () => group());
+    const reviseSharedLink = vi.fn(async (input: { title: string }) => {
+      if (input.title === 'Stale')
+        throw new CollaborationProtocolError(
+          'EVENT_CONFLICT',
+          'Workspace link revision is stale',
+        );
+      return group();
+    });
+    const revisePrincipalLink = vi.fn(async () => group());
+    const removeSharedLink = vi.fn(async () => group());
+    const removePrincipalLink = vi.fn(async () => group());
+    const postProgress = vi.fn(async () => group());
+    const indexed = [
+      {
+        linkId: 'link_shared',
+        virtualPath: '共享链接/规范',
+        repositoryPath: 'workspace/shared/links/link_shared/metadata.json',
+        scope: 'shared',
+        ownerPrincipalId: null,
+        revision: 1,
+        metadata: { link_id: 'link_shared', title: '共享规范' },
+        verifiedHead: 'a'.repeat(40),
+      },
+      {
+        linkId: 'link_owned',
+        virtualPath: '我的链接/手册',
+        repositoryPath:
+          'workspace/principals/principal_alice/links/link_owned/metadata.json',
+        scope: 'principal',
+        ownerPrincipalId: 'principal_alice',
+        revision: 2,
+        metadata: { link_id: 'link_owned', title: '个人手册' },
+        verifiedHead: 'a'.repeat(40),
+      },
+      {
+        linkId: 'link_other',
+        virtualPath: '其他链接',
+        repositoryPath:
+          'workspace/principals/principal_bob/links/link_other/metadata.json',
+        scope: 'principal',
+        ownerPrincipalId: 'principal_bob',
+        revision: 1,
+        metadata: { link_id: 'link_other', title: 'Other' },
+        verifiedHead: 'a'.repeat(40),
+      },
+    ];
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({
+          store: { listLinkIndex: vi.fn(() => indexed) },
+          groups: {
+            publishSharedLink,
+            publishPrincipalLink,
+            reviseSharedLink,
+            revisePrincipalLink,
+            removeSharedLink,
+            removePrincipalLink,
+            postProgress,
+          },
+        }),
+      ),
+      async (baseUrl) => {
+        const prefix = `${baseUrl}/api/collaboration/groups/group_test`;
+        const sharedRead = await fetch(`${prefix}/workspace/shared/links`);
+        expect(sharedRead.status).toBe(200);
+        expect(await sharedRead.json()).toMatchObject({
+          links: [{ linkId: 'link_shared', scope: 'shared' }],
+        });
+        const ownedRead = await fetch(`${prefix}/workspace/me/links`);
+        expect(await ownedRead.json()).toMatchObject({
+          links: [
+            { linkId: 'link_owned', ownerPrincipalId: 'principal_alice' },
+          ],
+        });
+
+        const create = await fetch(`${prefix}/workspace/shared/links`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 0,
+            title: '共享规范',
+            url: 'https://例子.测试/规范',
+            description: 'Unicode link',
+            workItemRefs: ['work_1'],
+          }),
+        });
+        expect(create.status).toBe(201);
+        expect(publishSharedLink).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          expectedRevision: 0,
+          title: '共享规范',
+          url: 'https://例子.测试/规范',
+          description: 'Unicode link',
+          workItemRefs: ['work_1'],
+        });
+        const createOwned = await fetch(`${prefix}/workspace/me/links`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 0,
+            title: 'Owned',
+            url: 'urn:icarus:owned',
+          }),
+        });
+        expect(createOwned.status).toBe(201);
+        expect(publishPrincipalLink).toHaveBeenCalledWith(
+          expect.not.objectContaining({ linkId: expect.anything() }),
+        );
+
+        const forbiddenId = await fetch(`${prefix}/workspace/me/links`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 0,
+            linkId: 'client_selected',
+            title: 'Forbidden',
+            url: 'https://example.test/forbidden',
+          }),
+        });
+        expect(forbiddenId.status).toBe(400);
+
+        const revise = await fetch(
+          `${prefix}/workspace/shared/links/link_shared`,
+          {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              expectedRevision: 1,
+              revision: 1,
+              title: '共享规范 v2',
+              url: 'https://例子.测试/规范/二',
+            }),
+          },
+        );
+        expect(revise.status).toBe(200);
+        expect(reviseSharedLink).toHaveBeenCalledWith(
+          expect.objectContaining({
+            groupId: 'group_test',
+            linkId: 'link_shared',
+            revision: 1,
+          }),
+        );
+        const stale = await fetch(
+          `${prefix}/workspace/shared/links/link_shared`,
+          {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              expectedRevision: 2,
+              revision: 1,
+              title: 'Stale',
+              url: 'https://example.test/stale',
+            }),
+          },
+        );
+        expect(stale.status).toBe(409);
+
+        const remove = await fetch(`${prefix}/workspace/me/links/link_owned`, {
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ expectedRevision: 2, revision: 2 }),
+        });
+        expect(remove.status).toBe(200);
+        expect(removePrincipalLink).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          linkId: 'link_owned',
+          expectedRevision: 2,
+          revision: 2,
+        });
+
+        const progress = await fetch(`${prefix}/workspace/me/updates`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 1,
+            summary: 'Reviewed links',
+            links: [{ title: 'Context', url: 'custom:context' }],
+          }),
+        });
+        expect(progress.status).toBe(201);
+        expect(postProgress).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          expectedRevision: 1,
+          summary: 'Reviewed links',
+          links: [{ title: 'Context', url: 'custom:context' }],
+        });
+        const invalid = await fetch(`${prefix}/workspace/shared/links`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 3,
+            title: 'Relative',
+            url: '/relative',
+          }),
+        });
+        expect(invalid.status).toBe(400);
+      },
+    );
+  });
+
   it('maps per-Aggregate revision conflicts to 409', async () => {
     const updateWorkItemDetails = vi.fn(async () => {
       throw new Error('Work Item revision conflict: expected 1, current 2');
@@ -1176,6 +1379,7 @@ describe('Collaboration project-space v3 Web API', () => {
               title: 'Release readiness',
               body: 'Please review the checklist.',
               mentions: ['principal_00000000-0000-4000-8000-000000000002'],
+              links: [{ title: 'Checklist', url: 'custom:release-checklist' }],
               scope: { type: 'group' },
             }),
           },
@@ -1187,9 +1391,26 @@ describe('Collaboration project-space v3 Web API', () => {
             title: 'Release readiness',
             body: 'Please review the checklist.',
             mentions: ['principal_00000000-0000-4000-8000-000000000002'],
+            links: [{ title: 'Checklist', url: 'custom:release-checklist' }],
             scope: { type: 'group' },
           }),
         );
+
+        const linkOnlyDiscussion = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/discussions`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              title: 'Missing initial body',
+              links: [{ title: 'Checklist', url: 'custom:release-checklist' }],
+              scope: { type: 'group' },
+            }),
+          },
+        );
+        expect(linkOnlyDiscussion.status).toBe(400);
+        expect(createDiscussion).toHaveBeenCalledTimes(1);
+        expect(createDiscussionWithMessage).toHaveBeenCalledTimes(1);
 
         for (const invalid of [
           {
@@ -1233,7 +1454,7 @@ describe('Collaboration project-space v3 Web API', () => {
               version: 1,
               name: 'Delivery',
               machine: {
-                format: 'icarus.collaboration-machine/3',
+                format: 'icarus.collaboration-machine/4',
                 initial_state: 'build',
                 states: {
                   build: {
@@ -1272,7 +1493,7 @@ describe('Collaboration project-space v3 Web API', () => {
           expect.objectContaining({
             groupId: 'group_test',
             machine: expect.objectContaining({
-              format: 'icarus.collaboration-machine/3',
+              format: 'icarus.collaboration-machine/4',
             }),
           }),
         );
@@ -1280,7 +1501,7 @@ describe('Collaboration project-space v3 Web API', () => {
     );
   });
 
-  it('exposes the remaining explicit v3 lifecycle and ownership commands', async () => {
+  it('exposes the remaining explicit v4 lifecycle and ownership commands', async () => {
     const groups = Object.fromEntries(
       [
         'reopenGroup',

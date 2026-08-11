@@ -130,13 +130,13 @@ describe('Collaboration project-space request builders', () => {
     ).toMatchObject({ inviteId: 'invite_bob' });
   });
 
-  it('builds a validated v3 Machine and participant layout', () => {
+  it('builds a validated v4 Machine and participant layout', () => {
     const request = buildCollaborationWorkflowRequest({
       expectedRevision: 0,
       draft: completeDraft(),
     });
     expect(request.machine).toMatchObject({
-      format: 'icarus.collaboration-machine/3',
+      format: 'icarus.collaboration-machine/4',
       initial_state: 'build',
       states: {
         build: {

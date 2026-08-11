@@ -5,7 +5,7 @@ import {
   COLLABORATION_PROJECT_ANALYST_ROOT,
   PROJECT_ANALYST_BUNDLE_RELATIVE_PATHS,
 } from './project-analyst-bundle.js';
-import type { CollaborationGroupSelfDescription } from './protocol/v3-schema.js';
+import type { CollaborationGroupSelfDescription } from './protocol/v4-schema.js';
 import { COLLABORATION_CONTROL_BRANCH } from './protocol/version.js';
 
 export interface CollaborationProjectAnalystBundleFile {
@@ -65,11 +65,11 @@ git rev-parse --verify refs/remotes/origin/icarus/control
 | --- | --- |
 | \`README.md\` | This human and agent orientation document. Markdown, fixed by the signed Genesis self-description manifest. |
 | \`group.json\` | Current Group settings and lifecycle Projection. Strict JSON. |
-| \`events/\` | Immutable v3 event streams by Aggregate, plus ordered batch manifests. Strict JSON; the signed event envelope is authoritative after verification. |
+| \`events/\` | Immutable v4 event streams by Aggregate, plus ordered batch manifests. Strict JSON; the signed event envelope is authoritative after verification. |
 | \`members/\` | Materialized Principal membership, Client, Credential, and Executor descriptors. Strict JSON. |
 | \`permissions/\` | Current per-Principal permission grants. Strict JSON. |
-| \`workspace/shared/\` | Shared progress and documents. Metadata is JSON; document bytes retain their business format and are hash/size bound. |
-| \`workspace/principals/\` | Principal-owned progress, files, Actions, and Markdown Prompts. JSON is used for machine contracts; Prompts are Markdown; business files retain their format. |
+| \`workspace/shared/\` | Shared files and first-class links. Link metadata is strict JSON under \`links/{link_id}/metadata.json\`; document bytes retain their business format and are hash/size bound. |
+| \`workspace/principals/\` | Principal-owned progress, files, links, Actions, and Markdown Prompts. Link metadata is separate from file metadata; business files retain their format. |
 | \`work-items/\` | Work Item state, relations, progress, and attachments. Machine state is JSON; attached business files retain their format. |
 | \`discussions/\` | Discussion metadata and append/revision/tombstone Message projections. Strict JSON. |
 | \`workflows/definitions/\` | Versioned Workflow Definition, machine, and layout contracts. Strict JSON. |
@@ -96,7 +96,12 @@ through their verified JSON metadata.
   Instance** is one execution of a Definition. A **Turn** is one fenced attempt to
   execute an active state, optionally producing results, handoff data, and artifacts.
 - A **Discussion** is a scoped thread whose Messages retain author, revision,
-  mention, and reference information.
+  mention, reference, and up to ten embedded link attachments. Progress updates
+  may carry the same bounded link attachments without promoting them to Workspace.
+- A **Workspace Link** is a durable Shared or Principal-owned resource with its
+  own id, URL/URI, title, description, revision, business refs, and ownership
+  location. It is not a File or an external file locator. Link content is never
+  fetched into the Icarus renderer; opening is delegated to the host system.
 
 ## Trust and verification boundary
 

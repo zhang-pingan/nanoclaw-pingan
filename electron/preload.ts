@@ -76,9 +76,7 @@ contextBridge.exposeInMainWorld('icarusApp', {
 
   // Open external URL in system browser
   openExternal: (url: string) => {
-    // This would go through IPC in a real implementation
-    // For now, let the renderer handle it via window.open with target=_blank
-    // which the main process intercepts
+    return ipcRenderer.invoke('open-external-url', url);
   },
 
   // Open an existing Codex App Server thread in the Codex desktop app.

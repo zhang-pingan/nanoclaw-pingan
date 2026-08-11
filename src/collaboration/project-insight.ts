@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 
 import type { CollaborationProjectSpaceGroupRecord } from './project-space-store.js';
-import type { CollaborationProjectionV3 } from './protocol/v3-reducer.js';
-import type { CollaborationTurnV3, WorkItem } from './protocol/v3-schema.js';
+import type { CollaborationProjectionV4 } from './protocol/v4-reducer.js';
+import type { CollaborationTurnV4, WorkItem } from './protocol/v4-schema.js';
 
 export type ProjectSignalCategory =
   | 'delivery_risk'
@@ -94,8 +94,8 @@ export interface CollaborationProjectInsight {
     readonly error: string | null;
   };
   readonly signals: readonly ProjectInsightSignal[];
-  readonly recent_activity: CollaborationProjectionV3['activity'];
-  readonly activity_delta: CollaborationProjectionV3['activity'];
+  readonly recent_activity: CollaborationProjectionV4['activity'];
+  readonly activity_delta: CollaborationProjectionV4['activity'];
 }
 
 const terminalWorkItemStatuses = new Set(['done', 'cancelled']);
@@ -133,7 +133,7 @@ function isActive(item: WorkItem): boolean {
 }
 
 function activeBlockers(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
   item: WorkItem,
 ): WorkItem[] {
   return item.blocked_by
@@ -142,7 +142,7 @@ function activeBlockers(
     .filter(isActive);
 }
 
-function turnDeadline(turn: CollaborationTurnV3): number | null {
+function turnDeadline(turn: CollaborationTurnV4): number | null {
   if (terminalTurnStates.has(turn.state)) return null;
   const timestamp = [
     'running',
@@ -157,7 +157,7 @@ function turnDeadline(turn: CollaborationTurnV3): number | null {
 }
 
 function dependencyCycles(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
 ): readonly string[][] {
   const state = new Map<string, 'visiting' | 'visited'>();
   const stack: string[] = [];
@@ -183,7 +183,7 @@ function dependencyCycles(
 }
 
 export function buildProjectSignals(input: {
-  readonly projection: CollaborationProjectionV3;
+  readonly projection: CollaborationProjectionV4;
   readonly nowMs: number;
 }): ProjectInsightSignal[] {
   const { projection, nowMs } = input;
@@ -454,7 +454,7 @@ export function buildMyItems(input: {
     | 'ownerPrincipalId'
     | 'subscriptionMode'
   >;
-  readonly projection: CollaborationProjectionV3;
+  readonly projection: CollaborationProjectionV4;
   readonly nowMs: number;
 }): CollaborationMyItem[] {
   const { group, projection, nowMs } = input;
@@ -747,7 +747,7 @@ export function buildMyItems(input: {
 
 export function buildCollaborationProjectInsight(input: {
   readonly group: CollaborationProjectSpaceGroupRecord;
-  readonly projection: CollaborationProjectionV3;
+  readonly projection: CollaborationProjectionV4;
   readonly snapshotHead: string;
   readonly nowMs?: number;
   readonly lastViewedActivityEventId?: string | null;
@@ -874,7 +874,7 @@ export function buildCollaborationProjectInsight(input: {
 }
 
 export function collaborationAnalysisResourceIndex(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
 ): string[] {
   return [
     `group:${projection.groupId}`,
@@ -890,6 +890,7 @@ export function collaborationAnalysisResourceIndex(
     ),
     ...Object.keys(projection.turns).map((id) => `turn:${id}`),
     ...Object.keys(projection.files).map((id) => `file:${id}`),
+    ...Object.keys(projection.links).map((id) => `link:${id}`),
     ...projection.activity.map((entry) => `event:${entry.eventId}`),
   ].sort();
 }

@@ -122,30 +122,30 @@ describe('Collaboration store preflight', () => {
     current.close();
   });
 
-  it('archives and rebuilds the lifecycle-only main v10 store as v11', () => {
+  it('archives and rebuilds the lifecycle-only main v11 store as v12', () => {
     const storeDir = temporaryStore();
     const databasePath = path.join(storeDir, 'collaboration.db');
     new CollaborationProjectSpaceStore(databasePath).close();
 
-    const lifecycleV10 = new Database(databasePath);
-    lifecycleV10.exec(`
-      DROP TABLE collaboration_group_initializations;
+    const lifecycleV11 = new Database(databasePath);
+    lifecycleV11.exec(`
+      DROP TABLE collaboration_link_index;
       UPDATE collaboration_meta
-         SET value = 'icarus.collaboration-local-store/10'
+         SET value = 'icarus.collaboration-local-store/11'
        WHERE key = 'format';
       INSERT INTO collaboration_local_group_bindings (
         group_id, remote_url, principal_id, credential_id,
         recovery_credential_id, binding_state, detach_reason,
         terminal_head, cleanup_paths_json, cleanup_error, updated_at_ms
       ) VALUES (
-        'group_main_v10', '/tmp/main-v10.git',
-        'principal_main_v10', 'credential_main_v10',
-        'credential_main_v10_recovery', 'retained', 'local_remove',
+        'group_main_v11', '/tmp/main-v11.git',
+        'principal_main_v11', 'credential_main_v11',
+        'credential_main_v11_recovery', 'retained', 'local_remove',
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', NULL, NULL, 1
       );
     `);
-    lifecycleV10.pragma('user_version = 10');
-    lifecycleV10.close();
+    lifecycleV11.pragma('user_version = 11');
+    lifecycleV11.close();
 
     const result = preflightCollaborationStore({
       storeDir,
@@ -153,8 +153,8 @@ describe('Collaboration store preflight', () => {
     });
     expect(result).toMatchObject({
       decision: 'archived',
-      observedSchemaVersion: 10,
-      targetSchemaVersion: 11,
+      observedSchemaVersion: 11,
+      targetSchemaVersion: 12,
     });
     expect(fs.existsSync(databasePath)).toBe(false);
 
@@ -162,12 +162,12 @@ describe('Collaboration store preflight', () => {
       path.join(result.archiveDirectory!, 'collaboration.db'),
       { readonly: true },
     );
-    expect(archived.pragma('user_version', { simple: true })).toBe(10);
+    expect(archived.pragma('user_version', { simple: true })).toBe(11);
     expect(
       archived
         .prepare(
           `SELECT binding_state FROM collaboration_local_group_bindings
-            WHERE group_id = 'group_main_v10'`,
+            WHERE group_id = 'group_main_v11'`,
         )
         .get(),
     ).toEqual({ binding_state: 'retained' });
@@ -175,7 +175,7 @@ describe('Collaboration store preflight', () => {
       archived
         .prepare(
           `SELECT 1 FROM sqlite_master
-            WHERE type = 'table' AND name = 'collaboration_group_initializations'`,
+            WHERE type = 'table' AND name = 'collaboration_link_index'`,
         )
         .get(),
     ).toBeUndefined();
@@ -184,8 +184,8 @@ describe('Collaboration store preflight', () => {
     const rebuilt = new CollaborationProjectSpaceStore(databasePath);
     expect(
       rebuilt.rawDatabaseForTests().pragma('user_version', { simple: true }),
-    ).toBe(11);
-    expect(rebuilt.getLocalGroupBinding('group_main_v10')).toBeNull();
+    ).toBe(12);
+    expect(rebuilt.getLocalGroupBinding('group_main_v11')).toBeNull();
     expect(rebuilt.listGroupInitializations()).toEqual([]);
     rebuilt.close();
   });

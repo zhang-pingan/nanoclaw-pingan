@@ -32,8 +32,8 @@ import {
   type ValidatedProjectSpaceHistory,
 } from './project-space-service.js';
 import { CollaborationProjectSpaceStore } from './project-space-store.js';
-import { reduceCollaborationEventV3 } from './protocol/v3-reducer.js';
-import { collaborationCredentialFingerprintV3 } from './protocol/v3-schema.js';
+import { reduceCollaborationEventV4 } from './protocol/v4-reducer.js';
+import { collaborationCredentialFingerprintV4 } from './protocol/v4-schema.js';
 
 const NOW = Date.parse('2026-08-08T12:00:00.000Z');
 const GROUP_ID = 'group_analysis_test';
@@ -49,7 +49,7 @@ const IDENTITY: CollaborationEventSigningIdentity = {
   credentialId: 'credential_alice',
   privateKeyPath: '/tmp/alice-analysis-key',
   publicKey: PUBLIC_KEY,
-  fingerprint: collaborationCredentialFingerprintV3(PUBLIC_KEY),
+  fingerprint: collaborationCredentialFingerprintV4(PUBLIC_KEY),
   purpose: 'event_signing',
 };
 
@@ -165,7 +165,7 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
         event.event_type === 'message_posted'
       )
         throw new Error('simulated standalone Discussion message push failure');
-      projection = reduceCollaborationEventV3(projection, event, {
+      projection = reduceCollaborationEventV4(projection, event, {
         previousEventInAtomicBatch: previousEvent,
       });
       previousEvent = event;
@@ -539,7 +539,7 @@ describe('CollaborationAnalysisService result boundary', () => {
     )!;
     const catalog = JSON.parse(catalogFile.content) as Record<string, any>;
     expect(catalog[`group:${GROUP_ID}`]).toMatchObject({
-      format: 'icarus.collaboration-group/3',
+      format: 'icarus.collaboration-group/4',
       group_id: GROUP_ID,
     });
     expect(catalog[`group:${GROUP_ID}`]).not.toHaveProperty('group');

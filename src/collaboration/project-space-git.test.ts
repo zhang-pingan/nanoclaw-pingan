@@ -36,14 +36,14 @@ import {
 import { CollaborationProjectSpaceService } from './project-space-service.js';
 import { CollaborationProjectSpaceStore } from './project-space-store.js';
 import {
-  buildCollaborationEventV3,
-  reduceCollaborationEventV3,
-} from './protocol/v3-reducer.js';
+  buildCollaborationEventV4,
+  reduceCollaborationEventV4,
+} from './protocol/v4-reducer.js';
 
 const roots: string[] = [];
 const NOW = '2026-08-06T12:00:00.000Z';
 const DELIVERY_MACHINE = {
-  format: 'icarus.collaboration-machine/3' as const,
+  format: 'icarus.collaboration-machine/4' as const,
   initial_state: 'build',
   states: {
     build: {
@@ -84,7 +84,7 @@ function run(cwd: string, args: readonly string[]): string {
 }
 
 function fixture() {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'icarus-v3-git-'));
+  const root = mkdtempSync(path.join(os.tmpdir(), 'icarus-v4-git-'));
   roots.push(root);
   const key = path.join(root, 'signing-key');
   run(root, ['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', key]);
@@ -160,8 +160,8 @@ function genesis(identity: CollaborationEventSigningIdentity) {
   });
   const payload = {
     group: {
-      format: 'icarus.collaboration-group/3' as const,
-      protocol_version: 3 as const,
+      format: 'icarus.collaboration-group/4' as const,
+      protocol_version: 4 as const,
       group_id: 'group_signed',
       name: 'Signed project',
       creator: {
@@ -176,7 +176,7 @@ function genesis(identity: CollaborationEventSigningIdentity) {
       archived_at: null,
     },
     member: {
-      format: 'icarus.collaboration-member/3' as const,
+      format: 'icarus.collaboration-member/4' as const,
       principal_id: identity.principalId,
       display_name: 'Alice',
       status: 'active' as const,
@@ -224,7 +224,7 @@ function genesis(identity: CollaborationEventSigningIdentity) {
     },
     self_description: selfDescription.manifest,
   };
-  const event = buildCollaborationEventV3({
+  const event = buildCollaborationEventV4({
     groupId: 'group_signed',
     eventId,
     aggregateType: 'group',
@@ -243,7 +243,7 @@ function genesis(identity: CollaborationEventSigningIdentity) {
   });
   return {
     event,
-    projection: reduceCollaborationEventV3(null, event),
+    projection: reduceCollaborationEventV4(null, event),
     materializedFiles: selfDescription.materializedFiles,
   };
 }
@@ -257,7 +257,7 @@ class CollaborationProjectSpaceGitTransport extends BaseCollaborationProjectSpac
   }
 }
 
-describe('Collaboration project space v3 Git protocol', () => {
+describe('Collaboration project space v4 Git protocol', () => {
   it('falls back from the configured default SSH key and persists the working key', async () => {
     const test = fixture();
     const primaryKey = path.join(test.root, 'configured-default-key');
@@ -1313,7 +1313,7 @@ process.exit(result.status === null ? 1 : result.status);
         ),
       },
     };
-    const maliciousEvent = buildCollaborationEventV3({
+    const maliciousEvent = buildCollaborationEventV4({
       groupId: initial.event.group_id,
       eventId: initial.event.event_id,
       aggregateType: initial.event.aggregate_type,
@@ -1328,7 +1328,7 @@ process.exit(result.status === null ? 1 : result.status);
         self_description: maliciousManifest,
       },
     });
-    const maliciousProjection = reduceCollaborationEventV3(
+    const maliciousProjection = reduceCollaborationEventV4(
       null,
       maliciousEvent,
     );
@@ -1388,7 +1388,7 @@ process.exit(result.status === null ? 1 : result.status);
       previousHead: history.head,
       identity: bob,
       buildEvent: (current) =>
-        buildCollaborationEventV3({
+        buildCollaborationEventV4({
           groupId: 'group_signed',
           eventId: joinEventId,
           aggregateType: 'membership',
@@ -1405,7 +1405,7 @@ process.exit(result.status === null ? 1 : result.status);
           occurredAt: NOW,
           payload: {
             member: {
-              format: 'icarus.collaboration-member/3',
+              format: 'icarus.collaboration-member/4',
               principal_id: bob.principalId,
               display_name: 'Bob',
               status: 'active',
@@ -1444,7 +1444,7 @@ process.exit(result.status === null ? 1 : result.status);
       buildEvent: (current) => {
         const head =
           current.projection.aggregateHeads[`membership:${bob.principalId}`]!;
-        return buildCollaborationEventV3({
+        return buildCollaborationEventV4({
           groupId: 'group_signed',
           eventId: executorEventId,
           aggregateType: 'membership',
@@ -1484,7 +1484,7 @@ process.exit(result.status === null ? 1 : result.status);
       buildEvent: (current) => {
         const head =
           current.projection.aggregateHeads[`membership:${bob.principalId}`]!;
-        return buildCollaborationEventV3({
+        return buildCollaborationEventV4({
           groupId: 'group_signed',
           eventId: leftEventId,
           aggregateType: 'membership',
@@ -1514,7 +1514,7 @@ process.exit(result.status === null ? 1 : result.status);
       identity: test.identity,
       buildEvent: (current) => {
         const head = current.projection.aggregateHeads['group:group_signed']!;
-        return buildCollaborationEventV3({
+        return buildCollaborationEventV4({
           groupId: 'group_signed',
           eventId: 'evt_group_dissolved',
           aggregateType: 'group',
@@ -1594,7 +1594,7 @@ process.exit(result.status === null ? 1 : result.status);
       previousHead: history.head,
       identity: test.identity,
       buildEvent: () =>
-        buildCollaborationEventV3({
+        buildCollaborationEventV4({
           groupId: 'group_signed',
           eventId: registeredEventId,
           aggregateType: 'membership',
@@ -1634,7 +1634,7 @@ process.exit(result.status === null ? 1 : result.status);
           current.projection.aggregateHeads[
             `membership:${test.identity.principalId}`
           ]!;
-        return buildCollaborationEventV3({
+        return buildCollaborationEventV4({
           groupId: 'group_signed',
           eventId: 'evt_executor_revoked',
           aggregateType: 'membership',
@@ -1676,7 +1676,7 @@ process.exit(result.status === null ? 1 : result.status);
     const revokedExecutor =
       history.projection.executors[test.identity.principalId]?.[executorId]!;
     const resurrectionEventId = 'evt_executor_resurrection';
-    const resurrection = buildCollaborationEventV3({
+    const resurrection = buildCollaborationEventV4({
       groupId: 'group_signed',
       eventId: resurrectionEventId,
       aggregateType: 'membership',
@@ -1764,7 +1764,7 @@ process.exit(result.status === null ? 1 : result.status);
       genesisProjection: initial.projection,
       genesisMaterializedFiles: initial.materializedFiles,
     });
-    const maliciousEvent = buildCollaborationEventV3({
+    const maliciousEvent = buildCollaborationEventV4({
       groupId: 'group_signed',
       eventId: 'evt_wrong_aggregate_dissolve',
       aggregateType: 'membership',
@@ -1878,7 +1878,7 @@ process.exit(result.status === null ? 1 : result.status);
       identity: test.identity,
       buildEvent: (current) => {
         const head = current.projection.aggregateHeads['group:group_signed']!;
-        return buildCollaborationEventV3({
+        return buildCollaborationEventV4({
           groupId: 'group_signed',
           eventId: 'evt_transport_key_check',
           aggregateType: 'group',
@@ -1962,7 +1962,7 @@ process.exit(result.status === null ? 1 : result.status);
           revision: 1,
         };
         return {
-          event: buildCollaborationEventV3({
+          event: buildCollaborationEventV4({
             groupId: 'group_signed',
             eventId: 'evt_shared_file',
             aggregateType: 'workspace',
@@ -2079,6 +2079,140 @@ process.exit(result.status === null ? 1 : result.status);
       expect(store.getStagedArtifact(staged.metadata.artifact_id)?.state).toBe(
         'committed',
       );
+    } finally {
+      store.close();
+    }
+  }, 30_000);
+
+  it('materializes, replays, revises, and removes Unicode Workspace links without erasing audit history', async () => {
+    const test = fixture();
+    const transport = new CollaborationProjectSpaceGitTransport();
+    const store = new CollaborationProjectSpaceStore(
+      path.join(test.root, 'links-collaboration.db'),
+    );
+    let advanceClock = false;
+    let nowMs = Date.parse(NOW);
+    const service = new CollaborationProjectSpaceService(
+      store,
+      transport,
+      path.join(test.root, 'link-repositories'),
+      identityService(test.identity),
+      () => (advanceClock ? nowMs++ : nowMs),
+    );
+    try {
+      await service.createGroup({
+        remoteUrl: test.remote,
+        name: 'Signed project',
+        gitSshKeyPath: test.identity.privateKeyPath,
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'open',
+        observerAccess: 'allowed',
+        groupId: 'group_signed',
+      });
+      advanceClock = true;
+      const published = await service.publishSharedLink({
+        groupId: 'group_signed',
+        expectedRevision: 0,
+        title: '设计规范',
+        url: 'https://例子.测试/设计?版本=四',
+        description: 'Unicode 长期资源',
+      });
+      const link = Object.values(published.projection!.links)[0]!;
+      const metadataPath = `workspace/shared/links/${link.link_id}/metadata.json`;
+      expect(
+        JSON.parse(
+          (
+            await transport.readVerifiedFile({
+              repositoryPath: published.repositoryPath,
+              verifiedHead: published.lastVerifiedHead!,
+              repositoryFile: metadataPath,
+            })
+          ).toString('utf8'),
+        ),
+      ).toEqual(link);
+      expect(store.listLinkIndex('group_signed')).toEqual([
+        expect.objectContaining({
+          linkId: link.link_id,
+          scope: 'shared',
+          ownerPrincipalId: null,
+          revision: 1,
+          repositoryPath: metadataPath,
+        }),
+      ]);
+      expect(
+        buildCollaborationVirtualTree(published.projection!)
+          .find((node) => node.id === 'shared')
+          ?.children?.some((node) => node.id === `link:${link.link_id}`),
+      ).toBe(true);
+
+      const revised = await service.reviseSharedLink({
+        groupId: 'group_signed',
+        expectedRevision: 1,
+        linkId: link.link_id,
+        revision: 1,
+        title: '设计规范 v2',
+        url: 'https://例子.测试/设计/二',
+        description: '已修订',
+      });
+      expect(
+        JSON.parse(
+          (
+            await transport.readVerifiedFile({
+              repositoryPath: revised.repositoryPath,
+              verifiedHead: revised.lastVerifiedHead!,
+              repositoryFile: metadataPath,
+            })
+          ).toString('utf8'),
+        ),
+      ).toMatchObject({ title: '设计规范 v2', revision: 2 });
+
+      const removed = await service.removeSharedLink({
+        groupId: 'group_signed',
+        expectedRevision: 2,
+        linkId: link.link_id,
+        revision: 2,
+      });
+      await expect(
+        transport.readVerifiedFile({
+          repositoryPath: removed.repositoryPath,
+          verifiedHead: removed.lastVerifiedHead!,
+          repositoryFile: metadataPath,
+        }),
+      ).rejects.toThrow();
+      expect(store.listLinkIndex('group_signed')).toEqual([]);
+      expect(
+        run(test.remote, [
+          'git',
+          'cat-file',
+          '-e',
+          `${published.lastVerifiedHead!}:${metadataPath}`,
+        ]),
+      ).toBe('');
+      expect(() =>
+        run(test.remote, [
+          'git',
+          'cat-file',
+          '-e',
+          `${removed.lastVerifiedHead!}:${metadataPath}`,
+        ]),
+      ).toThrow();
+
+      const replayed = await transport.inspect({
+        remoteUrl: test.remote,
+        repositoryPath: path.join(test.root, 'fresh-link-cache.git'),
+        gitSshKeyPath: test.identity.privateKeyPath,
+      });
+      expect(replayed.projection.links).toEqual({});
+      expect(replayed.projection.removedLinkIds).toContain(link.link_id);
+      expect(
+        replayed.eventRecords.map((record) => record.event.event_type),
+      ).toEqual([
+        'group_initialized',
+        'shared_link_published',
+        'shared_link_revised',
+        'shared_link_removed',
+      ]);
     } finally {
       store.close();
     }
@@ -2311,6 +2445,22 @@ process.exit(result.status === null ? 1 : result.status);
         'refs/tags/keep-history',
         old.lastVerifiedHead!,
       ]);
+      const linked = await service.publishSharedLink({
+        groupId: old.groupId,
+        expectedRevision: 0,
+        title: 'Old generation link',
+        url: 'https://example.test/old-generation',
+      });
+      const oldLink = Object.values(linked.projection!.links)[0]!;
+      const oldLinkPath = `workspace/shared/links/${oldLink.link_id}/metadata.json`;
+      expect(
+        run(test.remote, [
+          'git',
+          'cat-file',
+          '-e',
+          `${linked.lastVerifiedHead!}:${oldLinkPath}`,
+        ]),
+      ).toBe('');
       await service.createWorkItem({
         groupId: old.groupId,
         workItemId: 'confirmation_race',
@@ -2353,6 +2503,7 @@ process.exit(result.status === null ? 1 : result.status);
         projection: {
           groupId: initialized.groupId,
           workItems: {},
+          links: {},
           workflowInstances: {},
           turns: {},
           activity: [
@@ -2372,7 +2523,16 @@ process.exit(result.status === null ? 1 : result.status);
         `${newHead}:README.md`,
       ]);
       expect(initializedReadme).toContain(`Group \`${initialized.groupId}\``);
+      expect(initializedReadme).toContain('Workspace Link');
       expect(initializedReadme).not.toContain('Group `group_signed`');
+      expect(() =>
+        run(test.remote, [
+          'git',
+          'cat-file',
+          '-e',
+          `${newHead}:${oldLinkPath}`,
+        ]),
+      ).toThrow();
       expect(
         run(test.remote, [
           'git',
@@ -2556,7 +2716,7 @@ exit 0
         previousHead: history.head,
         identity: test.identity,
         buildEvent: (current) => ({
-          event: buildCollaborationEventV3({
+          event: buildCollaborationEventV4({
             groupId: 'group_signed',
             eventId: 'evt_bad_file',
             aggregateType: 'workspace',
@@ -2662,7 +2822,7 @@ exit 0
           previousHead: current.head,
           identity: test.identity,
           buildEvent: () =>
-            buildCollaborationEventV3({
+            buildCollaborationEventV4({
               groupId: 'group_signed',
               eventId: 'evt_relation_bypass',
               aggregateType: 'work_item',
@@ -2692,7 +2852,7 @@ exit 0
     }
   }, 30_000);
 
-  it('quarantines a direct commit that cannot be explained by one v3 event', async () => {
+  it('quarantines a direct commit that cannot be explained by one v4 event', async () => {
     const test = fixture();
     const transport = new CollaborationProjectSpaceGitTransport();
     const initial = genesis(test.identity);
@@ -2744,7 +2904,7 @@ exit 0
         repositoryPath: test.cache,
         previousHead: history.head,
       }),
-    ).rejects.toThrow(/exactly one v3 event|Unexpected file/u);
+    ).rejects.toThrow(/exactly one v4 event|Unexpected file/u);
   }, 30_000);
 
   it('quarantines a symbolic link substituted for signed Genesis Skill content', async () => {

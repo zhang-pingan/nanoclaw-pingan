@@ -712,6 +712,23 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('open-external-url', async (_event, value: unknown) => {
+    if (typeof value !== 'string' || value.length < 1 || value.length > 4096)
+      return { ok: false, error: 'Invalid external URL length' };
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol.length < 2)
+        return { ok: false, error: 'External URL must be absolute' };
+      await shell.openExternal(value);
+      return { ok: true };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  });
+
   ipcMain.handle(
     'desktop-capture',
     async (_event, payload: DesktopCapturePayload) => {

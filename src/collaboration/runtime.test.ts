@@ -55,7 +55,7 @@ describe('CollaborationRuntime', () => {
     expect(selected.status()).toMatchObject({
       available: true,
       databasePath: path.join(storeDir, 'collaboration.db'),
-      protocolVersion: 3,
+      protocolVersion: 4,
       error: null,
       scheduler: { running: true },
     });
@@ -105,7 +105,7 @@ describe('CollaborationRuntime', () => {
     const backupDirectory = path.join(storeDir, 'backup');
     const manifest = await selected.createBackup(backupDirectory);
     expect(manifest).toMatchObject({
-      format: 'icarus.collaboration-backup/3',
+      format: 'icarus.collaboration-backup/4',
       database_basename: 'collaboration.db',
       file: { size: expect.any(Number), sha256: expect.any(String) },
       staged_artifacts: {

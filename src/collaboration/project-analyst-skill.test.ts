@@ -33,7 +33,7 @@ import {
 } from './project-space-identity.js';
 import { CollaborationProjectSpaceService } from './project-space-service.js';
 import { CollaborationProjectSpaceStore } from './project-space-store.js';
-import { collaborationCanonicalHashV3 } from './protocol/v3-reducer.js';
+import { collaborationCanonicalHashV4 } from './protocol/v4-reducer.js';
 
 const roots: string[] = [];
 const NOW = '2026-08-09T12:00:00.000Z';
@@ -45,6 +45,7 @@ let remote = '';
 let principalId = '';
 const idlePrincipalId = 'principal_00000000-0000-4000-8000-000000000002';
 let validHead = '';
+let workspaceLinkId = '';
 
 class CollaborationProjectSpaceGitTransport extends BaseCollaborationProjectSpaceGitTransport {
   constructor() {
@@ -192,6 +193,48 @@ beforeAll(async () => {
       contents: Buffer.from('# 自动化规则\n', 'utf8'),
     });
     validHead = withUnicodeFile.lastVerifiedHead!;
+    const withWorkspaceLink = await service.publishSharedLink({
+      groupId: 'group_analyst_fixture',
+      expectedRevision: 1,
+      title: '发布检查清单',
+      url: 'https://example.com/发布/检查?locale=zh-CN',
+      description: '用于发布验收的长期 Workspace 资源。',
+      workItemRefs: ['wi_release'],
+    });
+    workspaceLinkId = Object.values(withWorkspaceLink.projection!.links).find(
+      (link) => link.title === '发布检查清单',
+    )!.link_id;
+    validHead = withWorkspaceLink.lastVerifiedHead!;
+    const withProgressLink = await service.postWorkItemProgress({
+      groupId: 'group_analyst_fixture',
+      workItemId: 'wi_release',
+      expectedRevision: 1,
+      summary: 'Release evidence is ready for review.',
+      links: [
+        {
+          title: 'Ephemeral release evidence',
+          url: 'urn:icarus:release:evidence:2026-08-09',
+          description: 'Attached only to this progress update.',
+        },
+      ],
+    });
+    validHead = withProgressLink.lastVerifiedHead!;
+    const withDiscussionLink = await service.createDiscussionWithMessage({
+      groupId: 'group_analyst_fixture',
+      threadId: 'discussion_release_review',
+      messageId: 'message_release_review',
+      title: 'Release review',
+      scope: { type: 'work_item', ref: 'wi_release' },
+      body: 'Please review the linked release notes.',
+      links: [
+        {
+          title: 'Release notes draft',
+          url: 'https://example.com/releases/2026-08-09',
+          description: 'Contextual Discussion evidence.',
+        },
+      ],
+    });
+    validHead = withDiscussionLink.lastVerifiedHead!;
     const idleKey = path.join(fixtureRoot, 'idle-signing-key');
     run(fixtureRoot, [
       'ssh-keygen',
@@ -252,7 +295,7 @@ beforeAll(async () => {
   } finally {
     store.close();
   }
-}, 30_000);
+}, 60_000);
 
 afterAll(() => {
   for (const root of roots.splice(0).reverse())
@@ -320,6 +363,45 @@ describe('project-analyst complete Skill', () => {
       'notification:notification_analyst_fixture',
     );
     expect(context.resource_index).toContain('file:file_automation_rules');
+    expect(context.resource_index).toContain(`link:${workspaceLinkId}`);
+    const catalog = json(path.join(first.output, 'resources/catalog.json'));
+    expect(catalog[`link:${workspaceLinkId}`]).toMatchObject({
+      link: {
+        link_id: workspaceLinkId,
+        title: '发布检查清单',
+        url: 'https://example.com/发布/检查?locale=zh-CN',
+        refs: { work_item_refs: ['wi_release'] },
+      },
+      location: {
+        scope: 'shared',
+        principalId: null,
+      },
+      repository_path: `workspace/shared/links/${workspaceLinkId}/metadata.json`,
+    });
+    expect(catalog['work_item:wi_release'].updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          links: [
+            expect.objectContaining({
+              title: 'Ephemeral release evidence',
+              url: 'urn:icarus:release:evidence:2026-08-09',
+            }),
+          ],
+        }),
+      ]),
+    );
+    expect(catalog['discussion:discussion_release_review']).toMatchObject({
+      messages: {
+        message_release_review: {
+          links: [
+            expect.objectContaining({
+              title: 'Release notes draft',
+              url: 'https://example.com/releases/2026-08-09',
+            }),
+          ],
+        },
+      },
+    });
     expect(context.rule_signals).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ rule_id: 'work_item_overdue' }),
@@ -354,6 +436,7 @@ describe('project-analyst complete Skill', () => {
         'group:group_analyst_fixture',
         `principal:${principalId}`,
         'work_item:wi_release',
+        `link:${workspaceLinkId}`,
       ]),
     );
 
@@ -364,6 +447,7 @@ describe('project-analyst complete Skill', () => {
         'group:group_analyst_fixture',
         `principal:${principalId}`,
         'work_item:wi_release',
+        `link:${workspaceLinkId}`,
       ]),
     );
 
@@ -390,7 +474,7 @@ describe('project-analyst complete Skill', () => {
     expect(
       json(path.join(idle.output, 'resources/catalog.json')),
     ).toHaveProperty(`principal:${idlePrincipalId}`);
-  });
+  }, 15_000);
 
   it('uses the shared delta resource closure and rejects an unknown base', () => {
     const genesis = run(fixtureRoot, [
@@ -678,7 +762,7 @@ describe('project-analyst complete Skill', () => {
       'notification:notification_analyst_fixture.body_markdown',
       'Review the **release analysis**.',
     );
-  });
+  }, 20_000);
 
   it('validates independent repository and package results without Ajv', () => {
     const repository = buildContext(remote, 'project');
@@ -690,6 +774,21 @@ describe('project-analyst complete Skill', () => {
     const repositoryResult = json(
       path.join(repository.output, 'result-template.json'),
     );
+    repositoryResult.findings = [
+      {
+        finding_id: 'finding_workspace_link',
+        kind: 'fact',
+        category: 'missing_evidence',
+        severity: 'info',
+        confidence: 1,
+        title: 'Workspace link is available',
+        summary: 'The release checklist can be cited as structured evidence.',
+        affected_refs: [`link:${workspaceLinkId}`],
+        evidence_refs: [`link:${workspaceLinkId}`],
+        recommendations: [],
+        proposed_actions: [],
+      },
+    ];
     writeFileSync(
       repositoryResultPath,
       `${JSON.stringify(repositoryResult, null, 2)}\n`,
@@ -704,6 +803,39 @@ describe('project-analyst complete Skill', () => {
       path.join(repository.output, 'resources/catalog.json'),
     ]);
     expect(validRepository.status).toBe(0);
+    const validEvidence = invoke(
+      path.join(skillRoot, 'scripts/verify-evidence.mjs'),
+      [path.join(repository.output, 'context.json'), repositoryResultPath],
+    );
+    expect(validEvidence.status).toBe(0);
+    writeFileSync(
+      repositoryResultPath,
+      `${JSON.stringify(
+        {
+          ...repositoryResult,
+          findings: [
+            {
+              ...repositoryResult.findings[0],
+              evidence_refs: ['link:missing'],
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const invalidEvidence = invoke(
+      path.join(skillRoot, 'scripts/verify-evidence.mjs'),
+      [path.join(repository.output, 'context.json'), repositoryResultPath],
+    );
+    expect(invalidEvidence.status).not.toBe(0);
+    expect(invalidEvidence.stderr).toContain(
+      'evidence ref is not in context: link:missing',
+    );
+    writeFileSync(
+      repositoryResultPath,
+      `${JSON.stringify(repositoryResult, null, 2)}\n`,
+    );
     const catalogPath = path.join(repository.output, 'resources/catalog.json');
     const originalCatalog = readFileSync(catalogPath, 'utf8');
     writeFileSync(catalogPath, '{"tampered":true}\n');
@@ -753,7 +885,7 @@ describe('project-analyst complete Skill', () => {
       contract_version: 1,
       analysis_id: packageContext.analysis_id,
       snapshot_head: validHead,
-      context_hash: collaborationCanonicalHashV3(packageContext),
+      context_hash: collaborationCanonicalHashV4(packageContext),
       prompt_hash: sha,
       challenge: 'challenge'.repeat(4),
       summary: { health: 'healthy', headline: 'No findings', details: '' },

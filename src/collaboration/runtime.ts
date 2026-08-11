@@ -49,7 +49,7 @@ export interface CollaborationRuntimeStatus {
   readonly available: boolean;
   readonly databasePath: string;
   readonly repositoryRoot: string;
-  readonly protocolVersion: 3;
+  readonly protocolVersion: 4;
   readonly error: string | null;
   readonly scheduler: ReturnType<CollaborationScheduler['diagnostics']> | null;
 }
@@ -170,11 +170,11 @@ export class CollaborationRuntime {
         });
       this.options.logger.info(
         {
-          protocolVersion: 3,
+          protocolVersion: 4,
           databasePath: this.databasePath,
           repositoryRoot: this.repositoryRoot,
         },
-        'Collaboration project-space v3 Runtime started',
+        'Collaboration project-space v4 Runtime started',
       );
       return true;
     } catch (error) {
@@ -189,7 +189,7 @@ export class CollaborationRuntime {
       this.analysisExecutorsValue = null;
       this.options.logger.error(
         { error: this.errorValue, databasePath: this.databasePath },
-        'Collaboration project-space v3 Runtime is unavailable',
+        'Collaboration project-space v4 Runtime is unavailable',
       );
       return false;
     }
@@ -233,7 +233,7 @@ export class CollaborationRuntime {
       available: Boolean(this.storeValue),
       databasePath: this.databasePath,
       repositoryRoot: this.repositoryRoot,
-      protocolVersion: 3,
+      protocolVersion: 4,
       error: this.errorValue,
       scheduler: this.schedulerValue?.diagnostics() ?? null,
     };

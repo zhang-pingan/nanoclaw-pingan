@@ -6,27 +6,33 @@ import {
   strictParseJson,
 } from './canonical-json.js';
 import {
-  buildCollaborationEventV3,
-  collaborationCanonicalHashV3,
-  collaborationDeadlineSnapshotHashV3,
-  collaborationIdempotencyKeyV3,
-  collaborationRecoveryRequestHashV3,
-  collaborationRecoveryVerificationCodeV3,
-  collaborationTurnInputHashV3,
-  collaborationWorkflowDefinitionHashV3,
-  reduceCollaborationEventV3,
-  type CollaborationProjectionV3,
-} from './v3-reducer.js';
+  buildCollaborationEventV4,
+  collaborationCanonicalHashV4,
+  collaborationDeadlineSnapshotHashV4,
+  collaborationIdempotencyKeyV4,
+  collaborationRecoveryRequestHashV4,
+  collaborationRecoveryVerificationCodeV4,
+  collaborationTurnInputHashV4,
+  collaborationWorkflowDefinitionHashV4,
+  reduceCollaborationEventV4,
+  type CollaborationProjectionV4,
+} from './v4-reducer.js';
 import {
-  collaborationEventV3Schema,
-  groupDefinitionV3Schema,
-  collaborationCredentialFingerprintV3,
-  machineDefinitionV3Schema,
-  parseV3ProtocolVersion,
+  collaborationEventV4Schema,
+  discussionMessageSchema,
+  externalLinkSchema,
+  externalLinksSchema,
+  groupDefinitionV4Schema,
+  collaborationCredentialFingerprintV4,
+  machineDefinitionV4Schema,
+  parseV4ProtocolVersion,
+  progressUpdateSchema,
+  workspaceLinkSchema,
+  workItemProgressSchema,
   type CollaborationAggregateType,
-  type CollaborationEventTypeV3,
-  type CollaborationEventV3,
-} from './v3-schema.js';
+  type CollaborationEventTypeV4,
+  type CollaborationEventV4,
+} from './v4-schema.js';
 
 const NOW = '2026-08-06T12:00:00.000Z';
 const ALICE = 'principal_00000000-0000-4000-8000-000000000001';
@@ -37,13 +43,13 @@ const CREDENTIAL = 'credential_alice_mac';
 const BOB_CREDENTIAL = 'credential_bob_mac';
 const RECOVERY_CREDENTIAL = 'credential_alice_recovery';
 const KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice';
-const FINGERPRINT = collaborationCredentialFingerprintV3(KEY);
+const FINGERPRINT = collaborationCredentialFingerprintV4(KEY);
 
 function event(input: {
-  projection?: CollaborationProjectionV3 | null;
+  projection?: CollaborationProjectionV4 | null;
   aggregateType: CollaborationAggregateType;
   aggregateId: string;
-  eventType: CollaborationEventTypeV3;
+  eventType: CollaborationEventTypeV4;
   payload: Record<string, unknown>;
   id?: string;
   actor?: {
@@ -51,12 +57,12 @@ function event(input: {
     clientId: string;
     credentialId: string;
   };
-}): CollaborationEventV3 {
+}): CollaborationEventV4 {
   const head =
     input.projection?.aggregateHeads[
       `${input.aggregateType}:${input.aggregateId}`
     ];
-  return buildCollaborationEventV3({
+  return buildCollaborationEventV4({
     groupId: 'group_payment',
     eventId: input.id ?? `evt_${input.eventType}`,
     aggregateType: input.aggregateType,
@@ -75,7 +81,7 @@ function event(input: {
   });
 }
 
-function genesis(): CollaborationEventV3 {
+function genesis(): CollaborationEventV4 {
   return event({
     aggregateType: 'group',
     aggregateId: 'group_payment',
@@ -83,8 +89,8 @@ function genesis(): CollaborationEventV3 {
     id: 'evt_genesis',
     payload: {
       group: {
-        format: 'icarus.collaboration-group/3',
-        protocol_version: 3,
+        format: 'icarus.collaboration-group/4',
+        protocol_version: 4,
         group_id: 'group_payment',
         name: 'Payment project',
         creator: {
@@ -100,7 +106,7 @@ function genesis(): CollaborationEventV3 {
         archived_at: null,
       },
       member: {
-        format: 'icarus.collaboration-member/3',
+        format: 'icarus.collaboration-member/4',
         principal_id: ALICE,
         display_name: 'Alice',
         status: 'active',
@@ -198,9 +204,113 @@ function workItem(revision = 1) {
   };
 }
 
-describe('Collaboration project space v3 contract', () => {
+describe('Collaboration project space v4 contract', () => {
+  it('validates strict Unicode external links and contextual attachment limits', () => {
+    const unicodeLink = {
+      format: 'icarus.collaboration-external-link/1',
+      link_id: 'link_unicode',
+      title: '设计说明',
+      url: 'https://例子.测试/路径?q=你好#章节',
+      description: '供产品与工程复核',
+    } as const;
+    expect(externalLinkSchema.parse(unicodeLink)).toEqual(unicodeLink);
+    expect(
+      externalLinksSchema.parse(
+        Array.from({ length: 10 }, (_, index) => ({
+          ...unicodeLink,
+          link_id: `link_${String(index)}`,
+        })),
+      ),
+    ).toHaveLength(10);
+    expect(() =>
+      externalLinksSchema.parse(
+        Array.from({ length: 11 }, (_, index) => ({
+          ...unicodeLink,
+          link_id: `link_${String(index)}`,
+        })),
+      ),
+    ).toThrow();
+    expect(() => externalLinksSchema.parse([unicodeLink, unicodeLink])).toThrow(
+      /unique/u,
+    );
+    expect(() =>
+      externalLinkSchema.parse({ ...unicodeLink, fetched_title: 'untrusted' }),
+    ).toThrow();
+    expect(() =>
+      externalLinkSchema.parse({ ...unicodeLink, url: 'relative/path' }),
+    ).toThrow(/absolute URL or URI/u);
+
+    const context = {
+      update_id: 'update_links',
+      summary: 'Reviewed linked design',
+      links: [unicodeLink],
+      origin: 'human',
+      actor_client_id: CLIENT,
+      executor_id: null,
+      created_at: NOW,
+    };
+    expect(
+      progressUpdateSchema.parse({
+        format: 'icarus.collaboration-progress-update/2',
+        principal_id: ALICE,
+        ...context,
+      }).links,
+    ).toEqual([unicodeLink]);
+    expect(() =>
+      workItemProgressSchema.parse({
+        format: 'icarus.collaboration-work-item-progress/2',
+        work_item_id: 'work_item_links',
+        actor_principal_id: ALICE,
+        ...context,
+        summary: '',
+      }),
+    ).toThrow();
+    expect(() =>
+      discussionMessageSchema.parse({
+        format: 'icarus.collaboration-message/2',
+        message_id: 'message_links',
+        thread_id: 'thread_links',
+        author_principal_id: ALICE,
+        actor_client_id: CLIENT,
+        executor_id: null,
+        origin: 'human',
+        body: '',
+        mentions: [],
+        refs: [],
+        links: [unicodeLink],
+        revision: 1,
+        tombstoned: false,
+        created_at: NOW,
+        updated_at: NOW,
+      }),
+    ).toThrow();
+    expect(() =>
+      workspaceLinkSchema.parse({
+        format: 'icarus.collaboration-workspace-link/1',
+        link_id: 'link_bad_owner',
+        title: 'Bad owner',
+        url: 'urn:icarus:test',
+        description: '',
+        scope: 'shared',
+        owner_principal_id: ALICE,
+        refs: {
+          work_item_refs: [],
+          workflow_instance_refs: [],
+          discussion_refs: [],
+        },
+        created_by_principal_id: ALICE,
+        created_by_client_id: CLIENT,
+        updated_by_principal_id: ALICE,
+        updated_by_client_id: CLIENT,
+        created_at: NOW,
+        updated_at: NOW,
+        revision: 1,
+      }),
+    ).toThrow(/Shared links have no owner/u);
+  });
+
   it('allows only the immediate audited default grant after open registration', () => {
-    const initial = reduceCollaborationEventV3(null, genesis());
+    const initial = reduceCollaborationEventV4(null, genesis());
     const registrationEvent = event({
       projection: initial,
       aggregateType: 'membership',
@@ -214,7 +324,7 @@ describe('Collaboration project space v3 contract', () => {
       },
       payload: {
         member: {
-          format: 'icarus.collaboration-member/3',
+          format: 'icarus.collaboration-member/4',
           principal_id: BOB,
           display_name: 'Bob',
           status: 'active',
@@ -243,7 +353,7 @@ describe('Collaboration project space v3 contract', () => {
         },
       },
     });
-    const registered = reduceCollaborationEventV3(initial, registrationEvent);
+    const registered = reduceCollaborationEventV4(initial, registrationEvent);
     const memberPermissions = [
       'workspace:publish_owned',
       'work_item:create',
@@ -274,12 +384,12 @@ describe('Collaboration project space v3 contract', () => {
       },
     });
     expect(
-      reduceCollaborationEventV3(registered, immediateGrant, {
+      reduceCollaborationEventV4(registered, immediateGrant, {
         previousEventInAtomicBatch: registrationEvent,
       }).permissionGrants[BOB]?.grants,
     ).toEqual(memberPermissions);
 
-    const settingsChanged = reduceCollaborationEventV3(
+    const settingsChanged = reduceCollaborationEventV4(
       registered,
       event({
         projection: registered,
@@ -291,7 +401,7 @@ describe('Collaboration project space v3 contract', () => {
       }),
     );
     expect(() =>
-      reduceCollaborationEventV3(
+      reduceCollaborationEventV4(
         settingsChanged,
         event({
           projection: settingsChanged,
@@ -322,8 +432,8 @@ describe('Collaboration project space v3 contract', () => {
     expect(canonicalJsonStringify({ z: 1, a: { y: true, x: 'v' } })).toBe(
       '{"a":{"x":"v","y":true},"z":1}',
     );
-    expect(collaborationCanonicalHashV3({ b: 2, a: 1 })).toBe(
-      collaborationCanonicalHashV3({ a: 1, b: 2 }),
+    expect(collaborationCanonicalHashV4({ b: 2, a: 1 })).toBe(
+      collaborationCanonicalHashV4({ a: 1, b: 2 }),
     );
     expect(prettyCollaborationJson({ b: 2, a: 1 })).toBe(
       '{\n  "b": 2,\n  "a": 1\n}\n',
@@ -334,22 +444,23 @@ describe('Collaboration project space v3 contract', () => {
   });
 
   it('accepts only the current Group format and a Group without Workflow', () => {
-    expect(parseV3ProtocolVersion(3)).toBe(3);
-    expect(() => parseV3ProtocolVersion(2)).toThrow(/only v3 is current/u);
+    expect(parseV4ProtocolVersion(4)).toBe(4);
+    expect(() => parseV4ProtocolVersion(3)).toThrow(/only v4 is current/u);
+    expect(() => parseV4ProtocolVersion(2)).toThrow(/only v4 is current/u);
     expect(() =>
-      groupDefinitionV3Schema.parse({
+      groupDefinitionV4Schema.parse({
         ...(genesis().payload.group as Record<string, unknown>),
         format: 'icarus.agent-group/2',
       }),
     ).toThrow();
     expect(() =>
-      collaborationEventV3Schema.parse({
+      collaborationEventV4Schema.parse({
         ...genesis(),
         event_type: 'client_registered',
       }),
     ).toThrow();
 
-    const projection = reduceCollaborationEventV3(null, genesis());
+    const projection = reduceCollaborationEventV4(null, genesis());
     expect(projection.group.lifecycle).toBe('active');
     expect(projection.workflowDefinitions).toEqual({});
     expect(projection.workflowInstances).toEqual({});
@@ -357,8 +468,8 @@ describe('Collaboration project space v3 contract', () => {
 
   it('rejects v2 owner_role and validates Principal/participant assignment', () => {
     expect(() =>
-      machineDefinitionV3Schema.parse({
-        format: 'icarus.collaboration-machine/3',
+      machineDefinitionV4Schema.parse({
+        format: 'icarus.collaboration-machine/4',
         initial_state: 'build',
         states: {
           build: {
@@ -375,8 +486,8 @@ describe('Collaboration project space v3 contract', () => {
     ).toThrow();
 
     expect(
-      machineDefinitionV3Schema.parse({
-        format: 'icarus.collaboration-machine/3',
+      machineDefinitionV4Schema.parse({
+        format: 'icarus.collaboration-machine/4',
         initial_state: 'build',
         states: {
           build: {
@@ -400,7 +511,7 @@ describe('Collaboration project space v3 contract', () => {
   });
 
   it('maintains independent Aggregate revisions without a global sequence', () => {
-    let projection = reduceCollaborationEventV3(null, genesis());
+    let projection = reduceCollaborationEventV4(null, genesis());
     const created = event({
       projection,
       aggregateType: 'work_item',
@@ -408,7 +519,7 @@ describe('Collaboration project space v3 contract', () => {
       eventType: 'work_item_created',
       payload: { item: workItem() },
     });
-    projection = reduceCollaborationEventV3(projection, created);
+    projection = reduceCollaborationEventV4(projection, created);
 
     const progress = event({
       projection,
@@ -417,7 +528,7 @@ describe('Collaboration project space v3 contract', () => {
       eventType: 'progress_update_posted',
       payload: {
         update: {
-          format: 'icarus.collaboration-progress-update/1',
+          format: 'icarus.collaboration-progress-update/2',
           update_id: 'update_1',
           principal_id: ALICE,
           summary: 'Backend complete',
@@ -435,7 +546,7 @@ describe('Collaboration project space v3 contract', () => {
         },
       },
     });
-    projection = reduceCollaborationEventV3(projection, progress);
+    projection = reduceCollaborationEventV4(projection, progress);
 
     expect(projection.aggregateHeads['work_item:wi_101']?.revision).toBe(1);
     expect(projection.aggregateHeads[`workspace:${ALICE}`]?.revision).toBe(1);
@@ -444,7 +555,7 @@ describe('Collaboration project space v3 contract', () => {
     );
 
     expect(() =>
-      reduceCollaborationEventV3(projection, {
+      reduceCollaborationEventV4(projection, {
         ...created,
         event_id: 'evt_stale',
       }),
@@ -452,9 +563,9 @@ describe('Collaboration project space v3 contract', () => {
   });
 
   it('binds rotation, multi-client recovery, revocation, and offline Owner recovery to Credentials', () => {
-    let projection = reduceCollaborationEventV3(null, genesis());
+    let projection = reduceCollaborationEventV4(null, genesis());
     const rotatedCredentialId = 'credential_alice_rotated';
-    projection = reduceCollaborationEventV3(
+    projection = reduceCollaborationEventV4(
       projection,
       event({
         projection,
@@ -517,8 +628,8 @@ describe('Collaboration project space v3 contract', () => {
       created_at: NOW,
       expires_at: '2026-08-07T12:00:00.000Z',
     };
-    const recoveryHash = collaborationRecoveryRequestHashV3(recoveryImmutable);
-    projection = reduceCollaborationEventV3(
+    const recoveryHash = collaborationRecoveryRequestHashV4(recoveryImmutable);
+    projection = reduceCollaborationEventV4(
       projection,
       event({
         projection,
@@ -546,10 +657,10 @@ describe('Collaboration project space v3 contract', () => {
       }),
     );
     expect(projection.clients[ALICE]?.[phoneClient]).toBeUndefined();
-    expect(collaborationRecoveryVerificationCodeV3(recoveryHash)).toMatch(
+    expect(collaborationRecoveryVerificationCodeV4(recoveryHash)).toMatch(
       /^\d{6}$/u,
     );
-    projection = reduceCollaborationEventV3(
+    projection = reduceCollaborationEventV4(
       projection,
       event({
         projection,
@@ -575,7 +686,7 @@ describe('Collaboration project space v3 contract', () => {
       'self_device',
     );
 
-    projection = reduceCollaborationEventV3(
+    projection = reduceCollaborationEventV4(
       projection,
       event({
         projection,
@@ -620,8 +731,8 @@ describe('Collaboration project space v3 contract', () => {
       },
       reason: 'All online signing Credentials are unavailable',
     };
-    const ownerHash = collaborationRecoveryRequestHashV3(ownerImmutable);
-    projection = reduceCollaborationEventV3(
+    const ownerHash = collaborationRecoveryRequestHashV4(ownerImmutable);
+    projection = reduceCollaborationEventV4(
       projection,
       event({
         projection,
@@ -648,7 +759,7 @@ describe('Collaboration project space v3 contract', () => {
         },
       }),
     );
-    projection = reduceCollaborationEventV3(
+    projection = reduceCollaborationEventV4(
       projection,
       event({
         projection,
@@ -684,7 +795,7 @@ describe('Collaboration project space v3 contract', () => {
       'active',
     );
     expect(() =>
-      reduceCollaborationEventV3(
+      reduceCollaborationEventV4(
         projection,
         event({
           projection,
@@ -708,9 +819,9 @@ describe('Collaboration project space v3 contract', () => {
   });
 
   it('preserves layout isolation and defaults an unconfigured State to manual', () => {
-    let projection = reduceCollaborationEventV3(null, genesis());
-    const machine = machineDefinitionV3Schema.parse({
-      format: 'icarus.collaboration-machine/3',
+    let projection = reduceCollaborationEventV4(null, genesis());
+    const machine = machineDefinitionV4Schema.parse({
+      format: 'icarus.collaboration-machine/4',
       initial_state: 'build',
       states: {
         build: {
@@ -758,13 +869,13 @@ describe('Collaboration project space v3 contract', () => {
       },
       machine_ref: 'workflows/definitions/delivery/machine.json',
       layout_ref: 'workflows/definitions/delivery/layout.json',
-      machine_hash: collaborationCanonicalHashV3(machine),
-      layout_hash: collaborationCanonicalHashV3(layout),
+      machine_hash: collaborationCanonicalHashV4(machine),
+      layout_hash: collaborationCanonicalHashV4(layout),
       revision: 1,
       created_at: NOW,
       updated_at: NOW,
     };
-    projection = reduceCollaborationEventV3(
+    projection = reduceCollaborationEventV4(
       projection,
       event({
         projection,
@@ -780,7 +891,7 @@ describe('Collaboration project space v3 contract', () => {
       nodes: { build: { x: 420, y: 240 } },
       revision: 2,
     };
-    projection = reduceCollaborationEventV3(
+    projection = reduceCollaborationEventV4(
       projection,
       event({
         projection,
@@ -791,7 +902,7 @@ describe('Collaboration project space v3 contract', () => {
           definition_id: 'delivery',
           version: 1,
           layout: nextLayout,
-          layout_hash: collaborationCanonicalHashV3(nextLayout),
+          layout_hash: collaborationCanonicalHashV4(nextLayout),
         },
       }),
     );
@@ -805,7 +916,7 @@ describe('Collaboration project space v3 contract', () => {
       instance_id: 'wfi_201',
       definition_id: 'delivery',
       definition_version: 1,
-      definition_hash: collaborationWorkflowDefinitionHashV3(
+      definition_hash: collaborationWorkflowDefinitionHashV4(
         storedDefinition.definition,
         storedDefinition.machine,
       ),
@@ -825,7 +936,7 @@ describe('Collaboration project space v3 contract', () => {
       created_at: NOW,
       updated_at: NOW,
     };
-    projection = reduceCollaborationEventV3(
+    projection = reduceCollaborationEventV4(
       projection,
       event({
         projection,
@@ -835,7 +946,7 @@ describe('Collaboration project space v3 contract', () => {
         payload: { instance },
       }),
     );
-    projection = reduceCollaborationEventV3(
+    projection = reduceCollaborationEventV4(
       projection,
       event({
         projection,
@@ -848,7 +959,7 @@ describe('Collaboration project space v3 contract', () => {
 
     const timeout = machine.states.build?.timeout_policy ?? null;
     const startDeadline = '2026-08-06T12:01:00.000Z';
-    const inputHash = collaborationTurnInputHashV3({
+    const inputHash = collaborationTurnInputHashV4({
       groupId: 'group_payment',
       instanceId: 'wfi_201',
       epoch: 1,
@@ -875,7 +986,7 @@ describe('Collaboration project space v3 contract', () => {
       action_hash: null,
       prompt_hash: null,
       input_hash: inputHash,
-      idempotency_key: collaborationIdempotencyKeyV3({
+      idempotency_key: collaborationIdempotencyKeyV4({
         groupId: 'group_payment',
         instanceId: 'wfi_201',
         epoch: 1,
@@ -888,7 +999,7 @@ describe('Collaboration project space v3 contract', () => {
       timeout_policy_snapshot: timeout,
       start_deadline_at: startDeadline,
       execution_deadline_at: null,
-      deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+      deadline_snapshot_hash: collaborationDeadlineSnapshotHashV4({
         turnId: 'turn_1',
         attempt: 1,
         timeoutPolicy: timeout,
@@ -907,7 +1018,7 @@ describe('Collaboration project space v3 contract', () => {
       completion_hash: null,
       recovery_reason: null,
     };
-    projection = reduceCollaborationEventV3(
+    projection = reduceCollaborationEventV4(
       projection,
       event({
         projection,

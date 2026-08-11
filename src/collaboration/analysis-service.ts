@@ -51,9 +51,9 @@ import {
   strictParseJson,
 } from './protocol/canonical-json.js';
 import {
-  collaborationCanonicalHashV3,
-  type CollaborationProjectionV3,
-} from './protocol/v3-reducer.js';
+  collaborationCanonicalHashV4,
+  type CollaborationProjectionV4,
+} from './protocol/v4-reducer.js';
 
 const MAX_RESULT_BYTES = 4 * 1024 * 1024;
 const MAX_EXTERNAL_FILE_BYTES = 2 * 1024 * 1024;
@@ -637,7 +637,7 @@ export class CollaborationAnalysisService {
         prior_findings: visiblePriorFindings,
       }),
     );
-    const contextHash = collaborationCanonicalHashV3(contextWithoutHash);
+    const contextHash = collaborationCanonicalHashV4(contextWithoutHash);
     const prompt = buildProjectAnalystPrompt({
       analysisId,
       snapshotHead,

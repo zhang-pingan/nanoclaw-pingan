@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  collaborationActionInputV3Schema,
-  type ActionDefinitionV3,
-  type HandoffEnvelopeV3,
-  type MachineDefinitionV3,
-} from '../protocol/v3-schema.js';
+  collaborationActionInputV4Schema,
+  type ActionDefinitionV4,
+  type HandoffEnvelopeV4,
+  type MachineDefinitionV4,
+} from '../protocol/v4-schema.js';
 import {
   buildCollaborationActionInput,
   parseCollaborationActionResult,
@@ -14,7 +14,7 @@ import {
 
 const hash = (character: string) => `sha256:${character.repeat(64)}`;
 
-const action: ActionDefinitionV3 = {
+const action: ActionDefinitionV4 = {
   format: 'icarus.collaboration-action/1',
   action_id: 'verify',
   name: 'Verify',
@@ -31,8 +31,8 @@ const action: ActionDefinitionV3 = {
   result_schema: { ref: 'verification@1', schema: null },
 };
 
-const machine: MachineDefinitionV3 = {
-  format: 'icarus.collaboration-machine/3',
+const machine: MachineDefinitionV4 = {
+  format: 'icarus.collaboration-machine/4',
   initial_state: 'verification',
   states: {
     verification: {
@@ -57,7 +57,7 @@ const machine: MachineDefinitionV3 = {
   },
 };
 
-const handoff: HandoffEnvelopeV3 = {
+const handoff: HandoffEnvelopeV4 = {
   format: 'icarus.collaboration-handoff/1',
   source_turn_id: 'turn_previous',
   outcome: 'implemented',
@@ -71,7 +71,7 @@ const handoff: HandoffEnvelopeV3 = {
   data: { commit: 'abc123' },
 };
 
-describe('Collaboration Action contract v3', () => {
+describe('Collaboration Action contract v4', () => {
   it('renders State, legal Outcomes, frozen Prompt, and untrusted Handoff in a fixed order', () => {
     const input = buildCollaborationActionInput({
       groupId: 'group_test',
@@ -85,7 +85,7 @@ describe('Collaboration Action contract v3', () => {
     });
 
     expect(input.contract).toMatchObject({
-      format: 'icarus.collaboration-action-input/3',
+      format: 'icarus.collaboration-action-input/4',
       state: {
         state_id: 'verification',
         legal_outcomes: [
@@ -98,7 +98,7 @@ describe('Collaboration Action contract v3', () => {
       action: { prompt: 'Run the verification checklist.' },
       untrusted_context: { previous_handoff: handoff },
     });
-    expect(collaborationActionInputV3Schema.parse(input.contract)).toEqual(
+    expect(collaborationActionInputV4Schema.parse(input.contract)).toEqual(
       input.contract,
     );
     expect(input.markdown.indexOf('## Security')).toBeLessThan(
@@ -117,7 +117,7 @@ describe('Collaboration Action contract v3', () => {
 
   it('accepts only schema-valid results with a legal business Outcome', () => {
     const valid = {
-      format: 'icarus.collaboration-action-result/3',
+      format: 'icarus.collaboration-action-result/4',
       outcome: 'ready_for_test',
       summary: 'Verification passed.',
       instruction: '',

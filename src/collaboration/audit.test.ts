@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildCollaborationAuditV3 } from './audit.js';
+import { buildCollaborationAuditV4 } from './audit.js';
 import { buildCollaborationGenesisSelfDescription } from './group-self-description.js';
 import type {
-  CollaborationActionExecutionV3,
-  CollaborationNotificationV3,
+  CollaborationActionExecutionV4,
+  CollaborationNotificationV4,
   CollaborationProjectSpaceGroupRecord,
 } from './project-space-store.js';
 import {
-  buildCollaborationEventV3,
-  reduceCollaborationEventV3,
-} from './protocol/v3-reducer.js';
-import { collaborationCredentialFingerprintV3 } from './protocol/v3-schema.js';
+  buildCollaborationEventV4,
+  reduceCollaborationEventV4,
+} from './protocol/v4-reducer.js';
+import { collaborationCredentialFingerprintV4 } from './protocol/v4-schema.js';
 
 const NOW = '2026-08-06T12:00:00.000Z';
 const PRINCIPAL = 'principal_00000000-0000-4000-8000-000000000001';
@@ -20,13 +20,13 @@ const CREDENTIAL = 'credential_alice';
 const RECOVERY_CREDENTIAL = 'credential_alice_recovery';
 const PUBLIC_KEY =
   'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice';
-const FINGERPRINT = collaborationCredentialFingerprintV3(PUBLIC_KEY);
+const FINGERPRINT = collaborationCredentialFingerprintV4(PUBLIC_KEY);
 
 function history() {
   const selfDescription = buildCollaborationGenesisSelfDescription({
     groupId: 'group_test',
   });
-  const event = buildCollaborationEventV3({
+  const event = buildCollaborationEventV4({
     groupId: 'group_test',
     eventId: 'evt_genesis',
     aggregateType: 'group',
@@ -43,8 +43,8 @@ function history() {
     occurredAt: NOW,
     payload: {
       group: {
-        format: 'icarus.collaboration-group/3',
-        protocol_version: 3,
+        format: 'icarus.collaboration-group/4',
+        protocol_version: 4,
         group_id: 'group_test',
         name: 'Test group',
         creator: {
@@ -59,7 +59,7 @@ function history() {
         archived_at: null,
       },
       member: {
-        format: 'icarus.collaboration-member/3',
+        format: 'icarus.collaboration-member/4',
         principal_id: PRINCIPAL,
         display_name: 'Alice',
         status: 'active',
@@ -108,7 +108,7 @@ function history() {
       self_description: selfDescription.manifest,
     },
   });
-  return { event, projection: reduceCollaborationEventV3(null, event) };
+  return { event, projection: reduceCollaborationEventV4(null, event) };
 }
 
 function group(
@@ -143,7 +143,7 @@ function group(
   };
 }
 
-const execution: CollaborationActionExecutionV3 = {
+const execution: CollaborationActionExecutionV4 = {
   executionId: 'execution_1',
   groupId: 'group_test',
   instanceId: 'instance_1',
@@ -168,7 +168,7 @@ const execution: CollaborationActionExecutionV3 = {
   updatedAtMs: 3,
 };
 
-const notification: CollaborationNotificationV3 = {
+const notification: CollaborationNotificationV4 = {
   notificationId: 'notification_1',
   groupId: 'group_test',
   recipientPrincipalId: PRINCIPAL,
@@ -189,10 +189,10 @@ const notification: CollaborationNotificationV3 = {
   payload: { private: true },
 };
 
-describe('Collaboration project-space v3 audit', () => {
+describe('Collaboration project-space v4 audit', () => {
   it('exports ordered signed facts and local evidence without content by default', () => {
     const { event, projection } = history();
-    const audit = buildCollaborationAuditV3({
+    const audit = buildCollaborationAuditV4({
       group: group(projection),
       projection,
       eventRecords: [{ event, commitHash: 'a'.repeat(40), commitOrder: 1 }],
@@ -211,7 +211,7 @@ describe('Collaboration project-space v3 audit', () => {
     });
 
     expect(audit).toMatchObject({
-      format: 'icarus.collaboration-audit/3',
+      format: 'icarus.collaboration-audit/4',
       generated_at: NOW,
       group: {
         group_id: 'group_test',
@@ -249,7 +249,7 @@ describe('Collaboration project-space v3 audit', () => {
 
   it('includes event and provider content only when explicitly requested', () => {
     const { event, projection } = history();
-    const audit = buildCollaborationAuditV3({
+    const audit = buildCollaborationAuditV4({
       group: group(projection),
       projection,
       eventRecords: [{ event, commitHash: 'a'.repeat(40), commitOrder: 1 }],

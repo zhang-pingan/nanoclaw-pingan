@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { z } from 'zod';
 
-import { buildCollaborationAuditV3 } from './audit.js';
+import { buildCollaborationAuditV4 } from './audit.js';
 import {
   collaborationAnalysisScopeSchema,
   collaborationFindingDecisionSchema,
@@ -11,15 +11,15 @@ import {
 } from './analysis-contracts.js';
 import type { CollaborationAnalysisRunDetail } from './analysis-service.js';
 import type {
-  CollaborationActionExecutionV3,
-  CollaborationExecutorBindingV3,
-  CollaborationLocalExecutorV3,
+  CollaborationActionExecutionV4,
+  CollaborationExecutorBindingV4,
+  CollaborationLocalExecutorV4,
 } from './project-space-store.js';
 import { CollaborationProjectSpaceGitConflictError } from './project-space-git.js';
 import type { CollaborationRuntime } from './runtime.js';
 import { strictParseJson } from './protocol/canonical-json.js';
-import { collaborationRecoveryVerificationCodeV3 } from './protocol/v3-reducer.js';
-import { projectCollaborationAllowedActionsV3 } from './authorization.js';
+import { collaborationRecoveryVerificationCodeV4 } from './protocol/v4-reducer.js';
+import { projectCollaborationAllowedActionsV4 } from './authorization.js';
 import { CollaborationProtocolError } from './protocol/version.js';
 import {
   COLLABORATION_PERMISSION_CATALOG,
@@ -28,18 +28,27 @@ import {
 } from './permissions.js';
 import {
   collaborationPermissionSchema,
-  machineDefinitionV3Schema,
-  memberNotificationScopeV3Schema,
+  collaborationExternalUrlSchema,
+  machineDefinitionV4Schema,
+  memberNotificationScopeV4Schema,
   principalIdSchema,
   workflowLayoutSchema,
   workItemStatusSchema,
-} from './protocol/v3-schema.js';
+} from './protocol/v4-schema.js';
 
 const API_PREFIX = '/api/collaboration';
 const MAX_BODY_BYTES = 14 * 1024 * 1024;
 
 const identifier = z.string().min(1).max(160);
 const expectedRevision = z.number().int().nonnegative();
+const externalLinkInputSchema = z
+  .object({
+    title: z.string().min(1).max(500),
+    url: collaborationExternalUrlSchema,
+    description: z.string().max(4000).optional(),
+  })
+  .strict();
+const externalLinksInputSchema = z.array(externalLinkInputSchema).max(10);
 const identityOverrideFields = new Set([
   'actorPrincipalId',
   'actorClientId',
@@ -99,7 +108,7 @@ function redactLocalSecrets(value: unknown): unknown {
   );
 }
 
-function publicBinding(binding: CollaborationExecutorBindingV3) {
+function publicBinding(binding: CollaborationExecutorBindingV4) {
   return {
     groupId: binding.groupId,
     instanceId: binding.instanceId,
@@ -118,7 +127,7 @@ function publicBinding(binding: CollaborationExecutorBindingV3) {
   };
 }
 
-function publicLocalExecutor(executor: CollaborationLocalExecutorV3) {
+function publicLocalExecutor(executor: CollaborationLocalExecutorV4) {
   return {
     groupId: executor.groupId,
     principalId: executor.principalId,
@@ -135,7 +144,7 @@ function publicLocalExecutor(executor: CollaborationLocalExecutorV3) {
   };
 }
 
-function publicExecution(execution: CollaborationActionExecutionV3) {
+function publicExecution(execution: CollaborationActionExecutionV4) {
   return {
     executionId: execution.executionId,
     groupId: execution.groupId,
@@ -206,7 +215,7 @@ function publicGroup(
 ) {
   if (!group) return null;
   const allowedActions = group.projection?.group
-    ? projectCollaborationAllowedActionsV3({
+    ? projectCollaborationAllowedActionsV4({
         projection: group.projection,
         subscriptionMode: group.subscriptionMode,
         principalId: group.localPrincipalId,
@@ -362,6 +371,15 @@ const fileMetadataInputSchema = z
   })
   .strict();
 
+const workspaceLinkInputSchema = externalLinkInputSchema
+  .extend({
+    expectedRevision,
+    workItemRefs: z.array(identifier).max(100).optional(),
+    workflowInstanceRefs: z.array(identifier).max(100).optional(),
+    discussionRefs: z.array(identifier).max(100).optional(),
+  })
+  .strict();
+
 function match(pathname: string, pattern: RegExp): RegExpMatchArray | null {
   return pathname.match(pattern);
 }
@@ -468,7 +486,7 @@ export class CollaborationWebApi {
         z
           .object({
             backupDirectory: z.string().min(1),
-            confirm: z.literal('RESTORE COLLABORATION V3'),
+            confirm: z.literal('RESTORE COLLABORATION V4'),
           })
           .strict(),
       );
@@ -999,7 +1017,7 @@ export class CollaborationWebApi {
               requestId,
               {
                 ...request,
-                verification_code: collaborationRecoveryVerificationCodeV3(
+                verification_code: collaborationRecoveryVerificationCodeV4(
                   request.request_hash,
                 ),
               },
@@ -1227,7 +1245,7 @@ export class CollaborationWebApi {
     if (await this.discussionRoutes(req, res, url)) return;
     if (await this.workflowRoutes(req, res, url)) return;
     if (await this.auditRoutes(req, res, url)) return;
-    throw new Error(`Unknown collaboration v3 route: ${method} ${pathname}`);
+    throw new Error(`Unknown collaboration v4 route: ${method} ${pathname}`);
   }
 
   private requireProjection(groupId: string) {
@@ -1290,7 +1308,7 @@ export class CollaborationWebApi {
               .min(1)
               .max(64_000)
               .refine((value) => value.trim().length > 0),
-            scope: memberNotificationScopeV3Schema,
+            scope: memberNotificationScopeV4Schema,
             executorId: identifier.nullable().optional(),
             origin: z.enum(['human', 'agent', 'workflow']).optional(),
           })
@@ -1652,6 +1670,7 @@ export class CollaborationWebApi {
             workItemRefs: z.array(identifier).optional(),
             workflowInstanceRefs: z.array(identifier).optional(),
             artifactRefs: z.array(z.string()).optional(),
+            links: externalLinksInputSchema.optional(),
           })
           .strict(),
       );
@@ -1663,6 +1682,97 @@ export class CollaborationWebApi {
           }),
         ),
       });
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/workspace/(shared|me)/links$`,
+        'u',
+      ),
+    );
+    if (found && method === 'GET') {
+      const group = this.runtime.store.getGroup(found[1]!);
+      const scope = found[2] === 'shared' ? 'shared' : 'principal';
+      send(res, 200, {
+        links: this.runtime.store
+          .listLinkIndex(found[1]!)
+          .filter((link) =>
+            scope === 'shared'
+              ? link.scope === 'shared'
+              : link.scope === 'principal' &&
+                link.ownerPrincipalId === group?.localPrincipalId,
+          ),
+      });
+      return true;
+    }
+    if (found && method === 'POST') {
+      const body = await jsonBody(req, workspaceLinkInputSchema);
+      const group =
+        found[2] === 'shared'
+          ? await this.runtime.groups.publishSharedLink({
+              groupId: found[1]!,
+              ...body,
+            })
+          : await this.runtime.groups.publishPrincipalLink({
+              groupId: found[1]!,
+              ...body,
+            });
+      send(res, 201, { group: publicGroup(group) });
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/workspace/(shared|me)/links/([^/]+)$`,
+        'u',
+      ),
+    );
+    if (found && method === 'PATCH') {
+      const body = await jsonBody(
+        req,
+        workspaceLinkInputSchema
+          .extend({ revision: z.number().int().positive() })
+          .strict(),
+      );
+      const group =
+        found[2] === 'shared'
+          ? await this.runtime.groups.reviseSharedLink({
+              groupId: found[1]!,
+              linkId: found[3]!,
+              ...body,
+            })
+          : await this.runtime.groups.revisePrincipalLink({
+              groupId: found[1]!,
+              linkId: found[3]!,
+              ...body,
+            });
+      send(res, 200, { group: publicGroup(group) });
+      return true;
+    }
+    if (found && method === 'DELETE') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            revision: z.number().int().positive(),
+          })
+          .strict(),
+      );
+      const group =
+        found[2] === 'shared'
+          ? await this.runtime.groups.removeSharedLink({
+              groupId: found[1]!,
+              linkId: found[3]!,
+              ...body,
+            })
+          : await this.runtime.groups.removePrincipalLink({
+              groupId: found[1]!,
+              linkId: found[3]!,
+              ...body,
+            });
+      send(res, 200, { group: publicGroup(group) });
       return true;
     }
     found = match(
@@ -1996,6 +2106,7 @@ export class CollaborationWebApi {
               blockers: z.array(z.string()).optional(),
               artifactIds: z.array(identifier).max(20).optional(),
               artifactRefs: z.array(z.string()).optional(),
+              links: externalLinksInputSchema.optional(),
             })
             .strict(),
         );
@@ -2097,6 +2208,7 @@ export class CollaborationWebApi {
               .optional(),
             mentions: z.array(principalIdSchema).max(100).optional(),
             refs: z.array(z.string()).max(100).optional(),
+            links: externalLinksInputSchema.optional(),
             scope: z.union([
               z.object({ type: z.literal('group') }).strict(),
               z
@@ -2107,7 +2219,15 @@ export class CollaborationWebApi {
                 .strict(),
             ]),
           })
-          .strict(),
+          .strict()
+          .superRefine((value, context) => {
+            if (!value.body && value.links?.length)
+              context.addIssue({
+                code: 'custom',
+                path: ['body'],
+                message: 'Discussion links require an initial message body',
+              });
+          }),
       );
       send(res, 201, {
         group: publicGroup(
@@ -2165,6 +2285,7 @@ export class CollaborationWebApi {
             body: z.string().min(1),
             mentions: z.array(identifier).optional(),
             refs: z.array(z.string()).optional(),
+            links: externalLinksInputSchema.optional(),
           })
           .strict(),
       );
@@ -2195,6 +2316,7 @@ export class CollaborationWebApi {
             body: z.string().min(1),
             mentions: z.array(identifier).optional(),
             refs: z.array(z.string()).optional(),
+            links: externalLinksInputSchema.optional(),
           })
           .strict(),
       );
@@ -2289,7 +2411,7 @@ export class CollaborationWebApi {
               })
               .strict()
               .optional(),
-            machine: machineDefinitionV3Schema,
+            machine: machineDefinitionV4Schema,
             layout: workflowLayoutSchema,
           })
           .strict(),
@@ -2329,7 +2451,7 @@ export class CollaborationWebApi {
                 })
                 .strict()
                 .optional(),
-              machine: machineDefinitionV3Schema,
+              machine: machineDefinitionV4Schema,
               layout: workflowLayoutSchema,
             })
             .strict(),
@@ -2799,7 +2921,7 @@ export class CollaborationWebApi {
       send(
         res,
         200,
-        buildCollaborationAuditV3({
+        buildCollaborationAuditV4({
           group,
           projection: group.projection,
           eventRecords: this.runtime.store.listEventRecords(

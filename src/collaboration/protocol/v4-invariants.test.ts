@@ -1,32 +1,32 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildCollaborationEventV3,
-  collaborationCanonicalHashV3,
-  collaborationDeadlineSnapshotHashV3,
-  collaborationFencingTokenV3,
-  collaborationIdempotencyKeyV3,
-  collaborationRecoveryRequestHashV3,
-  collaborationTurnInputHashV3,
-  collaborationWorkflowDefinitionHashV3,
-  reduceCollaborationEventV3,
-  type CollaborationProjectionV3,
-} from './v3-reducer.js';
+  buildCollaborationEventV4,
+  collaborationCanonicalHashV4,
+  collaborationDeadlineSnapshotHashV4,
+  collaborationFencingTokenV4,
+  collaborationIdempotencyKeyV4,
+  collaborationRecoveryRequestHashV4,
+  collaborationTurnInputHashV4,
+  collaborationWorkflowDefinitionHashV4,
+  reduceCollaborationEventV4,
+  type CollaborationProjectionV4,
+} from './v4-reducer.js';
 import type {
-  ActionDefinitionV3,
+  ActionDefinitionV4,
   CollaborationAggregateType,
-  CollaborationEventTypeV3,
-  CollaborationEventV3,
-  CollaborationTurnV3,
-  MachineDefinitionV3,
+  CollaborationEventTypeV4,
+  CollaborationEventV4,
+  CollaborationTurnV4,
+  MachineDefinitionV4,
   StateExecution,
   WorkflowLayout,
   WorkItem,
-} from './v3-schema.js';
+} from './v4-schema.js';
 import {
-  collaborationContentHashV3,
-  collaborationCredentialFingerprintV3,
-} from './v3-schema.js';
+  collaborationContentHashV4,
+  collaborationCredentialFingerprintV4,
+} from './v4-schema.js';
 
 const NOW = '2026-08-06T12:00:00.000Z';
 const ALICE = 'principal_00000000-0000-4000-8000-000000000001';
@@ -46,19 +46,19 @@ const ALICE_KEY =
   'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice';
 const BOB_KEY =
   'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEbob00';
-const ALICE_FINGERPRINT = collaborationCredentialFingerprintV3(ALICE_KEY);
-const BOB_FINGERPRINT = collaborationCredentialFingerprintV3(BOB_KEY);
+const ALICE_FINGERPRINT = collaborationCredentialFingerprintV4(ALICE_KEY);
+const BOB_FINGERPRINT = collaborationCredentialFingerprintV4(BOB_KEY);
 const CAROL_KEY =
   'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEcarol';
-const CAROL_FINGERPRINT = collaborationCredentialFingerprintV3(CAROL_KEY);
+const CAROL_FINGERPRINT = collaborationCredentialFingerprintV4(CAROL_KEY);
 
 let eventOrdinal = 0;
 
 function event(input: {
-  projection: CollaborationProjectionV3 | null;
+  projection: CollaborationProjectionV4 | null;
   aggregateType: CollaborationAggregateType;
   aggregateId: string;
-  eventType: CollaborationEventTypeV3;
+  eventType: CollaborationEventTypeV4;
   payload: Record<string, unknown>;
   actor?: string;
   client?: string;
@@ -66,13 +66,13 @@ function event(input: {
   executor?: string | null;
   id?: string;
   occurredAt?: string;
-}): CollaborationEventV3 {
+}): CollaborationEventV4 {
   const head =
     input.projection?.aggregateHeads[
       `${input.aggregateType}:${input.aggregateId}`
     ];
   const actor = input.actor ?? ALICE;
-  return buildCollaborationEventV3({
+  return buildCollaborationEventV4({
     groupId: 'group_test',
     eventId: input.id ?? `evt_${String(++eventOrdinal)}`,
     aggregateType: input.aggregateType,
@@ -94,16 +94,16 @@ function event(input: {
 }
 
 function apply(
-  projection: CollaborationProjectionV3 | null,
+  projection: CollaborationProjectionV4 | null,
   input: Omit<Parameters<typeof event>[0], 'projection'>,
-): CollaborationProjectionV3 {
-  return reduceCollaborationEventV3(
+): CollaborationProjectionV4 {
+  return reduceCollaborationEventV4(
     projection,
     event({ ...input, projection }),
   );
 }
 
-function genesis(): CollaborationProjectionV3 {
+function genesis(): CollaborationProjectionV4 {
   return apply(null, {
     aggregateType: 'group',
     aggregateId: 'group_test',
@@ -111,8 +111,8 @@ function genesis(): CollaborationProjectionV3 {
     id: 'evt_genesis',
     payload: {
       group: {
-        format: 'icarus.collaboration-group/3',
-        protocol_version: 3,
+        format: 'icarus.collaboration-group/4',
+        protocol_version: 4,
         group_id: 'group_test',
         name: 'Test group',
         creator: {
@@ -127,7 +127,7 @@ function genesis(): CollaborationProjectionV3 {
         archived_at: null,
       },
       member: {
-        format: 'icarus.collaboration-member/3',
+        format: 'icarus.collaboration-member/4',
         principal_id: ALICE,
         display_name: 'Alice',
         status: 'active',
@@ -203,7 +203,7 @@ function genesis(): CollaborationProjectionV3 {
   });
 }
 
-function withBob(secondClient = false): CollaborationProjectionV3 {
+function withBob(secondClient = false): CollaborationProjectionV4 {
   let projection = genesis();
   const joinEventId = 'evt_bob_join';
   projection = apply(projection, {
@@ -213,7 +213,7 @@ function withBob(secondClient = false): CollaborationProjectionV3 {
     id: joinEventId,
     payload: {
       member: {
-        format: 'icarus.collaboration-member/3',
+        format: 'icarus.collaboration-member/4',
         principal_id: BOB,
         display_name: 'Bob',
         status: 'active',
@@ -274,7 +274,7 @@ function action(
   version = 1,
   owner = ALICE,
   actionId = 'implement',
-): ActionDefinitionV3 {
+): ActionDefinitionV4 {
   return {
     format: 'icarus.collaboration-action/1',
     action_id: actionId,
@@ -295,8 +295,8 @@ function action(
 function machine(
   initialState = 'build',
   stateIds: readonly string[] = ['build', 'review'],
-): MachineDefinitionV3 {
-  const states: MachineDefinitionV3['states'] = {};
+): MachineDefinitionV4 {
+  const states: MachineDefinitionV4['states'] = {};
   for (const [index, stateId] of stateIds.entries())
     states[stateId] = {
       label: stateId,
@@ -322,17 +322,17 @@ function machine(
     transitions: [],
   };
   return {
-    format: 'icarus.collaboration-machine/3',
+    format: 'icarus.collaboration-machine/4',
     initial_state: initialState,
     states,
   };
 }
 
 function addDefinition(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
   definitionId: string,
-  selectedMachine: MachineDefinitionV3,
-): CollaborationProjectionV3 {
+  selectedMachine: MachineDefinitionV4,
+): CollaborationProjectionV4 {
   const layout: WorkflowLayout = {
     format: 'icarus.collaboration-workflow-layout/1',
     view: 'free',
@@ -365,8 +365,8 @@ function addDefinition(
         },
         machine_ref: `workflows/definitions/${definitionId}/machine.json`,
         layout_ref: `workflows/definitions/${definitionId}/layout.json`,
-        machine_hash: collaborationCanonicalHashV3(selectedMachine),
-        layout_hash: collaborationCanonicalHashV3(layout),
+        machine_hash: collaborationCanonicalHashV4(selectedMachine),
+        layout_hash: collaborationCanonicalHashV4(layout),
         revision: 1,
         created_at: NOW,
         updated_at: NOW,
@@ -381,8 +381,8 @@ function workflowFixture(input?: {
   startTurn?: boolean;
   secondBobClient?: boolean;
 }): {
-  projection: CollaborationProjectionV3;
-  turn: CollaborationTurnV3;
+  projection: CollaborationProjectionV4;
+  turn: CollaborationTurnV4;
 } {
   let projection = withBob(input?.secondBobClient);
   const selectedMachine = machine();
@@ -398,7 +398,7 @@ function workflowFixture(input?: {
         instance_id: 'instance_1',
         definition_id: 'delivery',
         definition_version: 1,
-        definition_hash: collaborationWorkflowDefinitionHashV3(
+        definition_hash: collaborationWorkflowDefinitionHashV4(
           definition.definition,
           definition.machine,
         ),
@@ -426,7 +426,7 @@ function workflowFixture(input?: {
     eventType: 'workflow_instance_started',
     payload: {},
   });
-  const inputHash = collaborationTurnInputHashV3({
+  const inputHash = collaborationTurnInputHashV4({
     groupId: 'group_test',
     instanceId: 'instance_1',
     epoch: 1,
@@ -436,7 +436,7 @@ function workflowFixture(input?: {
     incomingHandoffHash: null,
     workItem: null,
   });
-  let selectedTurn: CollaborationTurnV3 = {
+  let selectedTurn: CollaborationTurnV4 = {
     format: 'icarus.collaboration-turn/1',
     turn_id: 'turn_1',
     workflow_instance_id: 'instance_1',
@@ -453,7 +453,7 @@ function workflowFixture(input?: {
     action_hash: null,
     prompt_hash: null,
     input_hash: inputHash,
-    idempotency_key: collaborationIdempotencyKeyV3({
+    idempotency_key: collaborationIdempotencyKeyV4({
       groupId: 'group_test',
       instanceId: 'instance_1',
       epoch: 1,
@@ -466,7 +466,7 @@ function workflowFixture(input?: {
     timeout_policy_snapshot: null,
     start_deadline_at: null,
     execution_deadline_at: null,
-    deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+    deadline_snapshot_hash: collaborationDeadlineSnapshotHashV4({
       turnId: 'turn_1',
       attempt: 1,
       timeoutPolicy: null,
@@ -495,7 +495,7 @@ function workflowFixture(input?: {
     const startEventId = 'evt_turn_started';
     const expectedRevision =
       projection.aggregateHeads['workflow_instance:instance_1']!.revision;
-    const fence = collaborationFencingTokenV3({
+    const fence = collaborationFencingTokenV4({
       groupId: 'group_test',
       instanceId: 'instance_1',
       epoch: 1,
@@ -517,7 +517,7 @@ function workflowFixture(input?: {
         fencing_token: fence,
         executor_id: null,
         execution_deadline_at: null,
-        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV4({
           turnId: 'turn_1',
           attempt: 1,
           timeoutPolicy: null,
@@ -584,7 +584,7 @@ function workItem(workItemId: string): WorkItem {
 
 function addWorkItems(
   ...workItemIds: readonly string[]
-): CollaborationProjectionV3 {
+): CollaborationProjectionV4 {
   let projection = genesis();
   for (const workItemId of workItemIds)
     projection = apply(projection, {
@@ -596,19 +596,144 @@ function addWorkItems(
   return projection;
 }
 
-describe('Collaboration v3 reducer invariants', () => {
+describe('Collaboration v4 reducer invariants', () => {
+  it('publishes, revises, and removes first-class Workspace links fail closed', () => {
+    const sharedLink = {
+      format: 'icarus.collaboration-workspace-link/1',
+      link_id: 'link_shared',
+      title: '设计文档',
+      url: 'https://例子.测试/设计?版本=四',
+      description: '共享说明',
+      scope: 'shared',
+      owner_principal_id: null,
+      refs: {
+        work_item_refs: ['work_item_design'],
+        workflow_instance_refs: [],
+        discussion_refs: ['discussion_design'],
+      },
+      created_by_principal_id: ALICE,
+      created_by_client_id: ALICE_CLIENT,
+      updated_by_principal_id: ALICE,
+      updated_by_client_id: ALICE_CLIENT,
+      created_at: NOW,
+      updated_at: NOW,
+      revision: 1,
+    } as const;
+    let projection = genesis();
+    projection = apply(projection, {
+      aggregateType: 'workspace',
+      aggregateId: 'shared',
+      eventType: 'shared_link_published',
+      payload: { link: sharedLink },
+    });
+    expect(projection.links.link_shared).toEqual(sharedLink);
+    expect(projection.linkLocations.link_shared).toEqual({
+      scope: 'shared',
+      principalId: null,
+      repositoryDirectory: 'workspace/shared/links/link_shared',
+    });
+
+    const revisedLink = {
+      ...sharedLink,
+      title: '设计文档 v2',
+      refs: { ...sharedLink.refs, workflow_instance_refs: ['workflow_1'] },
+      revision: 2,
+    };
+    projection = apply(projection, {
+      aggregateType: 'workspace',
+      aggregateId: 'shared',
+      eventType: 'shared_link_revised',
+      payload: { link: revisedLink },
+    });
+    expect(projection.links.link_shared).toEqual(revisedLink);
+
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'workspace',
+        aggregateId: 'shared',
+        eventType: 'shared_link_revised',
+        payload: { link: { ...revisedLink, revision: 4 } },
+      }),
+    ).toThrow(/revision is stale/u);
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'workspace',
+        aggregateId: ALICE,
+        eventType: 'shared_link_published',
+        payload: {
+          link: { ...sharedLink, link_id: 'link_wrong_aggregate' },
+        },
+      }),
+    ).toThrow(/Aggregate does not match/u);
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'workspace',
+        aggregateId: ALICE,
+        eventType: 'principal_link_published',
+        payload: {
+          link: {
+            ...sharedLink,
+            link_id: 'link_bad_scope',
+            scope: 'principal',
+            owner_principal_id: BOB,
+          },
+        },
+      }),
+    ).toThrow(/scope, owner, or update actor/u);
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'workspace',
+        aggregateId: ALICE,
+        eventType: 'principal_link_published',
+        payload: {
+          link: {
+            ...sharedLink,
+            scope: 'principal',
+            owner_principal_id: ALICE,
+          },
+        },
+      }),
+    ).toThrow(/already exists/u);
+
+    projection = apply(projection, {
+      aggregateType: 'workspace',
+      aggregateId: 'shared',
+      eventType: 'shared_link_removed',
+      payload: { link_id: 'link_shared', revision: 3 },
+    });
+    expect(projection.links.link_shared).toBeUndefined();
+    expect(projection.linkLocations.link_shared).toBeUndefined();
+    expect(projection.removedLinkIds).toContain('link_shared');
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'workspace',
+        aggregateId: 'shared',
+        eventType: 'shared_link_removed',
+        payload: { link_id: 'link_shared', revision: 4 },
+      }),
+    ).toThrow(/target does not exist/u);
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'workspace',
+        aggregateId: 'shared',
+        eventType: 'shared_link_published',
+        payload: { link: sharedLink },
+      }),
+    ).toThrow(/already exists/u);
+  });
+
   it('authorizes immutable member notifications and rejects forged recipients, scopes, hashes, aggregates, and revoked senders', () => {
     let projection = withBob();
     const notification = (
       notificationId: string,
       overrides: Record<string, unknown> = {},
     ) => ({
-      format: 'icarus.collaboration-member-notification/1',
+      format: 'icarus.collaboration-member-notification/2',
       notification_id: notificationId,
       sender_principal_id: ALICE,
       recipient_principal_ids: [BOB],
       body_markdown: 'Please review **today**.',
-      body_sha256: collaborationContentHashV3('Please review **today**.'),
+      body_sha256: collaborationContentHashV4('Please review **today**.'),
       scope: { type: 'group', ref: 'group_test' },
       actor_client_id: ALICE_CLIENT,
       executor_id: null,
@@ -986,7 +1111,7 @@ describe('Collaboration v3 reducer invariants', () => {
           next_attempt: 2,
           reason: 'Cannot assign recovery to a departed member',
           start_deadline_at: null,
-          deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+          deadline_snapshot_hash: collaborationDeadlineSnapshotHashV4({
             turnId: 'turn_1',
             attempt: 2,
             timeoutPolicy: null,
@@ -1009,7 +1134,7 @@ describe('Collaboration v3 reducer invariants', () => {
         next_attempt: 2,
         reason: 'Owner reassigned work after Bob left',
         start_deadline_at: null,
-        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV4({
           turnId: 'turn_1',
           attempt: 2,
           timeoutPolicy: null,
@@ -1031,7 +1156,7 @@ describe('Collaboration v3 reducer invariants', () => {
       claimant_principal_id: null,
       recovery_reason: null,
     });
-    const recoveredInputHash = collaborationTurnInputHashV3({
+    const recoveredInputHash = collaborationTurnInputHashV4({
       groupId: 'group_test',
       instanceId: 'instance_1',
       epoch: 1,
@@ -1043,7 +1168,7 @@ describe('Collaboration v3 reducer invariants', () => {
     });
     expect(projection.turns.turn_1?.input_hash).toBe(recoveredInputHash);
     expect(projection.turns.turn_1?.idempotency_key).toBe(
-      collaborationIdempotencyKeyV3({
+      collaborationIdempotencyKeyV4({
         groupId: 'group_test',
         instanceId: 'instance_1',
         epoch: 1,
@@ -1055,7 +1180,7 @@ describe('Collaboration v3 reducer invariants', () => {
     const startEventId = 'evt_alice_started_recovered_turn';
     const expectedRevision =
       projection.aggregateHeads['workflow_instance:instance_1']!.revision;
-    const fence = collaborationFencingTokenV3({
+    const fence = collaborationFencingTokenV4({
       groupId: 'group_test',
       instanceId: 'instance_1',
       epoch: 1,
@@ -1076,7 +1201,7 @@ describe('Collaboration v3 reducer invariants', () => {
         fencing_token: fence,
         executor_id: null,
         execution_deadline_at: null,
-        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV4({
           turnId: 'turn_1',
           attempt: 2,
           timeoutPolicy: null,
@@ -1103,7 +1228,7 @@ describe('Collaboration v3 reducer invariants', () => {
       id: rejoinEventId,
       payload: {
         member: {
-          format: 'icarus.collaboration-member/3',
+          format: 'icarus.collaboration-member/4',
           principal_id: BOB,
           display_name: 'Bob',
           status: 'active',
@@ -1185,7 +1310,7 @@ describe('Collaboration v3 reducer invariants', () => {
       created_at: NOW,
       expires_at: '2026-08-07T12:00:00.000Z',
     };
-    const requestHash = collaborationRecoveryRequestHashV3(immutable);
+    const requestHash = collaborationRecoveryRequestHashV4(immutable);
     projection = apply(projection, {
       aggregateType: 'recovery',
       aggregateId: requestId,
@@ -1252,7 +1377,7 @@ describe('Collaboration v3 reducer invariants', () => {
       target_state: 'build',
     });
     projection.workflowInstances.instance_1!.definition_hash =
-      collaborationWorkflowDefinitionHashV3(
+      collaborationWorkflowDefinitionHashV4(
         definition.definition,
         definition.machine,
       );
@@ -1268,7 +1393,7 @@ describe('Collaboration v3 reducer invariants', () => {
       revoked_at_event: null,
     };
     const result = {
-      format: 'icarus.collaboration-action-result/3' as const,
+      format: 'icarus.collaboration-action-result/4' as const,
       outcome: 'next',
       summary: 'Implementation is ready.',
       instruction: 'Review the changes.',
@@ -1277,7 +1402,7 @@ describe('Collaboration v3 reducer invariants', () => {
       artifacts: [],
       error: null,
     };
-    const resultHash = collaborationCanonicalHashV3(result);
+    const resultHash = collaborationCanonicalHashV4(result);
     const awaiting = apply(projection, {
       aggregateType: 'workflow_instance',
       aggregateId: 'instance_1',
@@ -1310,12 +1435,12 @@ describe('Collaboration v3 reducer invariants', () => {
       artifact_refs: [],
       data: { commit: 'abc123', confirmed: true },
     };
-    const completionHash = collaborationCanonicalHashV3({
+    const completionHash = collaborationCanonicalHashV4({
       turn_id: 'turn_1',
       attempt: 1,
       outcome: 'retry',
       result_hash: resultHash,
-      handoff_hash: collaborationCanonicalHashV3(handoff),
+      handoff_hash: collaborationCanonicalHashV4(handoff),
       artifact_refs: [],
     });
     const completed = apply(awaiting, {
@@ -1332,7 +1457,7 @@ describe('Collaboration v3 reducer invariants', () => {
         result_hash: resultHash,
         completion_hash: completionHash,
         handoff,
-        handoff_hash: collaborationCanonicalHashV3(handoff),
+        handoff_hash: collaborationCanonicalHashV4(handoff),
         artifact_refs: [],
         artifacts: [],
       },
@@ -1381,16 +1506,16 @@ describe('Collaboration v3 reducer invariants', () => {
       fencing_token: turn.fencing_token,
       outcome: 'next',
       result_hash: resultHash,
-      completion_hash: collaborationCanonicalHashV3({
+      completion_hash: collaborationCanonicalHashV4({
         turn_id: 'turn_1',
         attempt: 1,
         outcome: 'next',
         result_hash: resultHash,
-        handoff_hash: collaborationCanonicalHashV3(handoff),
+        handoff_hash: collaborationCanonicalHashV4(handoff),
         artifact_refs: [],
       }),
       handoff,
-      handoff_hash: collaborationCanonicalHashV3(handoff),
+      handoff_hash: collaborationCanonicalHashV4(handoff),
       artifact_refs: [],
       artifacts: [],
     });
@@ -1406,7 +1531,7 @@ describe('Collaboration v3 reducer invariants', () => {
     ).toThrow(/Action result|action_completed|result hash/u);
 
     const result = {
-      format: 'icarus.collaboration-action-result/3' as const,
+      format: 'icarus.collaboration-action-result/4' as const,
       outcome: 'next',
       summary: 'Automatic result.',
       instruction: '',
@@ -1415,7 +1540,7 @@ describe('Collaboration v3 reducer invariants', () => {
       artifacts: [],
       error: null,
     };
-    const resultHash = collaborationCanonicalHashV3(result);
+    const resultHash = collaborationCanonicalHashV4(result);
     const actionCompleted = apply(projection, {
       aggregateType: 'workflow_instance',
       aggregateId: 'instance_1',
@@ -1455,7 +1580,7 @@ describe('Collaboration v3 reducer invariants', () => {
       target_state: 'review',
     });
     projection.workflowInstances.instance_1!.definition_hash =
-      collaborationWorkflowDefinitionHashV3(
+      collaborationWorkflowDefinitionHashV4(
         definition.definition,
         definition.machine,
       );
@@ -1471,7 +1596,7 @@ describe('Collaboration v3 reducer invariants', () => {
       revoked_at_event: null,
     };
     const result = {
-      format: 'icarus.collaboration-action-result/3' as const,
+      format: 'icarus.collaboration-action-result/4' as const,
       outcome: 'next',
       summary: 'Executor selected the next Outcome.',
       instruction: 'Review the generated report.',
@@ -1485,7 +1610,7 @@ describe('Collaboration v3 reducer invariants', () => {
       ],
       error: null,
     };
-    const resultHash = collaborationCanonicalHashV3(result);
+    const resultHash = collaborationCanonicalHashV4(result);
     const actionCompleted = apply(projection, {
       aggregateType: 'workflow_instance',
       aggregateId: 'instance_1',
@@ -1531,16 +1656,16 @@ describe('Collaboration v3 reducer invariants', () => {
         fencing_token: turn.fencing_token,
         outcome,
         result_hash: resultHash,
-        completion_hash: collaborationCanonicalHashV3({
+        completion_hash: collaborationCanonicalHashV4({
           turn_id: 'turn_1',
           attempt: 1,
           outcome,
           result_hash: resultHash,
-          handoff_hash: collaborationCanonicalHashV3(handoff),
+          handoff_hash: collaborationCanonicalHashV4(handoff),
           artifact_refs: artifactRefs,
         }),
         handoff,
-        handoff_hash: collaborationCanonicalHashV3(handoff),
+        handoff_hash: collaborationCanonicalHashV4(handoff),
         artifact_refs: artifactRefs,
         artifacts: [],
       };
@@ -1626,7 +1751,7 @@ describe('Collaboration v3 reducer invariants', () => {
       },
     });
     expect(() =>
-      reduceCollaborationEventV3(fixture.projection, unauthorized),
+      reduceCollaborationEventV4(fixture.projection, unauthorized),
     ).toThrow(/authority|cancel/u);
 
     const cancelled = apply(fixture.projection, {
@@ -1675,16 +1800,16 @@ describe('Collaboration v3 reducer invariants', () => {
         fencing_token: completedFixture.turn.fencing_token,
         outcome: 'next',
         result_hash: null,
-        completion_hash: collaborationCanonicalHashV3({
+        completion_hash: collaborationCanonicalHashV4({
           turn_id: 'turn_1',
           attempt: 1,
           outcome: 'next',
           result_hash: null,
-          handoff_hash: collaborationCanonicalHashV3(handoff),
+          handoff_hash: collaborationCanonicalHashV4(handoff),
           artifact_refs: [],
         }),
         handoff,
-        handoff_hash: collaborationCanonicalHashV3(handoff),
+        handoff_hash: collaborationCanonicalHashV4(handoff),
         artifact_refs: [],
         artifacts: [],
       },
@@ -2229,7 +2354,7 @@ describe('Collaboration v3 reducer invariants', () => {
       id: 'evt_carol_request',
       payload: {
         member: {
-          format: 'icarus.collaboration-member/3',
+          format: 'icarus.collaboration-member/4',
           principal_id: CAROL,
           display_name: 'Carol',
           status: 'requested',
@@ -2261,7 +2386,7 @@ describe('Collaboration v3 reducer invariants', () => {
     });
     expect(
       (
-        projection as CollaborationProjectionV3 & {
+        projection as CollaborationProjectionV4 & {
           invites: Record<string, { status: string; used_at_event: string }>;
         }
       ).invites[invite.invite_id],
@@ -2297,7 +2422,7 @@ describe('Collaboration v3 reducer invariants', () => {
 
   it('rejects missing, expired, and revoked Invites', () => {
     const request = (
-      projection: CollaborationProjectionV3,
+      projection: CollaborationProjectionV4,
       inviteId: string | null,
       occurredAt = NOW,
     ) =>
@@ -2309,7 +2434,7 @@ describe('Collaboration v3 reducer invariants', () => {
         occurredAt,
         payload: {
           member: {
-            format: 'icarus.collaboration-member/3',
+            format: 'icarus.collaboration-member/4',
             principal_id: BOB,
             display_name: 'Bob',
             status: 'requested',
@@ -2350,7 +2475,7 @@ describe('Collaboration v3 reducer invariants', () => {
     expect(() => request(base, 'invite_missing')).toThrow(/Invite/iu);
 
     const issue = (
-      projection: CollaborationProjectionV3,
+      projection: CollaborationProjectionV4,
       inviteId: string,
       expiresAt: string | null,
     ) =>

@@ -1,13 +1,13 @@
 import type {
-  CollaborationActionExecutionV3,
-  CollaborationNotificationV3,
+  CollaborationActionExecutionV4,
+  CollaborationNotificationV4,
   CollaborationProjectSpaceEventRecord,
   CollaborationProjectSpaceGroupRecord,
 } from './project-space-store.js';
-import type { CollaborationProjectionV3 } from './protocol/v3-reducer.js';
+import type { CollaborationProjectionV4 } from './protocol/v4-reducer.js';
 
-export interface CollaborationAuditExportV3 {
-  readonly format: 'icarus.collaboration-audit/3';
+export interface CollaborationAuditExportV4 {
+  readonly format: 'icarus.collaboration-audit/4';
   readonly generated_at: string;
   readonly group: {
     readonly group_id: string;
@@ -17,9 +17,9 @@ export interface CollaborationAuditExportV3 {
     readonly last_verified_head: string | null;
     readonly protocol_status: string;
   };
-  readonly aggregates: CollaborationProjectionV3['aggregateHeads'];
-  readonly credentials: CollaborationProjectionV3['credentials'];
-  readonly recovery_requests: CollaborationProjectionV3['recoveryRequests'];
+  readonly aggregates: CollaborationProjectionV4['aggregateHeads'];
+  readonly credentials: CollaborationProjectionV4['credentials'];
+  readonly recovery_requests: CollaborationProjectionV4['recoveryRequests'];
   readonly events: readonly Record<string, unknown>[];
   readonly local_evidence: readonly Record<string, unknown>[];
 }
@@ -45,7 +45,7 @@ function auditSafe(value: unknown): unknown {
 }
 
 function publicExecution(
-  execution: CollaborationActionExecutionV3,
+  execution: CollaborationActionExecutionV4,
   includeContent: boolean,
 ): Record<string, unknown> {
   return {
@@ -73,7 +73,7 @@ function publicExecution(
 }
 
 function publicNotification(
-  notification: CollaborationNotificationV3,
+  notification: CollaborationNotificationV4,
 ): Record<string, unknown> {
   return {
     notification_id: notification.notificationId,
@@ -95,19 +95,19 @@ function publicNotification(
   };
 }
 
-export function buildCollaborationAuditV3(input: {
+export function buildCollaborationAuditV4(input: {
   readonly group: CollaborationProjectSpaceGroupRecord;
-  readonly projection: CollaborationProjectionV3;
+  readonly projection: CollaborationProjectionV4;
   readonly eventRecords: readonly CollaborationProjectSpaceEventRecord[];
-  readonly executions: readonly CollaborationActionExecutionV3[];
-  readonly notifications: readonly CollaborationNotificationV3[];
+  readonly executions: readonly CollaborationActionExecutionV4[];
+  readonly notifications: readonly CollaborationNotificationV4[];
   readonly localEvidence: readonly Record<string, unknown>[];
   readonly includeContent?: boolean;
   readonly generatedAt?: Date;
-}): CollaborationAuditExportV3 {
+}): CollaborationAuditExportV4 {
   const includeContent = input.includeContent ?? false;
   return {
-    format: 'icarus.collaboration-audit/3',
+    format: 'icarus.collaboration-audit/4',
     generated_at: (input.generatedAt ?? new Date()).toISOString(),
     group: {
       group_id: input.group.groupId,

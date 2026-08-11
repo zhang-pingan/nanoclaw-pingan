@@ -10,21 +10,21 @@ import type {
 } from './executors/types.js';
 import type { CollaborationProjectSpaceService } from './project-space-service.js';
 import type {
-  CollaborationActionExecutionV3,
-  CollaborationExecutorBindingV3,
+  CollaborationActionExecutionV4,
+  CollaborationExecutorBindingV4,
   CollaborationProjectSpaceGroupRecord,
   CollaborationProjectSpaceStore,
 } from './project-space-store.js';
-import type { CollaborationProjectionV3 } from './protocol/v3-reducer.js';
+import type { CollaborationProjectionV4 } from './protocol/v4-reducer.js';
 import {
-  buildCollaborationEventV3,
-  collaborationCanonicalHashV3,
-} from './protocol/v3-reducer.js';
+  buildCollaborationEventV4,
+  collaborationCanonicalHashV4,
+} from './protocol/v4-reducer.js';
 import type {
-  ActionDefinitionV3,
-  CollaborationTurnV3,
+  ActionDefinitionV4,
+  CollaborationTurnV4,
   WorkflowInstance,
-} from './protocol/v3-schema.js';
+} from './protocol/v4-schema.js';
 import {
   collaborationActionSnapshotForTurn,
   CollaborationScheduler,
@@ -36,7 +36,7 @@ const NOW = 1_786_032_000_000;
 const PROMPT = '# Prompt\n';
 const PROMPT_HASH = `sha256:${crypto.createHash('sha256').update(PROMPT).digest('hex')}`;
 
-function action(): ActionDefinitionV3 {
+function action(): ActionDefinitionV4 {
   return {
     format: 'icarus.collaboration-action/1',
     action_id: 'implement',
@@ -55,7 +55,7 @@ function action(): ActionDefinitionV3 {
   };
 }
 
-function turn(state: CollaborationTurnV3['state']): CollaborationTurnV3 {
+function turn(state: CollaborationTurnV4['state']): CollaborationTurnV4 {
   const claimed = state !== 'pending';
   return {
     format: 'icarus.collaboration-turn/1',
@@ -74,7 +74,7 @@ function turn(state: CollaborationTurnV3['state']): CollaborationTurnV3 {
     state,
     action_ref:
       'workspace/principals/principal_00000000-0000-4000-8000-000000000001/automations/actions/implement.json',
-    action_hash: collaborationCanonicalHashV3(action()),
+    action_hash: collaborationCanonicalHashV4(action()),
     prompt_hash: PROMPT_HASH,
     input_hash: hash('i'),
     idempotency_key: hash('k'),
@@ -124,14 +124,14 @@ function instance(): WorkflowInstance {
   };
 }
 
-function binding(): CollaborationExecutorBindingV3 {
+function binding(): CollaborationExecutorBindingV4 {
   return {
     groupId: 'group_test',
     instanceId: 'instance_1',
     stateId: 'implementation',
     principalId: 'principal_00000000-0000-4000-8000-000000000001',
     clientId: 'client_alice',
-    actionHash: collaborationCanonicalHashV3(action()),
+    actionHash: collaborationCanonicalHashV4(action()),
     promptHash: PROMPT_HASH,
     executorId: 'executor_local',
     executorKind: 'run_once',
@@ -146,7 +146,7 @@ function binding(): CollaborationExecutorBindingV3 {
 
 function actionExecution(
   executionRef: string | null = null,
-): CollaborationActionExecutionV3 {
+): CollaborationActionExecutionV4 {
   return {
     executionId: 'execution_1',
     groupId: 'group_test',
@@ -175,7 +175,7 @@ function actionExecution(
 
 function succeeded(): ActionObservation {
   const result = {
-    format: 'icarus.collaboration-action-result/3' as const,
+    format: 'icarus.collaboration-action-result/4' as const,
     outcome: 'done',
     summary: 'Implemented',
     instruction: '',
@@ -189,17 +189,17 @@ function succeeded(): ActionObservation {
     executionRef: 'provider:1',
     providerMetadata: { provider: 'test' },
     result,
-    resultHash: collaborationCanonicalHashV3(result),
+    resultHash: collaborationCanonicalHashV4(result),
   };
 }
 
 function actionRecord(
-  selectedAction: ActionDefinitionV3,
+  selectedAction: ActionDefinitionV4,
   commitOrder = 1,
   commitHash = 'a'.repeat(40),
 ) {
   return {
-    event: buildCollaborationEventV3({
+    event: buildCollaborationEventV4({
       groupId: 'group_test',
       eventId: `evt_action_${commitOrder}`,
       aggregateType: 'workspace',
@@ -223,7 +223,7 @@ function actionRecord(
 }
 
 function harness(input: {
-  initialState?: CollaborationTurnV3['state'];
+  initialState?: CollaborationTurnV4['state'];
   observation?: ActionObservation;
   acquired?: boolean;
   existingExecutionRef?: string | null;
@@ -231,10 +231,10 @@ function harness(input: {
   markDispatchAccepted?: boolean;
   observationAccepted?: boolean;
   groupMode?: 'observer' | 'member';
-  projectionActions?: Record<string, ActionDefinitionV3>;
+  projectionActions?: Record<string, ActionDefinitionV4>;
   eventRecords?: ReturnType<typeof actionRecord>[];
   promptByCommit?: Record<string, string>;
-  turnOverrides?: Partial<CollaborationTurnV3>;
+  turnOverrides?: Partial<CollaborationTurnV4>;
 }) {
   let currentTurn = {
     ...turn(input.initialState ?? 'running'),
@@ -279,7 +279,7 @@ function harness(input: {
     aggregateHeads: {
       'workflow_instance:instance_1': { revision: 1 },
     },
-  } as unknown as CollaborationProjectionV3;
+  } as unknown as CollaborationProjectionV4;
   const group = {
     groupId: 'group_test',
     subscriptionMode: input.groupMode ?? 'member',
@@ -307,7 +307,7 @@ function harness(input: {
       return snapshot &&
         snapshot.action.owner_principal_id === query.ownerPrincipalId &&
         snapshot.action.action_id === query.actionId &&
-        collaborationCanonicalHashV3(snapshot.action) === query.actionHash &&
+        collaborationCanonicalHashV4(snapshot.action) === query.actionHash &&
         snapshot.action.prompt_hash === query.promptHash
         ? {
             action: snapshot.action,
@@ -408,7 +408,7 @@ function harness(input: {
   return { scheduler, store, groups, executor, order };
 }
 
-describe('Collaboration project-space v3 Scheduler', () => {
+describe('Collaboration project-space v4 Scheduler', () => {
   it('uses deterministic bounded poll jitter', () => {
     expect(deterministicCollaborationPollDelay('group_a', 60_000)).toBe(
       deterministicCollaborationPollDelay('group_a', 60_000),
@@ -555,7 +555,7 @@ describe('Collaboration project-space v3 Scheduler', () => {
       existingExecutionRef: 'provider:1',
       turnOverrides: {
         executor_result: invalidResult,
-        executor_result_hash: collaborationCanonicalHashV3(invalidResult),
+        executor_result_hash: collaborationCanonicalHashV4(invalidResult),
       },
     });
 
@@ -633,7 +633,7 @@ describe('Collaboration project-space v3 Scheduler', () => {
         executionRef: 'provider:1',
         providerMetadata: {},
         result: {
-          format: 'icarus.collaboration-action-result/3',
+          format: 'icarus.collaboration-action-result/4',
           outcome: 'rejected',
           summary: 'Provider failed',
           instruction: '',

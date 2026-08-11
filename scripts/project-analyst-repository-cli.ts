@@ -38,12 +38,12 @@ import { validateCollaborationProjectSpaceHistory } from '../src/collaboration/p
 import type { ValidatedProjectSpaceHistory } from '../src/collaboration/project-space-service.js';
 import { canonicalJsonStringify } from '../src/collaboration/protocol/canonical-json.js';
 import {
-  collaborationCanonicalHashV3,
-  collaborationEventHashV3,
+  collaborationCanonicalHashV4,
+  collaborationEventHashV4,
   workflowDefinitionVersionKey,
-  type CollaborationProjectionV3,
-} from '../src/collaboration/protocol/v3-reducer.js';
-import { memberNotificationV3Schema } from '../src/collaboration/protocol/v3-schema.js';
+  type CollaborationProjectionV4,
+} from '../src/collaboration/protocol/v4-reducer.js';
+import { memberNotificationV4Schema } from '../src/collaboration/protocol/v4-schema.js';
 import { COLLABORATION_CONTROL_BRANCH } from '../src/collaboration/protocol/version.js';
 
 const DEFAULT_REF = 'icarus/control';
@@ -536,17 +536,17 @@ function loadProjectionOnly(
   repositoryPath: string,
   head: string,
   failure: string,
-): CollaborationProjectionV3 {
+): CollaborationProjectionV4 {
   const group = showJson(repositoryPath, head, 'group.json') as {
     group_id?: unknown;
   };
   if (typeof group.group_id !== 'string')
     throw new Error('Projection-only fallback cannot parse group.json');
-  const projection: CollaborationProjectionV3 = {
-    format: 'icarus.collaboration-projection/3',
-    protocolVersion: 3,
+  const projection: CollaborationProjectionV4 = {
+    format: 'icarus.collaboration-projection/4',
+    protocolVersion: 4,
     groupId: group.group_id,
-    group: group as CollaborationProjectionV3['group'],
+    group: group as CollaborationProjectionV4['group'],
     aggregateHeads: {},
     invites: {},
     members: {},
@@ -557,8 +557,11 @@ function loadProjectionOnly(
     permissionGrants: {},
     progressUpdates: {},
     files: {},
+    links: {},
+    removedLinkIds: [],
     artifacts: {},
     fileLocations: {},
+    linkLocations: {},
     actions: {},
     workItems: {},
     workItemUpdates: {},
@@ -597,6 +600,8 @@ function loadProjectionOnly(
         projection.progressUpdates[update.update_id] = update;
       for (const metadata of value.files ?? [])
         projection.files[metadata.file_id] = metadata;
+      for (const link of value.links ?? [])
+        projection.links[link.link_id] = link;
       for (const action of value.actions ?? [])
         projection.actions[action.action_id] = action;
     }
@@ -612,7 +617,7 @@ function loadProjectionOnly(
     match = /^projections\/notifications\/([^/]+)\.json$/u.exec(file);
     if (match) {
       const id = match[1]!;
-      const notification = memberNotificationV3Schema.parse(value);
+      const notification = memberNotificationV4Schema.parse(value);
       if (notification.notification_id !== id)
         throw new Error(
           `Projection notification id does not match path: ${file}`,
@@ -652,6 +657,19 @@ function loadProjectionOnly(
         repositoryDirectory: metadataMatch[1]!,
       };
     }
+    const linkMatch =
+      /^(workspace\/(?:shared|principals\/([^/]+))\/links\/([^/]+))\/metadata\.json$/u.exec(
+        file,
+      );
+    if (linkMatch) {
+      const link = showJson(repositoryPath, head, file) as any;
+      projection.links[link.link_id] = link;
+      projection.linkLocations[link.link_id] = {
+        scope: linkMatch[2] ? 'principal' : 'shared',
+        principalId: linkMatch[2] ?? null,
+        repositoryDirectory: linkMatch[1]!,
+      };
+    }
     if (/^artifacts\/.+\/metadata\.json$/u.test(file)) {
       const artifact = showJson(repositoryPath, head, file) as any;
       projection.artifacts[artifact.artifact_id] = artifact;
@@ -682,7 +700,7 @@ function loadProjectionOnly(
         aggregateType: event.aggregate_type,
         aggregateId: event.aggregate_id,
         revision: Number(event.aggregate_revision),
-        eventHash: collaborationEventHashV3(event as any),
+        eventHash: collaborationEventHashV4(event as any),
         eventId: event.event_id,
       };
     } catch {
@@ -780,7 +798,7 @@ async function main(): Promise<void> {
       trustedGenesis: options.trustedGenesis,
     });
     let history: ValidatedProjectSpaceHistory | null = null;
-    let projection: CollaborationProjectionV3;
+    let projection: CollaborationProjectionV4;
     let verification: CollaborationRepositoryVerification;
     try {
       history = await validateCollaborationProjectSpaceHistory({
@@ -896,7 +914,7 @@ async function main(): Promise<void> {
         ),
       });
     const resourceIndex = Object.keys(catalog).sort();
-    const resourceCatalogHash = collaborationCanonicalHashV3(catalog);
+    const resourceCatalogHash = collaborationCanonicalHashV4(catalog);
     const visible = new Set(resourceIndex);
     const ruleSignals = insight.signals.filter((signal) =>
       [...signal.affected_refs, ...signal.evidence_refs].every((ref) =>
@@ -958,7 +976,7 @@ async function main(): Promise<void> {
       activity_delta: activity,
       prior_findings: [],
     });
-    const contextHash = collaborationCanonicalHashV3(context);
+    const contextHash = collaborationCanonicalHashV4(context);
     const resultTemplate = {
       format: 'icarus.collaboration-repository-analysis-result/1',
       contract_version: 1,

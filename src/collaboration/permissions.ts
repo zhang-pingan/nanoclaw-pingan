@@ -36,8 +36,14 @@ const permissionDescriptions: Readonly<
   'group:archive': ['归档群组', '归档或重新开放群组'],
   'member:approve': ['成员与邀请', '审批成员申请并管理邀请'],
   'permission:grant': ['权限授权', '变更成员的直接权限'],
-  'workspace:write_shared': ['共享文件写入', '发布或修订群组共享文件'],
-  'workspace:publish_owned': ['个人空间发布', '发布本人进展、文件与自动化'],
+  'workspace:write_shared': [
+    '共享资源写入',
+    '发布、修订或移除群组共享文件与链接',
+  ],
+  'workspace:publish_owned': [
+    '个人空间发布',
+    '发布本人进展、文件、链接与自动化',
+  ],
   'work_item:create': ['创建工作项', '创建任务、问题、决策或里程碑'],
   'work_item:manage_owned': ['管理负责的工作项', '管理本人负责的工作项'],
   'work_item:manage_all': ['管理全部工作项', '管理群组中的任意工作项'],

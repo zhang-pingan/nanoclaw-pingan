@@ -22,11 +22,11 @@ import {
   rollbackCollaborationProjectSpaceRestore,
 } from './project-space-store.js';
 import {
-  buildCollaborationEventV3,
-  collaborationCanonicalHashV3,
-  reduceCollaborationEventV3,
-} from './protocol/v3-reducer.js';
-import { collaborationCredentialFingerprintV3 } from './protocol/v3-schema.js';
+  buildCollaborationEventV4,
+  collaborationCanonicalHashV4,
+  reduceCollaborationEventV4,
+} from './protocol/v4-reducer.js';
+import { collaborationCredentialFingerprintV4 } from './protocol/v4-schema.js';
 
 const temporaryDirectories: string[] = [];
 const NOW = '2026-08-06T12:00:00.000Z';
@@ -37,7 +37,7 @@ const CREDENTIAL = 'credential_alice';
 const RECOVERY_CREDENTIAL = 'credential_alice_recovery';
 const PUBLIC_KEY =
   'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice';
-const FINGERPRINT = collaborationCredentialFingerprintV3(PUBLIC_KEY);
+const FINGERPRINT = collaborationCredentialFingerprintV4(PUBLIC_KEY);
 
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0))
@@ -45,7 +45,7 @@ afterEach(() => {
 });
 
 function temporaryPath(name: string): string {
-  const directory = mkdtempSync(path.join(os.tmpdir(), 'icarus-v3-store-'));
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'icarus-v4-store-'));
   temporaryDirectories.push(directory);
   return path.join(directory, name);
 }
@@ -54,8 +54,8 @@ function genesis(groupId = 'group_test') {
   const selfDescription = buildCollaborationGenesisSelfDescription({ groupId });
   const payload = {
     group: {
-      format: 'icarus.collaboration-group/3' as const,
-      protocol_version: 3 as const,
+      format: 'icarus.collaboration-group/4' as const,
+      protocol_version: 4 as const,
       group_id: groupId,
       name: 'Test group',
       creator: {
@@ -71,7 +71,7 @@ function genesis(groupId = 'group_test') {
       dissolved_at: null,
     },
     member: {
-      format: 'icarus.collaboration-member/3' as const,
+      format: 'icarus.collaboration-member/4' as const,
       principal_id: PRINCIPAL,
       display_name: 'Alice',
       status: 'active' as const,
@@ -119,7 +119,7 @@ function genesis(groupId = 'group_test') {
     },
     self_description: selfDescription.manifest,
   };
-  const event = buildCollaborationEventV3({
+  const event = buildCollaborationEventV4({
     groupId,
     eventId: 'evt_genesis',
     aggregateType: 'group',
@@ -136,7 +136,7 @@ function genesis(groupId = 'group_test') {
     occurredAt: NOW,
     payload,
   });
-  return { event, projection: reduceCollaborationEventV3(null, event) };
+  return { event, projection: reduceCollaborationEventV4(null, event) };
 }
 
 const ANALYSIS_HEAD = 'a'.repeat(40);
@@ -290,8 +290,8 @@ function analysisResult(
   };
 }
 
-describe('Collaboration project space v3 store', () => {
-  it('creates only the fresh v11 schema and rejects stale v10', () => {
+describe('Collaboration project space v4 store', () => {
+  it('creates only the fresh v12 schema and rejects stale v11', () => {
     const databasePath = temporaryPath('current.db');
     const store = new CollaborationProjectSpaceStore(databasePath);
     expect(
@@ -338,7 +338,7 @@ describe('Collaboration project space v3 store', () => {
 
     const stalePath = temporaryPath('stale.db');
     const stale = new Database(stalePath);
-    stale.pragma('user_version = 10');
+    stale.pragma('user_version = 11');
     stale.close();
     expect(() => new CollaborationProjectSpaceStore(stalePath)).toThrow(
       expect.objectContaining<Partial<CollaborationProjectSpaceStoreError>>({
@@ -752,7 +752,7 @@ describe('Collaboration project space v3 store', () => {
       filesystem_access: 'read_only' as const,
       result_schema: { ref: 'result_v1', schema: null },
     };
-    const actionEvent = buildCollaborationEventV3({
+    const actionEvent = buildCollaborationEventV4({
       groupId: 'group_test',
       eventId: 'evt_action_old',
       aggregateType: 'workspace',
@@ -801,7 +801,7 @@ describe('Collaboration project space v3 store', () => {
         groupId: 'group_test',
         ownerPrincipalId: PRINCIPAL,
         actionId: 'verify',
-        actionHash: collaborationCanonicalHashV3(action),
+        actionHash: collaborationCanonicalHashV4(action),
         promptHash: action.prompt_hash,
       }),
     ).toMatchObject({ action, commitHash: actionCommit, commitOrder: 2 });
@@ -992,7 +992,7 @@ describe('Collaboration project space v3 store', () => {
       createdAt: new Date(NOW),
     });
     expect(manifest).toMatchObject({
-      format: 'icarus.collaboration-backup/3',
+      format: 'icarus.collaboration-backup/4',
       file: { sha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/u) },
       staged_artifacts: {
         directory_basename: 'collaboration-staged-artifacts',

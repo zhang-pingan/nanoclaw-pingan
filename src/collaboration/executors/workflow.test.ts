@@ -9,11 +9,11 @@ import {
   type WorkflowExecutionHostGateway,
 } from '../../workflow-execution/host-service.js';
 import type { WorkflowRuntimeStore } from '../../workflow-runtime/gateway/connection.js';
-import type { CollaborationExecutorBindingV3 } from '../project-space-store.js';
+import type { CollaborationExecutorBindingV4 } from '../project-space-store.js';
 import type {
-  ActionDefinitionV3,
-  CollaborationTurnV3,
-} from '../protocol/v3-schema.js';
+  ActionDefinitionV4,
+  CollaborationTurnV4,
+} from '../protocol/v4-schema.js';
 import { WorkflowActionExecutor } from './workflow.js';
 import type { ActionRequest } from './types.js';
 
@@ -46,7 +46,7 @@ const creationTemplate = {
   initialActivation: {},
 } as unknown as FiniteWorkflowCreationTemplate;
 
-function action(): ActionDefinitionV3 {
+function action(): ActionDefinitionV4 {
   return {
     format: 'icarus.collaboration-action/1',
     action_id: 'workflow-action',
@@ -64,7 +64,7 @@ function action(): ActionDefinitionV3 {
   };
 }
 
-function binding(): CollaborationExecutorBindingV3 {
+function binding(): CollaborationExecutorBindingV4 {
   return {
     groupId: 'group_test',
     instanceId: 'instance_1',
@@ -91,7 +91,7 @@ function binding(): CollaborationExecutorBindingV3 {
   };
 }
 
-function turn(): CollaborationTurnV3 {
+function turn(): CollaborationTurnV4 {
   return {
     format: 'icarus.collaboration-turn/1',
     turn_id: 'turn_1',
@@ -179,7 +179,7 @@ function observation(
     output:
       state === 'succeeded'
         ? {
-            format: 'icarus.collaboration-action-result/3',
+            format: 'icarus.collaboration-action-result/4',
             outcome: 'ready_for_test',
             summary: 'Workflow reviewed the change.',
             instruction: '',

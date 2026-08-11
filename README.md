@@ -102,18 +102,18 @@ Active Member 只表示成员身份有效。业务写入还取决于直接权限
 - `group_id` 是稳定群组身份，Git Remote URL 只是可迁移的 locator；重新发现同一 `group_id` 时会更新 locator，而不会创建第二个群组或 Principal。
 - Observer 是不进入 Group Membership 的 Icarus 业务只读订阅，可以 fetch、验签、浏览 verified virtual file tree 和审计。即使拥有 Git push 权限，也只能提交 schema 严格限制的新成员申请、身份恢复申请及申请取消；Work Item、Workflow、Discussion、Permission 等业务事件会在 replay 时被拒绝并 quarantine，界面继续保留最后 verified head。
 - 身份恢复通过同一 Git Remote 异步传输。新 Client 使用新 Credential 提交 pending 请求；旧 Client 或 Owner 核对请求 hash 派生的相同验证码后批准或拒绝。Owner recovery 默认撤销目标 Principal 的旧 event Credentials；Owner 全部在线 Credential 丢失时只能使用预先生成并显式备份的 offline Group recovery Credential，否则 fail closed。
-- 每个 Principal 拥有可发布进度、文件、Prompt 和 Action 的 Workspace；Group 还提供 Shared Workspace、Work Item、Discussion 和直接权限。
+- 每个 Principal 拥有可发布进度、文件、链接、Prompt 和 Action 的 Workspace；Group 还提供 Shared Workspace、Work Item、Discussion 和直接权限。工作进展与消息可附带最多 10 个上下文链接，长期 Workspace Link 与 File 分开投影和授权。
 - Workflow Definition/Instance 均为可选且可多实例。State 可直接指派 Principal，也可在启动 Instance 时把 participant slot 解析为 Principal；Group 不再包含 Role、Role Claim 或单一 active Turn。
-- Outcome-first 编辑器生成 v3 JSON Machine 和独立 JSON layout；Outcome 只负责路由，移动节点不改变 Machine hash。运行视图显示当前 State、历史路径、合法 Outcome 和 deadline。
+- Outcome-first 编辑器生成 v4 JSON Machine 和独立 JSON layout；Outcome 只负责路由，移动节点不改变 Machine hash。运行视图显示当前 State、历史路径、合法 Outcome 和 deadline。
 - 被指派 Principal 自己发布 State Execution；Manual 不需要 Action/Executor，Assisted 和 Automatic 使用 Principal-owned Action 与当前 Client 的本地 Binding。Turn attempt 由 claimant Client、CAS 和 fencing token 防止重复执行。
 - Work Item progress 与 Turn completion 可先暂存原始业务文件，再在同一个签名事件和 Git commit 中物化 Artifact 原文件与 `metadata.json` sidecar；命令冲突不会自动重传已暂存文件。
 - Completion 只提交合法 Outcome，Reducer 根据固定 Workflow snapshot 路由；Handoff 和 Group 内容始终是不可信上下文，不能覆盖系统指令、权限或 FSM。
 - start/execution deadline 固定在 Turn snapshot 中，超时只产生幂等通知和审计 observation，不依据本地时钟自动推进状态。
 - Archive 是 owner 可逆的远端群组状态；Dissolve 是 owner-only、不可恢复的远端终态；Leave 是非 owner 正式成员退出并撤销其 Client/Credential/Executor；“从本机移除”只清除当前设备的订阅和可重建数据，不写 Git 事件，也不改变远端成员身份。
 - Dissolve/Leave 只有在远端事件提交成功后才从本机隐藏；本地文件清理失败会保留可重试的 pending 计划。Local remove 同样保留 Credential/私钥、备份以及 `group_id`、`remote_url`、`principal_id`、`credential_id` 最小恢复绑定。
-- 协议当前唯一版本为 v3，本地 SQLite 唯一版本为 v11；旧版本、旧备份和旧事件均 fail closed，不提供迁移、双写或兼容回放。
+- 协议当前唯一版本为 v4，本地 SQLite 唯一版本为 v12；旧版本、旧备份和旧事件均 fail closed，不提供迁移、双写或兼容回放。
 
-功能入口为 Web/Electron 工作台的“群组”导航或 `/groups`；当前协议和领域模型见 [`docs/collaboration-project-space-v3-plan.md`](docs/collaboration-project-space-v3-plan.md)。
+功能入口为 Web/Electron 工作台的“群组”导航或 `/groups`；当前协议和领域模型见 [`docs/collaboration-project-space-v4-plan.md`](docs/collaboration-project-space-v4-plan.md)。
 
 ### 个人助理客户端
 
@@ -165,7 +165,7 @@ Active Member 只表示成员身份有效。业务写入还取决于直接权限
 - **消息路由**：接收频道消息，按已注册 Agent、触发词和权限规则进入队列。
 - **工作流引擎**：读取 `container/workflow-definitions/*.json` 和卡片配置，驱动流程状态、委派、审批、中断恢复和产物索引。
 - **工作台同步**：把 workflow、delegation、interrupt、artifact、evaluation 等运行态同步为工作台任务视图。
-- **群组协作**：验证 Icarus Credential 签署的 Git control commit 与 Principal/Client/权限映射并归约 v3 Project Space Projection，调度 Principal-owned Workflow Turn，并管理本地 Credential、Binding、receipt、通知、staged Artifact 和联合备份/恢复。
+- **群组协作**：验证 Icarus Credential 签署的 Git control commit 与 Principal/Client/权限映射并归约 v4 Project Space Projection，调度 Principal-owned Workflow Turn，并管理本地 Credential、Binding、receipt、通知、staged Artifact 和联合备份/恢复。
 - **主动助手运行时**：运行 proactive scan、Agent Inbox 和动作日志。
 - **任务调度**：支持 cron、interval、once 类型定时任务，并复用容器执行链路。
 - **容器队列**：限制并发容器数，复用活跃会话，通过 IPC 推送后续消息。

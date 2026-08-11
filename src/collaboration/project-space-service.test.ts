@@ -33,12 +33,12 @@ import { CollaborationScheduler } from './scheduler.js';
 import type { CollaborationRuntime } from './runtime.js';
 import { CollaborationWebApi } from './web-api.js';
 import {
-  buildCollaborationEventV3,
-  collaborationCanonicalHashV3,
-  collaborationDeadlineSnapshotHashV3,
-  reduceCollaborationEventV3,
-} from './protocol/v3-reducer.js';
-import { collaborationCredentialFingerprintV3 } from './protocol/v3-schema.js';
+  buildCollaborationEventV4,
+  collaborationCanonicalHashV4,
+  collaborationDeadlineSnapshotHashV4,
+  reduceCollaborationEventV4,
+} from './protocol/v4-reducer.js';
+import { collaborationCredentialFingerprintV4 } from './protocol/v4-schema.js';
 
 const temporaryDirectories: string[] = [];
 const ALICE: CollaborationEventSigningIdentity = {
@@ -47,7 +47,7 @@ const ALICE: CollaborationEventSigningIdentity = {
   credentialId: 'credential_alice_mac',
   privateKeyPath: '/tmp/alice',
   publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice',
-  fingerprint: collaborationCredentialFingerprintV3(
+  fingerprint: collaborationCredentialFingerprintV4(
     'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXQfKE4hE1m3sXEXAMPLEalice',
   ),
   purpose: 'event_signing',
@@ -58,14 +58,14 @@ const BOB: CollaborationEventSigningIdentity = {
   credentialId: 'credential_bob_mac',
   privateKeyPath: '/tmp/bob',
   publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXQfKE4hE1m3sXEXAMPLEreview',
-  fingerprint: collaborationCredentialFingerprintV3(
+  fingerprint: collaborationCredentialFingerprintV4(
     'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXQfKE4hE1m3sXEXAMPLEreview',
   ),
   purpose: 'event_signing',
 };
 
 const DELIVERY_MACHINE = {
-  format: 'icarus.collaboration-machine/3' as const,
+  format: 'icarus.collaboration-machine/4' as const,
   initial_state: 'implementation',
   states: {
     implementation: {
@@ -119,7 +119,7 @@ afterEach(() => {
 });
 
 function tempDirectory(): string {
-  const directory = mkdtempSync(path.join(os.tmpdir(), 'icarus-v3-service-'));
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'icarus-v4-service-'));
   temporaryDirectories.push(directory);
   return directory;
 }
@@ -227,7 +227,7 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
       const head = commitOrder.toString(16).padStart(40, '0');
       current = {
         head,
-        projection: reduceCollaborationEventV3(current.projection, event),
+        projection: reduceCollaborationEventV4(current.projection, event),
         eventRecords: [
           ...current.eventRecords,
           { event, commitHash: head, commitOrder },
@@ -250,7 +250,7 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
       if (this.failBatchAtEventIndex === index)
         throw new Error(`simulated event ${String(index + 1)} build failure`);
       const event = 'event' in entry ? entry.event : entry;
-      projection = reduceCollaborationEventV3(projection, event, {
+      projection = reduceCollaborationEventV4(projection, event, {
         previousEventInAtomicBatch: previousEvent,
       });
       previousEvent = event;
@@ -539,7 +539,7 @@ async function withServiceApi(
   const runtime = {
     status: () => ({
       available: true,
-      protocolVersion: 3,
+      protocolVersion: 4,
       error: null,
       scheduler: null,
     }),
@@ -599,7 +599,7 @@ async function recoverClient(input: {
   return input.recovering.service.sync(input.groupId);
 }
 
-describe('Collaboration project space v3 Group and identity service', () => {
+describe('Collaboration project space v4 Group and identity service', () => {
   it('issues and consumes a one-time Invite before membership approval', async () => {
     const transport = new MemoryTransport();
     const owner = service(tempDirectory(), transport, ALICE);
@@ -825,7 +825,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     const before = transport.histories.get('/tmp/concurrent-open-project.git')!;
     const groupHead =
       before.projection.aggregateHeads['group:group_concurrent_open']!;
-    transport.concurrentEventBeforeBuild = buildCollaborationEventV3({
+    transport.concurrentEventBeforeBuild = buildCollaborationEventV4({
       groupId: 'group_concurrent_open',
       eventId: 'evt_concurrent_unrelated',
       aggregateType: 'group',
@@ -880,7 +880,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     });
     const membershipHead =
       joined.projection!.aggregateHeads[`membership:${BOB.principalId}`]!;
-    transport.concurrentEventBeforeBuild = buildCollaborationEventV3({
+    transport.concurrentEventBeforeBuild = buildCollaborationEventV4({
       groupId: 'group_concurrent_membership',
       eventId: 'evt_concurrent_permission',
       aggregateType: 'membership',
@@ -2006,6 +2006,14 @@ describe('Collaboration project space v3 Group and identity service', () => {
     expect(
       transport.histories.get('/tmp/lifecycle.git')?.projection.group.lifecycle,
     ).toBe('dissolved');
+    await expect(
+      local.service.publishSharedLink({
+        groupId: 'group_lifecycle',
+        expectedRevision: 0,
+        title: 'Must not publish after dissolution',
+        url: 'https://example.test/dissolved',
+      }),
+    ).rejects.toThrow(/Observer subscriptions|does not exist|dissolved/u);
 
     await expect(
       local.service.retryLocalCleanup('group_lifecycle'),
@@ -2185,6 +2193,16 @@ describe('Collaboration project space v3 Group and identity service', () => {
       bob.store.getGroup('group_rejoin')!.projection!.aggregateHeads[
         `membership:${BOB.principalId}`
       ]!.revision,
+    );
+    await expect(
+      bob.service.publishPrincipalLink({
+        groupId: 'group_rejoin',
+        expectedRevision: 0,
+        title: 'Must not publish after leaving',
+        url: 'https://example.test/left',
+      }),
+    ).rejects.toThrow(
+      /Observer subscriptions|active Group member|does not exist|not active/u,
     );
     expect(bob.store.getLocalGroupBinding('group_rejoin')).toMatchObject({
       principalId: BOB.principalId,
@@ -2449,7 +2467,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
           current.projection.aggregateHeads[
             'workflow_instance:instance_batch'
           ]!;
-        return buildCollaborationEventV3({
+        return buildCollaborationEventV4({
           groupId,
           eventId: 'evt_batch_recovered',
           aggregateType: 'workflow_instance',
@@ -2471,7 +2489,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
             next_attempt: 2,
             reason: 'Recovered before Owner batch sync',
             start_deadline_at: '2026-08-06T12:02:00.000Z',
-            deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+            deadline_snapshot_hash: collaborationDeadlineSnapshotHashV4({
               turnId: 'turn_batch',
               attempt: 2,
               timeoutPolicy:
@@ -2578,6 +2596,14 @@ describe('Collaboration project space v3 Group and identity service', () => {
     });
     await expect(
       observer.service.archiveGroup('group_project', 'not allowed', 1),
+    ).rejects.toThrow(/Observer subscriptions cannot issue/u);
+    await expect(
+      observer.service.publishSharedLink({
+        groupId: 'group_project',
+        expectedRevision: 0,
+        title: 'Observer link',
+        url: 'https://example.test/observer',
+      }),
     ).rejects.toThrow(/Observer subscriptions cannot issue/u);
     owner.store.close();
     observer.store.close();
@@ -2858,7 +2884,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
       ...ALICE,
       principalId: 'principal_00000000-0000-4000-8000-000000000002',
       credentialId: 'credential_00000000-0000-4000-8000-000000000002',
-      fingerprint: collaborationCredentialFingerprintV3(
+      fingerprint: collaborationCredentialFingerprintV4(
         'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXQfKE4hE1m3sXEXAMPLEreview',
       ),
       purpose: 'event_signing',
@@ -2876,15 +2902,61 @@ describe('Collaboration project space v3 Group and identity service', () => {
     const revision =
       joined.projection?.aggregateHeads[`membership:${bobIdentity.principalId}`]
         ?.revision ?? 0;
+    const owned = await bob.service.publishPrincipalLink({
+      groupId: 'group_project',
+      expectedRevision: 0,
+      title: 'Bob owned link',
+      url: 'https://example.test/bob',
+    });
+    const ownedLink = Object.values(owned.projection!.links).find(
+      (link) => link.owner_principal_id === bobIdentity.principalId,
+    )!;
+    await expect(
+      bob.service.publishSharedLink({
+        groupId: 'group_project',
+        expectedRevision: 0,
+        title: 'Unauthorized shared link',
+        url: 'https://example.test/shared',
+      }),
+    ).rejects.toThrow(/cannot manage links in the shared Workspace/u);
     const updated = await owner.service.updatePermissions({
       groupId: 'group_project',
       principalId: bobIdentity.principalId,
-      grants: ['work_item:create', 'discussion:post'],
+      grants: ['work_item:create', 'discussion:post', 'workspace:write_shared'],
       expectedRevision: revision,
     });
     expect(
       updated.projection?.permissionGrants[bobIdentity.principalId]?.grants,
-    ).toEqual(['work_item:create', 'discussion:post']);
+    ).toEqual([
+      'work_item:create',
+      'discussion:post',
+      'workspace:write_shared',
+    ]);
+    await bob.service.sync('group_project');
+    await expect(
+      bob.service.revisePrincipalLink({
+        groupId: 'group_project',
+        expectedRevision: 1,
+        linkId: ownedLink.link_id,
+        revision: 1,
+        title: 'No longer authorized',
+        url: 'https://example.test/bob/revised',
+      }),
+    ).rejects.toThrow(/owned Workspace/u);
+    const shared = await bob.service.publishSharedLink({
+      groupId: 'group_project',
+      expectedRevision: 0,
+      title: 'Authorized shared link',
+      url: 'https://example.test/shared',
+    });
+    expect(
+      Object.values(shared.projection!.links).find(
+        (link) => link.scope === 'shared',
+      ),
+    ).toMatchObject({
+      title: 'Authorized shared link',
+      owner_principal_id: null,
+    });
     expect(JSON.stringify(updated.projection)).not.toMatch(/role|claim/iu);
     owner.store.close();
     bob.store.close();
@@ -3015,6 +3087,179 @@ describe('Collaboration project space v3 Group and identity service', () => {
         },
       }),
     ).rejects.toThrow(/verified size and sha256/u);
+    owner.store.close();
+  });
+
+  it('keeps contextual links embedded and manages Shared and owned Workspace links independently', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/linked-resources.git',
+      name: 'Linked resources',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_links',
+    });
+
+    const progress = await owner.service.postProgress({
+      groupId: 'group_links',
+      expectedRevision: 0,
+      summary: 'Reviewed the architecture',
+      links: [
+        {
+          title: '架构说明',
+          url: 'https://例子.测试/架构?版本=四',
+          description: '个人进展上下文',
+        },
+      ],
+    });
+    const progressUpdate = Object.values(
+      progress.projection!.progressUpdates,
+    )[0]!;
+    expect(progressUpdate.links).toEqual([
+      expect.objectContaining({
+        link_id: expect.stringMatching(/^link_[0-9a-f-]+$/u),
+        title: '架构说明',
+        url: 'https://例子.测试/架构?版本=四',
+      }),
+    ]);
+    expect(progress.projection!.links).toEqual({});
+
+    await owner.service.createWorkItem({
+      groupId: 'group_links',
+      workItemId: 'work_item_links',
+      type: 'task',
+      title: 'Validate links',
+    });
+    const workProgress = await owner.service.postWorkItemProgress({
+      groupId: 'group_links',
+      workItemId: 'work_item_links',
+      expectedRevision: 1,
+      summary: 'Validated the reference',
+      links: [{ title: 'Spec', url: 'urn:icarus:spec:v4' }],
+    });
+    expect(
+      workProgress.projection!.workItemUpdates.work_item_links[0]!.links[0],
+    ).toMatchObject({ title: 'Spec', url: 'urn:icarus:spec:v4' });
+
+    const discussion = await owner.service.createDiscussionWithMessage({
+      groupId: 'group_links',
+      threadId: 'discussion_links',
+      title: 'Link review',
+      scope: { type: 'work_item', ref: 'work_item_links' },
+      messageId: 'message_links',
+      body: 'Please review the linked reference.',
+      links: [{ title: 'Review', url: 'custom+review://host/item/42' }],
+    });
+    expect(
+      discussion.projection!.discussions.discussion_links.messages.message_links
+        .links,
+    ).toHaveLength(1);
+    const revisedMessage = await owner.service.reviseDiscussionMessage({
+      groupId: 'group_links',
+      threadId: 'discussion_links',
+      expectedRevision: 1,
+      messageId: 'message_links',
+      body: 'The reference was reviewed.',
+      links: [],
+    });
+    expect(
+      revisedMessage.projection!.discussions.discussion_links.messages
+        .message_links,
+    ).toMatchObject({ revision: 2, links: [] });
+
+    const owned = await owner.service.publishPrincipalLink({
+      groupId: 'group_links',
+      expectedRevision: 1,
+      title: '个人手册',
+      url: 'https://例子.测试/个人',
+      description: '长期资源',
+      workItemRefs: ['work_item_links'],
+      discussionRefs: ['discussion_links'],
+    });
+    const ownedLink = Object.values(owned.projection!.links).find(
+      (link) => link.scope === 'principal',
+    )!;
+    expect(ownedLink).toMatchObject({
+      link_id: expect.stringMatching(/^link_[0-9a-f-]+$/u),
+      owner_principal_id: ALICE.principalId,
+      revision: 1,
+    });
+    const revisedOwned = await owner.service.revisePrincipalLink({
+      groupId: 'group_links',
+      expectedRevision: 2,
+      linkId: ownedLink.link_id,
+      revision: 1,
+      title: '个人手册 v2',
+      url: 'https://例子.测试/个人/二',
+      description: '已修订',
+      workItemRefs: ['work_item_links'],
+    });
+    expect(revisedOwned.projection!.links[ownedLink.link_id]).toMatchObject({
+      title: '个人手册 v2',
+      revision: 2,
+      created_at: ownedLink.created_at,
+      created_by_principal_id: ALICE.principalId,
+    });
+    const removedOwned = await owner.service.removePrincipalLink({
+      groupId: 'group_links',
+      expectedRevision: 3,
+      linkId: ownedLink.link_id,
+      revision: 2,
+    });
+    expect(removedOwned.projection!.links[ownedLink.link_id]).toBeUndefined();
+    expect(removedOwned.projection!.removedLinkIds).toContain(
+      ownedLink.link_id,
+    );
+
+    const shared = await owner.service.publishSharedLink({
+      groupId: 'group_links',
+      expectedRevision: 0,
+      title: '共享规范',
+      url: 'https://例子.测试/共享',
+      discussionRefs: ['discussion_links'],
+    });
+    const sharedLink = Object.values(shared.projection!.links).find(
+      (link) => link.scope === 'shared',
+    )!;
+    const revisedShared = await owner.service.reviseSharedLink({
+      groupId: 'group_links',
+      expectedRevision: 1,
+      linkId: sharedLink.link_id,
+      revision: 1,
+      title: '共享规范 v2',
+      url: 'https://例子.测试/共享/二',
+    });
+    await expect(
+      owner.service.reviseSharedLink({
+        groupId: 'group_links',
+        expectedRevision: 2,
+        linkId: sharedLink.link_id,
+        revision: 1,
+        title: 'Stale',
+        url: 'https://example.test/stale',
+      }),
+    ).rejects.toThrow(/revision is stale/u);
+    const removedShared = await owner.service.removeSharedLink({
+      groupId: 'group_links',
+      expectedRevision: 2,
+      linkId: sharedLink.link_id,
+      revision: revisedShared.projection!.links[sharedLink.link_id]!.revision,
+    });
+    expect(removedShared.projection!.links[sharedLink.link_id]).toBeUndefined();
+    expect(owner.store.listLinkIndex('group_links')).toEqual([]);
+
+    await expect(
+      owner.service.publishSharedLink({
+        groupId: 'group_links',
+        expectedRevision: 3,
+        title: 'Invalid',
+        url: 'relative/path',
+      }),
+    ).rejects.toThrow(/absolute URL or URI/u);
     owner.store.close();
   });
 
@@ -3234,7 +3479,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
       ...ALICE,
       principalId: 'principal_00000000-0000-4000-8000-000000000002',
       credentialId: 'credential_00000000-0000-4000-8000-000000000002',
-      fingerprint: collaborationCredentialFingerprintV3(
+      fingerprint: collaborationCredentialFingerprintV4(
         'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMXQfKE4hE1m3sXEXAMPLEreview',
       ),
       purpose: 'event_signing',
@@ -3655,7 +3900,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
       groupId: 'group_reassignment',
     });
     const machine = {
-      format: 'icarus.collaboration-machine/3' as const,
+      format: 'icarus.collaboration-machine/4' as const,
       initial_state: 'implementation',
       states: {
         implementation: {
@@ -4086,7 +4331,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
       executor_id: executorId,
     });
     const actionResult = {
-      format: 'icarus.collaboration-action-result/3' as const,
+      format: 'icarus.collaboration-action-result/4' as const,
       outcome: 'complete',
       summary: 'Executor suggests completion.',
       instruction: 'Review the generated changes.',
@@ -4104,7 +4349,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
       fencingToken: started.projection!.turns.turn_assisted.fencing_token!,
       state: 'completed',
       result: actionResult,
-      resultHash: collaborationCanonicalHashV3(actionResult),
+      resultHash: collaborationCanonicalHashV4(actionResult),
       executorId,
     });
     expect(awaiting.projection?.turns.turn_assisted).toMatchObject({
@@ -4151,7 +4396,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     });
     expect(confirmed!.projection.turns.turn_assisted).toMatchObject({
       state: 'completed',
-      executor_result_hash: collaborationCanonicalHashV3(actionResult),
+      executor_result_hash: collaborationCanonicalHashV4(actionResult),
       completion_hash: expect.stringMatching(/^sha256:/u),
       handoff: {
         artifact_refs: [confirmedArtifact.artifactRef],
@@ -4202,7 +4447,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     });
     const actionId = actionRegistration.action.action_id;
     const automaticMachine = {
-      format: 'icarus.collaboration-machine/3' as const,
+      format: 'icarus.collaboration-machine/4' as const,
       initial_state: 'verification',
       states: {
         verification: {
@@ -4295,7 +4540,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
         return {
           ok: true,
           text: JSON.stringify({
-            format: 'icarus.collaboration-action-result/3',
+            format: 'icarus.collaboration-action-result/4',
             outcome: 'ready_for_test',
             summary: 'Verification is ready for testing.',
             instruction: 'Run the release suite.',
@@ -4416,7 +4661,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     });
     const actionId = actionRegistration.action.action_id;
     const twoNodeMachine = {
-      format: 'icarus.collaboration-machine/3' as const,
+      format: 'icarus.collaboration-machine/4' as const,
       initial_state: 'prepare',
       states: {
         prepare: {
@@ -4561,12 +4806,12 @@ describe('Collaboration project space v3 Group and identity service', () => {
         turn_id: `turn_tampered_${incoming ? 'cross' : 'missing'}`,
         incoming_handoff: incoming,
         incoming_handoff_hash: incoming
-          ? collaborationCanonicalHashV3(incoming)
+          ? collaborationCanonicalHashV4(incoming)
           : null,
       };
       const head =
         beforeNext.projection.aggregateHeads['workflow_instance:wfi_handoff']!;
-      const tamperedEvent = buildCollaborationEventV3({
+      const tamperedEvent = buildCollaborationEventV4({
         groupId: 'group_handoff',
         eventId: `evt_${tamperedTurn.turn_id}`,
         aggregateType: 'workflow_instance',
@@ -4584,7 +4829,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
         payload: { turn: tamperedTurn },
       });
       expect(() =>
-        reduceCollaborationEventV3(beforeNext.projection, tamperedEvent),
+        reduceCollaborationEventV4(beforeNext.projection, tamperedEvent),
       ).toThrow(/incoming Handoff/u);
     }
 
@@ -4605,7 +4850,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
         return {
           ok: true,
           text: JSON.stringify({
-            format: 'icarus.collaboration-action-result/3',
+            format: 'icarus.collaboration-action-result/4',
             outcome: 'complete',
             summary: 'Reviewed the carried Handoff.',
             instruction: '',
@@ -4642,7 +4887,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     expect(handoffRunOnce).toHaveBeenCalledOnce();
 
     const loopMachine = {
-      format: 'icarus.collaboration-machine/3' as const,
+      format: 'icarus.collaboration-machine/4' as const,
       initial_state: 'loop',
       states: {
         loop: {

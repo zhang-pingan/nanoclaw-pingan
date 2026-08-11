@@ -7,7 +7,7 @@ import type { RunOnceResponse } from '../internal-agent-run-once/schemas.js';
 import type { RunOnceService } from './executors/run-once.js';
 import type { CollaborationAnalysisInput } from './analysis-contracts.js';
 import { canonicalJsonStringify } from './protocol/canonical-json.js';
-import { collaborationCanonicalHashV3 } from './protocol/v3-reducer.js';
+import { collaborationCanonicalHashV4 } from './protocol/v4-reducer.js';
 
 const SHA256 = /^sha256:[a-f0-9]{64}$/u;
 const GIT_COMMIT = /^[a-f0-9]{40,64}$/u;
@@ -219,7 +219,7 @@ function validateRequest(request: ManagedAnalysisExecutionRequest): void {
       'invalid_request',
       'Analysis Context identity does not match the execution request',
     );
-  if (collaborationCanonicalHashV3(request.context) !== request.contextHash)
+  if (collaborationCanonicalHashV4(request.context) !== request.contextHash)
     throw new ManagedAnalysisExecutorError(
       'hash_mismatch',
       'Analysis Context does not match contextHash',
@@ -334,7 +334,7 @@ function writePackage(
         'invalid_capability_package',
         `Capability package exceeds ${String(MAX_CAPABILITY_BYTES)} bytes`,
       );
-    const packageHash = collaborationCanonicalHashV3({
+    const packageHash = collaborationCanonicalHashV4({
       format: 'icarus.collaboration-analysis-capability-package/1',
       files: generated
         .map((file) => ({
@@ -381,7 +381,7 @@ function writePackage(
 function requestFingerprint(
   prepared: PreparedManagedAnalysisExecution,
 ): string {
-  return collaborationCanonicalHashV3({
+  return collaborationCanonicalHashV4({
     executor_id: prepared.executorId,
     analysis_id: prepared.analysisId,
     operation_key: prepared.operationKey,

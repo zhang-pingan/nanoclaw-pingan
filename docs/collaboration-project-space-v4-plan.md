@@ -1,26 +1,26 @@
-# Icarus 协作群组项目空间 v3 方案
+# Icarus 协作群组项目空间 v4 方案
 
 ## 文档状态
 
 - 状态：Implemented（current-only）
 - 日期：2026-08-08
 - 实施完成：2026-08-08
-- 当前协议：`icarus.collaboration-group/3`
+- 当前协议：`icarus.collaboration-group/4`
 - 实施前代码基线：`main@3eff5302`（历史）
-- 当前实现：Collaboration Project Space v3、SQLite v11
+- 当前实现：Collaboration Project Space v4、SQLite v12
 - 适用范围：Group、Principal、Client、Executor、Observer、Workspace、Work Item、Discussion、Workflow Definition、Workflow Instance、图形化 FSM、Git 协议、权限、同步和审计
 - 前提：方案仍处于开发迭代期，没有真实群组、不可丢弃业务数据或旧签名历史；每次迭代发布的新协议直接成为唯一 current version，不实现旧版本迁移、双写、兼容读取或兼容回放
 - 相关文档：
   - [Agent Group Collaboration Runtime 方案](agent-group-collaboration-runtime-plan.md)
   - [Agent Group 角色自治执行模型优化方案](agent-group-role-owned-execution-optimization.md)
 
-本文档定义并记录当前 v3 模型。上述两份文档仅保留 v1/v2 历史设计基线；v2 的“群组必须拥有一个 Machine/Role 集合”不再是现行语义，当前代码、API、Git replay、SQLite store 和测试均对旧版本 fail closed。
+本文档定义并记录当前 v4 模型。上述两份文档仅保留 v1/v2 历史设计基线；v2 的“群组必须拥有一个 Machine/Role 集合”不再是现行语义，当前代码、API、Git replay、SQLite store 和测试均对旧版本 fail closed。
 
 ## 摘要
 
 实施前的 Agent Group Runtime 将一个群组直接等同于一个 FSM：创建群组必须同时定义 Machine、Role 和创建者初始 Role；群组只有在 Role 认领和 State Implementation 完整后才能 READY。该模型已经实现 Role-owned Action、Manual/Assisted/Automatic Turn、Handoff、Artifact、节点计时、超时提醒、审计和 Outcome-first 图形化 FSM 编辑器，但它仍然只能表达“按一个流程推进的一组人”。
 
-v3 将 Group 提升为长期存在的协作项目空间：
+v4 将 Group 提升为长期存在的协作项目空间：
 
 1. Group 创建后立即可用，即使没有 Work Item 和 Workflow。
 2. Principal 是群组成员和权限主体；一个 Principal 可以使用多个 Icarus Client，并可以配置零个或多个本地 Executor。
@@ -32,7 +32,7 @@ v3 将 Group 提升为长期存在的协作项目空间：
 8. 被指派 Principal 自己决定 State 使用人工通知、Agent 辅助还是 Agent 自动执行；Action 和 Executor 均可选。
 9. 未正式加入的用户可以作为本地 Observer 只读订阅、验证和浏览群组，不写入成员协议。
 10. Git 原始路径在客户端映射为友好的虚拟项目树，支持定时同步和手动刷新；稳定 ID 不因显示名称变化而改写。
-11. v3 机器协议和结构化事实统一使用 JSON；人类文档和 Prompt 使用 Markdown；业务文件保持自身格式并使用 JSON sidecar 描述。
+11. v4 机器协议和结构化事实统一使用 JSON；人类文档和 Prompt 使用 Markdown；业务文件保持自身格式并使用 JSON sidecar 描述。
 12. 开发期采用 latest-only：新 schema、事件或 API 版本落地后立即替换旧版本，不保留兼容分支和迁移链。
 13. Principal 是 Group 内系统生成的 `principal_<uuid>`，不由 Git SSH key 或 Credential fingerprint 派生；每个安装持久化一个 `client_<uuid>`。
 14. 每个 Client 自动生成独立的 Icarus event-signing Credential。公钥和系统校验的 fingerprint 进入共享投影，私钥只留在本机安全目录；轮换或撤销 Credential 不改变 Principal。
@@ -86,12 +86,12 @@ Workflow Instance State
 
 ## 0. 实施结果
 
-v3 已按本文的 current-only 边界端到端落地：
+v4 已按本文的 current-only 边界端到端落地：
 
-- Git 控制分支只接受 v3 Group/Event/Projection 和 JSON materialization，按 canonical JSON hash、active Credential signature、Credential/Principal/Client actor mapping、aggregate revision、previous hash、commit order、路径、sidecar 和文件 hash/size 完整校验；
-- 本地 SQLite v11 保存 retained Group binding、Observer/Member subscription、Principal/Client/Credential、身份恢复请求、直接权限、投影、file index、精确 Action revision/commit 索引、本机 Executor profile、State Executor Binding、execution receipt/observation、notification、analysis、audit evidence、staged Artifact 和临时初始化恢复记录，非 v11 store 启动时 fail closed；
+- Git 控制分支只接受 v4 Group/Event/Projection 和 JSON materialization，按 canonical JSON hash、active Credential signature、Credential/Principal/Client actor mapping、aggregate revision、previous hash、commit order、路径、sidecar 和文件 hash/size 完整校验；
+- 本地 SQLite v12 保存 retained Group binding、Observer/Member subscription、Principal/Client/Credential、身份恢复请求、直接权限、投影、file index、精确 Action revision/commit 索引、本机 Executor profile、State Executor Binding、execution receipt/observation、notification、analysis、audit evidence、staged Artifact 和临时初始化恢复记录，非 v12 store 启动时 fail closed；
 - Group、Credential rotation/revocation、Client revocation、identity/owner/offline recovery、Workspace、Work Item、Discussion、Workflow Definition/Instance、State Execution、Turn、timeout、Artifact、审计、备份/恢复和 verified virtual file tree 已进入 service 与 Web API；
-- Work Item progress 与 Turn completion 通过 staged upload 在一个签名事件和 Git commit 中物化原始业务文件及 `metadata.json`，同时验证 scope、Principal/Client、attempt 和 fence；`/3` 备份联合保护 DB 与尚未提交的 staged bytes；
+- Work Item progress 与 Turn completion 通过 staged upload 在一个签名事件和 Git commit 中物化原始业务文件及 `metadata.json`，同时验证 scope、Principal/Client、attempt 和 fence；`icarus.collaboration-backup/4` 备份联合保护 DB 与尚未提交的 staged bytes；
 - Web/Electron `/groups` 已提供项目空间页面、Observer 受限申请状态、Work Item board/list、Discussion、文件树、Principal/Client/Credential/权限、恢复请求审批、Git Remote SSH 设置、offline recovery Credential 备份/导入、Workflow Definition/Instance、Outcome-first 编辑器、Turn、Artifact、审计和诊断；
 - v2 Role/Claim、Group-level Machine/active Turn、YAML machine/layout、旧 API、旧 store、兼容 reducer、迁移、双写和旧事件回放均已从当前实现与正向测试删除。
 
@@ -111,9 +111,9 @@ v3 已按本文的 current-only 边界端到端落地：
 - Outcome-first 图形化 FSM 创建和编辑；
 - `machine_revised` 与 `machine_layout_updated`；
 - 自由布局、角色泳道、自动整理、节点拖动、撤销/重做、实时校验和只读 Runtime 图；
-- 当前 v2 Machine 业务 hash 与 `layout.yaml` 展示布局隔离；v3 对应文件改为 JSON。
+- 当前 v2 Machine 业务 hash 与 `layout.yaml` 展示布局隔离；v4 对应文件改为 JSON。
 
-图形化编辑器的现有实现应作为 v3 Workflow Definition Editor 的基础继续复用，而不是推倒重写。
+图形化编辑器的现有实现应作为 v4 Workflow Definition Editor 的基础继续复用，而不是推倒重写。
 
 ### 1.2 当前强制耦合
 
@@ -164,7 +164,7 @@ artifacts/{turn-id}/
 
 ### 1.4 当前实现落点
 
-v3 实施应优先演进而不是重复实现这些模块：
+v4 实施应优先演进而不是重复实现这些模块：
 
 | 当前能力                                              | 代码位置                                        |
 | ----------------------------------------------------- | ----------------------------------------------- |
@@ -215,11 +215,11 @@ Group 不再要求：
 - 不把 Git 轮询改造成高频即时聊天系统。
 - 不实现多人实时共同编辑同一文档。
 - 不把 Git 作为大文件仓库；大文件继续使用外部对象引用或后续对象存储。
-- 不引入中心化账号服务作为 v3 前置条件。
+- 不引入中心化账号服务作为 v4 前置条件。
 - 不让客户端直接编辑受控 checkout 绕过签名事件。
 - 不让 Executor 获得高于其 Principal 的群组权限。
 - 不把 Work Item dependency 实现成另一套 DAG 调度器。
-- 不保留 v2 Role/Claim 和 v3 Principal Assignment 两套并行协议。
+- 不保留 v2 Role/Claim 和 v4 Principal Assignment 两套并行协议。
 - 不为开发迭代中已废弃的 schema、事件、API、SQLite 或 Git fixture 保留兼容代码和迁移工具。
 
 ## 3. 核心设计原则
@@ -236,7 +236,7 @@ Group 不再要求：
 
 ### 3.2 Client 与 Executor 分离
 
-v2 的 `agent_id` 同时接近“本机 Icarus 安装”和“执行 Agent”两个语义。v3 明确拆分：
+v2 的 `agent_id` 同时接近“本机 Icarus 安装”和“执行 Agent”两个语义。v4 明确拆分：
 
 | 概念       | 含义                                        | 是否进入共享 Git                                 |
 | ---------- | ------------------------------------------- | ------------------------------------------------ |
@@ -281,7 +281,7 @@ executor = null
 
 ### 3.6 数据格式边界
 
-v3 使用以下统一规则：
+v4 使用以下统一规则：
 
 | 内容类型                 | 权威格式     | 示例                                                    |
 | ------------------------ | ------------ | ------------------------------------------------------- |
@@ -301,7 +301,7 @@ v3 使用以下统一规则：
 - JSON 字段顺序、缩进和换行不影响业务 hash；Markdown 和业务文件则按其内容字节计算 content hash；
 - Prompt 的 ID、版本、引用、权限和 hash 属于 Action JSON，正文存放在独立 `.md` 文件，不使用 YAML front matter 承载权威字段；
 - 业务文件保留原始文件名和扩展名，旁置 `metadata.json` 固定 `content_ref`、media type、size、hash、uploader 和业务引用；
-- YAML 不是 v3 权威格式，也不由系统生成或写回。若未来需要兼容外部模板，可作为可选导入格式，导入后必须转换、校验并持久化为 JSON。
+- YAML 不是 v4 权威格式，也不由系统生成或写回。若未来需要兼容外部模板，可作为可选导入格式，导入后必须转换、校验并持久化为 JSON。
 
 每个协议对象必须包含稳定的 `format` 标识；当同一格式发生不兼容变化时发布新 format/version，而不是根据文件内容猜测版本。
 
@@ -367,7 +367,7 @@ Membership 只以 Principal 为唯一成员键：
 
 ```json
 {
-  "format": "icarus.collaboration-member/3",
+  "format": "icarus.collaboration-member/4",
   "principal_id": "principal_2d9023b8-73e3-41bf-bb96-d52c0cb15bb3",
   "display_name": "Alice",
   "status": "active",
@@ -526,7 +526,7 @@ Git Remote 服务账号与 SSH key 只决定 clone、fetch、push 能否成功�
 
 ### 6.1 删除 Group Role，保留直接 Grant
 
-v3 删除：
+v4 删除：
 
 ```text
 groups/roles/
@@ -630,7 +630,7 @@ Principal 的进度使用追加结构：
 
 ```json
 {
-  "format": "icarus.collaboration-progress-update/1",
+  "format": "icarus.collaboration-progress-update/2",
   "update_id": "update_xxx",
   "principal_id": "principal_alice",
   "summary": "支付接口已完成",
@@ -650,9 +650,30 @@ Principal 的进度使用追加结构：
 
 `origin` 的合法枚举为 `human`、`agent` 和 `workflow`。
 
+个人进展、Work Item progress 与 Discussion Message 可携带最多 10 个严格的
+`icarus.collaboration-external-link/1` 对象。`link_id` 由 Icarus 生成；`title`、
+`url` 与可选 `description` 随父资源的签名事件保存。进展仍要求 `summary`，
+消息仍要求非空 `body`。这些上下文链接不会自动复制到 Workspace。
+
+### 7.3 Workspace Link
+
+长期链接是独立于 File 的第一方资源，不使用 `external_locator`，也不进入
+`extensions`。Shared 与 Principal-owned link 使用同一严格
+`icarus.collaboration-workspace-link/1` schema，记录 `scope`、明确的
+`owner_principal_id`、创建/更新 Actor、revision、时间和 Work Item/Workflow/
+Discussion refs。创建、修订与移除分别使用
+`shared_link_published/revised/removed` 和
+`principal_link_published/revised/removed`。移除事件从当前 Projection 与
+materialization 删除 link sidecar，但签名 Git 事件历史不删除；历史 link id
+不得复用。
+
+URL/URI 只执行基本绝对格式与 4096 字符长度校验。第一阶段不限制 scheme、
+域名、参数或账号信息，不抓取标题、favicon 或摘要。Renderer 不加载外部内容，
+打开操作只能经 Electron 安全 IPC 交给系统。
+
 不要用一个不断覆盖的 `status.md` 作为权威事实。客户端可以投影“最新状态”，但必须保留全部更新和 Actor。
 
-### 7.3 Executor 产物
+### 7.4 Executor 产物
 
 Executor 可以代表 Principal 发布进度或文件，但共享事件必须同时记录：
 
@@ -780,7 +801,7 @@ Work Item 的详情字段与进度时间线分离。每次更新追加：
 
 ```json
 {
-  "format": "icarus.collaboration-work-item-progress/1",
+  "format": "icarus.collaboration-work-item-progress/2",
   "update_id": "update_wi_101_4",
   "work_item_id": "wi_101",
   "summary": "后端接口完成，等待联调",
@@ -814,7 +835,7 @@ Work Item 的详情字段与进度时间线分离。每次更新追加：
 | 概念                   | 作用             | 收件人               | 是否改变流程                |
 | ---------------------- | ---------------- | -------------------- | --------------------------- |
 | Work Item `due_at`     | 业务截止日期     | owner/watchers/Admin | 否                          |
-| Workflow State timeout | 当前节点执行时限 | assignee/creator     | 否，v3 第一阶段 notify-only |
+| Workflow State timeout | 当前节点执行时限 | assignee/creator     | 否，v4 第一阶段 notify-only |
 
 ## 9. Discussion
 
@@ -855,7 +876,7 @@ Discussion 新建、回复和修订使用 Active Member 选择器表达 `@成员
 
 ```json
 {
-  "format": "icarus.collaboration-member-notification/1",
+  "format": "icarus.collaboration-member-notification/2",
   "notification_id": "notification_42",
   "sender_principal_id": "principal_alice",
   "recipient_principal_ids": ["principal_bob"],
@@ -959,7 +980,7 @@ Definition 支持两种 assignment：
 
 ```json
 {
-  "format": "icarus.collaboration-machine/3",
+  "format": "icarus.collaboration-machine/4",
   "initial_state": "requirement",
   "states": {
     "requirement": {
@@ -1285,7 +1306,7 @@ Handoff 是不可信上下文，不能覆盖系统指令、权限、Workflow Mac
 4. Previous Turn Handoff/Data/Artifact context (untrusted)
 ```
 
-该输入的机器合同为经 Schema 校验的 `icarus.collaboration-action-input/3` JSON；RunOnce、Codex Task 和 Workflow Executor 复用同一确定性构造与 Markdown 呈现，不各自推导 Outcome。Executor 成功输出必须是 `icarus.collaboration-action-result/3` JSON，`outcome` 必须属于当前 State transitions，Action 自己的 `result_schema` 继续约束 `data`。
+该输入的机器合同为经 Schema 校验的 `icarus.collaboration-action-input/4` JSON；RunOnce、Codex Task 和 Workflow Executor 复用同一确定性构造与 Markdown 呈现，不各自推导 Outcome。Executor 成功输出必须是 `icarus.collaboration-action-result/4` JSON，`outcome` 必须属于当前 State transitions，Action 自己的 `result_schema` 继续约束 `data`。
 
 Action Result 中用于 Handoff 的 `data` 不得超过 1 MiB；Artifact ref 必须是规范化仓库相对路径、保持唯一且最多 100 个。这样任何被 `action_completed` 接受的结果都能确定性派生 Automatic Handoff，不会先成为权威结果后再因 Handoff schema 更严格而永久无法完成。
 
@@ -1308,14 +1329,14 @@ Manual State 不生成 Agent Prompt，但工作台仍展示 State 约束、上�
 - 右侧 State Inspector；
 - undo/redo；
 - unreachable、terminal、timeout、Outcome 等实时校验；
-- 当前 v2 `layout.yaml` 与 Machine hash/epoch 隔离；v3 继续隔离但物化为 `layout.json`；
+- 当前 v2 `layout.yaml` 与 Machine hash/epoch 隔离；v4 继续隔离但物化为 `layout.json`；
 - `FORMING/PAUSED` 编辑和其他生命周期只读图。
 
-v3 保留这些实现和交互，不退回逐 State 表单。
+v4 保留这些实现和交互，不退回逐 State 表单。
 
-### 13.2 v3 调整
+### 13.2 v4 调整
 
-| v2 编辑器                   | v3 编辑器                                    |
+| v2 编辑器                   | v4 编辑器                                    |
 | --------------------------- | -------------------------------------------- |
 | 创建 Group 时必填 FSM       | Group 创建后在 Workflows 页面新建 Definition |
 | Role 编辑器                 | 删除                                         |
@@ -1369,7 +1390,7 @@ State Execution/Action/Executor 不放进 Definition Inspector。Instance 运行
 - 无可达 terminal 默认 warning，允许显式确认纯循环流程；
 - layout 节点必须对应 Machine State，多余坐标忽略或清理。
 
-## 14. v3 Git 目录
+## 14. v4 Git 目录
 
 ```text
 README.md
@@ -1401,6 +1422,9 @@ workspace/
   shared/
     data/
     documents/
+    links/
+      {link-id}/
+        metadata.json
 
   principals/
     {principal-id}/
@@ -1410,6 +1434,9 @@ workspace/
         {file-id}/
           metadata.json
           {original-file-name.ext}
+      links/
+        {link-id}/
+          metadata.json
       automations/
         actions/
           {action-id}.json
@@ -1486,7 +1513,7 @@ projections/
 
 ### 14.1 目录调整
 
-v3 删除或移动：
+v4 删除或移动：
 
 ```text
 machine.yaml                              -> workflows/definitions/{id}/machine.json
@@ -1554,7 +1581,7 @@ Genesis `self_description` 是机器合同而不是任意文件上传入口。Ic
 
 v2 所有事件共享 Group `sequence`。当 Progress、Message、Work Item 和多个 Workflow 同时写入时，这会制造无意义冲突。
 
-v3 每个 Aggregate 使用独立 revision 和 previous event hash：
+v4 每个 Aggregate 使用独立 revision 和 previous event hash：
 
 ```text
 events/work-items/wi_101/000008-evt_xxx.json
@@ -1566,8 +1593,8 @@ events/workflow-instances/wfi_201/000014-evt_xxx.json
 
 ```json
 {
-  "format": "icarus.collaboration-event/3",
-  "protocol_version": 3,
+  "format": "icarus.collaboration-event/4",
+  "protocol_version": 4,
   "group_id": "group_payment",
   "event_id": "evt_xxx",
   "aggregate_type": "work_item",
@@ -1729,7 +1756,7 @@ display name：
 ### 17.2 文件能力
 
 - 虚拟目录树和面包屑；
-- 文本、Markdown、JSON、图片和小型产物预览；作为业务附件上传的 YAML 仍可按普通文本预览，但不解释为 v3 协议；
+- 文本、Markdown、JSON、图片和小型产物预览；作为业务附件上传的 YAML 仍可按普通文本预览，但不解释为 v4 协议；
 - Work Item/Discussion/Workflow 结构化业务视图；
 - raw file 和 raw path 高级入口；
 - 显示 uploader、时间、hash、size、media type 和业务 refs；
@@ -1889,7 +1916,7 @@ State Execution/Action/Executor 不是 READY 必需项，因为默认 manual/not
 
 初始化仅允许当前 Owner 执行。Host Service/API 在生成新身份和 Genesis 前必须先同步并完整验证 Remote current history，再确认最新 Projection 中的本地 Principal、Client 和 Credential 仍是 active Owner 身份；UI 隐藏入口不构成授权。授权完成后的 push 仍不使用 lease，之后到达 Remote 的提交也可以被覆盖。初始化默认沿用名称、membership policy、visibility policy 和本机 Git Remote SSH 配置，但创建新的 Group、Owner Principal、Client、event-signing Credential 与 recovery Credential。它不是 `group_reinitialized` 事件，不创建 reset/recovery/cancel 事实，不保留 generation/epoch，也不把旧成员身份迁移到新群组。
 
-新 Genesis 先在隔离临时仓库中签名并通过 current v3 history、reducer 与 materialization 全量验证，然后使用 `+HEAD:refs/heads/icarus/control` 推送。该 push 不使用 lease：确认后其他成员刚写入的提交仍会被覆盖；多个 Owner 设备并发时最后一次成功 push 生效。Git 服务端 branch protection 或 hook 可以拒绝 force push，Icarus 权限不能绕过 transport 限制。远端成功前不替换本地旧状态；远端成功后若本地中断，SQLite 临时操作记录会在下次启动重新读取 Remote 并完成替换，清理成功后删除该记录。
+新 Genesis 先在隔离临时仓库中签名并通过 current v4 history、reducer 与 materialization 全量验证，然后使用 `+HEAD:refs/heads/icarus/control` 推送。该 push 不使用 lease：确认后其他成员刚写入的提交仍会被覆盖；多个 Owner 设备并发时最后一次成功 push 生效。Git 服务端 branch protection 或 hook 可以拒绝 force push，Icarus 权限不能绕过 transport 限制。远端成功前不替换本地旧状态；远端成功后若本地中断，SQLite 临时操作记录会在下次启动重新读取 Remote 并完成替换，清理成功后删除该记录。
 
 其他设备发现 control history 非 fast-forward 且 `group_id` 改变时，必须隔离旧订阅、停止旧身份写入，并要求用户按新群组重新 Observe/Join；系统不能伪造旧事件链对重写的授权。并发初始化失败方仅在新群组 `observer_access=allowed` 时注册 Observer；`members_only` 时删除旧展示状态和仓库缓存，不注册新订阅，只能显式 Join 或恢复身份。初始化只更新 Icarus control ref，不删除无关 branch 或 tag。
 
@@ -2005,7 +2032,7 @@ PUT  /api/collaboration/groups/{groupId}/settings/git-remote
 PUT  /api/collaboration/groups/{groupId}/permissions/{principalId}
 ```
 
-### 21.3 Workspace 和 Files
+### 21.3 Workspace、Files 和 Links
 
 ```text
 GET  /api/collaboration/groups/{groupId}/files
@@ -2013,6 +2040,14 @@ GET  /api/collaboration/groups/{groupId}/files/content
 POST /api/collaboration/groups/{groupId}/workspace/shared/files
 POST /api/collaboration/groups/{groupId}/workspace/me/updates
 POST /api/collaboration/groups/{groupId}/workspace/me/files
+GET  /api/collaboration/groups/{groupId}/workspace/shared/links
+POST /api/collaboration/groups/{groupId}/workspace/shared/links
+PATCH /api/collaboration/groups/{groupId}/workspace/shared/links/{linkId}
+DELETE /api/collaboration/groups/{groupId}/workspace/shared/links/{linkId}
+GET  /api/collaboration/groups/{groupId}/workspace/me/links
+POST /api/collaboration/groups/{groupId}/workspace/me/links
+PATCH /api/collaboration/groups/{groupId}/workspace/me/links/{linkId}
+DELETE /api/collaboration/groups/{groupId}/workspace/me/links/{linkId}
 ```
 
 客户端不能提交任意 repository path。Host 根据 endpoint、local Principal 和对象 ID 生成 canonical path。
@@ -2254,16 +2289,16 @@ Observer 使用相同浏览和验证界面，但：
 
 ## 25. 实施阶段
 
-### Phase 0：冻结 v3 Contract
+### Phase 0：冻结 v4 Contract
 
-- 将本文档作为唯一 v3 产品/协议目标；
+- 将本文档作为唯一 v4 产品/协议目标；
 - 冻结 Group、Identity、Aggregate Event、Work Item、Workflow Definition/Instance schema；
 - 冻结 JSON Schema registry、`format` 版本规则、pretty materialization 和 RFC 8785 canonical hash 规则；
-- 建立 JSON 协议、Markdown Prompt 和原格式业务文件 + JSON sidecar 的 fixture；v3 不生成或回放 YAML 协议；
+- 建立 JSON 协议、Markdown Prompt 和原格式业务文件 + JSON sidecar 的 fixture；v4 不生成或回放 YAML 协议；
 - 明确开发期 latest-only：v2 及后续被替代迭代均无迁移、无双写、无兼容读取、无旧回放；
 - 删除旧 parser/reducer/API/materializer/schema/fixture 和兼容测试，只保留最新目标实现；
 - 非 current 协议、Git fixture 和 SQLite schema fail closed，提供显式开发环境 reset/reinitialize 流程；
-- 建立 fresh v3 fixture 和临时 Git remote 测试基线；
+- 建立 fresh v4 fixture 和临时 Git remote 测试基线；
 - 实施时只把 v2 测试作为行为参考；当前测试和 API 不保留 v2 兼容路径。
 
 ### Phase 1：Group Container 和 Identity
@@ -2483,12 +2518,12 @@ Observer 使用相同浏览和验证界面，但：
 - Work Item status 与 Workflow State/timeout 没有双重来源或错误映射。
 - 每个 Aggregate 独立 revision/hash chain，跨 Work Item/Discussion/Workflow 的并发不会争用一个 Group sequence。
 - 所有共享写入保留 Git 签名、path authorization、hash、CAS 和可重建 Projection。
-- 所有 v3 机器协议、API payload 和结构化事实使用 Schema 校验后的 JSON；系统不生成 YAML 权威文件。
+- 所有 v4 机器协议、API payload 和结构化事实使用 Schema 校验后的 JSON；系统不生成 YAML 权威文件。
 - 人类文档和 Prompt 使用 Markdown，业务文件保持自身格式并由 JSON sidecar 固定引用和完整性信息。
 - 开发期只运行最新协议、schema、API、Git fixture 和 SQLite schema；旧版本不会被迁移、兼容读取、双写或回放。
 - 创建首个真实群组或不可丢弃签名历史前必须显式结束 latest-only 阶段并制定正式兼容策略。
 - 审计导出可以从 Group 创建追溯到 Principal 更新、Work Item、Discussion、Workflow State、Turn、Outcome、Artifact 和本地证据。
-- v3 交付后不存在仍可运行的 v2 Role/Claim 双模型或旧群组迁移路径。
+- v4 交付后不存在仍可运行的 v2 Role/Claim 双模型或旧群组迁移路径。
 
 ## 28. 最终决策摘要
 
@@ -2533,7 +2568,7 @@ Observer 使用相同浏览和验证界面，但：
 | JSON hash               | RFC 8785 JCS；与 pretty materialization 分离      |
 | 人类文档与 Prompt       | Markdown；权威 metadata/ref/hash 在 JSON          |
 | 业务文件                | 保持原格式；JSON sidecar 固定引用与完整性         |
-| YAML                    | 不作为 v3 权威格式；仅可选导入并立即转换          |
+| YAML                    | 不作为 v4 权威格式；仅可选导入并立即转换          |
 | 开发期版本策略          | latest-only；每次迭代的新版本立即成为唯一 current |
 | 旧版本处理              | fail closed；不迁移、不双写、不兼容读取或回放     |
 | 兼容冻结点              | 首个真实群组/不可丢弃签名历史产生之前             |

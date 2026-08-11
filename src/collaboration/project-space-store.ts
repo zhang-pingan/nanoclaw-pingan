@@ -24,16 +24,17 @@ import {
 } from './protocol/canonical-json.js';
 import {
   observerSubscriptionSchema,
-  actionDefinitionV3Schema,
-  type ActionDefinitionV3,
-  type CollaborationEventV3,
-  type CollaborationTurnV3,
+  actionDefinitionV4Schema,
+  type ActionDefinitionV4,
+  type CollaborationEventV4,
+  type CollaborationTurnV4,
   type ObserverSubscription,
-} from './protocol/v3-schema.js';
+  type WorkspaceLink,
+} from './protocol/v4-schema.js';
 import type {
-  CollaborationProjectionV3,
-  CollaborationAggregateHeadV3,
-} from './protocol/v3-reducer.js';
+  CollaborationProjectionV4,
+  CollaborationAggregateHeadV4,
+} from './protocol/v4-reducer.js';
 import type {
   CollaborationAnalysisInput,
   CollaborationAnalysisResult,
@@ -45,9 +46,9 @@ import type {
 import { assertCollaborationAnalysisTransition } from './analysis-contracts.js';
 import type { CollaborationEventSigningIdentity } from './project-space-identity.js';
 
-export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 11;
+export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 12;
 export const COLLABORATION_PROJECT_SPACE_STORE_FORMAT =
-  'icarus.collaboration-local-store/11';
+  'icarus.collaboration-local-store/12';
 
 export function deterministicCollaborationPollDelay(
   groupId: string,
@@ -82,7 +83,7 @@ export class CollaborationProjectSpaceStoreError extends Error {
   }
 }
 
-const SCHEMA_V11 = `
+const SCHEMA_V12 = `
 CREATE TABLE collaboration_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -232,6 +233,20 @@ CREATE TABLE collaboration_file_index (
   verified_head TEXT NOT NULL,
   PRIMARY KEY (group_id, file_id),
   UNIQUE (group_id, repository_path)
+);
+CREATE TABLE collaboration_link_index (
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
+  link_id TEXT NOT NULL,
+  virtual_path TEXT NOT NULL,
+  repository_path TEXT NOT NULL,
+  scope TEXT NOT NULL CHECK (scope IN ('shared', 'principal')),
+  owner_principal_id TEXT,
+  revision INTEGER NOT NULL,
+  metadata_json TEXT NOT NULL,
+  verified_head TEXT NOT NULL,
+  PRIMARY KEY (group_id, link_id),
+  UNIQUE (group_id, repository_path),
+  CHECK ((scope = 'shared') = (owner_principal_id IS NULL))
 );
 CREATE TABLE collaboration_progress_updates (
   group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
@@ -603,6 +618,8 @@ CREATE INDEX collaboration_event_activity_idx
   ON collaboration_event_cache(group_id, commit_order DESC);
 CREATE INDEX collaboration_file_virtual_path_idx
   ON collaboration_file_index(group_id, virtual_path);
+CREATE INDEX collaboration_link_virtual_path_idx
+  ON collaboration_link_index(group_id, virtual_path);
 CREATE INDEX collaboration_work_item_status_idx
   ON collaboration_work_items(group_id, status, due_at);
 CREATE INDEX collaboration_message_thread_idx
@@ -698,6 +715,13 @@ const REQUIRED_TABLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
     'commit_order',
   ],
   collaboration_file_index: ['group_id', 'file_id', 'virtual_path'],
+  collaboration_link_index: [
+    'group_id',
+    'link_id',
+    'virtual_path',
+    'scope',
+    'revision',
+  ],
   collaboration_progress_updates: ['group_id', 'update_id', 'principal_id'],
   collaboration_work_items: ['group_id', 'work_item_id', 'status', 'revision'],
   collaboration_work_item_updates: ['group_id', 'work_item_id', 'update_id'],
@@ -823,7 +847,7 @@ function initialize(database: Database.Database): void {
     );
   if (version === 0)
     database.transaction(() => {
-      database.exec(SCHEMA_V11);
+      database.exec(SCHEMA_V12);
       database
         .prepare('INSERT INTO collaboration_meta (key, value) VALUES (?, ?)')
         .run('format', COLLABORATION_PROJECT_SPACE_STORE_FORMAT);
@@ -884,7 +908,7 @@ export interface CollaborationProjectSpaceGroupRecord {
   readonly recoveryPrivateKeyPath: string | null;
   readonly protocolStatus: string;
   readonly protocolError: string | null;
-  readonly projection: CollaborationProjectionV3 | null;
+  readonly projection: CollaborationProjectionV4 | null;
   readonly pollIntervalMs: number;
   readonly nextSyncAtMs: number;
   readonly lastVerifiedHead: string | null;
@@ -918,19 +942,19 @@ export interface CollaborationLocalDetachPlan {
 }
 
 export interface CollaborationProjectSpaceEventRecord {
-  readonly event: CollaborationEventV3;
+  readonly event: CollaborationEventV4;
   readonly commitHash: string;
   readonly commitOrder: number;
 }
 
 export interface CollaborationActionSnapshotRecord {
-  readonly action: ActionDefinitionV3;
+  readonly action: ActionDefinitionV4;
   readonly eventId: string;
   readonly commitHash: string;
   readonly commitOrder: number;
 }
 
-export interface CollaborationLocalExecutorV3 {
+export interface CollaborationLocalExecutorV4 {
   readonly groupId: string;
   readonly principalId: string;
   readonly clientId: string;
@@ -945,7 +969,7 @@ export interface CollaborationLocalExecutorV3 {
   readonly updatedAtMs: number;
 }
 
-export interface CollaborationExecutorBindingV3 {
+export interface CollaborationExecutorBindingV4 {
   readonly groupId: string;
   readonly instanceId: string;
   readonly stateId: string;
@@ -963,7 +987,7 @@ export interface CollaborationExecutorBindingV3 {
   readonly updatedAtMs: number;
 }
 
-export interface CollaborationNotificationV3 {
+export interface CollaborationNotificationV4 {
   readonly notificationId: string;
   readonly groupId: string;
   readonly recipientPrincipalId: string;
@@ -1085,7 +1109,7 @@ export interface CollaborationAnalysisActionApplicationRecord {
   readonly updatedAtMs: number;
 }
 
-export interface CollaborationActionExecutionV3 {
+export interface CollaborationActionExecutionV4 {
   readonly executionId: string;
   readonly groupId: string;
   readonly instanceId: string;
@@ -1110,7 +1134,7 @@ export interface CollaborationActionExecutionV3 {
   readonly updatedAtMs: number;
 }
 
-export interface CollaborationStagedArtifactV3 {
+export interface CollaborationStagedArtifactV4 {
   readonly artifactId: string;
   readonly groupId: string;
   readonly scopeType: 'work_item' | 'workflow_turn';
@@ -1131,7 +1155,7 @@ export interface CollaborationStagedArtifactV3 {
   readonly committedAtMs: number | null;
 }
 
-export interface CollaborationTimeoutScheduleV3 {
+export interface CollaborationTimeoutScheduleV4 {
   readonly scheduleId: string;
   readonly groupId: string;
   readonly instanceId: string;
@@ -1145,7 +1169,7 @@ export interface CollaborationTimeoutScheduleV3 {
   readonly active: boolean;
 }
 
-export interface CollaborationSyncAttemptV3 {
+export interface CollaborationSyncAttemptV4 {
   readonly id: number;
   readonly groupId: string;
   readonly startedAtMs: number;
@@ -1247,7 +1271,7 @@ function groupFromRow(
     protocolStatus: String(row.protocol_status),
     protocolError:
       row.protocol_error == null ? null : String(row.protocol_error),
-    projection: parseJson<CollaborationProjectionV3>(row.projection_json),
+    projection: parseJson<CollaborationProjectionV4>(row.projection_json),
     pollIntervalMs: Number(row.poll_interval_ms),
     nextSyncAtMs: Number(row.next_sync_at_ms),
     lastVerifiedHead:
@@ -1893,7 +1917,7 @@ export class CollaborationProjectSpaceStore {
     readonly operationId: string;
     readonly history: {
       readonly head: string;
-      readonly projection: CollaborationProjectionV3;
+      readonly projection: CollaborationProjectionV4;
       readonly eventRecords: readonly CollaborationProjectSpaceEventRecord[];
     };
     readonly identity: CollaborationEventSigningIdentity | null;
@@ -2092,7 +2116,7 @@ export class CollaborationProjectSpaceStore {
   saveVerifiedProjection(input: {
     readonly groupId: string;
     readonly verifiedHead: string;
-    readonly projection: CollaborationProjectionV3;
+    readonly projection: CollaborationProjectionV4;
     readonly eventRecords: readonly CollaborationProjectSpaceEventRecord[];
     readonly nowMs?: number;
   }): void {
@@ -2190,7 +2214,7 @@ export class CollaborationProjectSpaceStore {
           record.event.event_type !== 'action_revised'
         )
           continue;
-        const parsed = actionDefinitionV3Schema.safeParse(
+        const parsed = actionDefinitionV4Schema.safeParse(
           record.event.payload.action,
         );
         if (!parsed.success) continue;
@@ -2239,7 +2263,7 @@ export class CollaborationProjectSpaceStore {
 
   private replaceProjectionRows(
     groupId: string,
-    projection: CollaborationProjectionV3,
+    projection: CollaborationProjectionV4,
     verifiedHead: string,
     nowMs: number,
   ): void {
@@ -2250,6 +2274,7 @@ export class CollaborationProjectSpaceStore {
       'collaboration_recovery_requests',
       'collaboration_permission_grants',
       'collaboration_file_index',
+      'collaboration_link_index',
       'collaboration_progress_updates',
       'collaboration_work_items',
       'collaboration_work_item_updates',
@@ -2397,6 +2422,38 @@ export class CollaborationProjectSpaceStore {
         `${directory}/${metadata.content_ref}`,
         metadata.uploader_principal_id,
         JSON.stringify(metadata),
+        verifiedHead,
+      );
+    }
+    const linkStatement = this.database.prepare(
+      `INSERT INTO collaboration_link_index
+       (group_id, link_id, virtual_path, repository_path, scope,
+        owner_principal_id, revision, metadata_json, verified_head)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    for (const link of Object.values(projection.links)) {
+      const location = projection.linkLocations[link.link_id];
+      if (!location)
+        throw new Error(
+          `Verified Workspace link location is missing: ${link.link_id}`,
+        );
+      const owner = link.owner_principal_id;
+      const display = owner
+        ? (projection.members[owner]?.display_name ?? owner)
+        : null;
+      const virtualPath =
+        link.scope === 'shared'
+          ? `Shared space/Links/${link.title}`
+          : `Member spaces/${display} · ${owner!.slice(-4)}/Links/${link.title}`;
+      linkStatement.run(
+        groupId,
+        link.link_id,
+        virtualPath,
+        `${location.repositoryDirectory}/metadata.json`,
+        link.scope,
+        owner,
+        link.revision,
+        JSON.stringify(link),
         verifiedHead,
       );
     }
@@ -2554,7 +2611,7 @@ export class CollaborationProjectSpaceStore {
     groupId: string,
     aggregateType: string,
     aggregateId: string,
-  ): (CollaborationAggregateHeadV3 & { readonly commitHash: string }) | null {
+  ): (CollaborationAggregateHeadV4 & { readonly commitHash: string }) | null {
     this.assertOpen();
     const row = this.database
       .prepare(
@@ -2568,7 +2625,7 @@ export class CollaborationProjectSpaceStore {
       ? {
           aggregateType: String(
             row.aggregate_type,
-          ) as CollaborationAggregateHeadV3['aggregateType'],
+          ) as CollaborationAggregateHeadV4['aggregateType'],
           aggregateId: String(row.aggregate_id),
           revision: Number(row.revision),
           eventHash: String(row.event_hash),
@@ -2595,7 +2652,7 @@ export class CollaborationProjectSpaceStore {
         unknown
       >[]
     ).map((row) => ({
-      event: JSON.parse(String(row.event_json)) as CollaborationEventV3,
+      event: JSON.parse(String(row.event_json)) as CollaborationEventV4,
       commitHash: String(row.commit_hash),
       commitOrder: Number(row.commit_order),
     }));
@@ -2625,7 +2682,7 @@ export class CollaborationProjectSpaceStore {
       ) as Record<string, unknown> | undefined;
     return row
       ? {
-          action: actionDefinitionV3Schema.parse(
+          action: actionDefinitionV4Schema.parse(
             JSON.parse(String(row.action_json)),
           ),
           eventId: String(row.event_id),
@@ -2671,7 +2728,7 @@ export class CollaborationProjectSpaceStore {
     ).map((row) => JSON.parse(row.discussion_json) as DiscussionRow);
   }
 
-  listTurns(groupId: string): CollaborationTurnV3[] {
+  listTurns(groupId: string): CollaborationTurnV4[] {
     this.assertOpen();
     return (
       this.database
@@ -2680,7 +2737,7 @@ export class CollaborationProjectSpaceStore {
             WHERE group_id = ? ORDER BY updated_at_ms DESC`,
         )
         .all(groupId) as Array<{ turn_json: string }>
-    ).map((row) => JSON.parse(row.turn_json) as CollaborationTurnV3);
+    ).map((row) => JSON.parse(row.turn_json) as CollaborationTurnV4);
   }
 
   listFileIndex(groupId: string): Array<{
@@ -2713,7 +2770,38 @@ export class CollaborationProjectSpaceStore {
     }));
   }
 
-  listActionExecutions(groupId: string): CollaborationActionExecutionV3[] {
+  listLinkIndex(groupId: string): Array<{
+    readonly linkId: string;
+    readonly virtualPath: string;
+    readonly repositoryPath: string;
+    readonly scope: 'shared' | 'principal';
+    readonly ownerPrincipalId: string | null;
+    readonly revision: number;
+    readonly metadata: WorkspaceLink;
+    readonly verifiedHead: string;
+  }> {
+    this.assertOpen();
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_link_index
+            WHERE group_id = ? ORDER BY virtual_path, link_id`,
+        )
+        .all(groupId) as Record<string, unknown>[]
+    ).map((row) => ({
+      linkId: String(row.link_id),
+      virtualPath: String(row.virtual_path),
+      repositoryPath: String(row.repository_path),
+      scope: String(row.scope) as 'shared' | 'principal',
+      ownerPrincipalId:
+        row.owner_principal_id == null ? null : String(row.owner_principal_id),
+      revision: Number(row.revision),
+      metadata: JSON.parse(String(row.metadata_json)) as WorkspaceLink,
+      verifiedHead: String(row.verified_head),
+    }));
+  }
+
+  listActionExecutions(groupId: string): CollaborationActionExecutionV4[] {
     this.assertOpen();
     return (
       this.database
@@ -2725,7 +2813,7 @@ export class CollaborationProjectSpaceStore {
     ).map((row) => this.actionExecutionFromRow(row));
   }
 
-  listNotificationsForAudit(groupId: string): CollaborationNotificationV3[] {
+  listNotificationsForAudit(groupId: string): CollaborationNotificationV4[] {
     this.assertOpen();
     return (
       this.database
@@ -2738,7 +2826,7 @@ export class CollaborationProjectSpaceStore {
   }
 
   saveLocalExecutor(
-    input: Omit<CollaborationLocalExecutorV3, 'updatedAtMs'> & {
+    input: Omit<CollaborationLocalExecutorV4, 'updatedAtMs'> & {
       readonly updatedAtMs?: number;
     },
   ): void {
@@ -2781,7 +2869,7 @@ export class CollaborationProjectSpaceStore {
     readonly principalId: string;
     readonly clientId: string;
     readonly executorId: string;
-  }): CollaborationLocalExecutorV3 | null {
+  }): CollaborationLocalExecutorV4 | null {
     this.assertOpen();
     const row = this.database
       .prepare(
@@ -2802,7 +2890,7 @@ export class CollaborationProjectSpaceStore {
     readonly groupId: string;
     readonly principalId?: string;
     readonly clientId?: string;
-  }): CollaborationLocalExecutorV3[] {
+  }): CollaborationLocalExecutorV4[] {
     this.assertOpen();
     const clauses = ['group_id = ?'];
     const parameters: string[] = [input.groupId];
@@ -2859,7 +2947,7 @@ export class CollaborationProjectSpaceStore {
   }
 
   saveExecutorBinding(
-    input: Omit<CollaborationExecutorBindingV3, 'updatedAtMs'> & {
+    input: Omit<CollaborationExecutorBindingV4, 'updatedAtMs'> & {
       readonly updatedAtMs?: number;
     },
   ): void {
@@ -2910,7 +2998,7 @@ export class CollaborationProjectSpaceStore {
     readonly clientId: string;
     readonly actionHash: string;
     readonly promptHash: string;
-  }): CollaborationExecutorBindingV3 | null {
+  }): CollaborationExecutorBindingV4 | null {
     this.assertOpen();
     const row = this.database
       .prepare(
@@ -2931,7 +3019,7 @@ export class CollaborationProjectSpaceStore {
     return row ? this.bindingFromRow(row) : null;
   }
 
-  listExecutorBindings(groupId: string): CollaborationExecutorBindingV3[] {
+  listExecutorBindings(groupId: string): CollaborationExecutorBindingV4[] {
     this.assertOpen();
     return (
       this.database
@@ -2974,7 +3062,7 @@ export class CollaborationProjectSpaceStore {
     readonly contents: Buffer;
     readonly nowMs?: number;
     readonly expiresAtMs?: number;
-  }): CollaborationStagedArtifactV3 {
+  }): CollaborationStagedArtifactV4 {
     this.assertOpen();
     if (
       !/^[A-Za-z0-9][A-Za-z0-9._:@-]*$/u.test(input.artifactId) ||
@@ -3038,7 +3126,7 @@ export class CollaborationProjectSpaceStore {
     return this.getStagedArtifact(input.artifactId)!;
   }
 
-  getStagedArtifact(artifactId: string): CollaborationStagedArtifactV3 | null {
+  getStagedArtifact(artifactId: string): CollaborationStagedArtifactV4 | null {
     this.assertOpen();
     const row = this.database
       .prepare(
@@ -3050,8 +3138,8 @@ export class CollaborationProjectSpaceStore {
 
   listStagedArtifacts(input: {
     readonly groupId: string;
-    readonly state?: CollaborationStagedArtifactV3['state'];
-  }): CollaborationStagedArtifactV3[] {
+    readonly state?: CollaborationStagedArtifactV4['state'];
+  }): CollaborationStagedArtifactV4[] {
     this.assertOpen();
     const rows = input.state
       ? this.database
@@ -3076,7 +3164,7 @@ export class CollaborationProjectSpaceStore {
     artifactId: string,
     nowMs = Date.now(),
   ): {
-    readonly artifact: CollaborationStagedArtifactV3;
+    readonly artifact: CollaborationStagedArtifactV4;
     readonly contents: Buffer;
   } {
     const artifact = this.getStagedArtifact(artifactId);
@@ -3154,7 +3242,7 @@ export class CollaborationProjectSpaceStore {
 
   private localExecutorFromRow(
     row: Record<string, unknown>,
-  ): CollaborationLocalExecutorV3 {
+  ): CollaborationLocalExecutorV4 {
     return {
       groupId: String(row.group_id),
       principalId: String(row.principal_id),
@@ -3163,14 +3251,14 @@ export class CollaborationProjectSpaceStore {
       displayName: String(row.display_name),
       executorKind: String(
         row.executor_kind,
-      ) as CollaborationLocalExecutorV3['executorKind'],
+      ) as CollaborationLocalExecutorV4['executorKind'],
       workspacePath: String(row.workspace_path),
       filesystemAccess: String(
         row.filesystem_access,
-      ) as CollaborationLocalExecutorV3['filesystemAccess'],
+      ) as CollaborationLocalExecutorV4['filesystemAccess'],
       approvalPolicy: String(
         row.approval_policy,
-      ) as CollaborationLocalExecutorV3['approvalPolicy'],
+      ) as CollaborationLocalExecutorV4['approvalPolicy'],
       config: JSON.parse(String(row.config_json)) as Record<string, unknown>,
       enabled: Number(row.enabled) === 1,
       updatedAtMs: Number(row.updated_at_ms),
@@ -3179,7 +3267,7 @@ export class CollaborationProjectSpaceStore {
 
   private bindingFromRow(
     row: Record<string, unknown>,
-  ): CollaborationExecutorBindingV3 {
+  ): CollaborationExecutorBindingV4 {
     return {
       groupId: String(row.group_id),
       instanceId: String(row.instance_id),
@@ -3191,14 +3279,14 @@ export class CollaborationProjectSpaceStore {
       executorId: String(row.executor_id),
       executorKind: String(
         row.executor_kind,
-      ) as CollaborationExecutorBindingV3['executorKind'],
+      ) as CollaborationExecutorBindingV4['executorKind'],
       workspacePath: String(row.workspace_path),
       filesystemAccess: String(
         row.filesystem_access,
-      ) as CollaborationExecutorBindingV3['filesystemAccess'],
+      ) as CollaborationExecutorBindingV4['filesystemAccess'],
       approvalPolicy: String(
         row.approval_policy,
-      ) as CollaborationExecutorBindingV3['approvalPolicy'],
+      ) as CollaborationExecutorBindingV4['approvalPolicy'],
       config: JSON.parse(String(row.config_json)) as Record<string, unknown>,
       enabled: Number(row.enabled) === 1,
       updatedAtMs: Number(row.updated_at_ms),
@@ -3207,7 +3295,7 @@ export class CollaborationProjectSpaceStore {
 
   private stagedArtifactFromRow(
     row: Record<string, unknown>,
-  ): CollaborationStagedArtifactV3 {
+  ): CollaborationStagedArtifactV4 {
     return {
       artifactId: String(row.artifact_id),
       groupId: String(row.group_id),
@@ -3224,7 +3312,7 @@ export class CollaborationProjectSpaceStore {
       sha256: String(row.sha256),
       size: Number(row.size),
       mediaType: String(row.media_type),
-      state: String(row.state) as CollaborationStagedArtifactV3['state'],
+      state: String(row.state) as CollaborationStagedArtifactV4['state'],
       createdAtMs: Number(row.created_at_ms),
       expiresAtMs: Number(row.expires_at_ms),
       committedAtMs:
@@ -3245,7 +3333,7 @@ export class CollaborationProjectSpaceStore {
     readonly executorKind: string;
     readonly nowMs?: number;
   }): {
-    readonly execution: CollaborationActionExecutionV3;
+    readonly execution: CollaborationActionExecutionV4;
     readonly acquired: boolean;
   } {
     this.assertOpen();
@@ -3287,7 +3375,7 @@ export class CollaborationProjectSpaceStore {
     readonly groupId: string;
     readonly turnId: string;
     readonly attempt: number;
-  }): CollaborationActionExecutionV3 | null {
+  }): CollaborationActionExecutionV4 | null {
     this.assertOpen();
     const row = this.database
       .prepare(
@@ -3395,7 +3483,7 @@ export class CollaborationProjectSpaceStore {
 
   private actionExecutionFromRow(
     row: Record<string, unknown>,
-  ): CollaborationActionExecutionV3 {
+  ): CollaborationActionExecutionV4 {
     const parseObject = (value: unknown): Record<string, unknown> | null =>
       value == null
         ? null
@@ -3441,7 +3529,7 @@ export class CollaborationProjectSpaceStore {
 
   syncTimeoutSchedules(
     groupId: string,
-    turns: readonly CollaborationTurnV3[],
+    turns: readonly CollaborationTurnV4[],
   ): void {
     this.assertOpen();
     const deactivate = this.database.prepare(
@@ -3505,7 +3593,7 @@ export class CollaborationProjectSpaceStore {
   listDueTimeoutSchedules(
     nowMs: number,
     groupId?: string,
-  ): CollaborationTimeoutScheduleV3[] {
+  ): CollaborationTimeoutScheduleV4[] {
     this.assertOpen();
     const rows = groupId
       ? this.database
@@ -3576,13 +3664,13 @@ export class CollaborationProjectSpaceStore {
     readonly payload?: Record<string, unknown>;
     readonly nowMs?: number;
   }): {
-    readonly notification: CollaborationNotificationV3;
+    readonly notification: CollaborationNotificationV4;
     readonly enqueued: boolean;
   } {
     this.assertOpen();
     const notificationId = `notification_${crypto.randomUUID()}`;
     const nowMs = input.nowMs ?? Date.now();
-    const candidate: CollaborationNotificationV3 = {
+    const candidate: CollaborationNotificationV4 = {
       notificationId,
       groupId: input.groupId,
       recipientPrincipalId: input.recipientPrincipalId,
@@ -3658,7 +3746,7 @@ export class CollaborationProjectSpaceStore {
     readonly principalId: string;
     readonly clientId: string;
     readonly groupId?: string;
-  }): CollaborationNotificationV3[] {
+  }): CollaborationNotificationV4[] {
     this.assertOpen();
     const rows = input.groupId
       ? this.database
@@ -3707,10 +3795,10 @@ export class CollaborationProjectSpaceStore {
     readonly clientId: string;
     readonly groupId: string;
     readonly includeHandled?: boolean;
-    readonly severity?: CollaborationNotificationV3['severity'];
+    readonly severity?: CollaborationNotificationV4['severity'];
     readonly resourceType?: string;
     readonly limit?: number;
-  }): CollaborationNotificationV3[] {
+  }): CollaborationNotificationV4[] {
     this.assertOpen();
     const conditions = [
       'recipient_principal_id = ?',
@@ -4646,7 +4734,7 @@ export class CollaborationProjectSpaceStore {
     })();
   }
 
-  listSyncAttempts(groupId: string, limit = 50): CollaborationSyncAttemptV3[] {
+  listSyncAttempts(groupId: string, limit = 50): CollaborationSyncAttemptV4[] {
     this.assertOpen();
     return (
       this.database
@@ -4856,7 +4944,7 @@ export class CollaborationProjectSpaceStore {
 
   private notificationFromRow(
     row: Record<string, unknown>,
-  ): CollaborationNotificationV3 {
+  ): CollaborationNotificationV4 {
     return {
       notificationId: String(row.notification_id),
       groupId: String(row.group_id),
@@ -4867,7 +4955,7 @@ export class CollaborationProjectSpaceStore {
       resourceId: String(row.resource_id),
       reason: String(row.reason),
       dedupeKey: String(row.dedupe_key),
-      severity: String(row.severity) as CollaborationNotificationV3['severity'],
+      severity: String(row.severity) as CollaborationNotificationV4['severity'],
       reminderOrdinal: Number(row.reminder_ordinal),
       dueAtMs: row.due_at_ms == null ? null : Number(row.due_at_ms),
       firstObservedAtMs: Number(row.first_observed_at_ms),
@@ -5073,7 +5161,7 @@ const backupRelativePathSchema = z
 
 const collaborationProjectSpaceBackupManifestSchema = z
   .object({
-    format: z.literal('icarus.collaboration-backup/3'),
+    format: z.literal('icarus.collaboration-backup/4'),
     database_basename: z
       .string()
       .min(1)
@@ -5563,7 +5651,7 @@ export function createCollaborationProjectSpaceBackup(input: {
       });
     }
     const manifest = collaborationProjectSpaceBackupManifestSchema.parse({
-      format: 'icarus.collaboration-backup/3',
+      format: 'icarus.collaboration-backup/4',
       database_basename: path.basename(databasePath),
       schema_version: CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION,
       created_at: (input.createdAt ?? new Date()).toISOString(),
@@ -5600,7 +5688,7 @@ export function restoreCollaborationProjectSpaceBackup(input: {
     ),
   );
   if (manifest.database_basename !== path.basename(databasePath))
-    throw new Error('Collaboration backup is not the current v3 format');
+    throw new Error('Collaboration backup is not the current v4 format');
   const source = path.join(backupDirectory, manifest.database_basename);
   const sourceDetails = requireRegularFile(
     source,
@@ -5811,6 +5899,6 @@ export function rollbackCollaborationProjectSpaceRestore(input: {
     renameSync(rollbackArtifacts, liveArtifactRoot);
 }
 
-type WorkItemRow = CollaborationProjectionV3['workItems'][string];
+type WorkItemRow = CollaborationProjectionV4['workItems'][string];
 type DiscussionRow =
-  CollaborationProjectionV3['discussions'][string]['discussion'];
+  CollaborationProjectionV4['discussions'][string]['discussion'];

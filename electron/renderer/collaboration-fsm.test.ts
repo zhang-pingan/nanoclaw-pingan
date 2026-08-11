@@ -14,7 +14,7 @@ import {
 } from './collaboration-fsm.js';
 import { calculateCollaborationFsmFitZoom } from './collaboration-fsm-editor.js';
 
-describe('Outcome-first v3 Workflow model', () => {
+describe('Outcome-first v4 Workflow model', () => {
   it('fits the stage against both canvas dimensions', () => {
     expect(calculateCollaborationFsmFitZoom(1000, 500, 880, 760)).toBeCloseTo(
       472 / 760,

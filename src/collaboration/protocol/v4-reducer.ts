@@ -4,27 +4,27 @@ import { z } from 'zod';
 
 import { canonicalJsonStringify } from './canonical-json.js';
 import {
-  actionDefinitionV3Schema,
-  artifactMetadataV3Schema,
+  actionDefinitionV4Schema,
+  artifactMetadataV4Schema,
   clientDefinitionSchema,
-  collaborationActionResultV3Schema,
+  collaborationActionResultV4Schema,
   collaborationGroupSelfDescriptionSchema,
-  collaborationContentHashV3,
+  collaborationContentHashV4,
   credentialDefinitionSchema,
-  collaborationEventV3Schema,
+  collaborationEventV4Schema,
   collaborationIdentifierSchema,
   collaborationSha256Schema,
-  collaborationTurnV3Schema,
+  collaborationTurnV4Schema,
   discussionMessageSchema,
   discussionSchema,
   executorDescriptorSchema,
   fileMetadataSchema,
-  groupDefinitionV3Schema,
-  handoffEnvelopeV3Schema,
-  inviteDefinitionV3Schema,
-  machineDefinitionV3Schema,
-  memberDefinitionV3Schema,
-  memberNotificationV3Schema,
+  groupDefinitionV4Schema,
+  handoffEnvelopeV4Schema,
+  inviteDefinitionV4Schema,
+  machineDefinitionV4Schema,
+  memberDefinitionV4Schema,
+  memberNotificationV4Schema,
   permissionGrantSchema,
   progressUpdateSchema,
   recoveryRequestSchema,
@@ -32,28 +32,29 @@ import {
   workflowDefinitionSchema,
   workflowInstanceSchema,
   workflowLayoutSchema,
+  workspaceLinkSchema,
   workItemProgressSchema,
   workItemSchema,
   workItemStatusSchema,
-  type ActionDefinitionV3,
-  type ArtifactMetadataV3,
-  type CollaborationActionResultV3,
+  type ActionDefinitionV4,
+  type ArtifactMetadataV4,
+  type CollaborationActionResultV4,
   type ClientDefinition,
   type CredentialDefinition,
   type CollaborationAggregateType,
-  type CollaborationEventTypeV3,
-  type CollaborationEventV3,
-  type CollaborationTurnV3,
+  type CollaborationEventTypeV4,
+  type CollaborationEventV4,
+  type CollaborationTurnV4,
   type Discussion,
   type DiscussionMessage,
   type ExecutorDescriptor,
   type FileMetadata,
-  type GroupDefinitionV3,
-  type HandoffEnvelopeV3,
-  type InviteDefinitionV3,
-  type MachineDefinitionV3,
-  type MemberDefinitionV3,
-  type MemberNotificationV3,
+  type GroupDefinitionV4,
+  type HandoffEnvelopeV4,
+  type InviteDefinitionV4,
+  type MachineDefinitionV4,
+  type MemberDefinitionV4,
+  type MemberNotificationV4,
   type PermissionGrant,
   type ProgressUpdate,
   type RecoveryRequest,
@@ -61,16 +62,17 @@ import {
   type WorkflowDefinition,
   type WorkflowInstance,
   type WorkflowLayout,
+  type WorkspaceLink,
   type WorkItem,
   type WorkItemProgress,
-} from './v3-schema.js';
+} from './v4-schema.js';
 import { CollaborationProtocolError } from './version.js';
 import {
-  canContributeToCollaborationWorkItemV3,
-  canLaunchCollaborationWorkflowV3,
-  canManageCollaborationWorkflowInstanceV3,
-  canManageCollaborationWorkItemV3,
-  hasCollaborationPermissionV3 as evaluateCollaborationPermissionV3,
+  canContributeToCollaborationWorkItemV4,
+  canLaunchCollaborationWorkflowV4,
+  canManageCollaborationWorkflowInstanceV4,
+  canManageCollaborationWorkItemV4,
+  hasCollaborationPermissionV4 as evaluateCollaborationPermissionV4,
 } from '../authorization.js';
 import {
   DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID,
@@ -97,7 +99,7 @@ const memberLeftPayloadSchema = z
   );
 const memberPayloadSchema = z
   .object({
-    member: memberDefinitionV3Schema,
+    member: memberDefinitionV4Schema,
     client: clientDefinitionSchema.optional(),
     credential: credentialDefinitionSchema.optional(),
   })
@@ -111,14 +113,14 @@ const memberPayloadSchema = z
   });
 const membershipRequestPayloadSchema = z
   .object({
-    member: memberDefinitionV3Schema,
+    member: memberDefinitionV4Schema,
     client: clientDefinitionSchema,
     credential: credentialDefinitionSchema,
     invite_id: collaborationIdentifierSchema.nullable(),
   })
   .strict();
 const invitePayloadSchema = z
-  .object({ invite: inviteDefinitionV3Schema })
+  .object({ invite: inviteDefinitionV4Schema })
   .strict();
 const credentialRotationPayloadSchema = z
   .object({
@@ -169,8 +171,8 @@ const executorIdPayloadSchema = z
   .strict();
 const genesisPayloadSchema = z
   .object({
-    group: groupDefinitionV3Schema,
-    member: memberDefinitionV3Schema,
+    group: groupDefinitionV4Schema,
+    member: memberDefinitionV4Schema,
     client: clientDefinitionSchema,
     credential: credentialDefinitionSchema,
     recovery_credential: credentialDefinitionSchema,
@@ -182,25 +184,32 @@ const groupSettingsPayloadSchema = z
   .object({
     name: z.string().min(1).max(240).optional(),
     membership_policy:
-      groupDefinitionV3Schema.shape.membership_policy.optional(),
+      groupDefinitionV4Schema.shape.membership_policy.optional(),
     visibility_policy:
-      groupDefinitionV3Schema.shape.visibility_policy.optional(),
+      groupDefinitionV4Schema.shape.visibility_policy.optional(),
     default_permission_template_id:
-      groupDefinitionV3Schema.shape.default_permission_template_id.optional(),
+      groupDefinitionV4Schema.shape.default_permission_template_id.optional(),
   })
   .strict();
 const progressPayloadSchema = z
   .object({ update: progressUpdateSchema })
   .strict();
 const filePayloadSchema = z.object({ metadata: fileMetadataSchema }).strict();
+const linkPayloadSchema = z.object({ link: workspaceLinkSchema }).strict();
+const linkRemovalPayloadSchema = z
+  .object({
+    link_id: collaborationIdentifierSchema,
+    revision: z.number().int().positive(),
+  })
+  .strict();
 const actionPayloadSchema = z
-  .object({ action: actionDefinitionV3Schema })
+  .object({ action: actionDefinitionV4Schema })
   .strict();
 const workItemPayloadSchema = z.object({ item: workItemSchema }).strict();
 const workItemProgressPayloadSchema = z
   .object({
     update: workItemProgressSchema,
-    artifacts: z.array(artifactMetadataV3Schema).max(20),
+    artifacts: z.array(artifactMetadataV4Schema).max(20),
   })
   .strict();
 const workItemStatusPayloadSchema = z
@@ -236,12 +245,12 @@ const messageIdPayloadSchema = z
   .object({ message_id: id, reason: z.string().max(4000).default('') })
   .strict();
 const memberNotificationPayloadSchema = z
-  .object({ notification: memberNotificationV3Schema })
+  .object({ notification: memberNotificationV4Schema })
   .strict();
 const workflowDefinitionPayloadSchema = z
   .object({
     definition: workflowDefinitionSchema,
-    machine: machineDefinitionV3Schema,
+    machine: machineDefinitionV4Schema,
     layout: workflowLayoutSchema,
   })
   .strict();
@@ -266,7 +275,7 @@ const stateExecutionWithdrawalPayloadSchema = z
   .object({ state_id: id })
   .strict();
 const turnPayloadSchema = z
-  .object({ turn: collaborationTurnV3Schema })
+  .object({ turn: collaborationTurnV4Schema })
   .strict();
 const turnFencePayloadSchema = z
   .object({
@@ -286,7 +295,7 @@ const actionDispatchedPayloadSchema = turnFencePayloadSchema
   .extend({ execution_ref: id })
   .strict();
 const actionCompletedPayloadSchema = turnFencePayloadSchema
-  .extend({ result: collaborationActionResultV3Schema, result_hash: sha256 })
+  .extend({ result: collaborationActionResultV4Schema, result_hash: sha256 })
   .strict();
 const timeoutObservedPayloadSchema = z
   .object({
@@ -303,10 +312,10 @@ const turnCompletedPayloadSchema = turnFencePayloadSchema
     outcome: id,
     result_hash: sha256.nullable(),
     completion_hash: sha256,
-    handoff: handoffEnvelopeV3Schema,
+    handoff: handoffEnvelopeV4Schema,
     handoff_hash: sha256,
     artifact_refs: z.array(z.string()).max(100),
-    artifacts: z.array(artifactMetadataV3Schema).max(20),
+    artifacts: z.array(artifactMetadataV4Schema).max(20),
   })
   .strict();
 const turnCancelledPayloadSchema = z
@@ -338,7 +347,7 @@ const turnRecoveredPayloadSchema = z
   })
   .strict();
 
-const payloadSchemas: Record<CollaborationEventTypeV3, z.ZodType> = {
+const payloadSchemas: Record<CollaborationEventTypeV4, z.ZodType> = {
   group_initialized: genesisPayloadSchema,
   group_settings_updated: groupSettingsPayloadSchema,
   group_archived: reasonPayloadSchema,
@@ -370,6 +379,12 @@ const payloadSchemas: Record<CollaborationEventTypeV3, z.ZodType> = {
   shared_file_published: filePayloadSchema,
   shared_file_revised: filePayloadSchema,
   principal_file_published: filePayloadSchema,
+  shared_link_published: linkPayloadSchema,
+  shared_link_revised: linkPayloadSchema,
+  shared_link_removed: linkRemovalPayloadSchema,
+  principal_link_published: linkPayloadSchema,
+  principal_link_revised: linkPayloadSchema,
+  principal_link_removed: linkRemovalPayloadSchema,
   action_published: actionPayloadSchema,
   action_revised: actionPayloadSchema,
   work_item_created: workItemPayloadSchema,
@@ -414,7 +429,7 @@ const payloadSchemas: Record<CollaborationEventTypeV3, z.ZodType> = {
   turn_recovered: turnRecoveredPayloadSchema,
 };
 
-export interface CollaborationAggregateHeadV3 {
+export interface CollaborationAggregateHeadV4 {
   readonly aggregateType: CollaborationAggregateType;
   readonly aggregateId: string;
   readonly revision: number;
@@ -422,25 +437,25 @@ export interface CollaborationAggregateHeadV3 {
   readonly eventId: string;
 }
 
-export interface WorkflowDefinitionProjectionV3 {
+export interface WorkflowDefinitionProjectionV4 {
   definition: WorkflowDefinition;
-  machine: MachineDefinitionV3;
+  machine: MachineDefinitionV4;
   layout: WorkflowLayout;
 }
 
-export interface DiscussionProjectionV3 {
+export interface DiscussionProjectionV4 {
   discussion: Discussion;
   messages: Record<string, DiscussionMessage>;
 }
 
-export interface CollaborationProjectionV3 {
-  readonly format: 'icarus.collaboration-projection/3';
-  readonly protocolVersion: 3;
+export interface CollaborationProjectionV4 {
+  readonly format: 'icarus.collaboration-projection/4';
+  readonly protocolVersion: 4;
   readonly groupId: string;
-  group: GroupDefinitionV3;
-  aggregateHeads: Record<string, CollaborationAggregateHeadV3>;
-  invites: Record<string, InviteDefinitionV3>;
-  members: Record<string, MemberDefinitionV3>;
+  group: GroupDefinitionV4;
+  aggregateHeads: Record<string, CollaborationAggregateHeadV4>;
+  invites: Record<string, InviteDefinitionV4>;
+  members: Record<string, MemberDefinitionV4>;
   clients: Record<string, Record<string, ClientDefinition>>;
   credentials: Record<string, Record<string, CredentialDefinition>>;
   recoveryRequests: Record<string, RecoveryRequest>;
@@ -448,7 +463,9 @@ export interface CollaborationProjectionV3 {
   permissionGrants: Record<string, PermissionGrant>;
   progressUpdates: Record<string, ProgressUpdate>;
   files: Record<string, FileMetadata>;
-  artifacts: Record<string, ArtifactMetadataV3>;
+  links: Record<string, WorkspaceLink>;
+  removedLinkIds: string[];
+  artifacts: Record<string, ArtifactMetadataV4>;
   fileLocations: Record<
     string,
     {
@@ -457,16 +474,24 @@ export interface CollaborationProjectionV3 {
       readonly repositoryDirectory: string;
     }
   >;
-  actions: Record<string, ActionDefinitionV3>;
+  linkLocations: Record<
+    string,
+    {
+      readonly scope: 'shared' | 'principal';
+      readonly principalId: string | null;
+      readonly repositoryDirectory: string;
+    }
+  >;
+  actions: Record<string, ActionDefinitionV4>;
   workItems: Record<string, WorkItem>;
   workItemUpdates: Record<string, WorkItemProgress[]>;
-  discussions: Record<string, DiscussionProjectionV3>;
-  notifications: Record<string, MemberNotificationV3>;
-  workflowDefinitions: Record<string, WorkflowDefinitionProjectionV3>;
+  discussions: Record<string, DiscussionProjectionV4>;
+  notifications: Record<string, MemberNotificationV4>;
+  workflowDefinitions: Record<string, WorkflowDefinitionProjectionV4>;
   latestWorkflowDefinitionVersions: Record<string, number>;
   workflowInstances: Record<string, WorkflowInstance>;
   stateExecutions: Record<string, Record<string, StateExecution>>;
-  turns: Record<string, CollaborationTurnV3>;
+  turns: Record<string, CollaborationTurnV4>;
   timeoutObservations: Record<
     string,
     Array<{
@@ -483,7 +508,7 @@ export interface CollaborationProjectionV3 {
     readonly aggregateType: CollaborationAggregateType;
     readonly aggregateId: string;
     readonly aggregateRevision: number;
-    readonly eventType: CollaborationEventTypeV3;
+    readonly eventType: CollaborationEventTypeV4;
     readonly actorPrincipalId: string;
     readonly actorClientId: string;
     readonly occurredAt: string;
@@ -507,14 +532,14 @@ function projectionKey(
   return `${type}:${idValue}`;
 }
 
-export function collaborationCanonicalHashV3(value: unknown): string {
+export function collaborationCanonicalHashV4(value: unknown): string {
   return `sha256:${crypto
     .createHash('sha256')
     .update(canonicalJsonStringify(value), 'utf8')
     .digest('hex')}`;
 }
 
-export function collaborationRecoveryRequestHashV3(
+export function collaborationRecoveryRequestHashV4(
   request: Omit<
     RecoveryRequest,
     | 'request_hash'
@@ -526,7 +551,7 @@ export function collaborationRecoveryRequestHashV3(
     | 'revoked_credential_ids'
   >,
 ): string {
-  return collaborationCanonicalHashV3({
+  return collaborationCanonicalHashV4({
     format: request.format,
     request_id: request.request_id,
     type: request.type,
@@ -540,7 +565,7 @@ export function collaborationRecoveryRequestHashV3(
   });
 }
 
-export function collaborationRecoveryVerificationCodeV3(
+export function collaborationRecoveryVerificationCodeV4(
   requestHash: string,
 ): string {
   const digest = crypto
@@ -550,7 +575,7 @@ export function collaborationRecoveryVerificationCodeV3(
   return String(digest.readUInt32BE(0) % 1_000_000).padStart(6, '0');
 }
 
-export function collaborationTurnCompletionHashV3(input: {
+export function collaborationTurnCompletionHashV4(input: {
   readonly turnId: string;
   readonly attempt: number;
   readonly outcome: string;
@@ -558,7 +583,7 @@ export function collaborationTurnCompletionHashV3(input: {
   readonly handoffHash: string;
   readonly artifactRefs: readonly string[];
 }): string {
-  return collaborationCanonicalHashV3({
+  return collaborationCanonicalHashV4({
     turn_id: input.turnId,
     attempt: input.attempt,
     outcome: input.outcome,
@@ -568,8 +593,8 @@ export function collaborationTurnCompletionHashV3(input: {
   });
 }
 
-export function collaborationAutomaticCompletionFactsV3(
-  input: CollaborationActionResultV3,
+export function collaborationAutomaticCompletionFactsV4(
+  input: CollaborationActionResultV4,
 ): {
   readonly outcome: string;
   readonly summary: string;
@@ -579,7 +604,7 @@ export function collaborationAutomaticCompletionFactsV3(
   readonly artifactRefs: readonly string[];
   readonly data: Readonly<Record<string, unknown>>;
 } {
-  const result = collaborationActionResultV3Schema.parse(input);
+  const result = collaborationActionResultV4Schema.parse(input);
   return {
     outcome: result.outcome,
     summary: result.summary,
@@ -591,15 +616,15 @@ export function collaborationAutomaticCompletionFactsV3(
   };
 }
 
-export function collaborationEventHashV3(event: CollaborationEventV3): string {
-  return collaborationCanonicalHashV3(event);
+export function collaborationEventHashV4(event: CollaborationEventV4): string {
+  return collaborationCanonicalHashV4(event);
 }
 
-export function collaborationWorkflowDefinitionHashV3(
+export function collaborationWorkflowDefinitionHashV4(
   definition: WorkflowDefinition,
-  machine: MachineDefinitionV3,
+  machine: MachineDefinitionV4,
 ): string {
-  return collaborationCanonicalHashV3({
+  return collaborationCanonicalHashV4({
     format: definition.format,
     definition_id: definition.definition_id,
     name: definition.name,
@@ -615,7 +640,7 @@ export function collaborationWorkflowDefinitionHashV3(
   });
 }
 
-export function collaborationDeadlineAtV3(
+export function collaborationDeadlineAtV4(
   occurredAt: string,
   durationMs: number | null | undefined,
 ): string | null {
@@ -624,15 +649,15 @@ export function collaborationDeadlineAtV3(
     : new Date(Date.parse(occurredAt) + durationMs).toISOString();
 }
 
-export function collaborationDeadlineSnapshotHashV3(input: {
+export function collaborationDeadlineSnapshotHashV4(input: {
   readonly turnId: string;
   readonly attempt: number;
-  readonly timeoutPolicy: CollaborationTurnV3['timeout_policy_snapshot'];
+  readonly timeoutPolicy: CollaborationTurnV4['timeout_policy_snapshot'];
   readonly startDeadlineAt: string | null;
   readonly startedAt: string | null;
   readonly executionDeadlineAt: string | null;
 }): string {
-  return collaborationCanonicalHashV3({
+  return collaborationCanonicalHashV4({
     turn_id: input.turnId,
     attempt: input.attempt,
     timeout_policy_snapshot: input.timeoutPolicy,
@@ -642,7 +667,7 @@ export function collaborationDeadlineSnapshotHashV3(input: {
   });
 }
 
-export function collaborationTurnInputHashV3(input: {
+export function collaborationTurnInputHashV4(input: {
   readonly groupId: string;
   readonly instanceId: string;
   readonly epoch: number;
@@ -652,7 +677,7 @@ export function collaborationTurnInputHashV3(input: {
   readonly incomingHandoffHash: string | null;
   readonly workItem: WorkItem | null;
 }): string {
-  return collaborationCanonicalHashV3({
+  return collaborationCanonicalHashV4({
     group_id: input.groupId,
     instance_id: input.instanceId,
     epoch: input.epoch,
@@ -671,7 +696,7 @@ function hashParts(parts: readonly (string | number)[]): string {
     .digest('hex')}`;
 }
 
-export function collaborationIdempotencyKeyV3(input: {
+export function collaborationIdempotencyKeyV4(input: {
   readonly groupId: string;
   readonly instanceId: string;
   readonly epoch: number;
@@ -680,7 +705,7 @@ export function collaborationIdempotencyKeyV3(input: {
   readonly inputHash: string;
 }): string {
   return hashParts([
-    'icarus-collaboration-action-v3',
+    'icarus-collaboration-action-v4',
     input.groupId,
     input.instanceId,
     input.epoch,
@@ -690,7 +715,7 @@ export function collaborationIdempotencyKeyV3(input: {
   ]);
 }
 
-export function collaborationFencingTokenV3(input: {
+export function collaborationFencingTokenV4(input: {
   readonly groupId: string;
   readonly instanceId: string;
   readonly epoch: number;
@@ -701,7 +726,7 @@ export function collaborationFencingTokenV3(input: {
   readonly expectedRevision: number;
 }): string {
   return hashParts([
-    'icarus-collaboration-fence-v3',
+    'icarus-collaboration-fence-v4',
     input.groupId,
     input.instanceId,
     input.epoch,
@@ -720,16 +745,16 @@ export function workflowDefinitionVersionKey(
   return `${definitionId}@${String(version)}`;
 }
 
-export function activeCollaborationMemberV3(
-  projection: CollaborationProjectionV3,
+export function activeCollaborationMemberV4(
+  projection: CollaborationProjectionV4,
   principalId: string,
-): MemberDefinitionV3 | null {
+): MemberDefinitionV4 | null {
   const member = projection.members[principalId];
   return member?.status === 'active' ? member : null;
 }
 
-export function collaborationMemberLeftAffectedTurnIdsV3(
-  projection: CollaborationProjectionV3,
+export function collaborationMemberLeftAffectedTurnIdsV4(
+  projection: CollaborationProjectionV4,
   principalId: string,
 ): string[] {
   return Object.values(projection.turns)
@@ -746,16 +771,16 @@ export function collaborationMemberLeftAffectedTurnIdsV3(
     .sort((left, right) => left.localeCompare(right));
 }
 
-export function hasCollaborationPermissionV3(
-  projection: CollaborationProjectionV3,
+export function hasCollaborationPermissionV4(
+  projection: CollaborationProjectionV4,
   principalId: string,
   permission: PermissionGrant['grants'][number],
 ): boolean {
-  return evaluateCollaborationPermissionV3(projection, principalId, permission);
+  return evaluateCollaborationPermissionV4(projection, principalId, permission);
 }
 
-export function parseCollaborationEventPayloadV3(
-  event: CollaborationEventV3,
+export function parseCollaborationEventPayloadV4(
+  event: CollaborationEventV4,
 ): Record<string, unknown> {
   return payloadSchemas[event.event_type].parse(event.payload) as Record<
     string,
@@ -763,12 +788,12 @@ export function parseCollaborationEventPayloadV3(
   >;
 }
 
-export function validateCollaborationEventV3(
+export function validateCollaborationEventV4(
   input: unknown,
-): CollaborationEventV3 {
-  const event = collaborationEventV3Schema.parse(input);
-  parseCollaborationEventPayloadV3(event);
-  const expected = collaborationCanonicalHashV3(event.payload);
+): CollaborationEventV4 {
+  const event = collaborationEventV4Schema.parse(input);
+  parseCollaborationEventPayloadV4(event);
+  const expected = collaborationCanonicalHashV4(event.payload);
   if (expected !== event.payload_hash)
     conflict(
       `Event payload hash mismatch: expected ${expected}, received ${event.payload_hash}`,
@@ -777,8 +802,8 @@ export function validateCollaborationEventV3(
 }
 
 function assertAggregateChain(
-  projection: CollaborationProjectionV3 | null,
-  event: CollaborationEventV3,
+  projection: CollaborationProjectionV4 | null,
+  event: CollaborationEventV4,
 ): void {
   const head =
     projection?.aggregateHeads[
@@ -802,10 +827,10 @@ function assertAggregateChain(
 }
 
 function assertMemberAndClient(
-  projection: CollaborationProjectionV3,
-  event: CollaborationEventV3,
+  projection: CollaborationProjectionV4,
+  event: CollaborationEventV4,
 ): void {
-  if (!activeCollaborationMemberV3(projection, event.actor.principal_id))
+  if (!activeCollaborationMemberV4(projection, event.actor.principal_id))
     unauthorized('Event actor is not an active Group member');
   const credential =
     projection.credentials[event.actor.principal_id]?.[
@@ -841,32 +866,32 @@ function assertMemberAndClient(
 }
 
 function assertActivePrincipals(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
   principalIds: readonly string[],
 ): void {
   for (const principalId of principalIds)
-    if (!activeCollaborationMemberV3(projection, principalId))
+    if (!activeCollaborationMemberV4(projection, principalId))
       conflict(`Principal is not an active Group member: ${principalId}`);
 }
 
 function canManageWorkItem(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
   principalId: string,
   item: WorkItem,
 ): boolean {
-  return canManageCollaborationWorkItemV3(projection, principalId, item);
+  return canManageCollaborationWorkItemV4(projection, principalId, item);
 }
 
 function canContributeToWorkItem(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
   principalId: string,
   item: WorkItem,
 ): boolean {
-  return canContributeToCollaborationWorkItemV3(projection, principalId, item);
+  return canContributeToCollaborationWorkItemV4(projection, principalId, item);
 }
 
 function assertWorkItemRelations(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
   workItemId: string,
   relations: Pick<WorkItem, 'parent_id' | 'blocked_by' | 'related_items'>,
 ): void {
@@ -901,9 +926,9 @@ const WORK_ITEM_TRANSITIONS: Record<string, readonly string[]> = {
 };
 
 function activeDefinition(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
   instance: WorkflowInstance,
-): WorkflowDefinitionProjectionV3 {
+): WorkflowDefinitionProjectionV4 {
   const definition =
     projection.workflowDefinitions[
       workflowDefinitionVersionKey(
@@ -917,7 +942,7 @@ function activeDefinition(
   )
     conflict('Workflow Instance references a missing published Definition');
   if (
-    collaborationWorkflowDefinitionHashV3(
+    collaborationWorkflowDefinitionHashV4(
       definition.definition,
       definition.machine,
     ) !== instance.definition_hash
@@ -927,9 +952,9 @@ function activeDefinition(
 }
 
 function validateWorkflowAssignments(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
   instance: WorkflowInstance,
-  machine: MachineDefinitionV3,
+  machine: MachineDefinitionV4,
   requireComplete: boolean,
 ): boolean {
   let complete = true;
@@ -943,7 +968,7 @@ function validateWorkflowAssignments(
         `Workflow State ${stateId} is not resolved to an active Principal`,
       );
     }
-    if (!activeCollaborationMemberV3(projection, resolved))
+    if (!activeCollaborationMemberV4(projection, resolved))
       conflict(
         `Workflow State ${stateId} is not resolved to an active Principal`,
       );
@@ -964,12 +989,12 @@ function validateWorkflowAssignments(
 }
 
 function canLaunchWorkflow(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
   principalId: string,
   instance: WorkflowInstance,
   definition: WorkflowDefinition,
 ): boolean {
-  return canLaunchCollaborationWorkflowV3(
+  return canLaunchCollaborationWorkflowV4(
     projection,
     principalId,
     instance,
@@ -978,19 +1003,19 @@ function canLaunchWorkflow(
 }
 
 function canManageWorkflowInstance(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
   principalId: string,
   instance: WorkflowInstance,
 ): boolean {
-  return canManageCollaborationWorkflowInstanceV3(
+  return canManageCollaborationWorkflowInstanceV4(
     projection,
     principalId,
     instance,
   );
 }
 
-export function canCreateWorkflowTurnV3(
-  projection: CollaborationProjectionV3,
+export function canCreateWorkflowTurnV4(
+  projection: CollaborationProjectionV4,
   principalId: string,
   instance: WorkflowInstance,
 ): boolean {
@@ -998,13 +1023,13 @@ export function canCreateWorkflowTurnV3(
 }
 
 function hasWorkflowInstanceAuthority(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
   principalId: string,
   instance: WorkflowInstance,
 ): boolean {
   return (
     instance.created_by_principal_id === principalId ||
-    hasCollaborationPermissionV3(
+    hasCollaborationPermissionV4(
       projection,
       principalId,
       'workflow_instance:manage_all',
@@ -1013,9 +1038,9 @@ function hasWorkflowInstanceAuthority(
 }
 
 function assertTurnFence(
-  turn: CollaborationTurnV3,
+  turn: CollaborationTurnV4,
   payload: { turn_id: string; attempt: number; fencing_token: string },
-  event: CollaborationEventV3,
+  event: CollaborationEventV4,
 ): void {
   if (
     turn.turn_id !== payload.turn_id ||
@@ -1030,13 +1055,13 @@ function assertTurnFence(
     conflict('Turn event actor is not the fenced claimant Client');
 }
 
-function reduceGenesis(event: CollaborationEventV3): CollaborationProjectionV3 {
+function reduceGenesis(event: CollaborationEventV4): CollaborationProjectionV4 {
   if (
     event.event_type !== 'group_initialized' ||
     event.aggregate_type !== 'group' ||
     event.aggregate_id !== event.group_id
   )
-    conflict('The first v3 event must initialize the Group Aggregate');
+    conflict('The first v4 event must initialize the Group Aggregate');
   const payload = genesisPayloadSchema.parse(event.payload);
   if (
     payload.group.group_id !== event.group_id ||
@@ -1057,10 +1082,10 @@ function reduceGenesis(event: CollaborationEventV3): CollaborationProjectionV3 {
     event.actor.client_id !== payload.client.client_id
   )
     conflict('Genesis Group, Principal, Client, and actor must agree');
-  const eventHash = collaborationEventHashV3(event);
+  const eventHash = collaborationEventHashV4(event);
   return {
-    format: 'icarus.collaboration-projection/3',
-    protocolVersion: 3,
+    format: 'icarus.collaboration-projection/4',
+    protocolVersion: 4,
     groupId: event.group_id,
     group: payload.group,
     aggregateHeads: {
@@ -1093,8 +1118,11 @@ function reduceGenesis(event: CollaborationEventV3): CollaborationProjectionV3 {
     },
     progressUpdates: {},
     files: {},
+    links: {},
+    removedLinkIds: [],
     artifacts: {},
     fileLocations: {},
+    linkLocations: {},
     actions: {},
     workItems: {},
     workItemUpdates: {},
@@ -1124,14 +1152,14 @@ function reduceGenesis(event: CollaborationEventV3): CollaborationProjectionV3 {
   };
 }
 
-export function reduceCollaborationEventV3(
-  current: CollaborationProjectionV3 | null,
+export function reduceCollaborationEventV4(
+  current: CollaborationProjectionV4 | null,
   input: unknown,
   options: {
-    readonly previousEventInAtomicBatch?: CollaborationEventV3;
+    readonly previousEventInAtomicBatch?: CollaborationEventV4;
   } = {},
-): CollaborationProjectionV3 {
-  const event = validateCollaborationEventV3(input);
+): CollaborationProjectionV4 {
+  const event = validateCollaborationEventV4(input);
   assertAggregateChain(current, event);
   if (!current) return reduceGenesis(event);
   if (current.integrityStatus !== 'OK')
@@ -1166,7 +1194,7 @@ export function reduceCollaborationEventV3(
     assertMemberAndClient(current, event);
 
   const next = structuredClone(current);
-  const payload = parseCollaborationEventPayloadV3(event);
+  const payload = parseCollaborationEventPayloadV4(event);
 
   switch (event.event_type) {
     case 'group_initialized':
@@ -1174,7 +1202,7 @@ export function reduceCollaborationEventV3(
     case 'group_settings_updated': {
       if (
         event.actor.principal_id !== next.group.owner_principal_id &&
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'group:admin',
@@ -1182,7 +1210,7 @@ export function reduceCollaborationEventV3(
       )
         unauthorized('Only Owner/Admin may update Group settings');
       const parsed = groupSettingsPayloadSchema.parse(payload);
-      next.group = groupDefinitionV3Schema.parse({
+      next.group = groupDefinitionV4Schema.parse({
         ...next.group,
         ...(parsed.name ? { name: parsed.name } : {}),
         ...(parsed.membership_policy
@@ -1203,7 +1231,7 @@ export function reduceCollaborationEventV3(
     case 'group_archived':
     case 'group_reopened': {
       if (
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'group:archive',
@@ -1213,7 +1241,7 @@ export function reduceCollaborationEventV3(
       const archive = event.event_type === 'group_archived';
       if ((next.group.lifecycle === 'archived') === archive)
         conflict('Group lifecycle transition is redundant');
-      next.group = groupDefinitionV3Schema.parse({
+      next.group = groupDefinitionV4Schema.parse({
         ...next.group,
         lifecycle: archive ? 'archived' : 'active',
         archived_at: archive ? event.occurred_at : null,
@@ -1230,7 +1258,7 @@ export function reduceCollaborationEventV3(
         conflict('Group dissolution must use the Group Aggregate');
       if (event.actor.principal_id !== next.group.owner_principal_id)
         conflict('Only the Group Owner may dissolve the Group');
-      next.group = groupDefinitionV3Schema.parse({
+      next.group = groupDefinitionV4Schema.parse({
         ...next.group,
         lifecycle: 'dissolved',
         archived_at: null,
@@ -1246,7 +1274,7 @@ export function reduceCollaborationEventV3(
       )
         conflict('Invite event Aggregate does not match Invite id');
       if (
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'member:approve',
@@ -1270,7 +1298,7 @@ export function reduceCollaborationEventV3(
       if (event.aggregate_type !== 'invite')
         conflict('Invite revocation must use the Invite Aggregate');
       if (
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'member:approve',
@@ -1281,7 +1309,7 @@ export function reduceCollaborationEventV3(
       if (!invite) conflict('Invite does not exist');
       if (invite.status !== 'active')
         conflict('Only an active Invite may be revoked');
-      next.invites[event.aggregate_id] = inviteDefinitionV3Schema.parse({
+      next.invites[event.aggregate_id] = inviteDefinitionV4Schema.parse({
         ...invite,
         status: 'revoked',
         revoked_at_event: event.event_id,
@@ -1332,7 +1360,7 @@ export function reduceCollaborationEventV3(
           Date.parse(invite.expires_at) <= Date.parse(event.occurred_at)
         )
           conflict('Invite has expired');
-        next.invites[inviteId] = inviteDefinitionV3Schema.parse({
+        next.invites[inviteId] = inviteDefinitionV4Schema.parse({
           ...invite,
           status: 'used',
           used_at_event: event.event_id,
@@ -1354,7 +1382,7 @@ export function reduceCollaborationEventV3(
       const { principal_id: principalId } =
         principalPayloadSchema.parse(payload);
       if (
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'member:approve',
@@ -1377,7 +1405,7 @@ export function reduceCollaborationEventV3(
       const selfOpen =
         next.group.membership_policy.join === 'open' &&
         event.actor.principal_id === member.principal_id;
-      const approved = hasCollaborationPermissionV3(
+      const approved = hasCollaborationPermissionV4(
         next,
         event.actor.principal_id,
         'member:approve',
@@ -1424,7 +1452,7 @@ export function reduceCollaborationEventV3(
       const { principal_id: principalId } =
         principalPayloadSchema.parse(payload);
       if (
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'group:admin',
@@ -1456,7 +1484,7 @@ export function reduceCollaborationEventV3(
       const member = next.members[principalId];
       if (!member || member.status !== 'active')
         conflict('Only an active member may leave the Group');
-      const affectedTurnIds = collaborationMemberLeftAffectedTurnIdsV3(
+      const affectedTurnIds = collaborationMemberLeftAffectedTurnIdsV4(
         next,
         principalId,
       );
@@ -1592,7 +1620,7 @@ export function reduceCollaborationEventV3(
       const target = next.members[request.target_principal_id];
       if (!target || target.status !== 'active')
         conflict('Recovery target must be an active Principal');
-      const expectedHash = collaborationRecoveryRequestHashV3(request);
+      const expectedHash = collaborationRecoveryRequestHashV4(request);
       if (request.request_hash !== expectedHash)
         conflict('Recovery request hash does not match its immutable identity');
       if (Date.parse(request.expires_at) <= Date.parse(event.occurred_at))
@@ -1801,7 +1829,7 @@ export function reduceCollaborationEventV3(
           [...defaultPermissions].sort().join('\0');
       if (
         !initialDefaultSelfGrant &&
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'permission:grant',
@@ -1835,7 +1863,7 @@ export function reduceCollaborationEventV3(
           'Progress update must be published in the actor Principal space',
         );
       if (
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'workspace:publish_owned',
@@ -1856,7 +1884,7 @@ export function reduceCollaborationEventV3(
         conflict('File uploader identity does not match event actor');
       if (
         event.event_type.startsWith('shared_') &&
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'workspace:write_shared',
@@ -1870,7 +1898,7 @@ export function reduceCollaborationEventV3(
         conflict('Principal file must use the actor Workspace Aggregate');
       if (
         event.event_type === 'principal_file_published' &&
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'workspace:publish_owned',
@@ -1900,11 +1928,115 @@ export function reduceCollaborationEventV3(
       };
       break;
     }
+    case 'shared_link_published':
+    case 'shared_link_revised':
+    case 'shared_link_removed':
+    case 'principal_link_published':
+    case 'principal_link_revised':
+    case 'principal_link_removed': {
+      const shared = event.event_type.startsWith('shared_');
+      const published = event.event_type.endsWith('_published');
+      const revised = event.event_type.endsWith('_revised');
+      if (
+        event.aggregate_type !== 'workspace' ||
+        event.aggregate_id !== (shared ? 'shared' : event.actor.principal_id)
+      )
+        conflict('Workspace link Aggregate does not match its scope and actor');
+      if (
+        shared &&
+        !hasCollaborationPermissionV4(
+          next,
+          event.actor.principal_id,
+          'workspace:write_shared',
+        )
+      )
+        unauthorized('Actor cannot manage links in the shared Workspace');
+      if (
+        !shared &&
+        !hasCollaborationPermissionV4(
+          next,
+          event.actor.principal_id,
+          'workspace:publish_owned',
+        )
+      )
+        unauthorized('Actor cannot manage links in the owned Workspace');
+
+      if (!published && !revised) {
+        const removal = linkRemovalPayloadSchema.parse(payload);
+        const previous = next.links[removal.link_id];
+        const location = next.linkLocations[removal.link_id];
+        if (!previous || !location)
+          conflict('Workspace link removal target does not exist');
+        if (
+          location.scope !== (shared ? 'shared' : 'principal') ||
+          location.principalId !== (shared ? null : event.actor.principal_id)
+        )
+          conflict('Workspace link removal target is outside the actor scope');
+        if (removal.revision !== previous.revision + 1)
+          conflict('Workspace link removal revision is stale');
+        delete next.links[removal.link_id];
+        delete next.linkLocations[removal.link_id];
+        next.removedLinkIds.push(removal.link_id);
+        break;
+      }
+
+      const { link } = linkPayloadSchema.parse(payload);
+      if (
+        link.scope !== (shared ? 'shared' : 'principal') ||
+        link.owner_principal_id !==
+          (shared ? null : event.actor.principal_id) ||
+        link.updated_by_principal_id !== event.actor.principal_id ||
+        link.updated_by_client_id !== event.actor.client_id ||
+        link.updated_at !== event.occurred_at
+      )
+        conflict('Workspace link scope, owner, or update actor is invalid');
+      const previous = next.links[link.link_id];
+      if (published) {
+        if (previous || next.removedLinkIds.includes(link.link_id))
+          conflict('Published Workspace link id already exists');
+        if (
+          link.revision !== 1 ||
+          link.created_by_principal_id !== event.actor.principal_id ||
+          link.created_by_client_id !== event.actor.client_id ||
+          link.created_at !== event.occurred_at ||
+          link.updated_at !== link.created_at
+        )
+          conflict('New Workspace link audit fields are invalid');
+      } else {
+        if (!previous)
+          conflict('Workspace link revision target does not exist');
+        const location = next.linkLocations[link.link_id];
+        if (
+          !location ||
+          location.scope !== (shared ? 'shared' : 'principal') ||
+          location.principalId !== (shared ? null : event.actor.principal_id)
+        )
+          conflict('Workspace link revision target is outside the actor scope');
+        if (
+          link.revision !== previous.revision + 1 ||
+          link.created_by_principal_id !== previous.created_by_principal_id ||
+          link.created_by_client_id !== previous.created_by_client_id ||
+          link.created_at !== previous.created_at
+        )
+          conflict(
+            'Workspace link revision is stale or rewrites creation audit',
+          );
+      }
+      next.links[link.link_id] = link;
+      next.linkLocations[link.link_id] = {
+        scope: shared ? 'shared' : 'principal',
+        principalId: shared ? null : event.actor.principal_id,
+        repositoryDirectory: shared
+          ? `workspace/shared/links/${link.link_id}`
+          : `workspace/principals/${event.actor.principal_id}/links/${link.link_id}`,
+      };
+      break;
+    }
     case 'action_published':
     case 'action_revised': {
       const { action } = actionPayloadSchema.parse(payload);
       if (
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'workspace:publish_owned',
@@ -1949,7 +2081,7 @@ export function reduceCollaborationEventV3(
           conflict('Work Item already exists');
         if (
           item.creator_principal_id !== event.actor.principal_id ||
-          !hasCollaborationPermissionV3(
+          !hasCollaborationPermissionV4(
             next,
             event.actor.principal_id,
             'work_item:create',
@@ -2125,7 +2257,7 @@ export function reduceCollaborationEventV3(
         conflict('Discussion genesis is invalid');
       if (
         discussion.created_by !== event.actor.principal_id ||
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'discussion:create',
@@ -2142,7 +2274,7 @@ export function reduceCollaborationEventV3(
         conflict('Discussion scope does not exist');
       if (message) {
         if (
-          !hasCollaborationPermissionV3(
+          !hasCollaborationPermissionV4(
             next,
             event.actor.principal_id,
             'discussion:post',
@@ -2173,7 +2305,7 @@ export function reduceCollaborationEventV3(
       if (!thread || message.thread_id !== event.aggregate_id)
         conflict('Message Discussion does not exist');
       if (
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'discussion:post',
@@ -2215,7 +2347,7 @@ export function reduceCollaborationEventV3(
       if (message.tombstoned) conflict('Message is already tombstoned');
       if (
         message.author_principal_id !== event.actor.principal_id &&
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'discussion:moderate',
@@ -2242,7 +2374,7 @@ export function reduceCollaborationEventV3(
         conflict('Discussion status transition is invalid');
       if (
         thread.discussion.created_by !== event.actor.principal_id &&
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'discussion:moderate',
@@ -2273,7 +2405,7 @@ export function reduceCollaborationEventV3(
       )
         conflict('Member Notification source does not match its event actor');
       if (
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'notification:send',
@@ -2286,7 +2418,7 @@ export function reduceCollaborationEventV3(
         conflict('Member Notifications cannot target their sender');
       assertActivePrincipals(next, notification.recipient_principal_ids);
       if (
-        collaborationContentHashV3(notification.body_markdown) !==
+        collaborationContentHashV4(notification.body_markdown) !==
         notification.body_sha256
       )
         conflict('Member Notification Markdown hash does not match its body');
@@ -2313,8 +2445,8 @@ export function reduceCollaborationEventV3(
       if (
         definition.definition_id !== event.aggregate_id ||
         definition.revision !== event.aggregate_revision ||
-        definition.machine_hash !== collaborationCanonicalHashV3(machine) ||
-        definition.layout_hash !== collaborationCanonicalHashV3(layout)
+        definition.machine_hash !== collaborationCanonicalHashV4(machine) ||
+        definition.layout_hash !== collaborationCanonicalHashV4(layout)
       )
         conflict('Workflow Definition hashes or revision do not match');
       const expectedStatus =
@@ -2335,7 +2467,7 @@ export function reduceCollaborationEventV3(
         conflict('Workflow Definition creator cannot be rewritten');
       if (
         expectedStatus === 'proposed' &&
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'workflow_definition:propose',
@@ -2344,7 +2476,7 @@ export function reduceCollaborationEventV3(
         unauthorized('Actor cannot propose Workflow Definitions');
       if (
         expectedStatus === 'published' &&
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'workflow_definition:publish',
@@ -2392,7 +2524,7 @@ export function reduceCollaborationEventV3(
       if (!definition || definition.definition.status !== 'published')
         conflict('Published Workflow Definition does not exist');
       if (
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'workflow_definition:publish',
@@ -2417,14 +2549,14 @@ export function reduceCollaborationEventV3(
       if (
         definition.definition.created_by_principal_id !==
           event.actor.principal_id &&
-        !hasCollaborationPermissionV3(
+        !hasCollaborationPermissionV4(
           next,
           event.actor.principal_id,
           'workflow_definition:publish',
         )
       )
         unauthorized('Actor cannot update this Workflow layout');
-      if (parsed.layout_hash !== collaborationCanonicalHashV3(parsed.layout))
+      if (parsed.layout_hash !== collaborationCanonicalHashV4(parsed.layout))
         conflict('Workflow layout hash does not match');
       definition.layout = parsed.layout;
       definition.definition.layout_hash = parsed.layout_hash;
@@ -2579,7 +2711,7 @@ export function reduceCollaborationEventV3(
     case 'workflow_state_assignee_changed': {
       const instance = next.workflowInstances[event.aggregate_id];
       const parsed = assigneePayloadSchema.parse(payload);
-      if (!instance || !activeCollaborationMemberV3(next, parsed.principal_id))
+      if (!instance || !activeCollaborationMemberV4(next, parsed.principal_id))
         conflict('Workflow Instance or assignee does not exist');
       if (instance.lifecycle === 'closed')
         conflict('Closed Workflow Instances cannot be reassigned');
@@ -2668,7 +2800,7 @@ export function reduceCollaborationEventV3(
         if (!action || execution.action_ref !== expectedActionRef)
           conflict('State Execution Action is not Principal-owned');
         if (
-          execution.action_hash !== collaborationCanonicalHashV3(action) ||
+          execution.action_hash !== collaborationCanonicalHashV4(action) ||
           execution.prompt_hash !== action.prompt_hash
         )
           conflict('State Execution Action or Prompt hash does not match');
@@ -2716,7 +2848,7 @@ export function reduceCollaborationEventV3(
         next.turns[turn.turn_id]
       )
         conflict('Turn does not match the active Workflow Instance State');
-      if (!canCreateWorkflowTurnV3(next, event.actor.principal_id, instance))
+      if (!canCreateWorkflowTurnV4(next, event.actor.principal_id, instance))
         unauthorized('Actor cannot create a Turn for this Workflow Instance');
       const execution =
         next.stateExecutions[instance.instance_id]?.[instance.business_state];
@@ -2748,7 +2880,7 @@ export function reduceCollaborationEventV3(
         !previousTurn.handoff_hash ||
         instance.last_handoff_hash !== previousTurn.handoff_hash ||
         turn.incoming_handoff_hash !== previousTurn.handoff_hash ||
-        collaborationCanonicalHashV3(turn.incoming_handoff) !==
+        collaborationCanonicalHashV4(turn.incoming_handoff) !==
           previousTurn.handoff_hash
       ) {
         conflict(
@@ -2757,7 +2889,7 @@ export function reduceCollaborationEventV3(
       }
       if (
         turn.input_hash !==
-        collaborationTurnInputHashV3({
+        collaborationTurnInputHashV4({
           groupId: next.groupId,
           instanceId: instance.instance_id,
           epoch: instance.epoch,
@@ -2786,7 +2918,7 @@ export function reduceCollaborationEventV3(
         conflict('A new Turn must start pending without execution results');
       if (
         turn.idempotency_key !==
-        collaborationIdempotencyKeyV3({
+        collaborationIdempotencyKeyV4({
           groupId: next.groupId,
           instanceId: instance.instance_id,
           epoch: instance.epoch,
@@ -2798,7 +2930,7 @@ export function reduceCollaborationEventV3(
         conflict('Turn idempotency key is invalid');
       if (
         turn.deadline_snapshot_hash !==
-        collaborationDeadlineSnapshotHashV3({
+        collaborationDeadlineSnapshotHashV4({
           turnId: turn.turn_id,
           attempt: turn.attempt,
           timeoutPolicy: turn.timeout_policy_snapshot,
@@ -2832,7 +2964,7 @@ export function reduceCollaborationEventV3(
         parsed.executor_id !== event.actor.executor_id
       )
         conflict('Turn Executor does not match its execution mode or actor');
-      const expectedFence = collaborationFencingTokenV3({
+      const expectedFence = collaborationFencingTokenV4({
         groupId: next.groupId,
         instanceId: instance.instance_id,
         epoch: instance.epoch,
@@ -2846,7 +2978,7 @@ export function reduceCollaborationEventV3(
         conflict('Turn fencing token is invalid');
       if (
         parsed.deadline_snapshot_hash !==
-        collaborationDeadlineSnapshotHashV3({
+        collaborationDeadlineSnapshotHashV4({
           turnId: turn.turn_id,
           attempt: turn.attempt,
           timeoutPolicy: turn.timeout_policy_snapshot,
@@ -2899,7 +3031,7 @@ export function reduceCollaborationEventV3(
           conflict('Action completion is already recorded for this Turn');
         if (
           completion.result_hash !==
-          collaborationCanonicalHashV3(completion.result)
+          collaborationCanonicalHashV4(completion.result)
         )
           conflict('Action result hash does not match its canonical result');
         const definition = activeDefinition(next, instance);
@@ -2996,7 +3128,7 @@ export function reduceCollaborationEventV3(
         );
       }
       if (turn.execution_mode === 'automatic') {
-        const expected = collaborationAutomaticCompletionFactsV3(
+        const expected = collaborationAutomaticCompletionFactsV4(
           turn.executor_result!,
         );
         const actual = {
@@ -3009,10 +3141,10 @@ export function reduceCollaborationEventV3(
           data: parsed.handoff.data,
         };
         if (
-          collaborationCanonicalHashV3(actual) !==
-            collaborationCanonicalHashV3(expected) ||
-          collaborationCanonicalHashV3(parsed.artifact_refs) !==
-            collaborationCanonicalHashV3(expected.artifactRefs)
+          collaborationCanonicalHashV4(actual) !==
+            collaborationCanonicalHashV4(expected) ||
+          collaborationCanonicalHashV4(parsed.artifact_refs) !==
+            collaborationCanonicalHashV4(expected.artifactRefs)
         )
           conflict(
             'Automatic Turn completion must exactly match its recorded Executor Result',
@@ -3045,12 +3177,12 @@ export function reduceCollaborationEventV3(
       if (
         parsed.handoff.source_turn_id !== turn.turn_id ||
         parsed.handoff.outcome !== parsed.outcome ||
-        parsed.handoff_hash !== collaborationCanonicalHashV3(parsed.handoff)
+        parsed.handoff_hash !== collaborationCanonicalHashV4(parsed.handoff)
       )
         conflict('Turn Handoff does not match its Outcome or hash');
       if (
         parsed.completion_hash !==
-        collaborationTurnCompletionHashV3({
+        collaborationTurnCompletionHashV4({
           turnId: turn.turn_id,
           attempt: turn.attempt,
           outcome: parsed.outcome,
@@ -3170,11 +3302,11 @@ export function reduceCollaborationEventV3(
         conflict('Turn recovery attempt is invalid');
       if (!canManageWorkflowInstance(next, event.actor.principal_id, instance))
         unauthorized('Actor cannot recover this Workflow Instance');
-      if (!activeCollaborationMemberV3(next, parsed.assignee_principal_id))
+      if (!activeCollaborationMemberV4(next, parsed.assignee_principal_id))
         conflict('Recovered Turn assignee must be an active Group member');
       if (
         parsed.deadline_snapshot_hash !==
-        collaborationDeadlineSnapshotHashV3({
+        collaborationDeadlineSnapshotHashV4({
           turnId: turn.turn_id,
           attempt: parsed.next_attempt,
           timeoutPolicy: turn.timeout_policy_snapshot,
@@ -3202,7 +3334,7 @@ export function reduceCollaborationEventV3(
       turn.action_ref = execution?.action_ref ?? null;
       turn.action_hash = execution?.action_hash ?? null;
       turn.prompt_hash = execution?.prompt_hash ?? null;
-      turn.input_hash = collaborationTurnInputHashV3({
+      turn.input_hash = collaborationTurnInputHashV4({
         groupId: next.groupId,
         instanceId: instance.instance_id,
         epoch: instance.epoch,
@@ -3215,7 +3347,7 @@ export function reduceCollaborationEventV3(
             ? (next.workItems[instance.scope.work_item_id] ?? null)
             : null,
       });
-      turn.idempotency_key = collaborationIdempotencyKeyV3({
+      turn.idempotency_key = collaborationIdempotencyKeyV4({
         groupId: next.groupId,
         instanceId: instance.instance_id,
         epoch: instance.epoch,
@@ -3242,7 +3374,7 @@ export function reduceCollaborationEventV3(
     }
   }
 
-  const eventHash = collaborationEventHashV3(event);
+  const eventHash = collaborationEventHashV4(event);
   next.aggregateHeads[projectionKey(event.aggregate_type, event.aggregate_id)] =
     {
       aggregateType: event.aggregate_type,
@@ -3265,39 +3397,39 @@ export function reduceCollaborationEventV3(
   return next;
 }
 
-export function reduceCollaborationEventsV3(
+export function reduceCollaborationEventsV4(
   events: readonly unknown[],
-): CollaborationProjectionV3 {
+): CollaborationProjectionV4 {
   if (events.length === 0) conflict('Collaboration history is empty');
-  let projection: CollaborationProjectionV3 | null = null;
+  let projection: CollaborationProjectionV4 | null = null;
   for (const event of events)
-    projection = reduceCollaborationEventV3(projection, event);
+    projection = reduceCollaborationEventV4(projection, event);
   return projection!;
 }
 
-export function deterministicProjectionJsonV3(
-  projection: CollaborationProjectionV3,
+export function deterministicProjectionJsonV4(
+  projection: CollaborationProjectionV4,
 ): string {
   return `${JSON.stringify(projection, null, 2)}\n`;
 }
 
-export function buildCollaborationEventV3(input: {
+export function buildCollaborationEventV4(input: {
   readonly groupId: string;
   readonly eventId: string;
   readonly aggregateType: CollaborationAggregateType;
   readonly aggregateId: string;
   readonly aggregateRevision: number;
   readonly previousEventHash: string | null;
-  readonly eventType: CollaborationEventTypeV3;
-  readonly actor: CollaborationEventV3['actor'];
+  readonly eventType: CollaborationEventTypeV4;
+  readonly actor: CollaborationEventV4['actor'];
   readonly occurredAt: string;
   readonly causationId?: string | null;
   readonly correlationId?: string;
   readonly payload: Record<string, unknown>;
-}): CollaborationEventV3 {
-  return validateCollaborationEventV3({
-    format: 'icarus.collaboration-event/3',
-    protocol_version: 3,
+}): CollaborationEventV4 {
+  return validateCollaborationEventV4({
+    format: 'icarus.collaboration-event/4',
+    protocol_version: 4,
     group_id: input.groupId,
     event_id: input.eventId,
     aggregate_type: input.aggregateType,
@@ -3309,7 +3441,7 @@ export function buildCollaborationEventV3(input: {
     occurred_at: input.occurredAt,
     causation_id: input.causationId ?? null,
     correlation_id: input.correlationId ?? input.aggregateId,
-    payload_hash: collaborationCanonicalHashV3(input.payload),
+    payload_hash: collaborationCanonicalHashV4(input.payload),
     payload: input.payload,
   });
 }

@@ -1,6 +1,6 @@
 ---
 name: project-analyst
-description: Analyze Icarus collaboration projects from either a frozen Icarus Analysis Package or a local/remote v3 Group Git repository. Use for project health, delivery risk, schedule, dependency, workflow, assignment, collaboration, identity, protocol, evidence, or next-action analysis while preserving read-only and Icarus result-contract boundaries.
+description: Analyze Icarus collaboration projects from either a frozen Icarus Analysis Package or a local/remote v4 Group Git repository. Use for project health, delivery risk, schedule, dependency, workflow, assignment, collaboration, identity, protocol, evidence, or next-action analysis while preserving read-only and Icarus result-contract boundaries.
 ---
 
 # Icarus Project Analyst

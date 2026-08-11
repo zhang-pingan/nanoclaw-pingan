@@ -1,12 +1,12 @@
 import type { CollaborationAnalysisScope } from './analysis-contracts.js';
 import type { ValidatedProjectSpaceHistory } from './project-space-service.js';
-import { workflowDefinitionVersionKey } from './protocol/v3-reducer.js';
-import type { CollaborationProjectionV3 } from './protocol/v3-reducer.js';
+import { workflowDefinitionVersionKey } from './protocol/v4-reducer.js';
+import type { CollaborationProjectionV4 } from './protocol/v4-reducer.js';
 
 export type CollaborationAnalysisResourceCatalog = Record<string, unknown>;
 
 export function buildCollaborationAnalysisResourceCatalog(
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
 ): CollaborationAnalysisResourceCatalog {
   const catalog: CollaborationAnalysisResourceCatalog = {
     [`group:${projection.groupId}`]: projection.group,
@@ -72,6 +72,16 @@ export function buildCollaborationAnalysisResourceCatalog(
           : null,
     };
   }
+  for (const [id, link] of Object.entries(projection.links)) {
+    const location = projection.linkLocations[id];
+    catalog[`link:${id}`] = {
+      link,
+      location: location ?? null,
+      repository_path: location
+        ? `${location.repositoryDirectory}/metadata.json`
+        : null,
+    };
+  }
   for (const event of projection.activity)
     catalog[`event:${event.eventId}`] = event;
   return catalog;
@@ -79,15 +89,21 @@ export function buildCollaborationAnalysisResourceCatalog(
 
 export function collaborationAnalysisScopeRefs(input: {
   readonly scope: CollaborationAnalysisScope;
-  readonly projection: CollaborationProjectionV3;
+  readonly projection: CollaborationProjectionV4;
   readonly myItemRefs: readonly string[];
   readonly currentPrincipalId?: string | null;
 }): Set<string> | null {
   const { scope, projection } = input;
   if (scope.type === 'project' || scope.type === 'delta') return null;
   const refs = new Set<string>([`group:${projection.groupId}`]);
+  const addLink = (id: string): void => {
+    if (projection.links[id]) refs.add(`link:${id}`);
+  };
   const addPrincipal = (id: string | null | undefined): void => {
-    if (id && projection.members[id]) refs.add(`principal:${id}`);
+    if (!id || !projection.members[id]) return;
+    refs.add(`principal:${id}`);
+    for (const link of Object.values(projection.links))
+      if (link.owner_principal_id === id) addLink(link.link_id);
   };
   const addFile = (id: string): void => {
     if (projection.files[id]) refs.add(`file:${id}`);
@@ -102,6 +118,8 @@ export function collaborationAnalysisScopeRefs(input: {
       addPrincipal(message.author_principal_id);
       for (const principalId of message.mentions) addPrincipal(principalId);
     }
+    for (const link of Object.values(projection.links))
+      if (link.refs.discussion_refs.includes(id)) addLink(link.link_id);
   };
   const addWorkItem = (id: string): void => {
     const item = projection.workItems[id];
@@ -116,6 +134,8 @@ export function collaborationAnalysisScopeRefs(input: {
       addPrincipal(principalId);
     for (const [fileId, file] of Object.entries(projection.files))
       if (file.refs.work_item_refs.includes(id)) addFile(fileId);
+    for (const link of Object.values(projection.links))
+      if (link.refs.work_item_refs.includes(id)) addLink(link.link_id);
     for (const [discussionId, discussion] of Object.entries(
       projection.discussions,
     ))
@@ -141,6 +161,8 @@ export function collaborationAnalysisScopeRefs(input: {
     }
     for (const [fileId, file] of Object.entries(projection.files))
       if (file.refs.workflow_instance_refs.includes(id)) addFile(fileId);
+    for (const link of Object.values(projection.links))
+      if (link.refs.workflow_instance_refs.includes(id)) addLink(link.link_id);
     for (const [discussionId, discussion] of Object.entries(
       projection.discussions,
     ))
@@ -164,6 +186,7 @@ export function collaborationAnalysisScopeRefs(input: {
       if (turn) addWorkflow(turn.workflow_instance_id);
     } else if (type === 'discussion') addDiscussion(id);
     else if (type === 'file') addFile(id);
+    else if (type === 'link') addLink(id);
     else if (type === 'recovery') {
       const request = projection.recoveryRequests[id];
       if (request) {
@@ -205,7 +228,7 @@ export function collaborationAnalysisScopeRefs(input: {
 export function scopeCollaborationAnalysisResourceCatalog(input: {
   readonly catalog: CollaborationAnalysisResourceCatalog;
   readonly scope: CollaborationAnalysisScope;
-  readonly projection: CollaborationProjectionV3;
+  readonly projection: CollaborationProjectionV4;
   readonly myItemRefs: readonly string[];
   readonly currentPrincipalId?: string | null;
 }): CollaborationAnalysisResourceCatalog {
@@ -218,7 +241,7 @@ export function scopeCollaborationAnalysisResourceCatalog(input: {
 
 export interface CollaborationAnalysisDeltaSelection {
   readonly catalog: CollaborationAnalysisResourceCatalog;
-  readonly activity: CollaborationProjectionV3['activity'];
+  readonly activity: CollaborationProjectionV4['activity'];
   readonly changedRefs: readonly string[];
   readonly eventCount: number;
 }
@@ -235,7 +258,7 @@ function analysisContextStrings(value: unknown): string[] {
 function aggregateResourceRef(
   aggregateType: string,
   aggregateId: string,
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
 ): string | null {
   switch (aggregateType) {
     case 'group':

@@ -49,7 +49,7 @@
   --msg-assistant-bg: #ffffff;
 }
 
-/* Collaboration project-space v3 */
+/* Collaboration project-space v4 */
 .collaboration-tabs {
   overflow-x: auto;
   scrollbar-width: thin;
@@ -270,6 +270,81 @@
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+.collaboration-link-editor {
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--minimal-line, #dfe2e7);
+  border-radius: 6px;
+}
+
+.collaboration-link-editor > legend {
+  padding: 0 6px;
+  color: var(--minimal-text-soft, #575f6a);
+  font-size: 12px;
+}
+
+.collaboration-link-editor-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(180px, 1.4fr) minmax(120px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+
+.collaboration-link-cards,
+.collaboration-workspace-link-list {
+  display: grid;
+  gap: 8px;
+}
+
+.collaboration-link-cards {
+  margin-top: 10px;
+}
+
+.collaboration-link-cards > button,
+.collaboration-workspace-link {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--minimal-line, #dfe2e7);
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+}
+
+.collaboration-link-cards > button,
+.collaboration-workspace-link > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.collaboration-link-cards span,
+.collaboration-workspace-link span,
+.collaboration-workspace-link small {
+  overflow-wrap: anywhere;
+  color: var(--minimal-text-soft, #575f6a);
+  font-size: 12px;
+}
+
+.collaboration-workspace-links {
+  min-width: 0;
+}
+
+.collaboration-workspace-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.collaboration-file-preview {
+  margin-top: 18px;
+  border-top: 1px solid var(--minimal-line, #dfe2e7);
+  padding-top: 16px;
 }
 
 .collaboration-file-tree,
@@ -573,6 +648,15 @@
 }
 
 @media (max-width: 620px) {
+  .collaboration-link-editor-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .collaboration-workspace-link {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .collaboration-observer-band,
   .collaboration-workflow-toolbar,
   .collaboration-detail-toolbar {

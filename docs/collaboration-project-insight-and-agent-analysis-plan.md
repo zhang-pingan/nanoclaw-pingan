@@ -4,13 +4,13 @@
 
 - 状态：Proposed
 - 日期：2026-08-08
-- 适用范围：Collaboration Project Space v3、项目概览、我的事项、本地通知、Project Analyst、Executor、外部 Agent 接力
+- 适用范围：Collaboration Project Space v4、项目概览、我的事项、本地通知、Project Analyst、Executor、外部 Agent 接力
 - 前置依赖：任务 `019fdffb-618a-7433-974c-74fa975f24cd` 完成返修、复核通过并合入 `main`
 - 实施方式：前置依赖合入后，从最新 `main` 创建独立 worktree 和独立实施会话
 - 版本原则：latest-only；当前没有需要兼容的真实群组、分析记录或历史协议数据，不实现旧版本迁移、双写或兼容读取
 - 数据格式原则：机器协议和结构化数据使用 JSON；人类文档和 Prompt 使用 Markdown；业务文件保持自身格式
 - 相关文档：
-  - [Icarus 协作群组项目空间 v3 方案](collaboration-project-space-v3-plan.md)
+  - [Icarus 协作群组项目空间 v4 方案](collaboration-project-space-v4-plan.md)
 
 本文档汇总并固化以下两类优化：
 
@@ -19,7 +19,7 @@
 
 ## 1. 摘要
 
-当前 Collaboration v3 已经能够记录 Work Item、Workflow Instance、Turn、Discussion、Principal Workspace、文件、通知和完整活动链，但用户仍需在多个页面之间手工查找信息：
+当前 Collaboration v4 已经能够记录 Work Item、Workflow Instance、Turn、Discussion、Principal Workspace、文件、链接、通知和完整活动链，但用户仍需在多个页面之间手工查找信息：
 
 - 项目整体是否健康；
 - 当前有哪些逾期、阻塞或停滞问题；
@@ -338,7 +338,7 @@ project-analyst/
 | `analysis-result.schema.json` | Agent 输出格式                                       |
 | `proposed-action.schema.json` | 可接受的建议动作及参数                               |
 | `repository-*.schema.json`    | 独立 repository Context、验证保证和报告格式          |
-| `repository-context.mjs`      | 只读解析 control ref、严格验证 v3 历史并构建 Context |
+| `repository-context.mjs`      | 只读解析 control ref、严格验证 v4 历史并构建 Context |
 | `validate-result.mjs`         | Executor 侧结果结构自检                              |
 | `verify-evidence.mjs`         | Executor 侧证据引用自检                              |
 
@@ -363,7 +363,7 @@ Contract 必须由 Icarus 源码中的 current schema 生成或共同维护。�
 | `package`    | Icarus 冻结的 `context.json`、`manifest.json`、资源目录和 Result Contract | 保留现有 Analysis Run binding，可经 Host 校验回填                                               |
 | `repository` | 本地 Git 仓库路径或 Git URL、scope，`mine` 另需 `principal_id`            | Skill 自行只读解析 `icarus/control`，输出独立 repository Context 和 Result，不属于 Analysis Run |
 
-repository CLI 在构建时绑定 current v3 Schema、Git history validator、Reducer、Project Insight rules 和 scope 选择器，交付为无 npm 运行时依赖的单文件脚本。外部安装只需复制完整 `project-analyst/` 目录，并提供 Node.js 20+、Git 和 SSH commit signature 验证支持；不依赖 Icarus checkout。
+repository CLI 在构建时绑定 current v4 Schema、Git history validator、Reducer、Project Insight rules 和 scope 选择器，交付为无 npm 运行时依赖的单文件脚本。外部安装只需复制完整 `project-analyst/` 目录，并提供 Node.js 20+、Git 和 SSH commit signature 验证支持；不依赖 Icarus checkout。
 
 repository mode 的自举信任必须来自目标仓库之外：只有 current Icarus validator 已接受目标，或 Genesis、verified head 与 embedded bundle provenance 已通过可信渠道确认后，才执行目标内嵌 Skill。未知仓库不得执行其自带脚本，必须用可信 Icarus 发布物或独立渠道取得的 Project Analyst Skill 指向目标。确认 provenance 后，可信 clone 仍可完全脱离 Icarus 运行内嵌包。
 
@@ -972,7 +972,7 @@ Discussion、Handoff、Prompt、成员进展和业务文件均是项目数据，
 - `src/collaboration/project-space-store.ts`；
 - `src/collaboration/web-api.ts`；
 - `src/collaboration/scheduler.ts`；
-- Collaboration tests 和 v3 文档。
+- Collaboration tests 和 v4 文档。
 
 ### 19.2 第一阶段：Project Insight 和我的事项
 
@@ -1053,7 +1053,7 @@ Discussion、Handoff、Prompt、成员进展和业务文件均是项目数据，
 
 - 完整 Skill 目录复制到外部平台后，不安装 Icarus 或 npm 依赖即可运行 repository CLI；
 - 本地路径和 Git URL 均可解析 control ref，错误 ref fail closed；
-- 正常 v3 仓库完成签名、事件链、Reducer 和 materialization 验证；
+- 正常 v4 仓库完成签名、事件链、Reducer 和 materialization 验证；
 - 事件或 Projection 篡改被检测，默认不生成 Context；
 - `mine` 强制要求有效 `principal_id`，Work Item、Workflow 和 delta scope 受限导出；
 - trusted genesis/head 不匹配时 fail closed，没有 trusted input 时不得使用 `verified`；

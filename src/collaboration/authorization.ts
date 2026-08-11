@@ -6,13 +6,13 @@ import {
   collaborationPermissionTemplateMatch,
   type CollaborationPermission,
 } from './permissions.js';
-import type { CollaborationProjectionV3 } from './protocol/v3-reducer.js';
+import type { CollaborationProjectionV4 } from './protocol/v4-reducer.js';
 import type {
   DiscussionMessage,
   WorkflowDefinition,
   WorkflowInstance,
   WorkItem,
-} from './protocol/v3-schema.js';
+} from './protocol/v4-schema.js';
 
 export type CollaborationAuthorizationCode =
   | 'ALLOWED'
@@ -146,6 +146,16 @@ export interface CollaborationAllowedActionsProjection {
       }
     >
   >;
+  readonly links: Readonly<
+    Record<
+      string,
+      {
+        readonly revise: CollaborationActionDecision;
+        readonly remove: CollaborationActionDecision;
+        readonly open: CollaborationActionDecision;
+      }
+    >
+  >;
   readonly members: Readonly<
     Record<
       string,
@@ -196,8 +206,8 @@ const denied = (
   reason: string,
 ): CollaborationActionDecision => ({ allowed: false, code, reason });
 
-export function hasCollaborationPermissionV3(
-  projection: CollaborationProjectionV3,
+export function hasCollaborationPermissionV4(
+  projection: CollaborationProjectionV4,
   principalId: string,
   permission: CollaborationPermission,
 ): boolean {
@@ -212,19 +222,19 @@ export function hasCollaborationPermissionV3(
   );
 }
 
-export function canManageCollaborationWorkItemV3(
-  projection: CollaborationProjectionV3,
+export function canManageCollaborationWorkItemV4(
+  projection: CollaborationProjectionV4,
   principalId: string,
   item: WorkItem,
 ): boolean {
   return (
-    hasCollaborationPermissionV3(
+    hasCollaborationPermissionV4(
       projection,
       principalId,
       'work_item:manage_all',
     ) ||
     (item.owner_principal_id === principalId &&
-      hasCollaborationPermissionV3(
+      hasCollaborationPermissionV4(
         projection,
         principalId,
         'work_item:manage_owned',
@@ -232,25 +242,25 @@ export function canManageCollaborationWorkItemV3(
   );
 }
 
-export function canContributeToCollaborationWorkItemV3(
-  projection: CollaborationProjectionV3,
+export function canContributeToCollaborationWorkItemV4(
+  projection: CollaborationProjectionV4,
   principalId: string,
   item: WorkItem,
 ): boolean {
   return (
-    canManageCollaborationWorkItemV3(projection, principalId, item) ||
+    canManageCollaborationWorkItemV4(projection, principalId, item) ||
     item.contributors.includes(principalId)
   );
 }
 
-export function canLaunchCollaborationWorkflowV3(
-  projection: CollaborationProjectionV3,
+export function canLaunchCollaborationWorkflowV4(
+  projection: CollaborationProjectionV4,
   principalId: string,
   instance: Pick<WorkflowInstance, 'scope'>,
   definition: WorkflowDefinition,
 ): boolean {
   if (
-    hasCollaborationPermissionV3(
+    hasCollaborationPermissionV4(
       projection,
       principalId,
       'workflow_instance:start_allowed',
@@ -260,7 +270,7 @@ export function canLaunchCollaborationWorkflowV3(
     return true;
   if (
     definition.launch_policy.group_admin &&
-    hasCollaborationPermissionV3(projection, principalId, 'group:admin')
+    hasCollaborationPermissionV4(projection, principalId, 'group:admin')
   )
     return true;
   return Boolean(
@@ -271,14 +281,14 @@ export function canLaunchCollaborationWorkflowV3(
   );
 }
 
-export function canManageCollaborationWorkflowInstanceV3(
-  projection: CollaborationProjectionV3,
+export function canManageCollaborationWorkflowInstanceV4(
+  projection: CollaborationProjectionV4,
   principalId: string,
   instance: WorkflowInstance,
 ): boolean {
   return (
     instance.created_by_principal_id === principalId ||
-    hasCollaborationPermissionV3(
+    hasCollaborationPermissionV4(
       projection,
       principalId,
       'workflow_instance:manage_all',
@@ -288,7 +298,7 @@ export function canManageCollaborationWorkflowInstanceV3(
 }
 
 function principalBoundaryDecision(input: {
-  readonly projection: CollaborationProjectionV3;
+  readonly projection: CollaborationProjectionV4;
   readonly subscriptionMode: 'observer' | 'member';
   readonly principalId: string | null;
   readonly clientId: string | null;
@@ -314,7 +324,7 @@ function principalBoundaryDecision(input: {
 }
 
 function boundaryDecision(input: {
-  readonly projection: CollaborationProjectionV3;
+  readonly projection: CollaborationProjectionV4;
   readonly subscriptionMode: 'observer' | 'member';
   readonly principalId: string | null;
   readonly clientId: string | null;
@@ -329,13 +339,13 @@ function boundaryDecision(input: {
 
 function withPermission(
   boundary: CollaborationActionDecision,
-  projection: CollaborationProjectionV3,
+  projection: CollaborationProjectionV4,
   principalId: string | null,
   permission: CollaborationPermission,
 ): CollaborationActionDecision {
   if (!boundary.allowed) return boundary;
   return principalId &&
-    hasCollaborationPermissionV3(projection, principalId, permission)
+    hasCollaborationPermissionV4(projection, principalId, permission)
     ? allowed()
     : denied('PERMISSION_REQUIRED', `需要权限 ${permission}`);
 }
@@ -358,8 +368,8 @@ function withResourceState(
   return valid ? allowed() : denied('RESOURCE_STATE_BLOCKED', reason);
 }
 
-export function projectCollaborationAllowedActionsV3(input: {
-  readonly projection: CollaborationProjectionV3;
+export function projectCollaborationAllowedActionsV4(input: {
+  readonly projection: CollaborationProjectionV4;
   readonly subscriptionMode: 'observer' | 'member';
   readonly principalId: string | null;
   readonly clientId: string | null;
@@ -403,11 +413,11 @@ export function projectCollaborationAllowedActionsV3(input: {
     Object.values(projection.workItems).map((item) => {
       const manage = Boolean(
         principalId &&
-        canManageCollaborationWorkItemV3(projection, principalId, item),
+        canManageCollaborationWorkItemV4(projection, principalId, item),
       );
       const contribute = Boolean(
         principalId &&
-        canContributeToCollaborationWorkItemV3(projection, principalId, item),
+        canContributeToCollaborationWorkItemV4(projection, principalId, item),
       );
       const manageDecision = authority(
         manage,
@@ -495,7 +505,7 @@ export function projectCollaborationAllowedActionsV3(input: {
                 Boolean(
                   principalId &&
                   (thread.discussion.created_by === principalId ||
-                    hasCollaborationPermissionV3(
+                    hasCollaborationPermissionV4(
                       projection,
                       principalId,
                       'discussion:moderate',
@@ -510,7 +520,7 @@ export function projectCollaborationAllowedActionsV3(input: {
                 Boolean(
                   principalId &&
                   (thread.discussion.created_by === principalId ||
-                    hasCollaborationPermissionV3(
+                    hasCollaborationPermissionV4(
                       projection,
                       principalId,
                       'discussion:moderate',
@@ -537,7 +547,7 @@ export function projectCollaborationAllowedActionsV3(input: {
                     Boolean(
                       principalId &&
                       (message.author_principal_id === principalId ||
-                        hasCollaborationPermissionV3(
+                        hasCollaborationPermissionV4(
                           projection,
                           principalId,
                           'discussion:moderate',
@@ -576,7 +586,7 @@ export function projectCollaborationAllowedActionsV3(input: {
               : can(
                   Boolean(
                     principalId &&
-                    canLaunchCollaborationWorkflowV3(
+                    canLaunchCollaborationWorkflowV4(
                       projection,
                       principalId,
                       { scope },
@@ -615,7 +625,7 @@ export function projectCollaborationAllowedActionsV3(input: {
                   Boolean(
                     principalId &&
                     (entry.definition.created_by_principal_id === principalId ||
-                      hasCollaborationPermissionV3(
+                      hasCollaborationPermissionV4(
                         projection,
                         principalId,
                         'workflow_definition:publish',
@@ -661,7 +671,7 @@ export function projectCollaborationAllowedActionsV3(input: {
       const definition = definitionEntry?.definition;
       const manage = Boolean(
         principalId &&
-        canManageCollaborationWorkflowInstanceV3(
+        canManageCollaborationWorkflowInstanceV4(
           projection,
           principalId,
           instance,
@@ -674,7 +684,7 @@ export function projectCollaborationAllowedActionsV3(input: {
       const instanceAuthority = Boolean(
         principalId &&
         (instance.created_by_principal_id === principalId ||
-          hasCollaborationPermissionV3(
+          hasCollaborationPermissionV4(
             projection,
             principalId,
             'workflow_instance:manage_all',
@@ -787,7 +797,7 @@ export function projectCollaborationAllowedActionsV3(input: {
                   Boolean(
                     principalId &&
                     definition &&
-                    canLaunchCollaborationWorkflowV3(
+                    canLaunchCollaborationWorkflowV4(
                       projection,
                       principalId,
                       instance,
@@ -943,6 +953,26 @@ export function projectCollaborationAllowedActionsV3(input: {
       ];
     }),
   );
+  const links = Object.fromEntries(
+    Object.values(projection.links).map((link) => {
+      const manage =
+        link.scope === 'shared'
+          ? permission('workspace:write_shared')
+          : activeGroupDecision(
+              link.owner_principal_id === principalId &&
+                effectivePermissions.includes('workspace:publish_owned'),
+              '仅资源所属 Principal 可管理个人链接',
+            );
+      return [
+        link.link_id,
+        {
+          revise: manage,
+          remove: manage,
+          open: allowed(),
+        },
+      ];
+    }),
+  );
 
   return {
     version: 1,
@@ -985,8 +1015,10 @@ export function projectCollaborationAllowedActionsV3(input: {
       notifyMembers: permission('notification:send'),
       postOwnedWorkspace: permission('workspace:publish_owned'),
       publishOwnedAction: permission('workspace:publish_owned'),
+      publishOwnedLink: permission('workspace:publish_owned'),
       registerOwnExecutor: boundary,
       writeSharedWorkspace: permission('workspace:write_shared'),
+      publishSharedLink: permission('workspace:write_shared'),
       proposeWorkflowDefinition: permission('workflow_definition:propose'),
       createWorkflowInstance: can(
         canCreateWorkflowInstance,
@@ -1014,6 +1046,7 @@ export function projectCollaborationAllowedActionsV3(input: {
     workflowInstances,
     executors,
     actions,
+    links,
     members: Object.fromEntries(
       Object.keys(projection.members).map((memberId) => {
         const permissions = projection.permissionGrants[memberId]?.grants ?? [];

@@ -4,23 +4,23 @@ import type { ActionExecutorRegistry } from './executors/registry.js';
 import type { ActionObservation } from './executors/types.js';
 import type { CollaborationProjectSpaceService } from './project-space-service.js';
 import type {
-  CollaborationActionExecutionV3,
+  CollaborationActionExecutionV4,
   CollaborationProjectSpaceEventRecord,
   CollaborationProjectSpaceGroupRecord,
   CollaborationProjectSpaceStore,
 } from './project-space-store.js';
 export { deterministicCollaborationPollDelay } from './project-space-store.js';
 import {
-  actionDefinitionV3Schema,
-  type ActionDefinitionV3,
-  type CollaborationTurnV3,
-} from './protocol/v3-schema.js';
-import type { CollaborationEventV3 } from './protocol/v3-schema.js';
+  actionDefinitionV4Schema,
+  type ActionDefinitionV4,
+  type CollaborationTurnV4,
+} from './protocol/v4-schema.js';
+import type { CollaborationEventV4 } from './protocol/v4-schema.js';
 import {
-  collaborationAutomaticCompletionFactsV3,
-  collaborationCanonicalHashV3,
+  collaborationAutomaticCompletionFactsV4,
+  collaborationCanonicalHashV4,
   workflowDefinitionVersionKey,
-} from './protocol/v3-reducer.js';
+} from './protocol/v4-reducer.js';
 
 export interface CollaborationSchedulerOptions {
   readonly ownerId?: string;
@@ -40,25 +40,25 @@ export interface CollaborationSchedulerDiagnostic {
 }
 
 interface CollaborationActionSnapshot {
-  readonly action: ActionDefinitionV3;
+  readonly action: ActionDefinitionV4;
   readonly verifiedCommit: string;
 }
 
 function actionFromEvent(
-  event: CollaborationEventV3,
-): ActionDefinitionV3 | null {
+  event: CollaborationEventV4,
+): ActionDefinitionV4 | null {
   if (
     event.event_type !== 'action_published' &&
     event.event_type !== 'action_revised'
   )
     return null;
-  const parsed = actionDefinitionV3Schema.safeParse(event.payload.action);
+  const parsed = actionDefinitionV4Schema.safeParse(event.payload.action);
   return parsed.success ? parsed.data : null;
 }
 
 export function collaborationActionSnapshotForTurn(
   records: readonly CollaborationProjectSpaceEventRecord[],
-  turn: CollaborationTurnV3,
+  turn: CollaborationTurnV4,
 ): CollaborationActionSnapshot | null {
   if (!turn.action_ref || !turn.action_hash || !turn.prompt_hash) return null;
   for (const record of records) {
@@ -74,7 +74,7 @@ export function collaborationActionSnapshotForTurn(
         `workspace/principals/${action.owner_principal_id}/automations/prompts/`,
       ) === false ||
       turn.action_ref !== expectedActionRef ||
-      collaborationCanonicalHashV3(action) !== turn.action_hash ||
+      collaborationCanonicalHashV4(action) !== turn.action_hash ||
       action.prompt_hash !== turn.prompt_hash
     )
       continue;
@@ -238,7 +238,7 @@ export class CollaborationScheduler {
 
   private async resumeAutomaticCompletion(
     groupId: string,
-    turn: CollaborationTurnV3,
+    turn: CollaborationTurnV4,
   ): Promise<void> {
     if (
       turn.execution_mode !== 'automatic' ||
@@ -249,7 +249,7 @@ export class CollaborationScheduler {
     )
       return;
     if (
-      collaborationCanonicalHashV3(turn.executor_result) !==
+      collaborationCanonicalHashV4(turn.executor_result) !==
       turn.executor_result_hash
     ) {
       await this.requestRecovery(
@@ -259,9 +259,9 @@ export class CollaborationScheduler {
       );
       return;
     }
-    let completion: ReturnType<typeof collaborationAutomaticCompletionFactsV3>;
+    let completion: ReturnType<typeof collaborationAutomaticCompletionFactsV4>;
     try {
-      completion = collaborationAutomaticCompletionFactsV3(
+      completion = collaborationAutomaticCompletionFactsV4(
         turn.executor_result,
       );
     } catch (error) {
@@ -295,7 +295,7 @@ export class CollaborationScheduler {
 
   private bindingForTurn(
     group: CollaborationProjectSpaceGroupRecord,
-    turn: CollaborationTurnV3,
+    turn: CollaborationTurnV4,
   ) {
     if (
       !group.localPrincipalId ||
@@ -317,7 +317,7 @@ export class CollaborationScheduler {
 
   private async driveAction(
     groupId: string,
-    turn: CollaborationTurnV3,
+    turn: CollaborationTurnV4,
   ): Promise<void> {
     const group = this.store.getGroup(groupId);
     const instance =
@@ -386,7 +386,7 @@ export class CollaborationScheduler {
     if (
       action.owner_principal_id !== turn.assignee_principal_id ||
       turn.action_ref !== expectedActionRef ||
-      collaborationCanonicalHashV3(action) !== turn.action_hash ||
+      collaborationCanonicalHashV4(action) !== turn.action_hash ||
       action.prompt_hash !== turn.prompt_hash
     ) {
       await this.requestRecovery(
@@ -503,8 +503,8 @@ export class CollaborationScheduler {
 
   private async applyObservation(
     groupId: string,
-    turn: CollaborationTurnV3,
-    execution: CollaborationActionExecutionV3,
+    turn: CollaborationTurnV4,
+    execution: CollaborationActionExecutionV4,
     observation: ActionObservation,
   ): Promise<void> {
     if (!turn.fencing_token) return;
@@ -595,8 +595,8 @@ export class CollaborationScheduler {
 
   private async failClosedAfterDispatch(
     groupId: string,
-    turn: CollaborationTurnV3,
-    execution: CollaborationActionExecutionV3,
+    turn: CollaborationTurnV4,
+    execution: CollaborationActionExecutionV4,
     error: unknown,
   ): Promise<void> {
     const reason = error instanceof Error ? error.message : String(error);
@@ -617,7 +617,7 @@ export class CollaborationScheduler {
 
   private async requestRecovery(
     groupId: string,
-    turn: CollaborationTurnV3,
+    turn: CollaborationTurnV4,
     reason: string,
   ): Promise<void> {
     const current =

@@ -82,6 +82,8 @@ export function collaborationActionAccess(
     decision = allowed?.executors?.[resourceId]?.[action];
   else if (resourceType === 'action')
     decision = allowed?.actions?.[resourceId]?.[action];
+  else if (resourceType === 'link')
+    decision = allowed?.links?.[resourceId]?.[action];
   else if (resourceType === 'client')
     decision = allowed?.clients?.[resourceId]?.[action];
   else if (resourceType === 'credential')
@@ -494,7 +496,65 @@ export function buildCollaborationDiscussionMessageRequest(input) {
           refs: collaborationUniqueIdentifiers(input.refs, 100, '引用资源'),
         }
       : {}),
+    links: buildCollaborationExternalLinks(input.links || []),
   };
+}
+
+export function buildCollaborationExternalLinks(inputs) {
+  if (!Array.isArray(inputs)) throw new Error('链接必须是数组');
+  if (inputs.length > 10) throw new Error('每次最多添加 10 个链接');
+  return inputs.map((input) => {
+    const title = String(input?.title || '').trim();
+    const url = String(input?.url || '').trim();
+    const description = String(input?.description || '').trim();
+    if (!title) throw new Error('链接标题不能为空');
+    if (title.length > 500) throw new Error('链接标题最多 500 个字符');
+    if (!url || url.length > 4096) throw new Error('链接地址无效');
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol.length < 2) throw new Error();
+    } catch {
+      throw new Error('链接地址必须是绝对 URL 或 URI');
+    }
+    if (description.length > 4000)
+      throw new Error('链接说明最多 4000 个字符');
+    return { title, url, ...(description ? { description } : {}) };
+  });
+}
+
+export function buildCollaborationWorkspaceLinkRequest(input) {
+  const [link] = buildCollaborationExternalLinks([input]);
+  const revision = input.revision == null ? null : Number(input.revision);
+  if (revision !== null && (!Number.isInteger(revision) || revision < 1))
+    throw new Error('链接 revision 必须是正整数');
+  return {
+    expectedRevision: collaborationExpectedRevision(input.expectedRevision),
+    ...(revision === null ? {} : { revision }),
+    ...link,
+    workItemRefs: collaborationUniqueIdentifiers(
+      input.workItemRefs || [],
+      100,
+      '工作项引用',
+    ),
+    workflowInstanceRefs: collaborationUniqueIdentifiers(
+      input.workflowInstanceRefs || [],
+      100,
+      '工作流引用',
+    ),
+    discussionRefs: collaborationUniqueIdentifiers(
+      input.discussionRefs || [],
+      100,
+      '讨论引用',
+    ),
+  };
+}
+
+export async function openCollaborationExternalLink(bridge, url) {
+  if (typeof bridge !== 'function')
+    throw new Error('当前环境没有系统外部打开能力');
+  const result = await bridge(String(url || ''));
+  if (!result?.ok) throw new Error(result?.error || '无法打开外部链接');
+  return result;
 }
 
 export function buildCollaborationMemberNotificationRequest(input) {

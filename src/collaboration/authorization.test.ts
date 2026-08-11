@@ -5,16 +5,16 @@ import {
   DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID,
   collaborationPermissionTemplate,
 } from './permissions.js';
-import { projectCollaborationAllowedActionsV3 } from './authorization.js';
-import type { CollaborationProjectionV3 } from './protocol/v3-reducer.js';
+import { projectCollaborationAllowedActionsV4 } from './authorization.js';
+import type { CollaborationProjectionV4 } from './protocol/v4-reducer.js';
 
 const ownerId = 'principal_00000000-0000-4000-8000-000000000001';
 const memberId = 'principal_00000000-0000-4000-8000-000000000002';
 const contributorId = 'principal_00000000-0000-4000-8000-000000000003';
 
-function projection(): CollaborationProjectionV3 {
+function projection(): CollaborationProjectionV4 {
   const member = (principalId: string, status = 'active') => ({
-    format: 'icarus.collaboration-member/3' as const,
+    format: 'icarus.collaboration-member/4' as const,
     principal_id: principalId,
     display_name: principalId,
     status: status as 'active',
@@ -43,12 +43,12 @@ function projection(): CollaborationProjectionV3 {
     revoked_at_event: null,
   });
   return {
-    format: 'icarus.collaboration-projection/3',
-    protocolVersion: 3,
+    format: 'icarus.collaboration-projection/4',
+    protocolVersion: 4,
     groupId: 'group_test',
     group: {
-      format: 'icarus.collaboration-group/3',
-      protocol_version: 3,
+      format: 'icarus.collaboration-group/4',
+      protocol_version: 4,
       group_id: 'group_test',
       name: 'Test',
       creator: { principal_id: ownerId },
@@ -93,8 +93,11 @@ function projection(): CollaborationProjectionV3 {
     },
     progressUpdates: {},
     files: {},
+    links: {},
+    removedLinkIds: [],
     artifacts: {},
     fileLocations: {},
+    linkLocations: {},
     actions: {},
     workItems: {
       work_owner: {
@@ -142,12 +145,12 @@ function projection(): CollaborationProjectionV3 {
 }
 
 function actions(
-  value: CollaborationProjectionV3,
+  value: CollaborationProjectionV4,
   principalId: string | null,
   mode: 'observer' | 'member' = 'member',
 ) {
   const suffix = principalId?.slice(-4) ?? '';
-  return projectCollaborationAllowedActionsV3({
+  return projectCollaborationAllowedActionsV4({
     projection: value,
     subscriptionMode: mode,
     principalId,
@@ -283,7 +286,7 @@ describe('collaboration authorization projection', () => {
         },
       },
       machine: { states: { build: { terminal: false } } },
-    } as unknown as CollaborationProjectionV3['workflowDefinitions'][string];
+    } as unknown as CollaborationProjectionV4['workflowDefinitions'][string];
     value.workflowInstances.instance_delivery = {
       instance_id: 'instance_delivery',
       definition_id: 'delivery',
@@ -294,7 +297,7 @@ describe('collaboration authorization projection', () => {
       resolved_assignments: { build: contributorId },
       lifecycle: 'draft',
       active_turn_id: null,
-    } as unknown as CollaborationProjectionV3['workflowInstances'][string];
+    } as unknown as CollaborationProjectionV4['workflowInstances'][string];
 
     const assignee = actions(value, contributorId);
     expect(assignee.workflowInstances.instance_delivery.manage.allowed).toBe(
@@ -347,7 +350,7 @@ describe('collaboration authorization projection', () => {
       fencing_token: null,
       attempt: 1,
       state: 'pending',
-    } as unknown as CollaborationProjectionV3['turns'][string];
+    } as unknown as CollaborationProjectionV4['turns'][string];
     const activeTurn = actions(value, contributorId).workflowInstances
       .instance_delivery;
     expect(activeTurn.createTurn.code).toBe('RESOURCE_STATE_BLOCKED');
@@ -385,7 +388,7 @@ describe('collaboration authorization projection', () => {
           tombstoned: false,
         },
       },
-    } as unknown as CollaborationProjectionV3['discussions'][string];
+    } as unknown as CollaborationProjectionV4['discussions'][string];
     expect(
       actions(value, memberId).discussions.thread_1.messages.message_1?.revise
         .allowed,
@@ -408,7 +411,7 @@ describe('collaboration authorization projection', () => {
         },
       },
       machine: { states: {} },
-    } as unknown as CollaborationProjectionV3['workflowDefinitions'][string];
+    } as unknown as CollaborationProjectionV4['workflowDefinitions'][string];
     value.latestWorkflowDefinitionVersions['member-flow'] = 1;
     expect(
       actions(value, memberId).workflowDefinitions['member-flow@1']!
@@ -450,7 +453,7 @@ describe('collaboration authorization projection', () => {
           tombstoned: false,
         },
       },
-    } as unknown as CollaborationProjectionV3['discussions'][string];
+    } as unknown as CollaborationProjectionV4['discussions'][string];
     const open = actions(value, memberId).discussions.thread_1;
     expect(open.resolve.allowed).toBe(true);
     expect(open.reopen.code).toBe('RESOURCE_STATE_BLOCKED');
@@ -531,13 +534,13 @@ describe('collaboration authorization projection', () => {
         principal_id: memberId,
         status: 'active',
       },
-    } as unknown as CollaborationProjectionV3['executors'][string];
+    } as unknown as CollaborationProjectionV4['executors'][string];
     value.actions[`${memberId}:action_member`] = {
       action_id: 'action_member',
       owner_principal_id: memberId,
       name: 'Member action',
       version: 1,
-    } as unknown as CollaborationProjectionV3['actions'][string];
+    } as unknown as CollaborationProjectionV4['actions'][string];
     value.workflowInstances.instance_member = {
       instance_id: 'instance_member',
       definition_id: 'delivery',
@@ -548,10 +551,10 @@ describe('collaboration authorization projection', () => {
       resolved_assignments: { build: memberId },
       lifecycle: 'running',
       active_turn_id: null,
-    } as unknown as CollaborationProjectionV3['workflowInstances'][string];
+    } as unknown as CollaborationProjectionV4['workflowInstances'][string];
     value.stateExecutions.instance_member = {
       build: { instance_id: 'instance_member', state_id: 'build' },
-    } as unknown as CollaborationProjectionV3['stateExecutions'][string];
+    } as unknown as CollaborationProjectionV4['stateExecutions'][string];
 
     const member = actions(value, memberId);
     expect(member.group.registerOwnExecutor.allowed).toBe(true);

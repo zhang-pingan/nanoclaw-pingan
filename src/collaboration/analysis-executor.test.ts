@@ -22,7 +22,7 @@ import {
   type ManagedAnalysisExecutionRequest,
   type PreparedManagedAnalysisExecution,
 } from './analysis-executor.js';
-import { collaborationCanonicalHashV3 } from './protocol/v3-reducer.js';
+import { collaborationCanonicalHashV4 } from './protocol/v4-reducer.js';
 
 const roots: string[] = [];
 
@@ -77,7 +77,7 @@ function request(
     attempt: 1,
     groupId: selectedContext.group_id,
     snapshotHead: selectedContext.snapshot_head,
-    contextHash: collaborationCanonicalHashV3(selectedContext),
+    contextHash: collaborationCanonicalHashV4(selectedContext),
     promptHash: sha256(PROMPT),
     challenge: 'challenge_'.padEnd(40, 'x'),
     prompt: PROMPT,

@@ -14,81 +14,85 @@ import {
 import {
   CollaborationProjectSpaceStore,
   type CollaborationLocalGroupBinding,
-  type CollaborationLocalExecutorV3,
+  type CollaborationLocalExecutorV4,
   type CollaborationProjectSpaceEventRecord,
   type CollaborationGroupInitializationOperation,
   type CollaborationProjectSpaceGroupRecord,
 } from './project-space-store.js';
 import {
-  buildCollaborationEventV3,
-  canCreateWorkflowTurnV3,
-  collaborationCanonicalHashV3,
-  collaborationDeadlineAtV3,
-  collaborationDeadlineSnapshotHashV3,
-  collaborationFencingTokenV3,
-  collaborationIdempotencyKeyV3,
-  collaborationMemberLeftAffectedTurnIdsV3,
-  collaborationRecoveryRequestHashV3,
-  collaborationRecoveryVerificationCodeV3,
-  collaborationTurnCompletionHashV3,
-  collaborationTurnInputHashV3,
-  collaborationWorkflowDefinitionHashV3,
-  hasCollaborationPermissionV3,
-  reduceCollaborationEventV3,
+  buildCollaborationEventV4,
+  canCreateWorkflowTurnV4,
+  collaborationCanonicalHashV4,
+  collaborationDeadlineAtV4,
+  collaborationDeadlineSnapshotHashV4,
+  collaborationFencingTokenV4,
+  collaborationIdempotencyKeyV4,
+  collaborationMemberLeftAffectedTurnIdsV4,
+  collaborationRecoveryRequestHashV4,
+  collaborationRecoveryVerificationCodeV4,
+  collaborationTurnCompletionHashV4,
+  collaborationTurnInputHashV4,
+  collaborationWorkflowDefinitionHashV4,
+  hasCollaborationPermissionV4,
+  reduceCollaborationEventV4,
   workflowDefinitionVersionKey,
-  type CollaborationProjectionV3,
-} from './protocol/v3-reducer.js';
+  type CollaborationProjectionV4,
+} from './protocol/v4-reducer.js';
 import {
   COLLABORATION_CONTROL_BRANCH,
   CollaborationProtocolError,
 } from './protocol/version.js';
 import {
-  actionDefinitionV3Schema,
-  artifactMetadataV3Schema,
+  actionDefinitionV4Schema,
+  artifactMetadataV4Schema,
   collaborationBasenameSchema,
-  collaborationContentHashV3,
+  collaborationContentHashV4,
   clientDefinitionSchema,
   credentialDefinitionSchema,
   discussionMessageSchema,
   discussionSchema,
+  externalLinksSchema,
   executorDescriptorSchema,
-  machineDefinitionV3Schema,
-  memberDefinitionV3Schema,
-  memberNotificationV3Schema,
+  machineDefinitionV4Schema,
+  memberDefinitionV4Schema,
+  memberNotificationV4Schema,
   permissionGrantSchema,
   recoveryRequestSchema,
-  handoffEnvelopeV3Schema,
+  handoffEnvelopeV4Schema,
   stateExecutionSchema,
-  collaborationTurnV3Schema,
+  collaborationTurnV4Schema,
   workflowDefinitionSchema,
   workflowInstanceSchema,
   workflowLayoutSchema,
+  workspaceLinkSchema,
   workItemProgressSchema,
   workItemSchema,
   type CollaborationAggregateType,
-  type ActionDefinitionV3,
-  type CollaborationEventTypeV3,
-  type CollaborationEventV3,
+  type ActionDefinitionV4,
+  type CollaborationEventTypeV4,
+  type CollaborationEventV4,
   type CollaborationPermission,
   type CredentialDefinition,
-  type ArtifactMetadataV3,
+  type ArtifactMetadataV4,
   type Discussion,
   type DiscussionMessage,
+  type ExternalLink,
   type FileMetadata,
-  type MachineDefinitionV3,
-  type MemberDefinitionV3,
-  type MemberNotificationScopeV3,
+  type MachineDefinitionV4,
+  type MemberDefinitionV4,
+  type MemberNotificationScopeV4,
   type ObserverSubscription,
-  type HandoffEnvelopeV3,
-  type ExecutionModeV3,
+  type HandoffEnvelopeV4,
+  type ExecutionModeV4,
   type ExecutorDescriptor,
   type WorkflowDefinition,
   type WorkflowInstance,
   type WorkflowLayout,
   type WorkItem,
   type WorkItemStatus,
-} from './protocol/v3-schema.js';
-import type { CollaborationStagedArtifactV3 } from './project-space-store.js';
+  type WorkspaceLink,
+} from './protocol/v4-schema.js';
+import type { CollaborationStagedArtifactV4 } from './project-space-store.js';
 import {
   DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID,
   collaborationPermissionTemplate,
@@ -97,7 +101,7 @@ import {
 
 export interface ValidatedProjectSpaceHistory {
   readonly head: string;
-  readonly projection: CollaborationProjectionV3;
+  readonly projection: CollaborationProjectionV4;
   readonly eventRecords: readonly CollaborationProjectSpaceEventRecord[];
   readonly transportGitSshKeyPath?: string;
 }
@@ -105,12 +109,12 @@ export interface ValidatedProjectSpaceHistory {
 export interface CollaborationExecutorRegistrationResult {
   readonly group: CollaborationProjectSpaceGroupRecord;
   readonly executor: ExecutorDescriptor;
-  readonly localExecutor: CollaborationLocalExecutorV3;
+  readonly localExecutor: CollaborationLocalExecutorV4;
 }
 
 export interface CollaborationActionMutationResult {
   readonly group: CollaborationProjectSpaceGroupRecord;
-  readonly action: ActionDefinitionV3;
+  readonly action: ActionDefinitionV4;
 }
 
 export interface CollaborationProjectSpaceTransport {
@@ -127,8 +131,8 @@ export interface CollaborationProjectSpaceTransport {
     readonly gitSshKeyPath?: string;
     readonly gitSshKeyPaths?: readonly string[];
     readonly identity: CollaborationEventSigningIdentity;
-    readonly genesisEvent: CollaborationEventV3;
-    readonly genesisProjection: CollaborationProjectionV3;
+    readonly genesisEvent: CollaborationEventV4;
+    readonly genesisProjection: CollaborationProjectionV4;
     readonly genesisMaterializedFiles: readonly {
       readonly path: string;
       readonly contents: string | Buffer;
@@ -139,8 +143,8 @@ export interface CollaborationProjectSpaceTransport {
     readonly repositoryPath: string;
     readonly gitSshKeyPath: string;
     readonly identity: CollaborationEventSigningIdentity;
-    readonly genesisEvent: CollaborationEventV3;
-    readonly genesisProjection: CollaborationProjectionV3;
+    readonly genesisEvent: CollaborationEventV4;
+    readonly genesisProjection: CollaborationProjectionV4;
     readonly genesisMaterializedFiles: readonly {
       readonly path: string;
       readonly contents: string | Buffer;
@@ -172,9 +176,9 @@ export interface CollaborationProjectSpaceTransport {
 }
 
 export type CollaborationProjectSpaceAppendEvent =
-  | CollaborationEventV3
+  | CollaborationEventV4
   | {
-      readonly event: CollaborationEventV3;
+      readonly event: CollaborationEventV4;
       readonly materializedFiles: readonly {
         readonly path: string;
         readonly contents: string | Buffer | null;
@@ -184,10 +188,10 @@ export type CollaborationProjectSpaceAppendEvent =
 interface CollaborationEventAppendCommand {
   readonly aggregateType: CollaborationAggregateType;
   readonly aggregateId: string;
-  readonly eventType: CollaborationEventTypeV3;
+  readonly eventType: CollaborationEventTypeV4;
   readonly payload:
     | Record<string, unknown>
-    | ((projection: CollaborationProjectionV3) => Record<string, unknown>);
+    | ((projection: CollaborationProjectionV4) => Record<string, unknown>);
   readonly expectedRevision?: number;
   readonly replaceEventId?: boolean;
   readonly eventId?: string;
@@ -204,7 +208,7 @@ interface CollaborationLocalEventAppendCommand extends CollaborationEventAppendC
 }
 
 export interface ProjectSpaceInspectResult {
-  readonly group: CollaborationProjectionV3['group'];
+  readonly group: CollaborationProjectionV4['group'];
   readonly verifiedHead: string;
   readonly memberCount: number;
   readonly activeMemberCount: number;
@@ -212,7 +216,7 @@ export interface ProjectSpaceInspectResult {
   readonly workflowDefinitionCount: number;
   readonly workflowInstanceCount: number;
   readonly repositoryPath: string;
-  readonly projection: CollaborationProjectionV3;
+  readonly projection: CollaborationProjectionV4;
 }
 
 export interface CreateProjectSpaceGroupInput {
@@ -238,7 +242,7 @@ export interface JoinProjectSpaceGroupInput {
 }
 
 export interface ProjectSpaceStagedArtifactResult {
-  readonly metadata: ArtifactMetadataV3;
+  readonly metadata: ArtifactMetadataV4;
   readonly artifactRef: string;
 }
 
@@ -259,6 +263,26 @@ function newId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
 }
 
+export interface CollaborationExternalLinkInput {
+  readonly title: string;
+  readonly url: string;
+  readonly description?: string;
+}
+
+function buildExternalLinks(
+  inputs: readonly CollaborationExternalLinkInput[] | undefined,
+): ExternalLink[] {
+  return externalLinksSchema.parse(
+    (inputs ?? []).map((link) => ({
+      format: 'icarus.collaboration-external-link/1',
+      link_id: newId('link'),
+      title: link.title,
+      url: link.url,
+      description: link.description ?? '',
+    })),
+  );
+}
+
 function buildDiscussionMessage(input: {
   readonly group: CollaborationProjectSpaceGroupRecord;
   readonly threadId: string;
@@ -266,12 +290,13 @@ function buildDiscussionMessage(input: {
   readonly body: string;
   readonly mentions?: readonly string[];
   readonly refs?: readonly string[];
+  readonly links?: readonly CollaborationExternalLinkInput[];
   readonly executorId?: string | null;
   readonly origin?: 'human' | 'agent' | 'workflow';
   readonly now: string;
 }): DiscussionMessage {
   return discussionMessageSchema.parse({
-    format: 'icarus.collaboration-message/1',
+    format: 'icarus.collaboration-message/2',
     message_id: input.messageId ?? newId('message'),
     thread_id: input.threadId,
     author_principal_id: input.group.localPrincipalId,
@@ -281,6 +306,7 @@ function buildDiscussionMessage(input: {
     body: input.body,
     mentions: [...(input.mentions ?? [])],
     refs: [...(input.refs ?? [])],
+    links: buildExternalLinks(input.links),
     revision: 1,
     tombstoned: false,
     created_at: input.now,
@@ -326,8 +352,8 @@ function buildGroupGenesis(input: {
   readonly recoveryIdentity: CollaborationEventSigningIdentity;
   readonly occurredAt: string;
 }): {
-  readonly event: CollaborationEventV3;
-  readonly projection: CollaborationProjectionV3;
+  readonly event: CollaborationEventV4;
+  readonly projection: CollaborationProjectionV4;
   readonly materializedFiles: readonly {
     readonly path: string;
     readonly contents: string | Buffer;
@@ -337,8 +363,8 @@ function buildGroupGenesis(input: {
   const selfDescription = buildCollaborationGenesisSelfDescription({
     groupId: input.groupId,
   });
-  const member: MemberDefinitionV3 = memberDefinitionV3Schema.parse({
-    format: 'icarus.collaboration-member/3',
+  const member: MemberDefinitionV4 = memberDefinitionV4Schema.parse({
+    format: 'icarus.collaboration-member/4',
     principal_id: input.identity.principalId,
     display_name: input.displayName,
     status: 'active',
@@ -360,7 +386,7 @@ function buildGroupGenesis(input: {
     revision: 1,
     updated_at_event: eventId,
   });
-  const event = buildCollaborationEventV3({
+  const event = buildCollaborationEventV4({
     groupId: input.groupId,
     eventId,
     aggregateType: 'group',
@@ -377,8 +403,8 @@ function buildGroupGenesis(input: {
     occurredAt: input.occurredAt,
     payload: {
       group: {
-        format: 'icarus.collaboration-group/3',
-        protocol_version: 3,
+        format: 'icarus.collaboration-group/4',
+        protocol_version: 4,
         group_id: input.groupId,
         name: input.name,
         creator: { principal_id: input.identity.principalId },
@@ -402,7 +428,7 @@ function buildGroupGenesis(input: {
   });
   return {
     event,
-    projection: reduceCollaborationEventV3(null, event),
+    projection: reduceCollaborationEventV4(null, event),
     materializedFiles: selfDescription.materializedFiles,
   };
 }
@@ -668,10 +694,10 @@ export class CollaborationProjectSpaceService {
     group: CollaborationProjectSpaceGroupRecord | null,
   ): {
     readonly group: CollaborationProjectSpaceGroupRecord;
-    readonly projection: CollaborationProjectionV3;
-    readonly owner: MemberDefinitionV3;
+    readonly projection: CollaborationProjectionV4;
+    readonly owner: MemberDefinitionV4;
     readonly client: NonNullable<
-      CollaborationProjectionV3['clients'][string]
+      CollaborationProjectionV4['clients'][string]
     >[string];
   } {
     const projection = group?.projection;
@@ -926,7 +952,7 @@ export class CollaborationProjectSpaceService {
           eventType: open ? 'member_registered' : 'membership_requested',
           payload: {
             member: {
-              format: 'icarus.collaboration-member/3',
+              format: 'icarus.collaboration-member/4',
               principal_id: identity.principalId,
               display_name: input.displayName,
               status: open ? 'active' : 'requested',
@@ -953,7 +979,7 @@ export class CollaborationProjectSpaceService {
                 aggregateId: identity.principalId,
                 eventType: 'permission_granted' as const,
                 eventId: permissionEventId!,
-                payload: (projection: CollaborationProjectionV3) => ({
+                payload: (projection: CollaborationProjectionV4) => ({
                   grant: {
                     format: 'icarus.collaboration-permission-grant/1',
                     principal_id: identity.principalId,
@@ -1223,7 +1249,7 @@ export class CollaborationProjectSpaceService {
       created_at: createdAt,
       expires_at: expiresAt,
     };
-    const requestHash = collaborationRecoveryRequestHashV3(immutable);
+    const requestHash = collaborationRecoveryRequestHashV4(immutable);
     const request = recoveryRequestSchema.parse({
       ...immutable,
       request_hash: requestHash,
@@ -1264,7 +1290,7 @@ export class CollaborationProjectSpaceService {
       group: this.store.getGroup(input.groupId)!,
       requestId,
       requestHash,
-      verificationCode: collaborationRecoveryVerificationCodeV3(requestHash),
+      verificationCode: collaborationRecoveryVerificationCodeV4(requestHash),
     };
   }
 
@@ -1628,7 +1654,7 @@ export class CollaborationProjectSpaceService {
       payload: { executor },
       eventId,
     });
-    const localExecutor: CollaborationLocalExecutorV3 = {
+    const localExecutor: CollaborationLocalExecutorV4 = {
       groupId: input.groupId,
       principalId: group.localPrincipalId!,
       clientId: group.localClientId!,
@@ -1826,6 +1852,7 @@ export class CollaborationProjectSpaceService {
     readonly workItemRefs?: readonly string[];
     readonly workflowInstanceRefs?: readonly string[];
     readonly artifactRefs?: readonly string[];
+    readonly links?: readonly CollaborationExternalLinkInput[];
     readonly executorId?: string | null;
     readonly origin?: 'human' | 'agent' | 'workflow';
   }): Promise<CollaborationProjectSpaceGroupRecord> {
@@ -1837,7 +1864,7 @@ export class CollaborationProjectSpaceService {
       eventType: 'progress_update_posted',
       payload: {
         update: {
-          format: 'icarus.collaboration-progress-update/1',
+          format: 'icarus.collaboration-progress-update/2',
           update_id: input.updateId ?? newId('update'),
           principal_id: group.localPrincipalId,
           summary: input.summary,
@@ -1848,6 +1875,7 @@ export class CollaborationProjectSpaceService {
           work_item_refs: input.workItemRefs ?? [],
           workflow_instance_refs: input.workflowInstanceRefs ?? [],
           artifact_refs: input.artifactRefs ?? [],
+          links: buildExternalLinks(input.links),
           origin: input.origin ?? 'human',
           actor_client_id: group.localClientId,
           executor_id: input.executorId ?? null,
@@ -1956,6 +1984,104 @@ export class CollaborationProjectSpaceService {
     });
   }
 
+  async publishSharedLink(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly title: string;
+    readonly url: string;
+    readonly description?: string;
+    readonly workItemRefs?: readonly string[];
+    readonly workflowInstanceRefs?: readonly string[];
+    readonly discussionRefs?: readonly string[];
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.writeWorkspaceLink({
+      ...input,
+      scope: 'shared',
+      operation: 'publish',
+    });
+  }
+
+  async publishPrincipalLink(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly title: string;
+    readonly url: string;
+    readonly description?: string;
+    readonly workItemRefs?: readonly string[];
+    readonly workflowInstanceRefs?: readonly string[];
+    readonly discussionRefs?: readonly string[];
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.writeWorkspaceLink({
+      ...input,
+      scope: 'principal',
+      operation: 'publish',
+    });
+  }
+
+  async reviseSharedLink(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly linkId: string;
+    readonly revision: number;
+    readonly title: string;
+    readonly url: string;
+    readonly description?: string;
+    readonly workItemRefs?: readonly string[];
+    readonly workflowInstanceRefs?: readonly string[];
+    readonly discussionRefs?: readonly string[];
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.writeWorkspaceLink({
+      ...input,
+      scope: 'shared',
+      operation: 'revise',
+    });
+  }
+
+  async revisePrincipalLink(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly linkId: string;
+    readonly revision: number;
+    readonly title: string;
+    readonly url: string;
+    readonly description?: string;
+    readonly workItemRefs?: readonly string[];
+    readonly workflowInstanceRefs?: readonly string[];
+    readonly discussionRefs?: readonly string[];
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.writeWorkspaceLink({
+      ...input,
+      scope: 'principal',
+      operation: 'revise',
+    });
+  }
+
+  async removeSharedLink(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly linkId: string;
+    readonly revision: number;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.writeWorkspaceLink({
+      ...input,
+      scope: 'shared',
+      operation: 'remove',
+    });
+  }
+
+  async removePrincipalLink(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly linkId: string;
+    readonly revision: number;
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    return this.writeWorkspaceLink({
+      ...input,
+      scope: 'principal',
+      operation: 'remove',
+    });
+  }
+
   async createAction(input: {
     readonly groupId: string;
     readonly expectedRevision: number;
@@ -2021,7 +2147,7 @@ export class CollaborationProjectSpaceService {
       .createHash('sha256')
       .update(input.prompt, 'utf8')
       .digest('hex')}`;
-    const action = actionDefinitionV3Schema.parse({
+    const action = actionDefinitionV4Schema.parse({
       format: 'icarus.collaboration-action/1',
       action_id: input.actionId,
       name: input.name,
@@ -2240,7 +2366,7 @@ export class CollaborationProjectSpaceService {
     const canContribute =
       item.owner_principal_id === group.localPrincipalId ||
       item.contributors.includes(group.localPrincipalId!) ||
-      hasCollaborationPermissionV3(
+      hasCollaborationPermissionV4(
         history.projection,
         group.localPrincipalId!,
         'work_item:manage_all',
@@ -2273,6 +2399,7 @@ export class CollaborationProjectSpaceService {
     readonly blockers?: readonly string[];
     readonly artifactIds?: readonly string[];
     readonly artifactRefs?: readonly string[];
+    readonly links?: readonly CollaborationExternalLinkInput[];
     readonly executorId?: string | null;
     readonly origin?: 'human' | 'agent' | 'workflow';
   }): Promise<CollaborationProjectSpaceGroupRecord> {
@@ -2288,7 +2415,7 @@ export class CollaborationProjectSpaceService {
       ...new Set([...(input.artifactRefs ?? []), ...staged.artifactRefs]),
     ];
     const update = workItemProgressSchema.parse({
-      format: 'icarus.collaboration-work-item-progress/1',
+      format: 'icarus.collaboration-work-item-progress/2',
       update_id: newId('update'),
       work_item_id: input.workItemId,
       summary: input.summary,
@@ -2296,6 +2423,7 @@ export class CollaborationProjectSpaceService {
       next_steps: [...(input.nextSteps ?? [])],
       blockers: [...(input.blockers ?? [])],
       artifact_refs: artifactRefs,
+      links: buildExternalLinks(input.links),
       actor_principal_id: group.localPrincipalId,
       actor_client_id: group.localClientId,
       executor_id: input.executorId ?? null,
@@ -2392,6 +2520,7 @@ export class CollaborationProjectSpaceService {
     readonly body: string;
     readonly mentions?: readonly string[];
     readonly refs?: readonly string[];
+    readonly links?: readonly CollaborationExternalLinkInput[];
     readonly executorId?: string | null;
     readonly origin?: 'human' | 'agent' | 'workflow';
   }): Promise<CollaborationProjectSpaceGroupRecord> {
@@ -2416,6 +2545,7 @@ export class CollaborationProjectSpaceService {
       body: input.body,
       mentions: input.mentions,
       refs: input.refs,
+      links: input.links,
       executorId: input.executorId,
       origin: input.origin,
       now,
@@ -2438,6 +2568,7 @@ export class CollaborationProjectSpaceService {
     readonly body: string;
     readonly mentions?: readonly string[];
     readonly refs?: readonly string[];
+    readonly links?: readonly CollaborationExternalLinkInput[];
     readonly executorId?: string | null;
     readonly origin?: 'human' | 'agent' | 'workflow';
   }): Promise<CollaborationProjectSpaceGroupRecord> {
@@ -2450,6 +2581,7 @@ export class CollaborationProjectSpaceService {
       body: input.body,
       mentions: input.mentions,
       refs: input.refs,
+      links: input.links,
       executorId: input.executorId,
       origin: input.origin,
       now,
@@ -2472,6 +2604,7 @@ export class CollaborationProjectSpaceService {
     readonly body: string;
     readonly mentions?: readonly string[];
     readonly refs?: readonly string[];
+    readonly links?: readonly CollaborationExternalLinkInput[];
   }): Promise<CollaborationProjectSpaceGroupRecord> {
     const group = this.requireLocalMember(input.groupId);
     const history = await this.sync(input.groupId);
@@ -2486,6 +2619,7 @@ export class CollaborationProjectSpaceService {
       body: input.body,
       mentions: input.mentions ? [...input.mentions] : previous.mentions,
       refs: input.refs ? [...input.refs] : previous.refs,
+      links: input.links ? buildExternalLinks(input.links) : previous.links,
       revision: previous.revision + 1,
       updated_at: new Date(this.now()).toISOString(),
     });
@@ -2537,19 +2671,19 @@ export class CollaborationProjectSpaceService {
     readonly notificationId?: string;
     readonly recipientPrincipalIds: readonly string[];
     readonly bodyMarkdown: string;
-    readonly scope: MemberNotificationScopeV3;
+    readonly scope: MemberNotificationScopeV4;
     readonly executorId?: string | null;
     readonly origin?: 'human' | 'agent' | 'workflow';
   }): Promise<CollaborationProjectSpaceGroupRecord> {
     const group = this.requireLocalMember(input.groupId);
     const createdAt = new Date(this.now()).toISOString();
-    const notification = memberNotificationV3Schema.parse({
-      format: 'icarus.collaboration-member-notification/1',
+    const notification = memberNotificationV4Schema.parse({
+      format: 'icarus.collaboration-member-notification/2',
       notification_id: input.notificationId ?? newId('notification'),
       sender_principal_id: group.localPrincipalId,
       recipient_principal_ids: [...new Set(input.recipientPrincipalIds)],
       body_markdown: input.bodyMarkdown,
-      body_sha256: collaborationContentHashV3(input.bodyMarkdown),
+      body_sha256: collaborationContentHashV4(input.bodyMarkdown),
       scope: input.scope,
       actor_client_id: group.localClientId,
       executor_id: input.executorId ?? null,
@@ -2579,7 +2713,7 @@ export class CollaborationProjectSpaceService {
       readonly work_item_owner: boolean;
       readonly principals: readonly string[];
     };
-    readonly machine: MachineDefinitionV3;
+    readonly machine: MachineDefinitionV4;
     readonly layout: WorkflowLayout;
   }): Promise<CollaborationProjectSpaceGroupRecord> {
     const group = this.requireLocalMember(input.groupId);
@@ -2593,7 +2727,7 @@ export class CollaborationProjectSpaceService {
       throw new Error('Workflow Definition versions must be sequential');
     if (previous?.definition.status === 'published')
       throw new Error('Published Workflow Definition versions are immutable');
-    const machine = machineDefinitionV3Schema.parse(input.machine);
+    const machine = machineDefinitionV4Schema.parse(input.machine);
     const layout = workflowLayoutSchema.parse(input.layout);
     const now = new Date(this.now()).toISOString();
     const definition = workflowDefinitionSchema.parse({
@@ -2613,8 +2747,8 @@ export class CollaborationProjectSpaceService {
       },
       machine_ref: `workflows/definitions/${input.definitionId}/machine.json`,
       layout_ref: `workflows/definitions/${input.definitionId}/layout.json`,
-      machine_hash: collaborationCanonicalHashV3(machine),
-      layout_hash: collaborationCanonicalHashV3(layout),
+      machine_hash: collaborationCanonicalHashV4(machine),
+      layout_hash: collaborationCanonicalHashV4(layout),
       revision: input.expectedRevision + 1,
       created_at: previous?.definition.created_at ?? now,
       updated_at: now,
@@ -2691,7 +2825,7 @@ export class CollaborationProjectSpaceService {
         definition_id: input.definitionId,
         version: input.version,
         layout,
-        layout_hash: collaborationCanonicalHashV3(layout),
+        layout_hash: collaborationCanonicalHashV4(layout),
       },
     });
   }
@@ -2781,7 +2915,7 @@ export class CollaborationProjectSpaceService {
       instance_id: input.instanceId ?? newId('wfi'),
       definition_id: input.definitionId,
       definition_version: input.definitionVersion,
-      definition_hash: collaborationWorkflowDefinitionHashV3(
+      definition_hash: collaborationWorkflowDefinitionHashV4(
         selected.definition,
         selected.machine,
       ),
@@ -2908,7 +3042,7 @@ export class CollaborationProjectSpaceService {
     readonly instanceId: string;
     readonly stateId: string;
     readonly expectedRevision: number;
-    readonly mode: ExecutionModeV3;
+    readonly mode: ExecutionModeV4;
     readonly actionId?: string | null;
     readonly executorId?: string | null;
   }): Promise<CollaborationProjectSpaceGroupRecord> {
@@ -2966,7 +3100,7 @@ export class CollaborationProjectSpaceService {
       action_ref: action
         ? `workspace/principals/${group.localPrincipalId}/automations/actions/${action.action_id}.json`
         : null,
-      action_hash: action ? collaborationCanonicalHashV3(action) : null,
+      action_hash: action ? collaborationCanonicalHashV4(action) : null,
       prompt_hash: action?.prompt_hash ?? null,
       published_at_event: eventId,
       revision: (current?.revision ?? 0) + 1,
@@ -3045,7 +3179,7 @@ export class CollaborationProjectSpaceService {
       throw new Error('Workflow Instance is not on an executable State');
     const group = this.requireLocalMember(input.groupId);
     if (
-      !canCreateWorkflowTurnV3(
+      !canCreateWorkflowTurnV4(
         history.projection,
         group.localPrincipalId!,
         instance,
@@ -3074,11 +3208,11 @@ export class CollaborationProjectSpaceService {
     const incomingHandoffHash = previousTurn?.handoff_hash ?? null;
     const createdAt = new Date(this.now()).toISOString();
     const timeoutPolicy = state.timeout_policy ?? null;
-    const startDeadlineAt = collaborationDeadlineAtV3(
+    const startDeadlineAt = collaborationDeadlineAtV4(
       createdAt,
       timeoutPolicy?.start_timeout_ms,
     );
-    const inputHash = collaborationTurnInputHashV3({
+    const inputHash = collaborationTurnInputHashV4({
       groupId: input.groupId,
       instanceId: input.instanceId,
       epoch: instance.epoch,
@@ -3093,7 +3227,7 @@ export class CollaborationProjectSpaceService {
           : null,
     });
     const attempt = 1;
-    const turn = collaborationTurnV3Schema.parse({
+    const turn = collaborationTurnV4Schema.parse({
       format: 'icarus.collaboration-turn/1',
       turn_id: turnId,
       workflow_instance_id: input.instanceId,
@@ -3111,7 +3245,7 @@ export class CollaborationProjectSpaceService {
       action_hash: execution?.action_hash ?? null,
       prompt_hash: execution?.prompt_hash ?? null,
       input_hash: inputHash,
-      idempotency_key: collaborationIdempotencyKeyV3({
+      idempotency_key: collaborationIdempotencyKeyV4({
         groupId: input.groupId,
         instanceId: input.instanceId,
         epoch: instance.epoch,
@@ -3124,7 +3258,7 @@ export class CollaborationProjectSpaceService {
       timeout_policy_snapshot: timeoutPolicy,
       start_deadline_at: startDeadlineAt,
       execution_deadline_at: null,
-      deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+      deadline_snapshot_hash: collaborationDeadlineSnapshotHashV4({
         turnId,
         attempt,
         timeoutPolicy,
@@ -3187,11 +3321,11 @@ export class CollaborationProjectSpaceService {
     }
     const eventId = newId('evt');
     const startedAt = new Date(this.now()).toISOString();
-    const executionDeadlineAt = collaborationDeadlineAtV3(
+    const executionDeadlineAt = collaborationDeadlineAtV4(
       startedAt,
       turn.timeout_policy_snapshot?.execution_timeout_ms,
     );
-    const fencingToken = collaborationFencingTokenV3({
+    const fencingToken = collaborationFencingTokenV4({
       groupId: input.groupId,
       instanceId: input.instanceId,
       epoch: instance.epoch,
@@ -3212,7 +3346,7 @@ export class CollaborationProjectSpaceService {
         fencing_token: fencingToken,
         executor_id: input.executorId ?? null,
         execution_deadline_at: executionDeadlineAt,
-        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV4({
           turnId: input.turnId,
           attempt: turn.attempt,
           timeoutPolicy: turn.timeout_policy_snapshot,
@@ -3378,7 +3512,7 @@ export class CollaborationProjectSpaceService {
     const artifactRefs = [
       ...new Set([...(input.artifactRefs ?? []), ...staged.artifactRefs]),
     ];
-    const handoff = handoffEnvelopeV3Schema.parse({
+    const handoff = handoffEnvelopeV4Schema.parse({
       format: 'icarus.collaboration-handoff/1',
       source_turn_id: input.turnId,
       outcome: input.outcome,
@@ -3400,16 +3534,16 @@ export class CollaborationProjectSpaceService {
         fencing_token: input.fencingToken,
         outcome: input.outcome,
         result_hash: resultHash,
-        completion_hash: collaborationTurnCompletionHashV3({
+        completion_hash: collaborationTurnCompletionHashV4({
           turnId: input.turnId,
           attempt: input.attempt,
           outcome: input.outcome,
           resultHash,
-          handoffHash: collaborationCanonicalHashV3(handoff),
+          handoffHash: collaborationCanonicalHashV4(handoff),
           artifactRefs,
         }),
         handoff,
-        handoff_hash: collaborationCanonicalHashV3(handoff),
+        handoff_hash: collaborationCanonicalHashV4(handoff),
         artifact_refs: artifactRefs,
         artifacts: staged.metadata,
       },
@@ -3485,7 +3619,7 @@ export class CollaborationProjectSpaceService {
     if (!turn || turn.attempt !== input.previousAttempt)
       throw new Error('Turn recovery attempt is stale');
     const nextAttempt = input.previousAttempt + 1;
-    const startDeadlineAt = collaborationDeadlineAtV3(
+    const startDeadlineAt = collaborationDeadlineAtV4(
       new Date(this.now()).toISOString(),
       turn.timeout_policy_snapshot?.start_timeout_ms,
     );
@@ -3501,7 +3635,7 @@ export class CollaborationProjectSpaceService {
         next_attempt: nextAttempt,
         reason: input.reason,
         start_deadline_at: startDeadlineAt,
-        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+        deadline_snapshot_hash: collaborationDeadlineSnapshotHashV4({
           turnId: input.turnId,
           attempt: nextAttempt,
           timeoutPolicy: turn.timeout_policy_snapshot,
@@ -3905,7 +4039,7 @@ export class CollaborationProjectSpaceService {
   private async restoreBoundIdentity(
     binding: CollaborationLocalGroupBinding,
     history: ValidatedProjectSpaceHistory,
-    allowedStatuses: readonly MemberDefinitionV3['status'][],
+    allowedStatuses: readonly MemberDefinitionV4['status'][],
   ): Promise<CollaborationEventSigningIdentity | null> {
     if (!binding.principalId || !binding.credentialId) return null;
     const member = history.projection.members[binding.principalId];
@@ -4148,7 +4282,7 @@ export class CollaborationProjectSpaceService {
       readonly reason: string;
       readonly detachReason: 'group_dissolved' | 'member_left';
       readonly validate: (
-        projection: CollaborationProjectionV3,
+        projection: CollaborationProjectionV4,
         principalId: string,
       ) => void;
     },
@@ -4201,7 +4335,7 @@ export class CollaborationProjectSpaceService {
           input.eventType === 'member_left'
             ? {
                 reason: input.reason,
-                affected_turn_ids: collaborationMemberLeftAffectedTurnIdsV3(
+                affected_turn_ids: collaborationMemberLeftAffectedTurnIdsV4(
                   history.projection,
                   currentGroup.localPrincipalId!,
                 ),
@@ -4306,7 +4440,7 @@ export class CollaborationProjectSpaceService {
       identity: input.identity,
       buildEvent: (history) => {
         let projection = history.projection;
-        let previousEvent: CollaborationEventV3 | undefined;
+        let previousEvent: CollaborationEventV4 | undefined;
         return input.events.map((command) => {
           const head =
             projection.aggregateHeads[
@@ -4334,7 +4468,7 @@ export class CollaborationProjectSpaceService {
                   .replaceAll('__OCCURRED_AT__', occurredAt),
               ) as Record<string, unknown>)
             : sourcePayload;
-          const event = buildCollaborationEventV3({
+          const event = buildCollaborationEventV4({
             groupId: projection.groupId,
             eventId,
             aggregateType: command.aggregateType,
@@ -4351,7 +4485,7 @@ export class CollaborationProjectSpaceService {
             occurredAt,
             payload,
           });
-          projection = reduceCollaborationEventV3(projection, event, {
+          projection = reduceCollaborationEventV4(projection, event, {
             previousEventInAtomicBatch: previousEvent,
           });
           previousEvent = event;
@@ -4527,7 +4661,7 @@ export class CollaborationProjectSpaceService {
           payload: {
             request_id: parsed.data.request_id,
             request_hash: parsed.data.request_hash,
-            verification_code: collaborationRecoveryVerificationCodeV3(
+            verification_code: collaborationRecoveryVerificationCodeV4(
               parsed.data.request_hash,
             ),
             expires_at: parsed.data.expires_at,
@@ -4722,7 +4856,7 @@ export class CollaborationProjectSpaceService {
           'turn_recovery_requested',
         ].includes(record.event.event_type)
       ) {
-        const parsedTurn = collaborationTurnV3Schema.safeParse(
+        const parsedTurn = collaborationTurnV4Schema.safeParse(
           record.event.payload.turn,
         );
         const instance =
@@ -4797,7 +4931,7 @@ export class CollaborationProjectSpaceService {
         continue;
       }
       if (record.event.event_type === 'member_notified') {
-        const parsed = memberNotificationV3Schema.safeParse(
+        const parsed = memberNotificationV4Schema.safeParse(
           record.event.payload.notification,
         );
         if (
@@ -4845,7 +4979,7 @@ export class CollaborationProjectSpaceService {
         executorId: parsed.data.executor_id,
         origin: parsed.data.origin,
         bodyMarkdown: parsed.data.body,
-        bodySha256: collaborationContentHashV3(parsed.data.body),
+        bodySha256: collaborationContentHashV4(parsed.data.body),
         scope: { type: 'discussion', ref: parsed.data.thread_id },
         createdAt: parsed.data.updated_at,
         messageId: parsed.data.message_id,
@@ -5059,10 +5193,10 @@ export class CollaborationProjectSpaceService {
   }
 
   private artifactMetadata(
-    artifact: CollaborationStagedArtifactV3,
+    artifact: CollaborationStagedArtifactV4,
     executorId: string | null,
-  ): ArtifactMetadataV3 {
-    return artifactMetadataV3Schema.parse({
+  ): ArtifactMetadataV4 {
+    return artifactMetadataV4Schema.parse({
       format: 'icarus.collaboration-artifact/1',
       artifact_id: artifact.artifactId,
       scope:
@@ -5087,7 +5221,7 @@ export class CollaborationProjectSpaceService {
     });
   }
 
-  private artifactRef(metadata: ArtifactMetadataV3): string {
+  private artifactRef(metadata: ArtifactMetadataV4): string {
     return metadata.scope.type === 'work_item'
       ? `artifacts/work-items/${metadata.scope.work_item_id}/${metadata.artifact_id}/metadata.json`
       : `artifacts/workflows/${metadata.scope.workflow_instance_id}/${metadata.scope.turn_id}/${metadata.artifact_id}/metadata.json`;
@@ -5096,14 +5230,14 @@ export class CollaborationProjectSpaceService {
   private materializeStagedArtifacts(input: {
     readonly artifactIds: readonly string[];
     readonly group: CollaborationProjectSpaceGroupRecord;
-    readonly scopeType: CollaborationStagedArtifactV3['scopeType'];
+    readonly scopeType: CollaborationStagedArtifactV4['scopeType'];
     readonly scopeId: string;
     readonly turnId?: string;
     readonly attempt?: number;
     readonly fencingToken?: string;
     readonly executorId: string | null;
   }): {
-    readonly metadata: ArtifactMetadataV3[];
+    readonly metadata: ArtifactMetadataV4[];
     readonly artifactRefs: string[];
     readonly files: Array<{ readonly path: string; readonly contents: Buffer }>;
   } {
@@ -5111,7 +5245,7 @@ export class CollaborationProjectSpaceService {
       throw new Error('A command can materialize at most 20 Artifacts');
     if (new Set(input.artifactIds).size !== input.artifactIds.length)
       throw new Error('Staged Artifact ids must be unique');
-    const metadata: ArtifactMetadataV3[] = [];
+    const metadata: ArtifactMetadataV4[] = [];
     const artifactRefs: string[] = [];
     const files: Array<{ readonly path: string; readonly contents: Buffer }> =
       [];
@@ -5145,6 +5279,98 @@ export class CollaborationProjectSpaceService {
       });
     }
     return { metadata, artifactRefs, files };
+  }
+
+  private async writeWorkspaceLink(input: {
+    readonly groupId: string;
+    readonly expectedRevision: number;
+    readonly scope: 'shared' | 'principal';
+    readonly operation: 'publish' | 'revise' | 'remove';
+    readonly linkId?: string;
+    readonly revision?: number;
+    readonly title?: string;
+    readonly url?: string;
+    readonly description?: string;
+    readonly workItemRefs?: readonly string[];
+    readonly workflowInstanceRefs?: readonly string[];
+    readonly discussionRefs?: readonly string[];
+  }): Promise<CollaborationProjectSpaceGroupRecord> {
+    const group = this.requireLocalMember(input.groupId);
+    const history = await this.sync(input.groupId);
+    const ownerPrincipalId =
+      input.scope === 'shared' ? null : group.localPrincipalId!;
+    const linkId = input.linkId ?? newId('link');
+    const previous = history.projection.links[linkId];
+    if (input.operation === 'publish') {
+      if (input.linkId !== undefined)
+        throw new Error('Workspace link ids are generated by Icarus');
+      if (previous || history.projection.removedLinkIds.includes(linkId))
+        throw new Error('Workspace link id already exists');
+    } else {
+      if (!previous) throw new Error('Workspace link does not exist');
+      if (
+        previous.scope !== input.scope ||
+        previous.owner_principal_id !== ownerPrincipalId
+      )
+        throw new Error('Workspace link is outside the requested scope');
+      if (input.revision !== previous.revision)
+        throw new CollaborationProtocolError(
+          'EVENT_CONFLICT',
+          'Workspace link revision is stale',
+        );
+    }
+
+    const eventType =
+      `${input.scope === 'shared' ? 'shared' : 'principal'}_link_${
+        input.operation === 'publish'
+          ? 'published'
+          : input.operation === 'revise'
+            ? 'revised'
+            : 'removed'
+      }` as CollaborationEventTypeV4;
+    if (input.operation === 'remove')
+      return this.appendLocal(input.groupId, {
+        aggregateType: 'workspace',
+        aggregateId:
+          input.scope === 'shared' ? 'shared' : group.localPrincipalId!,
+        expectedRevision: input.expectedRevision,
+        eventType,
+        payload: { link_id: linkId, revision: previous!.revision + 1 },
+      });
+
+    const now = new Date(this.now()).toISOString();
+    const link = workspaceLinkSchema.parse({
+      format: 'icarus.collaboration-workspace-link/1',
+      link_id: linkId,
+      title: input.title,
+      url: input.url,
+      description: input.description ?? '',
+      scope: input.scope,
+      owner_principal_id: ownerPrincipalId,
+      refs: {
+        work_item_refs: [...(input.workItemRefs ?? [])],
+        workflow_instance_refs: [...(input.workflowInstanceRefs ?? [])],
+        discussion_refs: [...(input.discussionRefs ?? [])],
+      },
+      created_by_principal_id:
+        previous?.created_by_principal_id ?? group.localPrincipalId,
+      created_by_client_id:
+        previous?.created_by_client_id ?? group.localClientId,
+      updated_by_principal_id: group.localPrincipalId,
+      updated_by_client_id: group.localClientId,
+      created_at: previous?.created_at ?? now,
+      updated_at: now,
+      revision: previous ? previous.revision + 1 : 1,
+    });
+    return this.appendLocal(input.groupId, {
+      aggregateType: 'workspace',
+      aggregateId:
+        input.scope === 'shared' ? 'shared' : group.localPrincipalId!,
+      expectedRevision: input.expectedRevision,
+      eventType,
+      payload: { link },
+      occurredAt: now,
+    });
   }
 
   private fileMetadata(input: {

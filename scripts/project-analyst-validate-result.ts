@@ -8,7 +8,7 @@ import {
   collaborationRepositoryAnalysisInputSchema,
   collaborationRepositoryAnalysisResultSchema,
 } from '../src/collaboration/analysis-contracts.js';
-import { collaborationCanonicalHashV3 } from '../src/collaboration/protocol/v3-reducer.js';
+import { collaborationCanonicalHashV4 } from '../src/collaboration/protocol/v4-reducer.js';
 import { strictParseJson } from '../src/collaboration/protocol/canonical-json.js';
 
 interface Arguments {
@@ -67,7 +67,7 @@ function validatePackageResult(
     requireEqual(
       'context_hash',
       result.context_hash,
-      collaborationCanonicalHashV3(context),
+      collaborationCanonicalHashV4(context),
     );
   }
   if (manifestValue !== null) {
@@ -91,7 +91,7 @@ function validateRepositoryResult(
   catalogValue: unknown,
 ): void {
   const result = collaborationRepositoryAnalysisResultSchema.parse(value);
-  const catalogHash = collaborationCanonicalHashV3(catalogValue);
+  const catalogHash = collaborationCanonicalHashV4(catalogValue);
   requireEqual(
     'resource_catalog_hash',
     result.resource_catalog_hash,
@@ -119,7 +119,7 @@ function validateRepositoryResult(
     requireEqual(
       'context_hash',
       result.context_hash,
-      collaborationCanonicalHashV3(context),
+      collaborationCanonicalHashV4(context),
     );
   }
   if (manifestValue !== null) {

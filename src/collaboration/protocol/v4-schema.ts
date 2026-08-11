@@ -13,7 +13,7 @@ import {
   type CollaborationPermission,
 } from '../permissions.js';
 
-export const V3_COLLABORATION_PROTOCOL_VERSION = 3 as const;
+export const V4_COLLABORATION_PROTOCOL_VERSION = 4 as const;
 
 export const collaborationIdentifierSchema = z
   .string()
@@ -32,7 +32,7 @@ export const collaborationSshPublicKeySchema = z
     /^(?:ssh-ed25519|ecdsa-sha2-[A-Za-z0-9@._+-]+|sk-ssh-[A-Za-z0-9@._+-]+) [A-Za-z0-9+/]+={0,3}(?: [^\r\n]{1,1024})?$/u,
   );
 
-export function collaborationCredentialFingerprintV3(
+export function collaborationCredentialFingerprintV4(
   publicKey: string,
 ): string {
   const parsed = collaborationSshPublicKeySchema.parse(publicKey);
@@ -45,7 +45,7 @@ export function collaborationCredentialFingerprintV3(
     .replace(/=+$/u, '')}`;
 }
 
-export function collaborationContentHashV3(contents: string | Buffer): string {
+export function collaborationContentHashV4(contents: string | Buffer): string {
   return `sha256:${crypto.createHash('sha256').update(contents).digest('hex')}`;
 }
 
@@ -124,7 +124,7 @@ export const collaborationEventBatchSchema = z
               !value.startsWith('events/batches/') &&
               value.endsWith('.json'),
           ),
-        'must contain unique v3 event paths',
+        'must contain unique v4 event paths',
       ),
   })
   .strict();
@@ -174,10 +174,10 @@ export const visibilityPolicySchema = z
   .object({ observer_access: z.enum(['allowed', 'members_only']) })
   .strict();
 
-export const groupDefinitionV3Schema = z
+export const groupDefinitionV4Schema = z
   .object({
-    format: z.literal('icarus.collaboration-group/3'),
-    protocol_version: z.literal(V3_COLLABORATION_PROTOCOL_VERSION),
+    format: z.literal('icarus.collaboration-group/4'),
+    protocol_version: z.literal(V4_COLLABORATION_PROTOCOL_VERSION),
     group_id: collaborationIdentifierSchema,
     name: z.string().min(1).max(240),
     creator: z
@@ -231,11 +231,11 @@ export const groupDefinitionV3Schema = z
         message: 'Group dissolution lifecycle and timestamp must agree',
       });
   });
-export type GroupDefinitionV3 = z.infer<typeof groupDefinitionV3Schema>;
+export type GroupDefinitionV4 = z.infer<typeof groupDefinitionV4Schema>;
 
-export const memberDefinitionV3Schema = z
+export const memberDefinitionV4Schema = z
   .object({
-    format: z.literal('icarus.collaboration-member/3'),
+    format: z.literal('icarus.collaboration-member/4'),
     principal_id: principalIdSchema,
     display_name: z.string().min(1).max(160),
     status: z.enum([
@@ -250,7 +250,7 @@ export const memberDefinitionV3Schema = z
     extensions: extensionsSchema,
   })
   .strict();
-export type MemberDefinitionV3 = z.infer<typeof memberDefinitionV3Schema>;
+export type MemberDefinitionV4 = z.infer<typeof memberDefinitionV4Schema>;
 
 export const credentialDefinitionSchema = z
   .object({
@@ -269,7 +269,7 @@ export const credentialDefinitionSchema = z
   .strict()
   .superRefine((credential, context) => {
     if (
-      collaborationCredentialFingerprintV3(credential.public_key) !==
+      collaborationCredentialFingerprintV4(credential.public_key) !==
       credential.fingerprint
     )
       context.addIssue({
@@ -288,7 +288,7 @@ export const credentialDefinitionSchema = z
   });
 export type CredentialDefinition = z.infer<typeof credentialDefinitionSchema>;
 
-export const inviteDefinitionV3Schema = z
+export const inviteDefinitionV4Schema = z
   .object({
     format: z.literal('icarus.collaboration-invite/1'),
     invite_id: collaborationIdentifierSchema,
@@ -328,7 +328,7 @@ export const inviteDefinitionV3Schema = z
           'Invite status and lifecycle event references are inconsistent',
       });
   });
-export type InviteDefinitionV3 = z.infer<typeof inviteDefinitionV3Schema>;
+export type InviteDefinitionV4 = z.infer<typeof inviteDefinitionV4Schema>;
 
 export const clientDefinitionSchema = z
   .object({
@@ -444,7 +444,7 @@ export const permissionGrantSchema = z
   });
 export type PermissionGrant = z.infer<typeof permissionGrantSchema>;
 
-const fileBusinessRefsSchema = z
+const resourceBusinessRefsSchema = z
   .object({
     work_item_refs: z.array(collaborationIdentifierSchema).max(100).default([]),
     workflow_instance_refs: z
@@ -479,7 +479,7 @@ export const fileMetadataSchema = z
     uploader_client_id: collaborationIdentifierSchema,
     executor_id: collaborationIdentifierSchema.nullable().default(null),
     origin: actorOriginSchema,
-    refs: fileBusinessRefsSchema,
+    refs: resourceBusinessRefsSchema,
     created_at: collaborationIsoTimeSchema,
     revision: z.number().int().positive().default(1),
     extensions: extensionsSchema,
@@ -497,9 +497,87 @@ export const fileMetadataSchema = z
   });
 export type FileMetadata = z.infer<typeof fileMetadataSchema>;
 
+export const collaborationExternalUrlSchema = z
+  .string()
+  .min(1)
+  .max(4096)
+  .refine((value) => {
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol.length > 1;
+    } catch {
+      return false;
+    }
+  }, 'must be an absolute URL or URI');
+
+export const externalLinkSchema = z
+  .object({
+    format: z.literal('icarus.collaboration-external-link/1'),
+    link_id: collaborationIdentifierSchema,
+    title: z.string().min(1).max(500),
+    url: collaborationExternalUrlSchema,
+    description: z.string().max(4000).default(''),
+  })
+  .strict();
+export type ExternalLink = z.infer<typeof externalLinkSchema>;
+
+export const externalLinksSchema = z
+  .array(externalLinkSchema)
+  .max(10)
+  .default([])
+  .refine(
+    (links) => new Set(links.map((link) => link.link_id)).size === links.length,
+    'link ids must be unique',
+  );
+
+export const workspaceLinkSchema = z
+  .object({
+    format: z.literal('icarus.collaboration-workspace-link/1'),
+    link_id: collaborationIdentifierSchema,
+    title: z.string().min(1).max(500),
+    url: collaborationExternalUrlSchema,
+    description: z.string().max(4000).default(''),
+    scope: z.enum(['shared', 'principal']),
+    owner_principal_id: principalIdSchema.nullable(),
+    refs: resourceBusinessRefsSchema,
+    created_by_principal_id: principalIdSchema,
+    created_by_client_id: clientIdSchema,
+    updated_by_principal_id: principalIdSchema,
+    updated_by_client_id: clientIdSchema,
+    created_at: collaborationIsoTimeSchema,
+    updated_at: collaborationIsoTimeSchema,
+    revision: z.number().int().positive(),
+  })
+  .strict()
+  .superRefine((link, context) => {
+    if (
+      (link.scope === 'shared' && link.owner_principal_id !== null) ||
+      (link.scope === 'principal' && link.owner_principal_id === null)
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['owner_principal_id'],
+        message: 'Shared links have no owner; Principal links require one',
+      });
+    for (const [name, refs] of Object.entries(link.refs))
+      if (new Set(refs).size !== refs.length)
+        context.addIssue({
+          code: 'custom',
+          path: ['refs', name],
+          message: `${name} must be unique`,
+        });
+    if (Date.parse(link.updated_at) < Date.parse(link.created_at))
+      context.addIssue({
+        code: 'custom',
+        path: ['updated_at'],
+        message: 'updated_at cannot precede created_at',
+      });
+  });
+export type WorkspaceLink = z.infer<typeof workspaceLinkSchema>;
+
 export const progressUpdateSchema = z
   .object({
-    format: z.literal('icarus.collaboration-progress-update/1'),
+    format: z.literal('icarus.collaboration-progress-update/2'),
     update_id: collaborationIdentifierSchema,
     principal_id: principalIdSchema,
     summary: z.string().min(1).max(4000),
@@ -516,6 +594,7 @@ export const progressUpdateSchema = z
       .array(collaborationRelativePathSchema)
       .max(100)
       .default([]),
+    links: externalLinksSchema,
     origin: actorOriginSchema,
     actor_client_id: collaborationIdentifierSchema,
     executor_id: collaborationIdentifierSchema.nullable().default(null),
@@ -593,7 +672,7 @@ export type WorkItem = z.infer<typeof workItemSchema>;
 
 export const workItemProgressSchema = z
   .object({
-    format: z.literal('icarus.collaboration-work-item-progress/1'),
+    format: z.literal('icarus.collaboration-work-item-progress/2'),
     update_id: collaborationIdentifierSchema,
     work_item_id: collaborationIdentifierSchema,
     summary: z.string().min(1).max(4000),
@@ -604,6 +683,7 @@ export const workItemProgressSchema = z
       .array(collaborationRelativePathSchema)
       .max(100)
       .default([]),
+    links: externalLinksSchema,
     actor_principal_id: principalIdSchema,
     actor_client_id: collaborationIdentifierSchema,
     executor_id: collaborationIdentifierSchema.nullable().default(null),
@@ -651,7 +731,7 @@ export type Discussion = z.infer<typeof discussionSchema>;
 
 export const discussionMessageSchema = z
   .object({
-    format: z.literal('icarus.collaboration-message/1'),
+    format: z.literal('icarus.collaboration-message/2'),
     message_id: collaborationIdentifierSchema,
     thread_id: collaborationIdentifierSchema,
     author_principal_id: principalIdSchema,
@@ -661,6 +741,7 @@ export const discussionMessageSchema = z
     body: z.string().min(1).max(64_000),
     mentions: z.array(principalIdSchema).max(100).default([]),
     refs: z.array(collaborationRelativePathSchema).max(100).default([]),
+    links: externalLinksSchema,
     revision: z.number().int().positive(),
     tombstoned: z.boolean().default(false),
     created_at: collaborationIsoTimeSchema,
@@ -670,7 +751,7 @@ export const discussionMessageSchema = z
   .strict();
 export type DiscussionMessage = z.infer<typeof discussionMessageSchema>;
 
-export const memberNotificationScopeV3Schema = z.discriminatedUnion('type', [
+export const memberNotificationScopeV4Schema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('group'),
@@ -686,18 +767,19 @@ export const memberNotificationScopeV3Schema = z.discriminatedUnion('type', [
         'workflow_instance',
         'turn',
         'file',
+        'link',
       ]),
       ref: collaborationIdentifierSchema,
     })
     .strict(),
 ]);
-export type MemberNotificationScopeV3 = z.infer<
-  typeof memberNotificationScopeV3Schema
+export type MemberNotificationScopeV4 = z.infer<
+  typeof memberNotificationScopeV4Schema
 >;
 
-export const memberNotificationV3Schema = z
+export const memberNotificationV4Schema = z
   .object({
-    format: z.literal('icarus.collaboration-member-notification/1'),
+    format: z.literal('icarus.collaboration-member-notification/2'),
     notification_id: collaborationIdentifierSchema,
     sender_principal_id: principalIdSchema,
     recipient_principal_ids: z.array(principalIdSchema).min(1).max(100),
@@ -707,7 +789,7 @@ export const memberNotificationV3Schema = z
       .max(64_000)
       .refine((body) => body.trim().length > 0, 'message body cannot be blank'),
     body_sha256: collaborationSha256Schema,
-    scope: memberNotificationScopeV3Schema,
+    scope: memberNotificationScopeV4Schema,
     actor_client_id: clientIdSchema,
     executor_id: collaborationIdentifierSchema.nullable().default(null),
     origin: actorOriginSchema,
@@ -724,9 +806,9 @@ export const memberNotificationV3Schema = z
       message: 'notification recipients must be unique',
     },
   );
-export type MemberNotificationV3 = z.infer<typeof memberNotificationV3Schema>;
+export type MemberNotificationV4 = z.infer<typeof memberNotificationV4Schema>;
 
-export const timeoutPolicyV3Schema = z
+export const timeoutPolicyV4Schema = z
   .object({
     start_timeout_ms: z.number().int().positive().nullable().default(null),
     execution_timeout_ms: z.number().int().positive().nullable().default(null),
@@ -734,7 +816,7 @@ export const timeoutPolicyV3Schema = z
     on_timeout: z.literal('notify_only'),
   })
   .strict();
-export type TimeoutPolicyV3 = z.infer<typeof timeoutPolicyV3Schema>;
+export type TimeoutPolicyV4 = z.infer<typeof timeoutPolicyV4Schema>;
 
 export const stateAssigneeSchema = z.discriminatedUnion('type', [
   z
@@ -757,9 +839,9 @@ const workflowTransitionSchema = z
   })
   .strict();
 
-export const machineDefinitionV3Schema = z
+export const machineDefinitionV4Schema = z
   .object({
-    format: z.literal('icarus.collaboration-machine/3'),
+    format: z.literal('icarus.collaboration-machine/4'),
     initial_state: collaborationIdentifierSchema,
     states: z.record(
       collaborationIdentifierSchema,
@@ -769,7 +851,7 @@ export const machineDefinitionV3Schema = z
           description: z.string().max(4000).default(''),
           assignee: stateAssigneeSchema.optional(),
           terminal: z.boolean(),
-          timeout_policy: timeoutPolicyV3Schema.nullable().optional(),
+          timeout_policy: timeoutPolicyV4Schema.nullable().optional(),
           transitions: z.array(workflowTransitionSchema),
         })
         .strict(),
@@ -851,7 +933,7 @@ export const machineDefinitionV3Schema = z
           message: 'State is unreachable from the initial State',
         });
   });
-export type MachineDefinitionV3 = z.infer<typeof machineDefinitionV3Schema>;
+export type MachineDefinitionV4 = z.infer<typeof machineDefinitionV4Schema>;
 
 export const workflowLayoutSchema = z
   .object({
@@ -970,12 +1052,12 @@ export const workflowInstanceSchema = z
   .strict();
 export type WorkflowInstance = z.infer<typeof workflowInstanceSchema>;
 
-export const executionModeV3Schema = z.enum([
+export const executionModeV4Schema = z.enum([
   'manual',
   'assisted',
   'automatic',
 ]);
-export type ExecutionModeV3 = z.infer<typeof executionModeV3Schema>;
+export type ExecutionModeV4 = z.infer<typeof executionModeV4Schema>;
 
 export const stateExecutionSchema = z
   .object({
@@ -983,7 +1065,7 @@ export const stateExecutionSchema = z
     instance_id: collaborationIdentifierSchema,
     state_id: collaborationIdentifierSchema,
     principal_id: principalIdSchema,
-    mode: executionModeV3Schema,
+    mode: executionModeV4Schema,
     action_ref: collaborationRelativePathSchema.nullable(),
     action_hash: collaborationSha256Schema.nullable().default(null),
     prompt_hash: collaborationSha256Schema.nullable().default(null),
@@ -1014,7 +1096,7 @@ export const stateExecutionSchema = z
   });
 export type StateExecution = z.infer<typeof stateExecutionSchema>;
 
-export const actionDefinitionV3Schema = z
+export const actionDefinitionV4Schema = z
   .object({
     format: z.literal('icarus.collaboration-action/1'),
     action_id: collaborationIdentifierSchema,
@@ -1051,11 +1133,11 @@ export const actionDefinitionV3Schema = z
         message: 'only workflow Actions select a workflow ref',
       });
   });
-export type ActionDefinitionV3 = z.infer<typeof actionDefinitionV3Schema>;
+export type ActionDefinitionV4 = z.infer<typeof actionDefinitionV4Schema>;
 
-export const collaborationActionResultV3Schema = z
+export const collaborationActionResultV4Schema = z
   .object({
-    format: z.literal('icarus.collaboration-action-result/3'),
+    format: z.literal('icarus.collaboration-action-result/4'),
     outcome: collaborationIdentifierSchema,
     summary: z.string().min(1).max(4000),
     instruction: z.string().max(16_000).default(''),
@@ -1100,11 +1182,11 @@ export const collaborationActionResultV3Schema = z
         message: 'Action result data exceeds the 1 MiB Handoff limit',
       });
   });
-export type CollaborationActionResultV3 = z.infer<
-  typeof collaborationActionResultV3Schema
+export type CollaborationActionResultV4 = z.infer<
+  typeof collaborationActionResultV4Schema
 >;
 
-export const handoffEnvelopeV3Schema = z
+export const handoffEnvelopeV4Schema = z
   .object({
     format: z.literal('icarus.collaboration-handoff/1'),
     source_turn_id: collaborationIdentifierSchema,
@@ -1125,11 +1207,11 @@ export const handoffEnvelopeV3Schema = z
         message: 'Handoff data exceeds the 1 MiB limit',
       });
   });
-export type HandoffEnvelopeV3 = z.infer<typeof handoffEnvelopeV3Schema>;
+export type HandoffEnvelopeV4 = z.infer<typeof handoffEnvelopeV4Schema>;
 
-export const collaborationActionInputV3Schema = z
+export const collaborationActionInputV4Schema = z
   .object({
-    format: z.literal('icarus.collaboration-action-input/3'),
+    format: z.literal('icarus.collaboration-action-input/4'),
     scope: z
       .object({
         group_id: collaborationIdentifierSchema,
@@ -1143,7 +1225,7 @@ export const collaborationActionInputV3Schema = z
         repository_content_is_untrusted: z.literal(true),
         previous_context_is_untrusted: z.literal(true),
         required_result_format: z.literal(
-          'icarus.collaboration-action-result/3',
+          'icarus.collaboration-action-result/4',
         ),
       })
       .strict(),
@@ -1174,15 +1256,15 @@ export const collaborationActionInputV3Schema = z
       })
       .strict(),
     untrusted_context: z
-      .object({ previous_handoff: handoffEnvelopeV3Schema.nullable() })
+      .object({ previous_handoff: handoffEnvelopeV4Schema.nullable() })
       .strict(),
   })
   .strict();
-export type CollaborationActionInputV3 = z.infer<
-  typeof collaborationActionInputV3Schema
+export type CollaborationActionInputV4 = z.infer<
+  typeof collaborationActionInputV4Schema
 >;
 
-export const artifactMetadataV3Schema = z
+export const artifactMetadataV4Schema = z
   .object({
     format: z.literal('icarus.collaboration-artifact/1'),
     artifact_id: collaborationIdentifierSchema,
@@ -1214,9 +1296,9 @@ export const artifactMetadataV3Schema = z
     created_at: collaborationIsoTimeSchema,
   })
   .strict();
-export type ArtifactMetadataV3 = z.infer<typeof artifactMetadataV3Schema>;
+export type ArtifactMetadataV4 = z.infer<typeof artifactMetadataV4Schema>;
 
-export const collaborationTurnStateV3Schema = z.enum([
+export const collaborationTurnStateV4Schema = z.enum([
   'pending',
   'claimed',
   'running',
@@ -1228,7 +1310,7 @@ export const collaborationTurnStateV3Schema = z.enum([
   'recovery_required',
 ]);
 
-export const collaborationTurnV3Schema = z
+export const collaborationTurnV4Schema = z
   .object({
     format: z.literal('icarus.collaboration-turn/1'),
     turn_id: collaborationIdentifierSchema,
@@ -1240,16 +1322,16 @@ export const collaborationTurnV3Schema = z
     executor_id: collaborationIdentifierSchema.nullable(),
     attempt: z.number().int().positive(),
     fencing_token: collaborationSha256Schema.nullable(),
-    execution_mode: executionModeV3Schema,
-    state: collaborationTurnStateV3Schema,
+    execution_mode: executionModeV4Schema,
+    state: collaborationTurnStateV4Schema,
     action_ref: collaborationRelativePathSchema.nullable(),
     action_hash: collaborationSha256Schema.nullable(),
     prompt_hash: collaborationSha256Schema.nullable(),
     input_hash: collaborationSha256Schema,
     idempotency_key: collaborationSha256Schema,
-    incoming_handoff: handoffEnvelopeV3Schema.nullable(),
+    incoming_handoff: handoffEnvelopeV4Schema.nullable(),
     incoming_handoff_hash: collaborationSha256Schema.nullable(),
-    timeout_policy_snapshot: timeoutPolicyV3Schema.nullable(),
+    timeout_policy_snapshot: timeoutPolicyV4Schema.nullable(),
     start_deadline_at: collaborationIsoTimeSchema.nullable(),
     execution_deadline_at: collaborationIsoTimeSchema.nullable(),
     deadline_snapshot_hash: collaborationSha256Schema,
@@ -1257,15 +1339,15 @@ export const collaborationTurnV3Schema = z
     started_at: collaborationIsoTimeSchema.nullable(),
     completed_at: collaborationIsoTimeSchema.nullable(),
     outcome: collaborationIdentifierSchema.nullable(),
-    handoff: handoffEnvelopeV3Schema.nullable(),
+    handoff: handoffEnvelopeV4Schema.nullable(),
     handoff_hash: collaborationSha256Schema.nullable(),
-    executor_result: collaborationActionResultV3Schema.nullable(),
+    executor_result: collaborationActionResultV4Schema.nullable(),
     executor_result_hash: collaborationSha256Schema.nullable(),
     completion_hash: collaborationSha256Schema.nullable(),
     recovery_reason: z.string().max(4000).nullable(),
   })
   .strict();
-export type CollaborationTurnV3 = z.infer<typeof collaborationTurnV3Schema>;
+export type CollaborationTurnV4 = z.infer<typeof collaborationTurnV4Schema>;
 
 export const collaborationAggregateTypeSchema = z.enum([
   'group',
@@ -1283,7 +1365,7 @@ export type CollaborationAggregateType = z.infer<
   typeof collaborationAggregateTypeSchema
 >;
 
-export const collaborationEventTypesV3 = [
+export const collaborationEventTypesV4 = [
   'group_initialized',
   'group_settings_updated',
   'group_archived',
@@ -1315,6 +1397,12 @@ export const collaborationEventTypesV3 = [
   'shared_file_published',
   'shared_file_revised',
   'principal_file_published',
+  'shared_link_published',
+  'shared_link_revised',
+  'shared_link_removed',
+  'principal_link_published',
+  'principal_link_revised',
+  'principal_link_removed',
   'action_published',
   'action_revised',
   'work_item_created',
@@ -1358,20 +1446,20 @@ export const collaborationEventTypesV3 = [
   'turn_recovery_requested',
   'turn_recovered',
 ] as const;
-export type CollaborationEventTypeV3 =
-  (typeof collaborationEventTypesV3)[number];
+export type CollaborationEventTypeV4 =
+  (typeof collaborationEventTypesV4)[number];
 
-export const collaborationEventV3Schema = z
+export const collaborationEventV4Schema = z
   .object({
-    format: z.literal('icarus.collaboration-event/3'),
-    protocol_version: z.literal(V3_COLLABORATION_PROTOCOL_VERSION),
+    format: z.literal('icarus.collaboration-event/4'),
+    protocol_version: z.literal(V4_COLLABORATION_PROTOCOL_VERSION),
     group_id: collaborationIdentifierSchema,
     event_id: collaborationIdentifierSchema,
     aggregate_type: collaborationAggregateTypeSchema,
     aggregate_id: collaborationIdentifierSchema,
     aggregate_revision: z.number().int().positive(),
     previous_event_hash: collaborationSha256Schema.nullable(),
-    event_type: z.enum(collaborationEventTypesV3),
+    event_type: z.enum(collaborationEventTypesV4),
     actor: z
       .object({
         principal_id: principalIdSchema,
@@ -1399,7 +1487,7 @@ export const collaborationEventV3Schema = z
           'aggregate revision 1 requires null previous hash; later revisions require a hash',
       });
   });
-export type CollaborationEventV3 = z.infer<typeof collaborationEventV3Schema>;
+export type CollaborationEventV4 = z.infer<typeof collaborationEventV4Schema>;
 
 export const observerSubscriptionSchema = z
   .object({
@@ -1418,11 +1506,11 @@ export const observerSubscriptionSchema = z
   .strict();
 export type ObserverSubscription = z.infer<typeof observerSubscriptionSchema>;
 
-export function parseV3ProtocolVersion(value: unknown): 3 {
-  if (value !== V3_COLLABORATION_PROTOCOL_VERSION)
+export function parseV4ProtocolVersion(value: unknown): 4 {
+  if (value !== V4_COLLABORATION_PROTOCOL_VERSION)
     throw new CollaborationProtocolError(
       'PROTOCOL_VERSION_UNSUPPORTED',
-      `Collaboration protocol ${String(value)} is unsupported; only v3 is current`,
+      `Collaboration protocol ${String(value)} is unsupported; only v4 is current`,
     );
-  return V3_COLLABORATION_PROTOCOL_VERSION;
+  return V4_COLLABORATION_PROTOCOL_VERSION;
 }

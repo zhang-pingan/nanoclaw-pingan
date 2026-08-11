@@ -9,7 +9,7 @@ const resourceRefSchema = z
   .min(3)
   .max(1200)
   .regex(
-    /^(?:work_item|workflow_instance|turn|discussion|message|notification|event|file|principal|recovery|group):[^\s]+$/u,
+    /^(?:work_item|workflow_instance|turn|discussion|message|notification|event|file|link|principal|recovery|group):[^\s]+$/u,
   );
 
 export const collaborationAnalysisScopeSchema = z.discriminatedUnion('type', [

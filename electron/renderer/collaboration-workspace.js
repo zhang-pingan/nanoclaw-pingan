@@ -30,6 +30,7 @@ import {
   buildCollaborationAssignmentDecisionRequest,
   buildCollaborationCompleteTurnRequest,
   buildCollaborationDiscussionMessageRequest,
+  buildCollaborationExternalLinks,
   buildCollaborationMemberNotificationRequest,
   buildCollaborationReasonRequest,
   buildCollaborationActionMutationRequest,
@@ -45,6 +46,8 @@ import {
   buildCollaborationStartTurnRequest,
   buildCollaborationTurnCancellationRequest,
   buildCollaborationWorkflowReassignmentRequest,
+  buildCollaborationWorkspaceLinkRequest,
+  openCollaborationExternalLink,
   collaborationActiveMemberOptions,
   collaborationAnalysisRunAccess,
   collaborationActionAllowed,
@@ -284,6 +287,71 @@ function bindMemberPicker(root) {
     picker.addEventListener('change', updateCount);
     updateCount();
   });
+}
+
+function linkEditorRow(link = {}) {
+  return `<div class="collaboration-link-editor-row" data-link-editor-row>${field('显示名称', 'linkTitle', link.title || '')}${field('URL / URI', 'linkUrl', link.url || '')}${field('说明', 'linkDescription', link.description || '', { required: false })}<button type="button" class="btn-danger-soft" data-link-editor-remove aria-label="移除链接" title="移除链接">删除</button></div>`;
+}
+
+function linkEditor(links = []) {
+  return `<fieldset class="collaboration-link-editor" data-link-editor><legend>链接</legend><div data-link-editor-rows>${links.map(linkEditorRow).join('')}</div><button type="button" class="btn-ghost" data-link-editor-add>添加链接</button></fieldset>`;
+}
+
+function bindLinkEditor(root) {
+  root.querySelectorAll('[data-link-editor]').forEach((editor) => {
+    const rows = editor.querySelector('[data-link-editor-rows]');
+    editor.addEventListener('click', (event) => {
+      if (event.target.closest('[data-link-editor-remove]')) {
+        event.target.closest('[data-link-editor-row]')?.remove();
+        return;
+      }
+      if (!event.target.closest('[data-link-editor-add]')) return;
+      if (rows.children.length >= 10) return;
+      rows.insertAdjacentHTML('beforeend', linkEditorRow());
+    });
+    editor.addEventListener('change', (event) => {
+      if (event.target.name !== 'linkUrl') return;
+      const title = event.target
+        .closest('[data-link-editor-row]')
+        ?.querySelector('[name="linkTitle"]');
+      if (!title || title.value.trim()) return;
+      try {
+        const parsed = new URL(event.target.value);
+        title.value = parsed.hostname || parsed.pathname || parsed.protocol;
+      } catch {
+        // Schema validation reports malformed values at submit time.
+      }
+    });
+  });
+}
+
+function linksFromForm(formData) {
+  const titles = formData.getAll('linkTitle');
+  const urls = formData.getAll('linkUrl');
+  const descriptions = formData.getAll('linkDescription');
+  return buildCollaborationExternalLinks(
+    urls.flatMap((url, index) =>
+      String(url).trim() || String(titles[index] || '').trim()
+        ? [
+            {
+              title: titles[index],
+              url,
+              description: descriptions[index],
+            },
+          ]
+        : [],
+    ),
+  );
+}
+
+function renderLinkCards(links) {
+  if (!links?.length) return '';
+  return `<div class="collaboration-link-cards">${links
+    .map(
+      (link) =>
+        `<button type="button" data-collaboration-action="open-external-link" data-link-url="${attr(link.url)}"><strong>${html(link.title)}</strong><span>${html(link.url)}</span>${link.description ? `<small>${html(link.description)}</small>` : ''}</button>`,
+    )
+    .join('')}</div>`;
 }
 
 function metric(label, value, tone = '') {
@@ -741,7 +809,7 @@ export function createCollaborationWorkspace(options) {
           .reverse()
           .map(
             (update) =>
-              `<article class="collaboration-record"><div><strong>${html(update.summary)}</strong><small>${html(collaborationPrincipalName(group.projection, update.actor_principal_id))} · ${html(timestamp(update.created_at))}</small>${renderArtifactRefs(group.projection, update.artifact_refs)}</div></article>`,
+              `<article class="collaboration-record"><div><strong>${html(update.summary)}</strong><small>${html(collaborationPrincipalName(group.projection, update.actor_principal_id))} · ${html(timestamp(update.created_at))}</small>${renderArtifactRefs(group.projection, update.artifact_refs)}${renderLinkCards(update.links)}</div></article>`,
           )
           .join('') || empty('暂无进展')
       }</div></section>`;
@@ -796,7 +864,7 @@ export function createCollaborationWorkspace(options) {
               message.message_id,
               'tombstone',
             );
-            return `<article><header><strong>${html(collaborationPrincipalName(group.projection, message.author_principal_id))}</strong><small>${html(timestamp(message.updated_at || message.created_at))}</small></header><p class="collaboration-markdown-body">${message.tombstoned ? '<em>消息已删除</em>' : html(message.body)}</p>${canRevise || canTombstone ? `<div class="collaboration-record-actions">${canRevise ? `<button type="button" class="btn-ghost" data-collaboration-action="revise-message" data-message-id="${attr(message.message_id)}">编辑</button>` : ''}${canTombstone ? `<button type="button" class="btn-danger-soft" data-collaboration-action="tombstone-message" data-message-id="${attr(message.message_id)}">删除</button>` : ''}</div>` : ''}</article>`;
+            return `<article><header><strong>${html(collaborationPrincipalName(group.projection, message.author_principal_id))}</strong><small>${html(timestamp(message.updated_at || message.created_at))}</small></header><p class="collaboration-markdown-body">${message.tombstoned ? '<em>消息已删除</em>' : html(message.body)}</p>${message.tombstoned ? '' : renderLinkCards(message.links)}${canRevise || canTombstone ? `<div class="collaboration-record-actions">${canRevise ? `<button type="button" class="btn-ghost" data-collaboration-action="revise-message" data-message-id="${attr(message.message_id)}">编辑</button>` : ''}${canTombstone ? `<button type="button" class="btn-danger-soft" data-collaboration-action="tombstone-message" data-message-id="${attr(message.message_id)}">删除</button>` : ''}</div>` : ''}</article>`;
           })
           .join('') || empty('暂无消息')
       }</div></section>`;
@@ -807,10 +875,20 @@ export function createCollaborationWorkspace(options) {
   const renderFiles = () => {
     const group = selectedGroup();
     const files = state.tabData.files || [];
+    const links = state.tabData.links || [];
     const tree = collaborationVerifiedFileTree(files);
     const canUpload =
       groupAction('writeSharedWorkspace') || groupAction('postOwnedWorkspace');
-    return `<section class="collaboration-files-layout"><aside><div class="collaboration-section-head"><h3>已验证文件</h3>${canUpload ? '<button type="button" class="btn-primary" data-collaboration-action="upload-file">上传</button>' : ''}</div>${renderTreeNode(tree)}</aside><main id="collaboration-file-preview">${state.filePreview ? `<header><strong>${html(state.filePreview.name)}</strong><small>${html(state.filePreview.mediaType)}</small></header>${state.filePreview.text ? `<pre>${html(state.filePreview.text)}</pre>` : `<a class="btn-primary" href="${attr(state.filePreview.url)}" download>下载</a>`}` : empty('请选择文件')}</main></section>`;
+    const canAddLink =
+      groupAction('publishSharedLink') || groupAction('publishOwnedLink');
+    return `<section class="collaboration-files-layout"><aside><div class="collaboration-section-head"><h3>文件与链接</h3><div class="collaboration-record-actions">${canUpload ? '<button type="button" class="btn-ghost" data-collaboration-action="upload-file">上传文件</button>' : ''}${canAddLink ? '<button type="button" class="btn-primary" data-collaboration-action="add-workspace-link">添加链接</button>' : ''}</div></div>${renderTreeNode(tree)}</aside><main id="collaboration-file-preview"><section class="collaboration-workspace-links"><div class="collaboration-section-head"><h3>链接</h3><span>${links.length}</span></div><div class="collaboration-workspace-link-list">${links
+      .map((entry) => {
+        const link = entry.metadata || {};
+        const canRevise = resourceAction('link', link.link_id, 'revise');
+        const canRemove = resourceAction('link', link.link_id, 'remove');
+        return `<article class="collaboration-workspace-link"><div><strong>${html(link.title)}</strong><span>${html(link.url)}</span>${link.description ? `<small>${html(link.description)}</small>` : ''}<small>${link.scope === 'shared' ? 'Shared' : '个人'} · r${html(link.revision)}</small></div><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="open-external-link" data-link-url="${attr(link.url)}">打开</button>${canRevise ? `<button type="button" class="btn-ghost" data-collaboration-action="edit-workspace-link" data-link-id="${attr(link.link_id)}">编辑</button>` : ''}${canRemove ? `<button type="button" class="btn-danger-soft" data-collaboration-action="remove-workspace-link" data-link-id="${attr(link.link_id)}">删除</button>` : ''}</div></article>`;
+      })
+      .join('') || empty('暂无链接')}</div></section>${state.filePreview ? `<section class="collaboration-file-preview"><header><strong>${html(state.filePreview.name)}</strong><small>${html(state.filePreview.mediaType)}</small></header>${state.filePreview.text ? `<pre>${html(state.filePreview.text)}</pre>` : `<a class="btn-primary" href="${attr(state.filePreview.url)}" download>下载</a>`}</section>` : ''}</main></section>`;
   };
 
   const workflowDefinitionEntries = () =>
@@ -1178,10 +1256,20 @@ export function createCollaborationWorkspace(options) {
           )
         : null;
     } else if (state.activeTab === 'files') {
-      const data = await options.request(
-        `/groups/${encodeURIComponent(groupId)}/files`,
-      );
+      const [data, sharedLinks, ownedLinks] = await Promise.all([
+        options.request(`/groups/${encodeURIComponent(groupId)}/files`),
+        options.request(
+          `/groups/${encodeURIComponent(groupId)}/workspace/shared/links`,
+        ),
+        options.request(
+          `/groups/${encodeURIComponent(groupId)}/workspace/me/links`,
+        ),
+      ]);
       state.tabData.files = data.files || [];
+      state.tabData.links = [
+        ...(sharedLinks.links || []),
+        ...(ownedLinks.links || []),
+      ];
       if (state.selectedFileId) {
         const selected = collaborationFileById(
           state.tabData.files,
@@ -2138,7 +2226,8 @@ export function createCollaborationWorkspace(options) {
     let selectedFiles = null;
     openDialog({
       title: '发布工作进展',
-      body: `<div class="collaboration-form-grid">${field('进展摘要', 'summary', '', { multiline: true })}${field('产出物', 'artifacts', '', { type: 'file', required: false, multiple: true })}</div>`,
+      body: `<div class="collaboration-form-grid">${field('进展摘要', 'summary', '', { multiline: true })}${field('产出物', 'artifacts', '', { type: 'file', required: false, multiple: true })}${linkEditor()}</div>`,
+      onOpen: () => bindLinkEditor(elements.dialogBody),
       onSubmit: async (formData) => {
         const fileControl = elements.dialogForm.elements.artifacts;
         if (selectedFiles === null) {
@@ -2171,6 +2260,7 @@ export function createCollaborationWorkspace(options) {
                 ),
                 summary: formData.get('summary'),
                 artifactIds,
+                links: linksFromForm(formData),
               }),
             },
           );
@@ -2205,12 +2295,18 @@ export function createCollaborationWorkspace(options) {
     openDialog({
       title: '新建讨论',
       submitText: '创建讨论',
-      body: `<div class="collaboration-form-grid collaboration-form-grid-single">${field('标题', 'title')}${canPost ? `${field('首条消息（可选）', 'body', '', { multiline: true, required: false })}${memberPicker(group, { name: 'mentions', legend: '@成员（可选）' })}` : ''}</div>`,
+      body: `<div class="collaboration-form-grid collaboration-form-grid-single">${field('标题', 'title')}${canPost ? `${field('首条消息（可选）', 'body', '', { multiline: true, required: false })}${linkEditor()}${memberPicker(group, { name: 'mentions', legend: '@成员（可选）' })}` : ''}</div>`,
       onOpen: () => {
-        if (canPost) bindMemberPicker(elements.dialogBody);
+        if (canPost) {
+          bindMemberPicker(elements.dialogBody);
+          bindLinkEditor(elements.dialogBody);
+        }
       },
       onSubmit: async (formData) => {
         const body = String(formData.get('body') || '').trim();
+        const links = canPost ? linksFromForm(formData) : [];
+        if (!body && links.length)
+          throw new Error('讨论首条消息仍需填写正文');
         const request = {
           title: formData.get('title'),
           scope: { type: 'group' },
@@ -2220,9 +2316,11 @@ export function createCollaborationWorkspace(options) {
             expectedRevision: 0,
             body,
             mentions: formData.getAll('mentions'),
+            links,
           });
           request.body = message.body;
           request.mentions = message.mentions;
+          request.links = message.links;
         }
         await submitDiscussionMutation(group.groupId, () =>
           options.request(
@@ -2243,8 +2341,11 @@ export function createCollaborationWorkspace(options) {
     openDialog({
       title: '回复讨论',
       submitText: '发布回复',
-      body: `<div class="collaboration-form-grid collaboration-form-grid-single">${field('Markdown 消息', 'body', '', { multiline: true })}${memberPicker(group, { name: 'mentions', legend: '@成员（可选）' })}</div>`,
-      onOpen: () => bindMemberPicker(elements.dialogBody),
+      body: `<div class="collaboration-form-grid collaboration-form-grid-single">${field('Markdown 消息', 'body', '', { multiline: true })}${linkEditor()}${memberPicker(group, { name: 'mentions', legend: '@成员（可选）' })}</div>`,
+      onOpen: () => {
+        bindMemberPicker(elements.dialogBody);
+        bindLinkEditor(elements.dialogBody);
+      },
       onSubmit: async (formData) => {
         await submitDiscussionMutation(group.groupId, () =>
           options.request(
@@ -2260,6 +2361,7 @@ export function createCollaborationWorkspace(options) {
                   ),
                   body: formData.get('body'),
                   mentions: formData.getAll('mentions'),
+                  links: linksFromForm(formData),
                 }),
               ),
             },
@@ -2276,8 +2378,11 @@ export function createCollaborationWorkspace(options) {
     openDialog({
       title: '编辑消息',
       submitText: '保存修改',
-      body: `<div class="collaboration-form-grid collaboration-form-grid-single">${field('Markdown 消息', 'body', message.body, { multiline: true })}${memberPicker(group, { name: 'mentions', legend: '@成员（可选）', selected: message.mentions || [] })}</div>`,
-      onOpen: () => bindMemberPicker(elements.dialogBody),
+      body: `<div class="collaboration-form-grid collaboration-form-grid-single">${field('Markdown 消息', 'body', message.body, { multiline: true })}${linkEditor(message.links || [])}${memberPicker(group, { name: 'mentions', legend: '@成员（可选）', selected: message.mentions || [] })}</div>`,
+      onOpen: () => {
+        bindMemberPicker(elements.dialogBody);
+        bindLinkEditor(elements.dialogBody);
+      },
       onSubmit: async (formData) => {
         await submitDiscussionMutation(group.groupId, () =>
           options.request(
@@ -2294,6 +2399,7 @@ export function createCollaborationWorkspace(options) {
                   body: formData.get('body'),
                   mentions: formData.getAll('mentions'),
                   refs: message.refs || [],
+                  links: linksFromForm(formData),
                 }),
               ),
             },
@@ -2416,6 +2522,115 @@ export function createCollaborationWorkspace(options) {
         await loadTabData();
       },
     });
+  };
+
+  const editWorkspaceLink = (linkId = '') => {
+    const group = selectedGroup();
+    const entry = (state.tabData.links || []).find(
+      (candidate) => candidate.metadata?.link_id === linkId,
+    );
+    const link = entry?.metadata || null;
+    const scopeOptions = link
+      ? [[link.scope === 'shared' ? 'shared' : 'me', link.scope === 'shared' ? 'Shared' : '个人']]
+      : [
+          ...(groupAction('publishSharedLink') ? [['shared', 'Shared']] : []),
+          ...(groupAction('publishOwnedLink') ? [['me', '个人']] : []),
+        ];
+    openDialog({
+      title: link ? '编辑链接' : '添加链接',
+      submitText: link ? '保存修改' : '添加链接',
+      body: `<div class="collaboration-form-grid">${field('保存位置', 'scope', scopeOptions[0]?.[0] || 'me', { options: scopeOptions, disabled: Boolean(link) })}${field('显示名称', 'title', link?.title || '')}${field('URL / URI', 'url', link?.url || '')}${field('说明', 'description', link?.description || '', { multiline: true, required: false })}</div>`,
+      onSubmit: async (formData) => {
+        const scope = link
+          ? link.scope === 'shared'
+            ? 'shared'
+            : 'me'
+          : String(formData.get('scope'));
+        const currentGroup = selectedGroup();
+        const request = buildCollaborationWorkspaceLinkRequest({
+          expectedRevision: aggregateRevision(
+            currentGroup.projection,
+            'workspace',
+            scope === 'shared' ? 'shared' : currentGroup.localPrincipalId,
+          ),
+          ...(link ? { revision: link.revision } : {}),
+          title: formData.get('title'),
+          url: formData.get('url'),
+          description: formData.get('description'),
+          workItemRefs: link?.refs?.work_item_refs || [],
+          workflowInstanceRefs: link?.refs?.workflow_instance_refs || [],
+          discussionRefs: link?.refs?.discussion_refs || [],
+        });
+        try {
+          await options.request(
+            `/groups/${encodeURIComponent(group.groupId)}/workspace/${scope}/links${link ? `/${encodeURIComponent(link.link_id)}` : ''}`,
+            {
+              method: link ? 'PATCH' : 'POST',
+              body: JSON.stringify(request),
+            },
+          );
+        } catch (error) {
+          if (/revision conflict|stale/iu.test(String(error))) {
+            await loadDetail(group.groupId, false);
+            await loadTabData();
+            throw new Error('链接已在其他客户端更新，请核对最新版本后重试');
+          }
+          throw error;
+        }
+        closeDialog();
+        await loadDetail(group.groupId, false);
+        await loadTabData();
+      },
+    });
+  };
+
+  const removeWorkspaceLink = (linkId) => {
+    const group = selectedGroup();
+    const entry = (state.tabData.links || []).find(
+      (candidate) => candidate.metadata?.link_id === linkId,
+    );
+    const link = entry?.metadata;
+    if (!link) return;
+    const scope = link.scope === 'shared' ? 'shared' : 'me';
+    openDialog({
+      title: '删除链接',
+      submitText: '确认删除',
+      danger: true,
+      body: `<p class="collaboration-prose">${html(link.title)}</p>`,
+      onSubmit: async () => {
+        const currentGroup = selectedGroup();
+        try {
+          await options.request(
+            `/groups/${encodeURIComponent(group.groupId)}/workspace/${scope}/links/${encodeURIComponent(link.link_id)}`,
+            {
+              method: 'DELETE',
+              body: JSON.stringify({
+                expectedRevision: aggregateRevision(
+                  currentGroup.projection,
+                  'workspace',
+                  scope === 'shared' ? 'shared' : currentGroup.localPrincipalId,
+                ),
+                revision: link.revision,
+              }),
+            },
+          );
+        } catch (error) {
+          if (/revision conflict|stale/iu.test(String(error))) {
+            await loadDetail(group.groupId, false);
+            await loadTabData();
+            throw new Error('链接已在其他客户端更新，请核对最新版本后重试');
+          }
+          throw error;
+        }
+        closeDialog();
+        await loadDetail(group.groupId, false);
+        await loadTabData();
+      },
+    });
+  };
+
+  const openExternalLink = async (url) => {
+    await openCollaborationExternalLink(window.icarusApp?.openExternal, url);
   };
 
   const openWorkflowEditor = (entry = null, newVersion = false) => {
@@ -3361,7 +3576,7 @@ export function createCollaborationWorkspace(options) {
           method: 'POST',
           body: JSON.stringify({
             ...(directory ? { backupDirectory: directory } : {}),
-            ...(restore ? { confirm: 'RESTORE COLLABORATION V3' } : {}),
+            ...(restore ? { confirm: 'RESTORE COLLABORATION V4' } : {}),
           }),
         });
         closeDialog();
@@ -4166,6 +4381,13 @@ export function createCollaborationWorkspace(options) {
     if (action === 'tombstone-message')
       return tombstoneMessage(button.dataset.messageId);
     if (action === 'upload-file') return uploadFile();
+    if (action === 'add-workspace-link') return editWorkspaceLink();
+    if (action === 'edit-workspace-link')
+      return editWorkspaceLink(button.dataset.linkId);
+    if (action === 'remove-workspace-link')
+      return removeWorkspaceLink(button.dataset.linkId);
+    if (action === 'open-external-link')
+      return openExternalLink(button.dataset.linkUrl);
     if (action === 'open-file') {
       const path = button.dataset.repositoryPath;
       const indexed = (state.tabData.files || []).find(

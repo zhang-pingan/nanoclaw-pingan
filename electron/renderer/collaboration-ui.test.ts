@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   collaborationInitializeConfirmation,
@@ -54,6 +54,8 @@ import {
   buildCollaborationCompleteTurnRequest,
   buildCollaborationAssignmentDecisionRequest,
   buildCollaborationDiscussionMessageRequest,
+  buildCollaborationExternalLinks,
+  buildCollaborationWorkspaceLinkRequest,
   buildCollaborationMemberNotificationRequest,
   buildCollaborationReasonRequest,
   buildCollaborationTurnCancellationRequest,
@@ -83,9 +85,10 @@ import {
   collaborationVerifiedFileTree,
   collaborationWorkItemColumns,
   collaborationWorkflowLaunchAccess,
+  openCollaborationExternalLink,
 } from './collaboration-ui.js';
 
-describe('Collaboration project-space v3 UI helpers', () => {
+describe('Collaboration project-space v4 UI helpers', () => {
   it('renders project-space protocol labels in Chinese without changing technical keywords', () => {
     expect(collaborationStatusLabel('in_progress')).toBe('进行中');
     expect(collaborationStatusLabel('PROTOCOL_QUARANTINED')).toBe('协议已隔离');
@@ -847,6 +850,7 @@ describe('Collaboration project-space v3 UI helpers', () => {
       expectedRevision: 3,
       body: 'Please review',
       mentions: ['principal_bob', 'principal_carol'],
+      links: [],
     });
     expect(() =>
       buildCollaborationDiscussionMessageRequest({
@@ -855,6 +859,93 @@ describe('Collaboration project-space v3 UI helpers', () => {
         mentions: [],
       }),
     ).toThrow(/不能为空/u);
+  });
+
+  it('builds first-class link requests and opens them only through the bridge', async () => {
+    expect(
+      buildCollaborationExternalLinks([
+        {
+          title: ' 设计说明 ',
+          url: ' https://例子.测试/路径?版本=四 ',
+          description: ' 供复核 ',
+        },
+      ]),
+    ).toEqual([
+      {
+        title: '设计说明',
+        url: 'https://例子.测试/路径?版本=四',
+        description: '供复核',
+      },
+    ]);
+    expect(() =>
+      buildCollaborationExternalLinks(
+        Array.from({ length: 11 }, (_, index) => ({
+          title: `Link ${String(index)}`,
+          url: `custom:item:${String(index)}`,
+        })),
+      ),
+    ).toThrow(/最多添加 10/u);
+    expect(() =>
+      buildCollaborationExternalLinks([{ title: 'Relative', url: '/path' }]),
+    ).toThrow(/绝对 URL 或 URI/u);
+    expect(
+      buildCollaborationWorkspaceLinkRequest({
+        expectedRevision: 4,
+        revision: 2,
+        title: 'Workspace link',
+        url: 'urn:icarus:workspace',
+        workItemRefs: ['work_1', 'work_1'],
+        workflowInstanceRefs: ['workflow_1'],
+        discussionRefs: [],
+      }),
+    ).toEqual({
+      expectedRevision: 4,
+      revision: 2,
+      title: 'Workspace link',
+      url: 'urn:icarus:workspace',
+      workItemRefs: ['work_1'],
+      workflowInstanceRefs: ['workflow_1'],
+      discussionRefs: [],
+    });
+    const projected = {
+      allowedActions: {
+        links: {
+          link_1: {
+            revise: { allowed: true, code: 'ALLOWED', reason: null },
+            remove: {
+              allowed: false,
+              code: 'PERMISSION_REQUIRED',
+              reason: 'Missing permission',
+            },
+            open: { allowed: true, code: 'ALLOWED', reason: null },
+          },
+        },
+      },
+    };
+    expect(
+      collaborationActionAllowed(projected, 'revise', 'link', 'link_1'),
+    ).toBe(true);
+    expect(
+      collaborationActionAllowed(projected, 'remove', 'link', 'link_1'),
+    ).toBe(false);
+    expect(
+      collaborationActionAllowed(projected, 'revise', 'link', 'missing'),
+    ).toBe(false);
+
+    const bridge = vi.fn(async () => ({ ok: true }));
+    await expect(
+      openCollaborationExternalLink(bridge, 'custom:item:42'),
+    ).resolves.toEqual({ ok: true });
+    expect(bridge).toHaveBeenCalledWith('custom:item:42');
+    await expect(
+      openCollaborationExternalLink(
+        vi.fn(async () => ({ ok: false, error: 'blocked by system' })),
+        'https://example.test',
+      ),
+    ).rejects.toThrow(/blocked by system/u);
+    await expect(
+      openCollaborationExternalLink(undefined, 'https://example.test'),
+    ).rejects.toThrow(/外部打开能力/u);
   });
 
   it('builds member notifications without exposing raw protocol fields', () => {

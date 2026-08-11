@@ -145,7 +145,7 @@ export class RunOnceActionExecutor implements ActionExecutor {
           chat_jid: String(action.binding.config.agent_jid),
           require_result: true,
           metadata: {
-            source: 'collaboration_project_space_v3',
+            source: 'collaboration_project_space_v4',
             group_id: action.groupId,
             turn_id: action.turnId,
             attempt: action.attempt,

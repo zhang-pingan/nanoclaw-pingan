@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { RunOnceResponse } from '../../internal-agent-run-once/schemas.js';
-import type { CollaborationExecutorBindingV3 } from '../project-space-store.js';
+import type { CollaborationExecutorBindingV4 } from '../project-space-store.js';
 import type {
-  ActionDefinitionV3,
-  CollaborationTurnV3,
-} from '../protocol/v3-schema.js';
+  ActionDefinitionV4,
+  CollaborationTurnV4,
+} from '../protocol/v4-schema.js';
 import { RunOnceActionExecutor, type RunOnceService } from './run-once.js';
 import {
   ActionBlockedError,
@@ -17,7 +17,7 @@ import {
 
 const hash = (value: string) => `sha256:${value.repeat(64)}`;
 
-function action(resultSchema?: Record<string, unknown>): ActionDefinitionV3 {
+function action(resultSchema?: Record<string, unknown>): ActionDefinitionV4 {
   return {
     format: 'icarus.collaboration-action/1',
     action_id: 'implement',
@@ -39,8 +39,8 @@ function action(resultSchema?: Record<string, unknown>): ActionDefinitionV3 {
 }
 
 function binding(
-  cap: CollaborationExecutorBindingV3['filesystemAccess'] = 'workspace_write',
-): CollaborationExecutorBindingV3 {
+  cap: CollaborationExecutorBindingV4['filesystemAccess'] = 'workspace_write',
+): CollaborationExecutorBindingV4 {
   return {
     groupId: 'group_test',
     instanceId: 'instance_1',
@@ -60,7 +60,7 @@ function binding(
   };
 }
 
-function turn(): CollaborationTurnV3 {
+function turn(): CollaborationTurnV4 {
   return {
     format: 'icarus.collaboration-turn/1',
     turn_id: 'turn_1',
@@ -196,7 +196,7 @@ describe('RunOnceActionExecutor', () => {
     result.resolve({
       ok: true,
       text: JSON.stringify({
-        format: 'icarus.collaboration-action-result/3',
+        format: 'icarus.collaboration-action-result/4',
         outcome: 'ready_for_test',
         summary: 'Implemented safely',
         instruction: '',
@@ -256,7 +256,7 @@ describe('RunOnceActionExecutor', () => {
     });
     expect(() =>
       validateActionResult(selectedAction, {
-        format: 'icarus.collaboration-action-result/3',
+        format: 'icarus.collaboration-action-result/4',
         outcome: 'ready_for_test',
         summary: 'missing approved field',
         instruction: '',
@@ -270,7 +270,7 @@ describe('RunOnceActionExecutor', () => {
 
   it('hashes result objects with locale-independent code-unit key order', () => {
     const result = {
-      format: 'icarus.collaboration-action-result/3' as const,
+      format: 'icarus.collaboration-action-result/4' as const,
       outcome: 'success' as const,
       summary: 'deterministic',
       instruction: '',

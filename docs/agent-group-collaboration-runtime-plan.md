@@ -8,7 +8,7 @@
 - 范围：Icarus 第三种操作模式、Git 协作协议、群组状态机、执行器抽象、Codex App Server 适配器和 Web 客户端入口
 - 不包含：现有 Dynamic Workflow Runtime 语义变更、公开群组注册中心、deep-link dispatch transport
 
-> **历史文档**：本文记录最初 Agent Group v1 设计及后续 v2 注记，不是当前领域模型、API、协议或存储规范。当前唯一权威方案为 [Icarus 协作群组项目空间 v3 方案](collaboration-project-space-v3-plan.md)；当前实现不读取或迁移本文描述的 Role/Claim、Group-level Machine 或旧事件。
+> **历史文档**：本文记录最初 Agent Group v1 设计及后续 v2 注记，不是当前领域模型、API、协议或存储规范。当前唯一权威方案为 [Icarus 协作群组项目空间 v4 方案](collaboration-project-space-v4-plan.md)；当前实现不读取或迁移本文描述的 Role/Claim、Group-level Machine 或旧事件。
 
 > **项目边界**：Icarus 是内部、实验性的单用户工具。Agent Group 连接多个分别由单个用户控制的 Icarus 实例，不把 Icarus 变成多租户产品，也不承诺第三方协议实现、长期向后兼容或不同版本长期混跑。跨实例协议只保留防止重复执行、状态分歧、越权推进和不可恢复数据损坏所需的最小机制。具体原则见 [Icarus Internal Experimental Scope](internal-experimental-scope.md)。
 
