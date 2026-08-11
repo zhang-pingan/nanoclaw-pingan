@@ -56,9 +56,10 @@ export function collaborationCanMutate(group) {
 
 export function collaborationCanInitializeGroup(group) {
   return Boolean(
-    collaborationCanMutate(group) &&
+    collaborationHasActiveLocalIdentity(group) &&
     group.localPrincipalId &&
-    group.localPrincipalId === group.ownerPrincipalId,
+    group.localPrincipalId === group.ownerPrincipalId &&
+    ['active', 'archived'].includes(group.lifecycle),
   );
 }
 

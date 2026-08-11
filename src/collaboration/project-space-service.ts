@@ -462,8 +462,8 @@ export class CollaborationProjectSpaceService {
       ]?.status !== 'active'
     )
       throw new Error('Only the current Group Owner may initialize the Group');
-    if (current.lifecycle !== 'active')
-      throw new Error('Only an active Group may be initialized');
+    if (!['active', 'archived'].includes(current.lifecycle))
+      throw new Error('Only an active or archived Group may be initialized');
 
     return this.withRepositoryOperation(current.repositoryPath, async () => {
       await this.syncUnlocked(groupId);
@@ -473,7 +473,7 @@ export class CollaborationProjectSpaceService {
         !group ||
         !latest ||
         group.subscriptionMode !== 'member' ||
-        group.lifecycle !== 'active' ||
+        !['active', 'archived'].includes(group.lifecycle) ||
         !group.localPrincipalId ||
         group.localPrincipalId !== latest.group.owner_principal_id ||
         group.localPrincipalId !== group.ownerPrincipalId ||
@@ -502,36 +502,55 @@ export class CollaborationProjectSpaceService {
       if (!oldOwner || !oldClient)
         throw new Error('The current Owner identity is incomplete');
 
-      const identity = await this.identities.createPrincipalIdentity({
-        freshClient: true,
-      });
-      const recoveryIdentity = await this.identities.createCredentialIdentity({
-        principalId: identity.principalId,
-        clientId: identity.clientId,
-        purpose: 'group_recovery',
-      });
+      const operationId = newId('initialization');
       const newGroupId = newId('group');
-      const genesis = buildGroupGenesis({
-        groupId: newGroupId,
-        name: latest.group.name,
-        displayName: oldOwner.display_name,
-        clientDisplayName: oldClient.display_name,
-        membershipPolicy: latest.group.membership_policy.join,
-        observerAccess: latest.group.visibility_policy.observer_access,
-        identity,
-        recoveryIdentity,
-        occurredAt: new Date(this.now()).toISOString(),
-      });
-      const operation = this.store.beginGroupInitialization({
-        operationId: newId('initialization'),
+      const principalId = newId('principal');
+      const clientId = newId('client');
+      const credentialId = newId('credential');
+      const recoveryCredentialId = newId('credential');
+      let operation = this.store.prepareGroupInitialization({
+        operationId,
         oldGroupId: groupId,
         newGroupId,
-        identity,
-        recoveryIdentity,
+        principalId,
+        clientId,
+        credentialId,
+        recoveryCredentialId,
         nowMs: this.now(),
       });
       let pushed = false;
       try {
+        const identity = await this.identities.createPrincipalIdentity({
+          freshClient: true,
+          principalId,
+          clientId,
+          credentialId,
+        });
+        const recoveryIdentity = await this.identities.createCredentialIdentity(
+          {
+            principalId,
+            clientId,
+            credentialId: recoveryCredentialId,
+            purpose: 'group_recovery',
+          },
+        );
+        const genesis = buildGroupGenesis({
+          groupId: newGroupId,
+          name: latest.group.name,
+          displayName: oldOwner.display_name,
+          clientDisplayName: oldClient.display_name,
+          membershipPolicy: latest.group.membership_policy.join,
+          observerAccess: latest.group.visibility_policy.observer_access,
+          identity,
+          recoveryIdentity,
+          occurredAt: new Date(this.now()).toISOString(),
+        });
+        operation = this.store.beginGroupInitialization({
+          operationId,
+          identity,
+          recoveryIdentity,
+          nowMs: this.now(),
+        });
         const history = await this.transport.reinitialize({
           remoteUrl: group.remoteUrl,
           repositoryPath: group.repositoryPath,
@@ -557,7 +576,14 @@ export class CollaborationProjectSpaceService {
         return initialized;
       } catch (error) {
         if (!pushed) {
-          await this.discardPreparedInitialization(operation);
+          try {
+            await this.discardPreparedInitialization(operation);
+          } catch (cleanupError) {
+            throw new Error(
+              `Group initialization failed before the remote rewrite and generated Credential cleanup remains pending: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+              { cause: new AggregateError([error, cleanupError]) },
+            );
+          }
           throw error;
         }
         if (!this.store.getGroupInitialization(operation.operationId))

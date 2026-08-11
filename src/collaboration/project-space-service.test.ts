@@ -311,6 +311,7 @@ function service(
       principalId: string;
       purpose?: 'event_signing' | 'group_recovery';
       clientId?: string;
+      credentialId?: string;
     }) => Promise<CollaborationEventSigningIdentity>;
     loadCredentialIdentity?: (
       credentialId: string,
@@ -320,13 +321,21 @@ function service(
 ) {
   const store = new CollaborationProjectSpaceStore(path.join(root, 'store.db'));
   const identities = {
-    createPrincipalIdentity: async (input?: { freshClient?: boolean }) =>
+    createPrincipalIdentity: async (input?: {
+      freshClient?: boolean;
+      principalId?: string;
+      clientId?: string;
+      credentialId?: string;
+    }) =>
       input?.freshClient
         ? {
             ...identity,
-            principalId: 'principal_00000000-0000-4000-8000-000000000100',
-            clientId: `${identity.clientId}_initialized`,
-            credentialId: `${identity.credentialId}_initialized`,
+            principalId:
+              input.principalId ??
+              'principal_00000000-0000-4000-8000-000000000100',
+            clientId: input.clientId ?? `${identity.clientId}_initialized`,
+            credentialId:
+              input.credentialId ?? `${identity.credentialId}_initialized`,
           }
         : identity,
     createCredentialIdentity:
@@ -335,16 +344,18 @@ function service(
         principalId: string;
         clientId?: string;
         purpose?: string;
+        credentialId?: string;
       }) => ({
         ...identity,
         principalId: input.principalId,
         clientId: input.clientId ?? identity.clientId,
         credentialId:
-          input.purpose === 'group_recovery'
+          input.credentialId ??
+          (input.purpose === 'group_recovery'
             ? input.principalId === identity.principalId
               ? `${identity.credentialId}_recovery`
               : `credential_${input.principalId}_recovery`
-            : identity.credentialId,
+            : identity.credentialId),
         purpose:
           input.purpose === 'group_recovery'
             ? ('group_recovery' as const)
@@ -849,6 +860,34 @@ describe('Collaboration project space v3 Group and identity service', () => {
     observer.store.close();
   });
 
+  it('allows the current active Owner identity to initialize an archived Group', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-archived.git',
+      name: 'Initialize archived',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_archived',
+    });
+    const archived = await owner.service.archiveGroup(
+      old.groupId,
+      'Archive before rebuilding',
+      1,
+    );
+    expect(archived.lifecycle).toBe('archived');
+
+    const initialized = await owner.service.initializeGroup(old.groupId);
+
+    expect(initialized.groupId).not.toBe(old.groupId);
+    expect(initialized.lifecycle).toBe('active');
+    expect(owner.store.getGroup(old.groupId)).toBeNull();
+    expect(transport.reinitializeCount).toBe(1);
+    owner.store.close();
+  });
+
   it('syncs authorization and rejects an Owner device revoked by remote recovery without force push', async () => {
     const transport = new MemoryTransport();
     const staleOwner = service(tempDirectory(), transport, ALICE);
@@ -942,6 +981,130 @@ describe('Collaboration project space v3 Group and identity service', () => {
     expect(recovered?.groupId).not.toBe(old.groupId);
     expect(owner.store.getGroup(old.groupId)).toBeNull();
     expect(owner.store.listGroupInitializations()).toEqual([]);
+    owner.store.close();
+  });
+
+  it('cleans the reserved event Credential when recovery Credential creation fails', async () => {
+    const deletedCredentialIds: string[] = [];
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE, undefined, {
+      createCredentialIdentity: async (input) => {
+        if (input.principalId !== ALICE.principalId)
+          throw new Error('recovery Credential creation failed');
+        return {
+          ...ALICE,
+          credentialId: `${ALICE.credentialId}_recovery`,
+          purpose: 'group_recovery',
+        };
+      },
+      deleteCredentialIdentity: async (credentialId) => {
+        deletedCredentialIds.push(credentialId);
+        return true;
+      },
+    });
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-recovery-identity-failure.git',
+      name: 'Recovery identity failure',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_recovery_identity_failure',
+    });
+
+    await expect(owner.service.initializeGroup(old.groupId)).rejects.toThrow(
+      /recovery Credential creation failed/u,
+    );
+
+    expect(owner.store.getGroup(old.groupId)).not.toBeNull();
+    expect(owner.store.listGroupInitializations()).toEqual([]);
+    expect(deletedCredentialIds).toHaveLength(2);
+    expect(
+      deletedCredentialIds.every((credentialId) =>
+        /^credential_[0-9a-f-]{36}$/u.test(credentialId),
+      ),
+    ).toBe(true);
+    expect(transport.reinitializeCount).toBe(0);
+    owner.store.close();
+  });
+
+  it('cleans both generated Credentials when initialization materialization fails', async () => {
+    const deletedCredentialIds: string[] = [];
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE, undefined, {
+      deleteCredentialIdentity: async (credentialId) => {
+        deletedCredentialIds.push(credentialId);
+        return true;
+      },
+    });
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-begin-failure.git',
+      name: 'Begin initialization failure',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_begin_failure',
+    });
+    vi.spyOn(owner.store, 'beginGroupInitialization').mockImplementationOnce(
+      () => {
+        throw new Error('begin initialization failed');
+      },
+    );
+
+    await expect(owner.service.initializeGroup(old.groupId)).rejects.toThrow(
+      /begin initialization failed/u,
+    );
+
+    expect(owner.store.getGroup(old.groupId)).not.toBeNull();
+    expect(owner.store.listGroupInitializations()).toEqual([]);
+    expect(deletedCredentialIds).toHaveLength(2);
+    expect(transport.reinitializeCount).toBe(0);
+    owner.store.close();
+  });
+
+  it('retains cleanup responsibility when generated Credential deletion fails', async () => {
+    let rejectDeletion = true;
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE, undefined, {
+      deleteCredentialIdentity: async () => {
+        if (rejectDeletion) throw new Error('Credential directory is busy');
+        return true;
+      },
+    });
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-cleanup-retry.git',
+      name: 'Initialization cleanup retry',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_cleanup_retry',
+    });
+    vi.spyOn(owner.store, 'beginGroupInitialization').mockImplementationOnce(
+      () => {
+        throw new Error('begin initialization failed');
+      },
+    );
+
+    await expect(owner.service.initializeGroup(old.groupId)).rejects.toThrow(
+      /generated Credential cleanup remains pending/u,
+    );
+    expect(owner.store.listGroupInitializations()).toEqual([
+      expect.objectContaining({
+        oldGroupId: old.groupId,
+        phase: 'prepared',
+      }),
+    ]);
+    expect(owner.store.getGroup(old.groupId)).not.toBeNull();
+    expect(transport.reinitializeCount).toBe(0);
+
+    rejectDeletion = false;
+    await expect(
+      owner.service.recoverInterruptedInitializations(),
+    ).resolves.toEqual([]);
+    expect(owner.store.listGroupInitializations()).toEqual([]);
+    expect(owner.store.getGroup(old.groupId)).not.toBeNull();
     owner.store.close();
   });
 

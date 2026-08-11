@@ -169,12 +169,17 @@ export class CollaborationProjectSpaceIdentityService {
 
   async createPrincipalIdentity(input?: {
     readonly freshClient?: boolean;
+    readonly principalId?: string;
+    readonly clientId?: string;
+    readonly credentialId?: string;
   }): Promise<CollaborationEventSigningIdentity> {
+    const clientId =
+      input?.clientId ??
+      (input?.freshClient ? `client_${crypto.randomUUID()}` : undefined);
     return this.createCredentialIdentity({
-      principalId: `principal_${crypto.randomUUID()}`,
-      ...(input?.freshClient
-        ? { clientId: `client_${crypto.randomUUID()}` }
-        : {}),
+      principalId: input?.principalId ?? `principal_${crypto.randomUUID()}`,
+      ...(clientId ? { clientId } : {}),
+      credentialId: input?.credentialId,
       purpose: 'event_signing',
     });
   }
@@ -183,12 +188,17 @@ export class CollaborationProjectSpaceIdentityService {
     if (!CREDENTIAL_ID_PATTERN.test(credentialId))
       throw new Error(`Invalid Collaboration Credential id: ${credentialId}`);
     const directory = path.join(this.credentialDirectory, credentialId);
+    let directoryMetadata: Awaited<ReturnType<typeof lstat>>;
     try {
-      await this.loadCredentialIdentity(credentialId);
+      directoryMetadata = await lstat(directory);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
       throw error;
     }
+    if (!directoryMetadata.isDirectory() || directoryMetadata.isSymbolicLink())
+      throw new Error(
+        `Collaboration Credential storage is unsafe: ${directory}`,
+      );
     await rm(directory, { recursive: true, force: false });
     return true;
   }
@@ -197,6 +207,7 @@ export class CollaborationProjectSpaceIdentityService {
     readonly principalId: string;
     readonly purpose?: CollaborationCredentialPurpose;
     readonly clientId?: string;
+    readonly credentialId?: string;
   }): Promise<CollaborationEventSigningIdentity> {
     if (!PRINCIPAL_ID_PATTERN.test(input.principalId))
       throw new Error(
@@ -205,7 +216,10 @@ export class CollaborationProjectSpaceIdentityService {
     const clientId = input.clientId ?? (await this.clientId());
     if (!CLIENT_ID_PATTERN.test(clientId))
       throw new Error(`Invalid Collaboration Client id: ${clientId}`);
-    const credentialId = `credential_${crypto.randomUUID()}`;
+    const credentialId =
+      input.credentialId ?? `credential_${crypto.randomUUID()}`;
+    if (!CREDENTIAL_ID_PATTERN.test(credentialId))
+      throw new Error(`Invalid Collaboration Credential id: ${credentialId}`);
     const directory = path.join(this.credentialDirectory, credentialId);
     await this.ensurePrivateDirectory(directory);
     const privateKeyPath = path.join(directory, 'credential');

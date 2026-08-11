@@ -168,6 +168,12 @@ describe('Collaboration project-space v3 UI helpers', () => {
     };
     expect(collaborationCanInitializeGroup(owner)).toBe(true);
     expect(
+      collaborationCanInitializeGroup({ ...owner, lifecycle: 'archived' }),
+    ).toBe(true);
+    expect(
+      collaborationCanInitializeGroup({ ...owner, lifecycle: 'dissolved' }),
+    ).toBe(false);
+    expect(
       collaborationCanInitializeGroup({
         ...owner,
         localPrincipalId: 'principal_member',

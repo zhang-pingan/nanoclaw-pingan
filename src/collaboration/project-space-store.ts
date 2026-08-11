@@ -1667,12 +1667,14 @@ export class CollaborationProjectSpaceStore {
     }).detached;
   }
 
-  beginGroupInitialization(input: {
+  prepareGroupInitialization(input: {
     readonly operationId: string;
     readonly oldGroupId: string;
     readonly newGroupId: string;
-    readonly identity: CollaborationEventSigningIdentity;
-    readonly recoveryIdentity: CollaborationEventSigningIdentity;
+    readonly principalId: string;
+    readonly clientId: string;
+    readonly credentialId: string;
+    readonly recoveryCredentialId: string;
     readonly nowMs?: number;
   }): CollaborationGroupInitializationOperation {
     this.assertOpen();
@@ -1734,8 +1736,24 @@ export class CollaborationProjectSpaceStore {
           group.git_ssh_key_path,
           group.poll_interval_ms,
           group.notifications_enabled,
-          JSON.stringify(input.identity),
-          JSON.stringify(input.recoveryIdentity),
+          JSON.stringify({
+            principalId: input.principalId,
+            clientId: input.clientId,
+            credentialId: input.credentialId,
+            privateKeyPath: '',
+            publicKey: '',
+            fingerprint: '',
+            purpose: 'event_signing',
+          } satisfies CollaborationEventSigningIdentity),
+          JSON.stringify({
+            principalId: input.principalId,
+            clientId: input.clientId,
+            credentialId: input.recoveryCredentialId,
+            privateKeyPath: '',
+            publicKey: '',
+            fingerprint: '',
+            purpose: 'group_recovery',
+          } satisfies CollaborationEventSigningIdentity),
           JSON.stringify({
             credentialIds: [...credentialIds],
             stagedDirectories,
@@ -1744,6 +1762,50 @@ export class CollaborationProjectSpaceStore {
           nowMs,
         );
     })();
+    return this.getGroupInitialization(input.operationId)!;
+  }
+
+  beginGroupInitialization(input: {
+    readonly operationId: string;
+    readonly identity: CollaborationEventSigningIdentity;
+    readonly recoveryIdentity: CollaborationEventSigningIdentity;
+    readonly nowMs?: number;
+  }): CollaborationGroupInitializationOperation {
+    this.assertOpen();
+    const operation = this.getGroupInitialization(input.operationId);
+    if (!operation || operation.phase !== 'prepared')
+      throw new Error(
+        `Collaboration initialization not prepared: ${input.operationId}`,
+      );
+    if (
+      operation.identity.principalId !== input.identity.principalId ||
+      operation.identity.clientId !== input.identity.clientId ||
+      operation.identity.credentialId !== input.identity.credentialId ||
+      operation.recoveryIdentity.principalId !==
+        input.recoveryIdentity.principalId ||
+      operation.recoveryIdentity.clientId !== input.recoveryIdentity.clientId ||
+      operation.recoveryIdentity.credentialId !==
+        input.recoveryIdentity.credentialId
+    )
+      throw new Error(
+        `Collaboration initialization identity reservation changed: ${input.operationId}`,
+      );
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_group_initializations
+            SET identity_json = ?, recovery_identity_json = ?, updated_at_ms = ?
+          WHERE operation_id = ? AND phase = 'prepared'`,
+      )
+      .run(
+        JSON.stringify(input.identity),
+        JSON.stringify(input.recoveryIdentity),
+        input.nowMs ?? Date.now(),
+        input.operationId,
+      );
+    if (result.changes !== 1)
+      throw new Error(
+        `Collaboration initialization not prepared: ${input.operationId}`,
+      );
     return this.getGroupInitialization(input.operationId)!;
   }
 
@@ -4761,20 +4823,19 @@ export class CollaborationProjectSpaceStore {
         readonly: true,
         fileMustExist: true,
       });
-      let groupIds: string[];
+      let containsGroup: boolean;
+      let containsOtherRestorableGroup: boolean;
       try {
-        groupIds = (
-          snapshot
-            .prepare('SELECT group_id FROM collaboration_subscriptions')
-            .all() as Array<{ group_id: string }>
-        ).map((row) => row.group_id);
+        containsGroup = managedBackupContainsGroup(snapshot, groupId);
+        containsOtherRestorableGroup =
+          managedBackupContainsOtherRestorableGroup(snapshot, groupId);
       } catch {
         continue;
       } finally {
         snapshot.close();
       }
-      if (!groupIds.includes(groupId)) continue;
-      if (groupIds.length === 1) {
+      if (!containsGroup) continue;
+      if (!containsOtherRestorableGroup) {
         rmSync(directory, { recursive: true, force: true });
         processed += 1;
         continue;
@@ -4972,6 +5033,93 @@ function verifiedStagedBackupFiles(
   return files;
 }
 
+function quotedDatabaseIdentifier(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+function jsonContainsExactString(value: unknown, expected: string): boolean {
+  if (value === expected) return true;
+  if (Array.isArray(value))
+    return value.some((item) => jsonContainsExactString(item, expected));
+  if (value && typeof value === 'object')
+    return Object.values(value).some((item) =>
+      jsonContainsExactString(item, expected),
+    );
+  return false;
+}
+
+function initializationOperationsReferencingGroupInCleanup(
+  database: Database.Database,
+  groupId: string,
+): string[] {
+  return (
+    database
+      .prepare(
+        `SELECT operation_id, cleanup_json
+           FROM collaboration_group_initializations`,
+      )
+      .all() as Array<{ operation_id: string; cleanup_json: string }>
+  )
+    .filter((row) =>
+      jsonContainsExactString(strictParseJson(row.cleanup_json), groupId),
+    )
+    .map((row) => row.operation_id);
+}
+
+function managedGroupReferenceColumns(
+  database: Database.Database,
+): Array<{ table_name: string; column_name: string }> {
+  return database
+    .prepare(
+      `SELECT DISTINCT m.name AS table_name, p.name AS column_name
+         FROM sqlite_master m, pragma_table_info(m.name) p
+        WHERE m.type = 'table'
+          AND m.name LIKE 'collaboration_%'
+          AND p.name IN ('group_id', 'old_group_id', 'new_group_id')`,
+    )
+    .all() as Array<{ table_name: string; column_name: string }>;
+}
+
+function managedBackupContainsGroup(
+  database: Database.Database,
+  groupId: string,
+): boolean {
+  for (const reference of managedGroupReferenceColumns(database)) {
+    const table = quotedDatabaseIdentifier(reference.table_name);
+    const column = quotedDatabaseIdentifier(reference.column_name);
+    if (
+      database
+        .prepare(`SELECT 1 FROM ${table} WHERE ${column} = ? LIMIT 1`)
+        .get(groupId)
+    )
+      return true;
+  }
+  return (
+    initializationOperationsReferencingGroupInCleanup(database, groupId)
+      .length > 0
+  );
+}
+
+function managedBackupContainsOtherRestorableGroup(
+  database: Database.Database,
+  groupId: string,
+): boolean {
+  for (const tableName of [
+    'collaboration_subscriptions',
+    'collaboration_groups',
+    'collaboration_local_group_bindings',
+  ]) {
+    const table = quotedDatabaseIdentifier(tableName);
+    if (
+      database
+        .prepare(`SELECT 1 FROM ${table} WHERE group_id <> ? LIMIT 1`)
+        .get(groupId)
+    )
+      return true;
+  }
+  return false;
+}
+
 function sanitizeManagedBackupForGroup(
   backupDirectory: string,
   manifest: CollaborationProjectSpaceBackupManifest,
@@ -5014,6 +5162,8 @@ function sanitizeManagedBackupForGroup(
     try {
       sanitized.pragma('foreign_keys = ON');
       sanitized.pragma('secure_delete = ON');
+      const cleanupReferencedOperations =
+        initializationOperationsReferencingGroupInCleanup(sanitized, groupId);
       sanitized.transaction(() => {
         sanitized
           .prepare(
@@ -5026,41 +5176,34 @@ function sanitizeManagedBackupForGroup(
               WHERE old_group_id = ? OR new_group_id = ?`,
           )
           .run(groupId, groupId);
+        for (const operationId of cleanupReferencedOperations)
+          sanitized
+            .prepare(
+              `DELETE FROM collaboration_group_initializations
+                WHERE operation_id = ?`,
+            )
+            .run(operationId);
         sanitized
           .prepare(
             'DELETE FROM collaboration_local_group_bindings WHERE group_id = ?',
           )
           .run(groupId);
-        const removed = sanitized
+        sanitized
           .prepare('DELETE FROM collaboration_subscriptions WHERE group_id = ?')
           .run(groupId);
-        if (removed.changes !== 1)
-          throw new Error(
-            `Collaboration backup no longer contains Group ${groupId}`,
-          );
+        for (const reference of managedGroupReferenceColumns(sanitized)) {
+          const table = quotedDatabaseIdentifier(reference.table_name);
+          const column = quotedDatabaseIdentifier(reference.column_name);
+          sanitized
+            .prepare(`DELETE FROM ${table} WHERE ${column} = ?`)
+            .run(groupId);
+        }
       })();
       sanitized.exec('VACUUM');
-      const groupTables = (
-        sanitized
-          .prepare(
-            `SELECT DISTINCT m.name
-               FROM sqlite_master m, pragma_table_info(m.name) p
-              WHERE m.type = 'table' AND p.name = 'group_id'`,
-          )
-          .all() as Array<{ name: string }>
-      ).map((row) => row.name);
-      for (const table of groupTables) {
-        const identifier = `"${table.replaceAll('"', '""')}"`;
-        const remaining = sanitized
-          .prepare(
-            `SELECT count(*) AS count FROM ${identifier} WHERE group_id = ?`,
-          )
-          .get(groupId) as { count: number };
-        if (remaining.count !== 0)
-          throw new Error(
-            `Collaboration backup sanitization retained ${table} rows for ${groupId}`,
-          );
-      }
+      if (managedBackupContainsGroup(sanitized, groupId))
+        throw new Error(
+          `Collaboration backup sanitization retained managed references for ${groupId}`,
+        );
       remainingRows = backupArtifactRows(sanitized);
     } finally {
       sanitized.close();
