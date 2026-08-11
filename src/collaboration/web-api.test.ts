@@ -1106,14 +1106,51 @@ describe('Collaboration project-space v3 Web API', () => {
     );
   });
 
-  it('validates Discussion and Outcome-first Workflow commands before dispatch', async () => {
+  it('validates member notifications and Discussion commands before dispatch', async () => {
+    const sendMemberNotification = vi.fn(async () => group());
     const createDiscussion = vi.fn(async () => group());
+    const createDiscussionWithMessage = vi.fn(async () => group());
     const proposeWorkflowDefinition = vi.fn(async () => group());
     await withApiServer(
       new CollaborationWebApi(
-        runtime({ groups: { createDiscussion, proposeWorkflowDefinition } }),
+        runtime({
+          groups: {
+            sendMemberNotification,
+            createDiscussion,
+            createDiscussionWithMessage,
+            proposeWorkflowDefinition,
+          },
+        }),
       ),
       async (baseUrl) => {
+        const notification = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/notifications`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              recipientPrincipalIds: [
+                'principal_00000000-0000-4000-8000-000000000002',
+                'principal_00000000-0000-4000-8000-000000000003',
+              ],
+              bodyMarkdown: '**Please review**',
+              scope: { type: 'work_item', ref: 'work_1' },
+              origin: 'human',
+            }),
+          },
+        );
+        expect(notification.status).toBe(201);
+        expect(sendMemberNotification).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          recipientPrincipalIds: [
+            'principal_00000000-0000-4000-8000-000000000002',
+            'principal_00000000-0000-4000-8000-000000000003',
+          ],
+          bodyMarkdown: '**Please review**',
+          scope: { type: 'work_item', ref: 'work_1' },
+          origin: 'human',
+        });
+
         const discussion = await fetch(
           `${baseUrl}/api/collaboration/groups/group_test/discussions`,
           {
@@ -1129,6 +1166,61 @@ describe('Collaboration project-space v3 Web API', () => {
         expect(createDiscussion).toHaveBeenCalledWith(
           expect.objectContaining({ groupId: 'group_test' }),
         );
+
+        const discussionWithMessage = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/discussions`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              title: 'Release readiness',
+              body: 'Please review the checklist.',
+              mentions: ['principal_00000000-0000-4000-8000-000000000002'],
+              scope: { type: 'group' },
+            }),
+          },
+        );
+        expect(discussionWithMessage.status).toBe(201);
+        expect(createDiscussionWithMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            groupId: 'group_test',
+            title: 'Release readiness',
+            body: 'Please review the checklist.',
+            mentions: ['principal_00000000-0000-4000-8000-000000000002'],
+            scope: { type: 'group' },
+          }),
+        );
+
+        for (const invalid of [
+          {
+            recipientPrincipalIds: [],
+            bodyMarkdown: 'Empty recipients',
+            scope: { type: 'group', ref: 'group_test' },
+          },
+          {
+            recipientPrincipalIds: ['principal_not-a-uuid'],
+            bodyMarkdown: 'Invalid Principal',
+            scope: { type: 'group', ref: 'group_test' },
+          },
+          {
+            recipientPrincipalIds: [
+              'principal_00000000-0000-4000-8000-000000000002',
+            ],
+            bodyMarkdown: 'Invalid scope',
+            scope: { type: 'credential', ref: 'credential_1' },
+          },
+        ]) {
+          const invalidNotification = await fetch(
+            `${baseUrl}/api/collaboration/groups/group_test/notifications`,
+            {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(invalid),
+            },
+          );
+          expect(invalidNotification.status).toBe(400);
+        }
+        expect(sendMemberNotification).toHaveBeenCalledTimes(1);
 
         const workflow = await fetch(
           `${baseUrl}/api/collaboration/groups/group_test/workflow-definitions`,

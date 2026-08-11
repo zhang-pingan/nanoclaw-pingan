@@ -845,7 +845,34 @@ discussion_resolved
 discussion_reopened
 ```
 
-Message 可以引用 Principal、Work Item、Workflow State/Turn、Progress Update 和 Artifact。所有 mention 和通知投递继续使用本地持久去重记录。
+Message 可以引用 Principal、Work Item、Workflow State/Turn、Progress Update 和 Artifact。消息作者在讨论开放且仍有 `discussion:post` 时可修订自己的消息；作者或持有 `discussion:moderate` 的成员可软删除消息，讨论创建者或 moderator 可解决和重开讨论。已解决讨论拒绝回复和修订，tombstone 只清空正文而不改写签名历史。
+
+Discussion 新建、回复和修订使用 Active Member 选择器表达 `@成员`，不要求业务用户输入 Principal ID 或 JSON。每个被提及的成员在 verified sync 后通过与通用成员通知相同的本地投递器收到通知；事件、Discussion、recipient Principal 和 recipient Client 共同参与稳定去重。
+
+### 9.1 通用成员通知
+
+成员通知是群组 Git 中可签名、可审计、可重放的业务事实，不是 WebSocket 或中心化消息。持有 `notification:send` 的 Active Member 可选择一个或多个其他 Active Principal，填写内联 Markdown，并携带当前资源上下文：Group、Work Item、Discussion、Workflow Definition、Workflow Instance、Turn 或文件。
+
+```json
+{
+  "format": "icarus.collaboration-member-notification/1",
+  "notification_id": "notification_42",
+  "sender_principal_id": "principal_alice",
+  "recipient_principal_ids": ["principal_bob"],
+  "body_markdown": "请复核 **发布清单**。",
+  "body_sha256": "sha256:...",
+  "scope": { "type": "work_item", "ref": "wi_101" },
+  "actor_client_id": "client_alice_mac",
+  "executor_id": null,
+  "origin": "human",
+  "created_at": "2026-08-10T12:00:00.000Z",
+  "extensions": {}
+}
+```
+
+`member_notified` 必须使用独立 `notification` Aggregate 且从 revision 1 开始。Reducer 校验 sender/Client/optional Executor/created_at 与事件 Actor 一致、正文 hash 匹配、sender 具有 `notification:send`、recipient 均为当前 Active Principal，且 scope 指向 verified Projection 中存在的资源。历史 recipient 离开后不删除事实；资源后来归档或消失时通知仍可显示，但客户端必须安全回落到资源列表或 Group 概览。
+
+默认 `member.v1`、`contributor.v1`、`project_manager.v1` 和 `workflow_manager.v1` 模板包含 `notification:send`，群主可通过现有 direct grant 覆盖撤销。Git Remote 读写能力不参与这项业务授权。
 
 ## 10. Workflow Definition
 
@@ -1603,6 +1630,8 @@ message_posted
 message_revised
 message_tombstoned
 discussion_resolved
+discussion_reopened
+member_notified
 ```
 
 Workflow：
@@ -1878,6 +1907,7 @@ workflow_recovery_required
 
 - 共享 Git 只记录需要审计的业务事实，不为每个桌面展示写事件；
 - 每个 Client 本地 SQLite 保存 notification、recipient reason、delivery 和 reminder ordinal；
+- `member_notified` 和 Discussion mention 统一投递为 `member_communication`，按 event/resource/recipient Principal/recipient Client 去重，重复同步不重复投递；
 - 同一 Principal 的多个 Client 可以各自接收，当前 claim 后的执行提醒优先精确 claimant Client；
 - Principal 同时是 Item owner、mentioned user 和 Admin 时，本机合并展示但保留全部 reason；
 - Work Item due reminder 和 Workflow State timeout reminder 使用不同 dedupe key；
@@ -1981,7 +2011,11 @@ POST /api/collaboration/groups/{groupId}/work-items/{workItemId}/relations
 GET  /api/collaboration/groups/{groupId}/discussions
 POST /api/collaboration/groups/{groupId}/discussions
 POST /api/collaboration/groups/{groupId}/discussions/{threadId}/messages
+PATCH /api/collaboration/groups/{groupId}/discussions/{threadId}/messages/{messageId}
+DELETE /api/collaboration/groups/{groupId}/discussions/{threadId}/messages/{messageId}
 POST /api/collaboration/groups/{groupId}/discussions/{threadId}/resolve
+POST /api/collaboration/groups/{groupId}/discussions/{threadId}/reopen
+POST /api/collaboration/groups/{groupId}/notifications
 ```
 
 所有 mutation 接受对象级 `expectedRevision`，不使用一个 Group revision 阻塞无关对象。
@@ -2349,6 +2383,8 @@ Observer 使用相同浏览和验证界面，但：
 - thread scope 可以引用 Group、Work Item、Workflow/Turn；
 - message append、revision、tombstone 和 resolve/reopen 正确；
 - mention 通知持久去重；
+- 通用通知与 mention 共享 `member_communication` 投递语义，重复 verified sync 不重复投递；
+- 通用通知拒绝伪造 recipient/scope、撤权后的 sender、Observer、inactive Member/Client/Credential 和错误 Aggregate；
 - 消息内容不进入系统 Prompt 高权限槽位；
 - 并发不同 thread 不争用同一业务 revision。
 

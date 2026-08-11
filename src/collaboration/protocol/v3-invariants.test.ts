@@ -23,7 +23,10 @@ import type {
   WorkflowLayout,
   WorkItem,
 } from './v3-schema.js';
-import { collaborationCredentialFingerprintV3 } from './v3-schema.js';
+import {
+  collaborationContentHashV3,
+  collaborationCredentialFingerprintV3,
+} from './v3-schema.js';
 
 const NOW = '2026-08-06T12:00:00.000Z';
 const ALICE = 'principal_00000000-0000-4000-8000-000000000001';
@@ -576,6 +579,135 @@ function addWorkItems(
 }
 
 describe('Collaboration v3 reducer invariants', () => {
+  it('authorizes immutable member notifications and rejects forged recipients, scopes, hashes, aggregates, and revoked senders', () => {
+    let projection = withBob();
+    const notification = (
+      notificationId: string,
+      overrides: Record<string, unknown> = {},
+    ) => ({
+      format: 'icarus.collaboration-member-notification/1',
+      notification_id: notificationId,
+      sender_principal_id: ALICE,
+      recipient_principal_ids: [BOB],
+      body_markdown: 'Please review **today**.',
+      body_sha256: collaborationContentHashV3('Please review **today**.'),
+      scope: { type: 'group', ref: 'group_test' },
+      actor_client_id: ALICE_CLIENT,
+      executor_id: null,
+      origin: 'human',
+      created_at: NOW,
+      ...overrides,
+    });
+    const notifyEvent = (
+      notificationId: string,
+      overrides: Record<string, unknown> = {},
+    ) => ({
+      aggregateType: 'notification' as const,
+      aggregateId: notificationId,
+      eventType: 'member_notified' as const,
+      payload: { notification: notification(notificationId, overrides) },
+    });
+
+    expect(() =>
+      apply(
+        projection,
+        notifyEvent('notification_bad_recipient', {
+          recipient_principal_ids: [CAROL],
+        }),
+      ),
+    ).toThrow(/active Group member/u);
+    expect(() =>
+      apply(
+        projection,
+        notifyEvent('notification_bad_scope', {
+          scope: { type: 'work_item', ref: 'missing_work_item' },
+        }),
+      ),
+    ).toThrow(/scope does not exist/u);
+    expect(() =>
+      apply(
+        projection,
+        notifyEvent('notification_bad_hash', { body_sha256: HASH }),
+      ),
+    ).toThrow(/Markdown hash/u);
+    expect(() =>
+      apply(projection, {
+        ...notifyEvent('notification_wrong_aggregate'),
+        aggregateType: 'discussion',
+      }),
+    ).toThrow(/genesis is invalid/u);
+
+    projection = apply(projection, notifyEvent('notification_valid'));
+    expect(projection.notifications.notification_valid).toMatchObject({
+      sender_principal_id: ALICE,
+      recipient_principal_ids: [BOB],
+      scope: { type: 'group', ref: 'group_test' },
+    });
+
+    projection = apply(projection, {
+      aggregateType: 'membership',
+      aggregateId: BOB,
+      eventType: 'permission_granted',
+      id: 'evt_bob_notification_granted',
+      payload: {
+        grant: {
+          format: 'icarus.collaboration-permission-grant/1',
+          principal_id: BOB,
+          grants: ['notification:send'],
+          revision: 1,
+          updated_at_event: 'evt_bob_notification_granted',
+        },
+      },
+    });
+    expect(() =>
+      apply(projection, {
+        ...notifyEvent('notification_invalid_client', {
+          sender_principal_id: BOB,
+          recipient_principal_ids: [ALICE],
+          actor_client_id: 'client_missing',
+        }),
+        actor: BOB,
+        client: 'client_missing',
+        credential: BOB_CREDENTIAL,
+      }),
+    ).toThrow(/Credential is not active/u);
+    projection = apply(projection, {
+      ...notifyEvent('notification_bob_allowed', {
+        sender_principal_id: BOB,
+        recipient_principal_ids: [ALICE],
+        actor_client_id: BOB_CLIENT,
+      }),
+      actor: BOB,
+    });
+    expect(projection.notifications.notification_bob_allowed).toBeDefined();
+
+    projection = apply(projection, {
+      aggregateType: 'membership',
+      aggregateId: BOB,
+      eventType: 'permission_revoked',
+      id: 'evt_bob_notification_revoked',
+      payload: {
+        grant: {
+          format: 'icarus.collaboration-permission-grant/1',
+          principal_id: BOB,
+          grants: [],
+          revision: 2,
+          updated_at_event: 'evt_bob_notification_revoked',
+        },
+      },
+    });
+    expect(() =>
+      apply(projection, {
+        ...notifyEvent('notification_bob_revoked', {
+          sender_principal_id: BOB,
+          recipient_principal_ids: [ALICE],
+          actor_client_id: BOB_CLIENT,
+        }),
+        actor: BOB,
+      }),
+    ).toThrow(/cannot notify/u);
+  });
+
   it('allows only the Owner to dissolve and makes dissolution terminal', () => {
     let projection = withBob();
     expect(() =>

@@ -94,6 +94,9 @@ var collaborationDetailMeta = document.getElementById(
   'collaboration-detail-meta',
 );
 var collaborationSyncBtn = document.getElementById('collaboration-sync-btn');
+var collaborationNotifyBtn = document.getElementById(
+  'collaboration-notify-btn',
+);
 var collaborationTabs = Array.from(
   document.querySelectorAll('[data-collaboration-tab]'),
 );
@@ -13189,6 +13192,15 @@ if (collaborationSyncBtn) {
       showToast(error instanceof Error ? error.message : String(error), 3200);
     } finally {
       collaborationSyncBtn.disabled = false;
+    }
+  });
+}
+if (collaborationNotifyBtn) {
+  collaborationNotifyBtn.addEventListener('click', () => {
+    try {
+      collaborationWorkspace.openNotificationComposer();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), 3200);
     }
   });
 }

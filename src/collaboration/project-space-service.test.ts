@@ -1024,6 +1024,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
       'work_item:manage_owned',
       'discussion:create',
       'discussion:post',
+      'notification:send',
     ]);
     const permissionEvents = transport.histories
       .get('/tmp/template-project.git')!
@@ -2458,6 +2459,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
       'work_item:manage_owned',
       'discussion:create',
       'discussion:post',
+      'notification:send',
     ]);
     expect(
       transport.histories
@@ -3058,7 +3060,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
     owner.store.close();
   });
 
-  it('enforces Discussion authorship and persists deduplicated mention notifications', async () => {
+  it('unifies signed member notifications with Discussion mentions and enforces message lifecycle', async () => {
     const transport = new MemoryTransport();
     const owner = service(tempDirectory(), transport, ALICE);
     await owner.service.createGroup({
@@ -3113,20 +3115,70 @@ describe('Collaboration project space v3 Group and identity service', () => {
       body: 'Please review the API.',
       mentions: [bobIdentity.principalId],
     });
+    await owner.service.sendMemberNotification({
+      groupId: 'group_project',
+      notificationId: 'notification_review',
+      recipientPrincipalIds: [bobIdentity.principalId],
+      bodyMarkdown: 'Please also check the **release notes**.',
+      scope: { type: 'discussion', ref: 'thread_api' },
+    });
     await bob.service.sync('group_project');
     await bob.service.sync('group_project');
-    expect(
-      bob.store.listPendingNotifications({
-        principalId: bobIdentity.principalId,
-        clientId: bobIdentity.clientId,
+    const communications = bob.store.listPendingNotifications({
+      principalId: bobIdentity.principalId,
+      clientId: bobIdentity.clientId,
+      groupId: 'group_project',
+    });
+    expect(communications).toHaveLength(2);
+    expect(communications).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'member_communication',
+          reason: 'mentioned',
+          resourceId: 'thread_api',
+          payload: expect.objectContaining({
+            body_markdown: 'Please review the API.',
+          }),
+        }),
+        expect.objectContaining({
+          kind: 'member_communication',
+          reason: 'notified',
+          resourceId: 'thread_api',
+          payload: expect.objectContaining({
+            body_markdown: 'Please also check the **release notes**.',
+          }),
+        }),
+      ]),
+    );
+    expect(new Set(communications.map((entry) => entry.dedupeKey)).size).toBe(
+      2,
+    );
+    await expect(
+      bob.service.sendMemberNotification({
         groupId: 'group_project',
+        recipientPrincipalIds: [ALICE.principalId],
+        bodyMarkdown: 'I do not have the communication capability.',
+        scope: { type: 'group', ref: 'group_project' },
       }),
-    ).toEqual([
-      expect.objectContaining({
-        kind: 'discussion_mention',
-        resourceId: 'thread_api',
+    ).rejects.toThrow(/cannot notify/u);
+    await expect(
+      owner.service.sendMemberNotification({
+        groupId: 'group_project',
+        recipientPrincipalIds: [
+          'principal_00000000-0000-4000-8000-000000000099',
+        ],
+        bodyMarkdown: 'Forged recipient.',
+        scope: { type: 'group', ref: 'group_project' },
       }),
-    ]);
+    ).rejects.toThrow(/active Group member/u);
+    await expect(
+      owner.service.sendMemberNotification({
+        groupId: 'group_project',
+        recipientPrincipalIds: [bobIdentity.principalId],
+        bodyMarkdown: 'Forged scope.',
+        scope: { type: 'work_item', ref: 'missing_work_item' },
+      }),
+    ).rejects.toThrow(/scope does not exist/u);
     await expect(
       bob.service.reviseDiscussionMessage({
         groupId: 'group_project',
@@ -3155,16 +3207,57 @@ describe('Collaboration project space v3 Group and identity service', () => {
       messageId: 'message_bob',
       body: 'Reviewed and approved with one note.',
     });
-    await owner.service.setDiscussionResolved({
+    await bob.service.tombstoneDiscussionMessage({
       groupId: 'group_project',
       threadId: 'thread_api',
       expectedRevision: 4,
+      messageId: 'message_bob',
+      reason: 'No longer applicable',
+    });
+    await expect(
+      bob.service.reviseDiscussionMessage({
+        groupId: 'group_project',
+        threadId: 'thread_api',
+        expectedRevision: 5,
+        messageId: 'message_bob',
+        body: 'Cannot revive a deleted message.',
+      }),
+    ).rejects.toThrow(/Tombstoned messages cannot be revised/u);
+    await expect(
+      owner.service.setDiscussionResolved({
+        groupId: 'group_project',
+        threadId: 'thread_api',
+        expectedRevision: 4,
+        resolved: true,
+      }),
+    ).rejects.toThrow(/revision conflict/u);
+    await owner.service.setDiscussionResolved({
+      groupId: 'group_project',
+      threadId: 'thread_api',
+      expectedRevision: 5,
       resolved: true,
+    });
+    await expect(
+      bob.service.postDiscussionMessage({
+        groupId: 'group_project',
+        threadId: 'thread_api',
+        expectedRevision: 6,
+        body: 'Resolved discussions reject replies.',
+      }),
+    ).rejects.toThrow(/Resolved Discussions/u);
+    await owner.service.setDiscussionResolved({
+      groupId: 'group_project',
+      threadId: 'thread_api',
+      expectedRevision: 6,
+      resolved: false,
     });
     const final = await bob.service.sync('group_project');
     expect(final.projection.discussions.thread_api.discussion.status).toBe(
-      'resolved',
+      'open',
     );
+    expect(
+      final.projection.discussions.thread_api.messages.message_bob.tombstoned,
+    ).toBe(true);
     owner.store.close();
     bob.store.close();
   });

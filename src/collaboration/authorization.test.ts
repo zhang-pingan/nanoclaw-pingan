@@ -127,6 +127,7 @@ function projection(): CollaborationProjectionV3 {
     },
     workItemUpdates: {},
     discussions: {},
+    notifications: {},
     workflowDefinitions: {},
     latestWorkflowDefinitionVersions: {},
     workflowInstances: {},
@@ -223,6 +224,33 @@ describe('collaboration authorization projection', () => {
     expect(owner.group.managePermissions.allowed).toBe(true);
     expect(owner.group.archive.allowed).toBe(true);
     expect(owner.principal.isOwner).toBe(true);
+  });
+
+  it('projects member notification authority through the shared permission boundary', () => {
+    const value = projection();
+    value.permissionGrants[memberId] = {
+      ...value.permissionGrants[memberId]!,
+      grants: ['notification:send'],
+    };
+    expect(actions(value, memberId).group.notifyMembers.allowed).toBe(true);
+
+    value.permissionGrants[memberId] = {
+      ...value.permissionGrants[memberId]!,
+      grants: [],
+    };
+    expect(actions(value, memberId).group.notifyMembers).toMatchObject({
+      allowed: false,
+      code: 'PERMISSION_REQUIRED',
+    });
+
+    value.clients[memberId]!.client_0002!.status = 'revoked';
+    expect(actions(value, memberId).group.notifyMembers.code).toBe(
+      'CLIENT_INACTIVE',
+    );
+    expect(actions(value, null, 'observer').group.notifyMembers).toMatchObject({
+      allowed: false,
+      code: 'OBSERVER_READ_ONLY',
+    });
   });
 
   it('projects current Workflow assignee and per-scope launch authority', () => {

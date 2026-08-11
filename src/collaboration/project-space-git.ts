@@ -255,6 +255,7 @@ const EVENT_DIRECTORIES = {
   workspace: 'workspace',
   work_item: 'work-items',
   discussion: 'discussions',
+  notification: 'notifications',
   workflow_definition: 'workflow-definitions',
   workflow_instance: 'workflow-instances',
 } as const;
@@ -290,6 +291,8 @@ function aggregateProjectionPath(event: CollaborationEventV3): string {
       return `projections/work-items/${event.aggregate_id}.json`;
     case 'discussion':
       return `projections/discussions/${event.aggregate_id}.json`;
+    case 'notification':
+      return `projections/notifications/${event.aggregate_id}.json`;
     case 'workflow_definition':
       return `projections/workflow-definitions/${event.aggregate_id}.json`;
     case 'workflow_instance':
@@ -345,6 +348,8 @@ function aggregateProjectionValue(
           messages: {},
         }
       );
+    case 'notification':
+      return projection.notifications[event.aggregate_id] ?? null;
     case 'workflow_definition': {
       const version =
         projection.latestWorkflowDefinitionVersions[event.aggregate_id];
@@ -796,6 +801,12 @@ function automaticMaterialization(
       );
       break;
     }
+    case 'member_notified':
+      files.set(
+        `notifications/${event.aggregate_id}/notification.json`,
+        prettyCollaborationJson(projection.notifications[event.aggregate_id]),
+      );
+      break;
     case 'workflow_definition_proposed':
     case 'workflow_definition_published':
     case 'workflow_definition_retired':
@@ -1228,6 +1239,7 @@ async function assertSafeTree(
     'workspace/',
     'work-items/',
     'discussions/',
+    'notifications/',
     'workflows/',
     'artifacts/',
     'events/',

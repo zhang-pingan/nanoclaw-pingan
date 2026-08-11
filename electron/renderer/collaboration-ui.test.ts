@@ -36,6 +36,7 @@ import {
   collaborationOutcomeRoutes,
   collaborationPendingNotifications,
   collaborationNotificationTarget,
+  collaborationNotificationScope,
   collaborationResourceTarget,
   collaborationPrincipalName,
   collaborationShortId,
@@ -52,6 +53,7 @@ import {
   buildCollaborationCompleteTurnRequest,
   buildCollaborationAssignmentDecisionRequest,
   buildCollaborationDiscussionMessageRequest,
+  buildCollaborationMemberNotificationRequest,
   buildCollaborationReasonRequest,
   buildCollaborationTurnCancellationRequest,
   buildCollaborationWorkflowReassignmentRequest,
@@ -854,6 +856,46 @@ describe('Collaboration project-space v3 UI helpers', () => {
     ).toThrow(/不能为空/u);
   });
 
+  it('builds member notifications without exposing raw protocol fields', () => {
+    expect(
+      buildCollaborationMemberNotificationRequest({
+        recipientPrincipalIds: [
+          'principal_bob',
+          'principal_bob',
+          'principal_carol',
+        ],
+        bodyMarkdown: ' **Please review** ',
+        scope: { type: 'discussion', ref: 'discussion_1' },
+      }),
+    ).toEqual({
+      recipientPrincipalIds: ['principal_bob', 'principal_carol'],
+      bodyMarkdown: '**Please review**',
+      scope: { type: 'discussion', ref: 'discussion_1' },
+      origin: 'human',
+    });
+    expect(() =>
+      buildCollaborationMemberNotificationRequest({
+        recipientPrincipalIds: [],
+        bodyMarkdown: 'Hello',
+        scope: { type: 'group', ref: 'group_1' },
+      }),
+    ).toThrow(/至少选择一名成员/u);
+    expect(() =>
+      buildCollaborationMemberNotificationRequest({
+        recipientPrincipalIds: ['principal_bob'],
+        bodyMarkdown: ' ',
+        scope: { type: 'group', ref: 'group_1' },
+      }),
+    ).toThrow(/通知内容不能为空/u);
+    expect(() =>
+      buildCollaborationMemberNotificationRequest({
+        recipientPrincipalIds: ['principal_bob'],
+        bodyMarkdown: 'Hello',
+        scope: { type: 'credential', ref: 'credential_1' },
+      }),
+    ).toThrow(/资源上下文无效/u);
+  });
+
   it('builds structured Work Item edit, assignment, relation, and reason requests', () => {
     expect(
       buildCollaborationWorkItemDetailsRequest({
@@ -1205,6 +1247,58 @@ describe('Collaboration project-space v3 UI helpers', () => {
         projection,
       ),
     ).toMatchObject({ tab: 'analysis', selectedAnalysisId: 'analysis_1' });
+
+    expect(
+      collaborationResourceTarget('work_item', 'missing_work', projection),
+    ).toMatchObject({ tab: 'work-items', selectedWorkItemId: '' });
+    expect(
+      collaborationResourceTarget('discussion', 'missing_thread', projection),
+    ).toMatchObject({ tab: 'discussions', selectedDiscussionId: '' });
+  });
+
+  it('derives member notification scope from the current verified resource', () => {
+    const group = {
+      groupId: 'group_1',
+      projection: {
+        workItems: { work_1: { work_item_id: 'work_1' } },
+        discussions: { thread_1: { discussion: { thread_id: 'thread_1' } } },
+        files: { file_1: { file_id: 'file_1' } },
+        workflowInstances: {
+          instance_1: { instance_id: 'instance_1', active_turn_id: 'turn_1' },
+        },
+        turns: { turn_1: { turn_id: 'turn_1' } },
+      },
+    };
+    expect(
+      collaborationNotificationScope(group, {
+        activeTab: 'work-items',
+        selectedWorkItemId: 'work_1',
+      }),
+    ).toEqual({ type: 'work_item', ref: 'work_1' });
+    expect(
+      collaborationNotificationScope(group, {
+        activeTab: 'discussions',
+        selectedDiscussionId: 'thread_1',
+      }),
+    ).toEqual({ type: 'discussion', ref: 'thread_1' });
+    expect(
+      collaborationNotificationScope(group, {
+        activeTab: 'files',
+        filePreview: { fileId: 'file_1' },
+      }),
+    ).toEqual({ type: 'file', ref: 'file_1' });
+    expect(
+      collaborationNotificationScope(group, {
+        activeTab: 'workflows',
+        selectedInstanceId: 'instance_1',
+      }),
+    ).toEqual({ type: 'turn', ref: 'turn_1' });
+    expect(
+      collaborationNotificationScope(group, {
+        activeTab: 'work-items',
+        selectedWorkItemId: 'missing_work',
+      }),
+    ).toEqual({ type: 'group', ref: 'group_1' });
   });
 
   it('keeps Observer and stale Analysis reports read-only', () => {

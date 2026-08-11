@@ -232,6 +232,7 @@ describe('Collaboration project space v3 contract', () => {
       'work_item:manage_owned',
       'discussion:create',
       'discussion:post',
+      'notification:send',
     ];
     const immediateGrant = event({
       projection: registered,
