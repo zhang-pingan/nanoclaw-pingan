@@ -40,6 +40,8 @@ v3 将 Group 提升为长期存在的协作项目空间：
 16. 新设备先以 Observer 同步，然后通过 Git Remote 提交严格受限的身份恢复请求。旧 Client、Owner 或 offline Group recovery Credential 批准后，才原子绑定新 Client/Credential 并升级为 Member。
 17. Active Member 只表示成员身份有效，不自动获得业务写权限。Host 根据有效 Member/Client/Credential、直接权限、资源 owner/contributor、Work Item 指派和 Workflow 当前负责人投影 `allowedActions`；Reducer 在每次提交时使用同一授权语义重新校验。
 18. 固定权限模板只负责生成直接权限集合，权限事件仍是可签名、可回放的事实来源。模板 ID/version 是稳定机器合同，Renderer 不接受或生成未知 permission/template ID。
+19. `group_id` 是稳定业务身份；Git Remote URL 仅是 locator。同一 remote 可以迁移，多个 locator 也可以指向同一 `group_id`，本地重新发现时按远端投影中的 `group_id` 恢复原绑定。
+20. Archive、Dissolve、Leave 和本机移除是四种独立语义；远端终态事件必须先成功，之后才能隐藏并清理本地群组。
 
 核心关系：
 
@@ -75,7 +77,7 @@ Workflow Instance State
 1. `Member.status=active`、active Client 和 active event-signing Credential 是业务写入的身份前置条件，不是业务权限本身。
 2. Owner 拥有内置管理能力；其他成员的 `permission_granted` / `permission_revoked` 事件形成直接权限事实，`group:admin` 扩展为内置管理能力。
 3. 固定模板 `member.v1`、`contributor.v1`、`project_manager.v1`、`workflow_manager.v1`、`group_manager.v1` 只生成一组已知 permission；投影通过集合精确匹配解释“来源模板”或“自定义差异”，不把模板当作第二套授权事实。
-4. Group 概览 action 与资源 action 分开投影。例如 `createWorkItem` 需要 `work_item:create`，而 `workItems[id].editDetails/changeAssignment/changeRelations/archive/changeStatus` 分别表达当前资源和目标状态的能力；Discussion 消息、Workflow Definition layout/retire 和 Workflow Instance start/pause/resume/close 同样使用对应资源 action，不能回退到 Active Member 判断。
+4. Group 概览 action 与资源 action 分开投影。例如 `createWorkItem` 需要 `work_item:create`，而 `workItems[id].editDetails/changeAssignment/changeRelations/archive/changeStatus` 分别表达当前资源和目标状态的能力；Discussion 消息、Workflow Definition layout/retire、owned Action revise、own Executor revoke，以及 Workflow Instance start/pause/resume/close/withdraw execution 同样使用对应资源 action，不能回退到 Active Member 判断。
 5. Web API 返回当前本机 Principal 的 `allowedActions`，Renderer 据此隐藏不适用入口。资源状态也是 decision 的一部分，例如 draft Workflow Instance 的 `start` 返回 `RESOURCE_STATE_BLOCKED`，只提供补齐参与者。同步后权限或状态可能变化，因此 command/API/Reducer 仍在提交时重新校验，并以稳定错误码拒绝过期操作。
 6. 归档 Group 的普通业务 decision 继续返回 `GROUP_ARCHIVED`；`reopen` 是显式生命周期例外，但仍要求 Active Member、Active Client、Active Credential 和 `group:archive`。Renderer 只在该 decision 允许时提供恢复入口。
 7. Workflow Instance 将 `reassignStates[stateId]` 和 `turns[turnId].cancel` 分别投影。活动 Turn 所在的当前 State 不可重分配；多个 State 变更以一个有序事件 batch、一次 Git commit 和一次 CAS push 原子提交。有活动 Turn 时 Instance 不可 close，必须由 claimant 或 Instance authority 先取消 Turn。
@@ -87,7 +89,7 @@ Workflow Instance State
 v3 已按本文的 current-only 边界端到端落地：
 
 - Git 控制分支只接受 v3 Group/Event/Projection 和 JSON materialization，按 canonical JSON hash、active Credential signature、Credential/Principal/Client actor mapping、aggregate revision、previous hash、commit order、路径、sidecar 和文件 hash/size 完整校验；
-- 本地 SQLite v7 保存 Observer/Member subscription、Principal/Client/Credential、身份恢复请求、直接权限、投影、file index、精确 Action revision/commit 索引、Executor Binding、execution receipt/observation、notification、audit evidence 和 staged Artifact，非 v7 store 启动时 fail closed；
+- 本地 SQLite v11 保存 retained Group binding、Observer/Member subscription、Principal/Client/Credential、身份恢复请求、直接权限、投影、file index、精确 Action revision/commit 索引、本机 Executor profile、State Executor Binding、execution receipt/observation、notification、analysis、audit evidence 和 staged Artifact，非 v11 store 启动时 fail closed；
 - Group、Credential rotation/revocation、Client revocation、identity/owner/offline recovery、Workspace、Work Item、Discussion、Workflow Definition/Instance、State Execution、Turn、timeout、Artifact、审计、备份/恢复和 verified virtual file tree 已进入 service 与 Web API；
 - Work Item progress 与 Turn completion 通过 staged upload 在一个签名事件和 Git commit 中物化原始业务文件及 `metadata.json`，同时验证 scope、Principal/Client、attempt 和 fence；`/3` 备份联合保护 DB 与尚未提交的 staged bytes；
 - Web/Electron `/groups` 已提供项目空间页面、Observer 受限申请状态、Work Item board/list、Discussion、文件树、Principal/Client/Credential/权限、恢复请求审批、Git Remote SSH 设置、offline recovery Credential 备份/导入、Workflow Definition/Instance、Outcome-first 编辑器、Turn、Artifact、审计和诊断；
@@ -1164,6 +1166,8 @@ State 进入后，Runtime 解析 `assignee_principal_id` 并创建 Turn。没有
 - 同一 Principal 的不同 Client 可以拥有不同 Executor，但 Turn claim 最终固定一个 Client；
 - Turn 创建后固定 execution/action/prompt/input hash，运行期间修改配置不影响当前 Turn。
 - 桌面/API 创建 Turn 只允许 Instance creator、拥有 `workflow_instance:manage_all`/`group:admin` 的 Principal，或当前 State resolved assignee；普通活跃 Member 不能替别人的 State 启动 deadline、通知或审计链。
+- State Execution 只允许当前 business State 的 resolved Principal 在 `ready/running/paused` 生命周期配置或清除；清除后删除本机 State Binding，后续 Turn 回到协议默认 `manual`。
+- Renderer 只从当前 Principal 在该 Group 注册、状态 active、且当前 Client 有本机 profile 的 Executor 中选择；State 配置请求不携带本地路径、Provider 凭据或任意配置 JSON。
 
 ### 12.3 Principal Automation Library
 
@@ -1176,6 +1180,10 @@ workspace/principals/{principal-id}/automations/
 ```
 
 Action 可以被同一 Principal 在多个 Definition/Instance State 中复用。Action JSON 保存 Prompt ID、`prompt_ref`、版本和 content hash，Prompt 的人类可读正文保存在被引用的 Markdown 文件中。其他 Principal 可读和审计，但不能修改。
+
+业务创建合同不接受 `executor_id`、`action_id`、Action version、Prompt ref/hash 或 State Execution revision。Host 使用 UUID 生成 Group scoped `executor_<uuid>` 和 `action_<uuid>`；新 Action 固定从 v1 开始，修订沿路径中的 Action ID 从当前 Projection 自动计算 vN+1，Prompt ref/hash 从生成 ID 与 Markdown 内容推导。Renderer 只编辑显示名称、平台/类型、Prompt、执行权限、结果格式、本地工作目录和审批策略。机器 ID 仅在详情和审计中只读展示，不从显示名称派生。
+
+Executor 注册同时写入两类边界清晰的数据：Git 只保存当前 Principal 的公共 descriptor；本机 SQLite profile 保存 Client、工作目录、权限上限和 Provider 配置。同一底层本机平台注册到不同 Group 时生成不同 executor ID，State Execution 配置再从 profile 派生精确的 Instance/State/Action-hash Binding。
 
 ```json
 {
@@ -1552,6 +1560,7 @@ group_initialized
 group_settings_updated
 group_archived
 group_reopened
+group_dissolved
 invite_issued
 invite_revoked
 membership_requested
@@ -1560,6 +1569,7 @@ member_registered
 member_suspended
 member_reactivated
 member_removed
+member_left
 client_revoked
 credential_rotated
 credential_revoked
@@ -1735,11 +1745,15 @@ Observer 使用同一个只读 fetch/verify/project 流程，但：
 ```text
 ACTIVE
   -> ARCHIVED
+  -> DISSOLVED
 ARCHIVED
   -> ACTIVE (reopen, explicit policy)
+  -> DISSOLVED
+DISSOLVED
+  -> terminal
 ```
 
-Group 不使用 `FORMING/READY/RUNNING`。Archive 后所有业务写入默认禁止，但仍可读取和导出审计。
+Group 不使用 `FORMING/READY/RUNNING`。Archive 后普通业务写入默认禁止，但仍可读取、导出审计、由 Owner reopen 或 dissolve。`group_dissolved` 只能由 Owner 签署；Dissolved 拒绝包括 reopen、恢复和重新加入在内的全部后续事件。
 
 ### 18.2 Membership
 
@@ -1751,15 +1765,34 @@ REQUESTED
 ACTIVE
   -> SUSPENDED
   -> REMOVED
+  -> LEFT (self, non-Owner only)
 
 SUSPENDED
   -> ACTIVE
   -> REMOVED
+
+LEFT / REJECTED
+  -> REQUESTED or ACTIVE (current join policy, same principal_id)
 ```
 
-Removed Principal 的历史内容和 Actor 记录不删除；新业务写入拒绝。
+Removed/Left Principal 的历史内容和 Actor 记录不删除；新业务写入拒绝。`member_left` 撤销该 Principal 当前有效的全部 Client、Credential 和 Executor。事件必须携带 Reducer 根据事件发生时 Projection 校验过的 `affected_turn_ids`；若该 Principal 是活动 Turn 的 assignee 或 claimant，这些 Turn 与 Instance 同时进入 `recovery_required`，Owner 的 critical 通知直接绑定事件中的 Turn ID，不得从一次批量同步后的最终 Projection 反推。
 
-### 18.3 Workflow Definition
+`turn_recovered` 必须由 Instance 管理者指定新的 active Principal，并在同一个 Workflow Instance Aggregate 事件中原子更新当前状态的 `resolved_assignments`、活动 Turn 的 `assignee_principal_id`、attempt、输入哈希、幂等键和 deadline snapshot。若负责人发生变化，旧 Principal 的 State Execution 快照失效；新 attempt 至少可按 manual 模式启动，之后由新负责人继续执行。恢复不得依赖已退出 Principal 重新加入。
+
+### 18.3 Archive、Dissolve、Leave 与本机移除
+
+| 操作       | 执行者                 | Git 业务事件      | 远端语义                                 | 当前设备                                                          | 后续恢复                                          |
+| ---------- | ---------------------- | ----------------- | ---------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------- |
+| Archive    | Owner/授权管理者       | `group_archived`  | Group 只读归档                           | 保留全部本地展示数据                                              | Owner 可 `group_reopened`                         |
+| Dissolve   | 仅 Owner               | `group_dissolved` | Group 进入不可恢复终态                   | 远端成功后隐藏并清理可重建数据                                    | 不可 reopen、恢复或重新加入                       |
+| Leave      | active 非 Owner Member | `member_left`     | Membership 变为 `left`，撤销身份活动能力 | 远端成功后隐藏并清理可重建数据                                    | 按当前 join policy 使用原 `principal_id` 重新加入 |
+| 从本机移除 | Observer/Member/Owner  | 无                | 不改变 Group 或 Membership               | 立即移除 subscription/projection/cache/temp/notification/analysis | 重新发现 remote 后恢复 retained identity          |
+
+Dissolve 和 Leave 的 Git append/push 失败时，本地 subscription、projection 和列表展示必须原样保留。本地 detach 使用事务先写 cleanup plan，再级联删除展示数据；repository cache 或 staged-artifact 文件清理失败时保持 `cleanup_pending`，群组仍不可重新显示为 active，并在启动或显式 API 调用时重试。
+
+本机移除及终态 detach 不删除 Credential 安全目录、私钥材料或备份。长期 binding 只保留身份恢复所需的 `group_id`、当前 `remote_url`、`principal_id`、`credential_id` 和可选 `recovery_credential_id`，以及 detach reason、terminal head 和 pending cleanup 状态。Remote URL 不是唯一键；重新发现以 verified `group_id` 选择 binding 并更新 locator。
+
+### 18.4 Workflow Definition
 
 ```text
 DRAFT
@@ -1770,7 +1803,7 @@ DRAFT
 
 已发布版本不可原地覆盖。业务变更发布新 version；layout 更新独立，不改变 Machine hash。
 
-### 18.4 Workflow Instance
+### 18.5 Workflow Instance
 
 ```text
 DRAFT
@@ -1865,6 +1898,7 @@ JSON 导出至少包含：
 POST /api/collaboration/groups/inspect
 POST /api/collaboration/subscriptions
 DELETE /api/collaboration/subscriptions/{groupId}
+POST /api/collaboration/local-bindings/{groupId}/cleanup/retry
 POST /api/collaboration/groups/{groupId}/join-requests
 POST /api/collaboration/groups/{groupId}/join-requests/{requestId}/approve
 POST /api/collaboration/groups/{groupId}/join-requests/{requestId}/reject
@@ -1873,7 +1907,7 @@ POST /api/collaboration/groups/{groupId}/invites
 POST /api/collaboration/groups/{groupId}/invites/{inviteId}/revoke
 ```
 
-Observer subscription 是本地记录，不写 Group Git。Join API 不接受调用方覆盖 `principal_id/client_id/credential_id`，Host 生成 Group Principal 并解析持久 Client。`invite_only` 的 Join body 只提交 `inviteId` 引用；默认未绑定 Invite 不预先决定 Principal。
+Observer subscription 是本地记录，不写 Group Git。`DELETE subscriptions` 对 Observer/Member/Owner 都只执行本机移除，要求 body 中 `confirmation` 精确匹配 `groupId`；cleanup retry 只处理 retained binding 的本地 pending 文件。Join API 不接受调用方覆盖 `principal_id/client_id/credential_id`，Host 首次加入时生成 Group Principal，并在 retained binding 存在时恢复同一 Principal。`invite_only` 的 Join body 只提交 `inviteId` 引用；默认未绑定 Invite 不预先决定 Principal。
 
 ### 21.2 Group、Members 和 Permissions
 
@@ -1882,6 +1916,9 @@ POST /api/collaboration/groups
 GET  /api/collaboration/groups/{groupId}
 POST /api/collaboration/groups/{groupId}/sync
 POST /api/collaboration/groups/{groupId}/archive
+POST /api/collaboration/groups/{groupId}/reopen
+POST /api/collaboration/groups/{groupId}/dissolve
+POST /api/collaboration/groups/{groupId}/leave
 
 GET  /api/collaboration/groups/{groupId}/members
 POST /api/collaboration/groups/{groupId}/clients/{clientId}/revoke
@@ -1962,6 +1999,7 @@ GET /api/collaboration/groups/{groupId}/audit/export?format=json
 建议 fresh schema 新增或调整：
 
 ```text
+collaboration_local_group_bindings
 collaboration_subscriptions
 collaboration_groups
 collaboration_principals
@@ -2001,11 +2039,13 @@ collaboration_local_audit_evidence
 关键边界：
 
 - subscription、Client private state、Credential 私钥路径、Git SSH path、Executor Binding、receipt、staged upload、notification 和 local evidence 不能依赖 Git 重建；
+- local Group binding 以 `group_id` 为主键，并在 detach 后保留当前 remote locator、Principal/Credential 关联、terminal head 与 cleanup 状态；`remote_url` 不得成为 Group 唯一键；
 - Group/Member/Client/Credential public record、Recovery Request、Work Item、Discussion、Workflow Projection 和 file index 可以从 verified Git 重建；
 - 每个 Aggregate checkpoint 保存 last revision/hash/commit；
 - 每个 Action publish/revise 保存 group + owner + action id/hash + prompt hash + commit 的精确索引；Scheduler 和 verified historical read 不依赖任意最近事件窗口；
 - global activity feed 是 SQLite read model，不回写一个全局 Git 文件；
 - SQLite transaction 与 visible verified head 原子切换；
+- detach 事务先写 `cleanup_pending` 计划，再删除 subscription，使 projection、notification、analysis、temp 和其他 Group FK 数据级联清除；文件清理成功后转为 `retained`，失败则记录错误并可幂等重试；
 - 由于没有存量 Group，直接创建最新 current schema；任何旧 collaboration store fail closed，不实现 migration chain，由开发者显式重建本地数据库和 current fixture。
 
 ## 23. Web 工作台
@@ -2092,6 +2132,15 @@ Observer 使用相同浏览和验证界面，但：
 - 显示 Git read visibility 警告；
 - 本地刷新、文件预览和审计仍完整可用。
 
+### 23.7 生命周期操作
+
+- Settings 仅向 active/archived Owner 显示“解散群组”，仅向 active/archived 非 Owner Member 显示“退出群组”；服务端仍独立校验 actor、Membership、Credential 和 lifecycle；
+- Owner 从成员退出 critical 通知进入活动 Turn 后，恢复对话框只列出 active Principal，并将“重新分配负责人”和“创建新 attempt”作为一次原子提交；
+- Group 列表右键菜单向所有本地 subscription 显示“从本机移除”；
+- 三种危险操作分别解释远端与本机影响，并要求输入完整 `group_id`；Dissolve 明确标注不可恢复；
+- 远端失败时保留详情和列表；远端成功后立即返回群组列表。cleanup pending 以错误提示说明后台会重试，不重新展示已 detach 群组；
+- 手动同步若发现远端已 dissolved 或本机 Principal 已 left，直接隐藏本地群组，不再请求已删除的 detail。
+
 ## 24. 安全边界
 
 ### 24.1 身份与授权
@@ -2105,7 +2154,7 @@ Observer 使用相同浏览和验证界面，但：
 - 所有 mutation 在 Host 和 Git replay 两个边界都验证权限；
 - 不能依赖 UI 隐藏按钮；
 - permission grant 禁止普通 Admin 自我升级为 Owner 或 grant authority；
-- removed/suspended Principal 的新事件拒绝。
+- removed/suspended/left Principal 的新事件拒绝；dissolved Group 拒绝所有后续事件。
 
 ### 24.2 路径与内容
 
@@ -2145,7 +2194,7 @@ Observer 使用相同浏览和验证界面，但：
 ### Phase 1：Group Container 和 Identity
 
 - Group schema 移除 machine/required roles；
-- Group lifecycle 改为 ACTIVE/ARCHIVED；
+- Group lifecycle 改为 ACTIVE/ARCHIVED/DISSOLVED，并实现 Owner-only terminal dissolve；
 - Membership 改为 Principal 主体，拆分 Client 和 optional Executor descriptor；
 - 删除 Role/Claim schema、事件、Projection 和 UI；
 - 增加 direct permission grants；

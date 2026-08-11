@@ -3,9 +3,9 @@ import {
   CARD_PRESENTATION_KEYS,
   COMPILED_SCOPE_PLAN_REQUIRED_KEYS,
   COMPILED_SCOPE_PLAN_KEYS,
-  FEATURE_MANIFEST_REQUIRED_KEYS,
-  FEATURE_MANIFEST_KEYS,
-  FEATURE_WORKFLOW_RESOURCE_KINDS,
+  PACK_MANIFEST_REQUIRED_KEYS,
+  PACK_MANIFEST_KEYS,
+  PACK_WORKFLOW_RESOURCE_KINDS,
   GRAPH_NODE_TYPES,
   GRAPH_SCOPE_SOURCE_REQUIRED_KEYS,
   GRAPH_SCOPE_SOURCE_KEYS,
@@ -23,6 +23,7 @@ import {
   WORKFLOW_RECIPE_KEYS,
   WORKFLOW_RUNTIME_COMMAND_KEYS,
   WORKFLOW_TRANSITION_KEYS,
+  type PackWorkflowResourceKind,
 } from './closed-schema-types.js';
 import { SHA256_HASH_PATTERN, calculateArtifactHash } from './hash.js';
 import type {
@@ -425,7 +426,7 @@ function capabilityStateSchema(type: 'delegation' | 'system'): Schema {
 const workflowDefinitionSchema = object({
   format: { const: 'icarus.workflow-definition/1' },
   ref: ref('versioned_ref'),
-  owner_feature_id: nullable(stableKeySchema),
+  owner_pack_id: nullable(stableKeySchema),
   name: stringSchema({ minLength: 1, maxLength: 255 }),
   context_contract_ref: ref('versioned_ref'),
   entry_points: strictRecord(object({ state_key: stableKeySchema })),
@@ -511,45 +512,73 @@ const workflowDefinitionSchema = object({
   definition_hash: hashSchema,
 });
 
-const workflowRecipeSchema = object({
-  ref: ref('versioned_ref'),
-  owner_feature_id: nullable(stableKeySchema),
-  recipe_family: stableKeySchema,
-  task_kinds: array(stableKeySchema, { minItems: 1, uniqueItems: true }),
-  workflow_definition_ref: ref('versioned_ref'),
-  entry_point: stableKeySchema,
-  workflow_execution_policy_ref: ref('versioned_ref'),
-  context_contract_ref: ref('versioned_ref'),
-  workflow_command_policy_ref: ref('versioned_ref'),
-  input_schema_ref: ref('versioned_ref'),
-  output_schema_ref: ref('versioned_ref'),
-  launch_policy: enumSchema(['auto', 'confirm', 'manual_only']),
-  effect_ceiling: enumSchema(effectImpacts),
-  derived_effect_summary: object({
-    max_impact: enumSchema(effectImpacts),
-    recovery_kinds: array(enumSchema(effectRecoveryKinds), {
-      uniqueItems: true,
-    }),
-    permission_refs: array(stableKeySchema, { uniqueItems: true }),
-    dependency_closure_hash: hashSchema,
-  }),
-  required_permissions: array(stableKeySchema, { uniqueItems: true }),
-  allowed_child_recipe_refs: array(ref('versioned_ref'), { uniqueItems: true }),
-  resource_claims: array(
-    object({
-      id: stableKeySchema,
-      namespace: stableKeySchema,
-      mode: enumSchema(['shared', 'exclusive']),
-      key_json_pointers: array(pointerSchema, {
-        minItems: 1,
+const workflowRecipeSchema = object(
+  {
+    format: { const: 'icarus.workflow-recipe/1' },
+    ref: ref('versioned_ref'),
+    owner_pack_id: nullable(stableKeySchema),
+    catalog_visibility: enumSchema(['system_only', 'selectable']),
+    system_purposes: array(
+      enumSchema(['temporary_workflow', 'personal_workflow']),
+      { uniqueItems: true },
+    ),
+    name: stringSchema({ minLength: 1, maxLength: 255 }),
+    description: nullable(stringSchema({ minLength: 1, maxLength: 4096 })),
+    recipe_family: stableKeySchema,
+    task_kinds: array(stableKeySchema, { minItems: 1, uniqueItems: true }),
+    workflow_definition_ref: ref('versioned_ref'),
+    entry_point: stableKeySchema,
+    initial_state_key: stableKeySchema,
+    workflow_execution_policy_ref: ref('versioned_ref'),
+    context_contract_ref: ref('versioned_ref'),
+    workflow_command_policy_ref: ref('versioned_ref'),
+    input_schema_ref: ref('versioned_ref'),
+    output_schema_ref: ref('versioned_ref'),
+    routing_scope_ref: ref('versioned_ref'),
+    launch_policy: enumSchema(['auto', 'confirm', 'manual_only']),
+    effect_ceiling: enumSchema(effectImpacts),
+    input_summary: record(ref('json_value'), STABLE_KEY_PATTERN),
+    derived_effect_summary: object({
+      max_impact: enumSchema(effectImpacts),
+      recovery_kinds: array(enumSchema(effectRecoveryKinds), {
         uniqueItems: true,
       }),
-      hold_until: { const: 'workflow_terminal' },
+      permission_refs: array(stableKeySchema, { uniqueItems: true }),
+      dependency_closure_hash: hashSchema,
     }),
-    { uniqueItems: true },
-  ),
-  recipe_hash: hashSchema,
-});
+    required_permissions: array(stableKeySchema, { uniqueItems: true }),
+    allowed_child_recipe_refs: array(ref('versioned_ref'), {
+      uniqueItems: true,
+    }),
+    resource_claims: array(
+      object({
+        id: stableKeySchema,
+        namespace: stableKeySchema,
+        mode: enumSchema(['shared', 'exclusive']),
+        key_json_pointers: array(pointerSchema, {
+          minItems: 1,
+          uniqueItems: true,
+        }),
+        hold_until: { const: 'workflow_terminal' },
+      }),
+      { uniqueItems: true },
+    ),
+    recipe_hash: hashSchema,
+  },
+  [
+    'owner_pack_id',
+    'system_purposes',
+    'description',
+    'recipe_family',
+    'task_kinds',
+    'initial_state_key',
+    'derived_effect_summary',
+    'required_permissions',
+    'allowed_child_recipe_refs',
+    'resource_claims',
+    'recipe_hash',
+  ],
+);
 
 const commandBaseProperties: Record<string, Schema> = {
   command_id: stableKeySchema,
@@ -600,35 +629,25 @@ const workflowRuntimeCommandSchema: Schema = {
   ],
 };
 
-const featureManifestSchema = object({
-  format: { const: 'icarus.feature-manifest/2' },
-  feature_ref: ref('versioned_ref'),
+const packManifestSchema = object({
+  format: { const: 'icarus.workflow-pack/1' },
+  pack_ref: ref('versioned_ref'),
+  display_name: stringSchema({ minLength: 1, maxLength: 255 }),
+  description: nullable(stringSchema({ minLength: 1, maxLength: 4096 })),
   namespace: stableKeySchema,
   owner_principal_ref: stringSchema({ minLength: 1 }),
   dependencies: array(
     object({
-      feature_release_ref: ref('versioned_ref'),
-      feature_release_hash: hashSchema,
+      pack_release_ref: ref('versioned_ref'),
+      pack_release_hash: hashSchema,
       required_resource_refs: array(ref('versioned_ref'), {
         uniqueItems: true,
       }),
     }),
   ),
-  package_resources: object({
-    skills: array(stringSchema({ minLength: 1 }), { uniqueItems: true }),
-    agents: array(stringSchema({ minLength: 1 }), { uniqueItems: true }),
-    mcp: array(stringSchema({ minLength: 1 }), { uniqueItems: true }),
-    scripts: array(stringSchema({ minLength: 1 }), { uniqueItems: true }),
-    templates: array(stringSchema({ minLength: 1 }), { uniqueItems: true }),
-  }),
-  extension_surfaces: object({
-    api_entry: nullable(stringSchema({ minLength: 1 })),
-    nav_entry: nullable(stringSchema({ minLength: 1 })),
-    renderer_entry: nullable(stringSchema({ minLength: 1 })),
-  }),
-  dynamic_workflow_resources: array(
+  workflow_resources: array(
     object({
-      kind: enumSchema(FEATURE_WORKFLOW_RESOURCE_KINDS),
+      kind: enumSchema(PACK_WORKFLOW_RESOURCE_KINDS),
       ref: ref('versioned_ref'),
       source_path: stringSchema({
         minLength: 1,
@@ -637,16 +656,22 @@ const featureManifestSchema = object({
       expected_source_hash: hashSchema,
     }),
   ),
-  ownership: object({
-    feature_source_root: stringSchema({ minLength: 1 }),
-    workflow_source_root: stringSchema({ minLength: 1 }),
-    execution_bundle_owner: { const: 'feature_release' },
-    registry_namespace: stableKeySchema,
+  execution_resources: object({
+    agents: nullable(stringSchema({ minLength: 1 })),
+    skills: nullable(stringSchema({ minLength: 1 })),
+    mcp: nullable(stringSchema({ minLength: 1 })),
+    scripts: nullable(stringSchema({ minLength: 1 })),
+    templates: nullable(stringSchema({ minLength: 1 })),
   }),
-  lifecycle: object({
-    draining_policy_ref: ref('versioned_ref'),
-    retention_policy_ref: ref('versioned_ref'),
-    deletion_policy_ref: ref('versioned_ref'),
+  permissions: object({
+    host_actions: array(stableKeySchema, { uniqueItems: true }),
+    file_scopes: array(stringSchema({ minLength: 1 }), { uniqueItems: true }),
+    mcp_servers: array(stableKeySchema, { uniqueItems: true }),
+    effect_ceiling: enumSchema([
+      'read_only',
+      'workspace_write',
+      'external_write',
+    ]),
   }),
   manifest_hash: hashSchema,
 });
@@ -682,7 +707,7 @@ const cardActionBindingSchema: Schema = {
 const cardPresentationSchema = object({
   format: { const: 'icarus.card-presentation/1' },
   ref: ref('versioned_ref'),
-  owner_feature_id: nullable(stableKeySchema),
+  owner_pack_id: nullable(stableKeySchema),
   template_ref: ref('versioned_ref'),
   template_hash: hashSchema,
   variable_schema_ref: ref('versioned_ref'),
@@ -2064,15 +2089,15 @@ export const CLOSED_SCHEMA_DESCRIPTORS: readonly ClosedSchemaDescriptor[] = [
     ),
   },
   {
-    artifact_path: 'schemas/feature-manifest-v2-schema.json',
-    artifact_format: 'icarus.workflow-feature-manifest-v2-schema/1',
-    artifact_ref_id: 'icarus.workflow-feature-manifest-v2-schema',
-    target_format: 'icarus.feature-manifest/2',
-    domain_separator: 'icarus:workflow-feature-manifest-v2-schema:1\n',
+    artifact_path: 'schemas/workflow-pack-manifest-schema.json',
+    artifact_format: 'icarus.workflow-pack-manifest-schema/1',
+    artifact_ref_id: 'icarus.workflow-pack-manifest-schema',
+    target_format: 'icarus.workflow-pack/1',
+    domain_separator: 'icarus:workflow-pack-manifest-schema:1\n',
     schema: schemaDocument(
-      'feature-manifest/2',
-      'FeatureManifestVNext',
-      featureManifestSchema,
+      'workflow-pack/1',
+      'WorkflowPackManifestV1',
+      packManifestSchema,
       commonDefinitions,
     ),
   },
@@ -2142,13 +2167,109 @@ export function buildClosedSchemaArtifacts(): Array<
   ]);
 }
 
+export function buildWorkflowPackResourceSourceSchemas(): Readonly<
+  Record<PackWorkflowResourceKind, JsonObject>
+> {
+  const scopeInterfaceProperties = scopeInterfaceSchema.properties as Record<
+    string,
+    Schema
+  >;
+  const commandPolicySchema = object({
+    command_policy_allow_pause: { type: 'boolean' },
+    command_policy_allow_resume: { type: 'boolean' },
+    command_policy_allows_local_graph_cancel: { type: 'boolean' },
+    command_policy_allows_workflow_cancel: { type: 'boolean' },
+    command_policy_allow_manual_skip: { type: 'boolean' },
+    command_policy_allow_retry_wait_advance: { type: 'boolean' },
+    receipt_remediation_contract_allows_reconcile: { type: 'boolean' },
+    receipt_remediation_contract_allows_verified_receipt: { type: 'boolean' },
+    receipt_remediation_contract_allows_not_applied_proof: { type: 'boolean' },
+    command_policy_administrative_abandon_allowed: { type: 'boolean' },
+    administrative_abandon_release_claims: { const: false },
+  });
+  return {
+    recipe: schemaDocument(
+      'workflow-pack-source/recipe/1',
+      'WorkflowPackRecipeSource',
+      workflowRecipeSchema,
+      commonDefinitions,
+    ),
+    routing_scope: schemaDocument(
+      'workflow-pack-source/routing-scope/1',
+      'WorkflowPackRoutingScopeSource',
+      object({ mode: stringSchema({ minLength: 1 }) }),
+      {},
+    ),
+    execution_policy: schemaDocument(
+      'workflow-pack-source/execution-policy/1',
+      'WorkflowPackExecutionPolicySource',
+      object({ effect_ceiling: enumSchema(effectImpacts) }),
+      {},
+    ),
+    definition: schemaDocument(
+      'workflow-pack-source/definition/1',
+      'WorkflowPackDefinitionSource',
+      workflowDefinitionSchema,
+      definitionDefinitions,
+    ),
+    command_policy: schemaDocument(
+      'workflow-pack-source/command-policy/1',
+      'WorkflowPackCommandPolicySource',
+      commandPolicySchema,
+      {},
+    ),
+    context_contract: schemaDocument(
+      'workflow-pack-source/context-contract/1',
+      'WorkflowPackContextContractSource',
+      object({ slots: strictRecord(ref('json_value')) }),
+      commonDefinitions,
+    ),
+    schema: schemaDocument(
+      'workflow-pack-source/schema/1',
+      'WorkflowPackJsonSchemaSource',
+      { type: 'object' },
+      {},
+    ),
+    scope_interface: schemaDocument(
+      'workflow-pack-source/scope-interface/1',
+      'WorkflowPackScopeInterfaceSource',
+      object({
+        format: { const: 'icarus.workflow-scope-interface/1' },
+        ref: scopeInterfaceProperties.ref,
+        inputs: scopeInterfaceProperties.inputs,
+        exits: scopeInterfaceProperties.exits,
+        interface_hash: hashSchema,
+      }),
+      commonDefinitions,
+    ),
+    graph_template: schemaDocument(
+      'workflow-pack-source/graph-template/1',
+      'WorkflowPackGraphTemplateSource',
+      graphScopeSchema,
+      sourceDefinitions,
+    ),
+    graph_policy: schemaDocument(
+      'workflow-pack-source/graph-policy/1',
+      'WorkflowPackGraphPolicySource',
+      object({ ref: ref('versioned_ref'), request: graphPolicySchema }),
+      commonDefinitions,
+    ),
+    card_presentation: schemaDocument(
+      'workflow-pack-source/card-presentation/1',
+      'WorkflowPackCardPresentationSource',
+      cardPresentationSchema,
+      { ...commonDefinitions, card_action_binding: cardActionBindingSchema },
+    ),
+  };
+}
+
 export const CLOSED_SCHEMA_TOP_LEVEL_KEYS: Readonly<
   Record<string, readonly string[]>
 > = {
   'icarus.workflow-definition-schema/1': WORKFLOW_DEFINITION_KEYS,
   'icarus.workflow-recipe-schema/1': WORKFLOW_RECIPE_KEYS,
   'icarus.workflow-transition-schema/1': WORKFLOW_TRANSITION_KEYS,
-  'icarus.workflow-feature-manifest-v2-schema/1': FEATURE_MANIFEST_KEYS,
+  'icarus.workflow-pack-manifest-schema/1': PACK_MANIFEST_KEYS,
   'icarus.workflow-card-presentation-schema/1': CARD_PRESENTATION_KEYS,
   'icarus.workflow-graph-scope-source-schema/1': GRAPH_SCOPE_SOURCE_KEYS,
   'icarus.workflow-compiled-scope-plan-schema/1': COMPILED_SCOPE_PLAN_KEYS,
@@ -2162,8 +2283,7 @@ export const CLOSED_SCHEMA_TOP_LEVEL_REQUIRED_KEYS: Readonly<
   'icarus.workflow-runtime-command-schema/1':
     WORKFLOW_RUNTIME_COMMAND_REQUIRED_KEYS,
   'icarus.workflow-transition-schema/1': WORKFLOW_TRANSITION_REQUIRED_KEYS,
-  'icarus.workflow-feature-manifest-v2-schema/1':
-    FEATURE_MANIFEST_REQUIRED_KEYS,
+  'icarus.workflow-pack-manifest-schema/1': PACK_MANIFEST_REQUIRED_KEYS,
   'icarus.workflow-card-presentation-schema/1': CARD_PRESENTATION_REQUIRED_KEYS,
   'icarus.workflow-graph-scope-source-schema/1':
     GRAPH_SCOPE_SOURCE_REQUIRED_KEYS,
@@ -2176,7 +2296,7 @@ export const CLOSED_SCHEMA_UNIONS = {
   graph_node_types: GRAPH_NODE_TYPES,
   command_types: WORKFLOW_COMMAND_TYPES,
   command_reason_codes: WORKFLOW_COMMAND_REASON_CODES,
-  feature_resource_kinds: FEATURE_WORKFLOW_RESOURCE_KINDS,
+  pack_resource_kinds: PACK_WORKFLOW_RESOURCE_KINDS,
   value_binding_sources: WORKFLOW_VALUE_BINDING_SOURCES,
   graph_input_binding_sources: WORKFLOW_GRAPH_INPUT_BINDING_SOURCES,
   transition_effect_input_sources: WORKFLOW_TRANSITION_EFFECT_INPUT_SOURCES,

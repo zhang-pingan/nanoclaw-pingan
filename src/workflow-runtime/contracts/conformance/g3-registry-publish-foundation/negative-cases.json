@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-g3-registry-publish-negative-cases:1\n",
-  "hash": "sha256:2f74f7cc58bebdf285408ae089508cdf0820f8b66bfab41389881a2e6d9994ac",
+  "hash": "sha256:c2d147f72ce3a6031d01dcfa9b5c1aa8e3a06bedbdc4407cc581172ed7b5d4d0",
   "payload": {
     "fixture_scope": "test_only",
     "cases": [
@@ -191,19 +191,19 @@
         "expected_code": "test_only_scope_mismatch"
       },
       {
-        "case_id": "negative.feature-manifest-ref-without-hash",
+        "case_id": "negative.workflow-pack-ref-without-hash",
         "fixture_scope": "test_only",
         "base_case_id": "positive.test-only-definition-and-executor",
         "mutations": [
           {
             "operation": "set",
-            "pointer": "/feature_manifest_hash",
+            "pointer": "/pack_manifest_hash",
             "value": null
           }
         ],
         "rehash_resource_hashes": false,
         "rehash_preflight_hash": true,
-        "expected_code": "feature_identity_pair_mismatch"
+        "expected_code": "pack_identity_pair_mismatch"
       },
       {
         "case_id": "negative.compiled-plan-pin-missing",

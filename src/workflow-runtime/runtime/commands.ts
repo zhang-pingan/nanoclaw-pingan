@@ -84,17 +84,17 @@ export interface AuthenticatedRuntimeCommandActor {
   readonly authSessionRef: string;
   readonly entrypoint:
     | 'runtime_center'
-    | 'feature_page'
-    | 'feature_host_api'
+    | 'pack_page'
+    | 'pack_host_api'
     | 'external_api'
     | 'automation'
     | 'task_workspace'
     | 'card_action'
     | 'deadline_watchdog';
-  readonly sourceFeatureId: string | null;
+  readonly sourcePackId: string | null;
   readonly delegationChainRef: string | null;
   readonly permissions: ReadonlySet<RuntimePermissionCode>;
-  readonly featurePermissionCeiling: ReadonlySet<RuntimePermissionCode> | null;
+  readonly packPermissionCeiling: ReadonlySet<RuntimePermissionCode> | null;
 }
 
 export type G7SourceVerification =
@@ -180,7 +180,7 @@ interface TargetAuthority extends Record<string, unknown> {
   workflow_operational_state: string;
   workflow_row_version: number;
   owner_principal_ref: string;
-  controlling_feature_id: string | null;
+  controlling_pack_id: string | null;
   creator_automation_ref: string | null;
   command_policy_resource_id: string;
   command_policy_resource_hash: Sha256Hash;
@@ -303,7 +303,7 @@ function targetId(command: WorkflowRuntimeCommandDocument): string {
 
 function idempotencyDomain(input: RuntimeCommandGatewayInput): string {
   if (input.actor.actorKind === 'system') return SYSTEM_DEADLINE_DOMAIN;
-  const source = input.actor.sourceFeatureId ?? input.actor.entrypoint;
+  const source = input.actor.sourcePackId ?? input.actor.entrypoint;
   return `${input.actor.actorKind}:${input.actor.actorRef}:${source}`;
 }
 
@@ -468,7 +468,7 @@ function prepareRuntimeCommandIngress(
        command_type, claimed_target_kind, claimed_workflow_id, claimed_run_id,
        claimed_node_id, claimed_retry_schedule_id, claimed_effect_operation_id,
        claimed_operational_blocker_id, actor_ref, actor_kind, auth_session_ref,
-       entrypoint, source_feature_id, delegation_chain_ref, resolution_result,
+       entrypoint, source_pack_id, delegation_chain_ref, resolution_result,
        authorization_result, execution_result, denial_code,
        canonical_result_json, canonical_result_hash, resolved_command_id,
        resolved_invocation_id, requested_at_ms, decided_at_ms, applied_at_ms
@@ -495,7 +495,7 @@ function prepareRuntimeCommandIngress(
       input.actor.actorKind,
       input.actor.authSessionRef,
       input.actor.entrypoint,
-      input.actor.sourceFeatureId,
+      input.actor.sourcePackId,
       input.actor.delegationChainRef,
       input.nowMs,
     ],
@@ -550,7 +550,7 @@ function terminalizeRuntimeCommandIngress(
     actor_kind: input.actor.actorKind,
     auth_session_ref: input.actor.authSessionRef,
     entrypoint: input.actor.entrypoint,
-    source_feature_id: input.actor.sourceFeatureId,
+    source_pack_id: input.actor.sourcePackId,
     delegation_chain_ref: input.actor.delegationChainRef,
     resolution_result: resolutionResult,
     authorization_result: authorizationResult,
@@ -613,7 +613,7 @@ function loadTarget(
   const workflowColumns = `w.id AS workflow_id, w.status AS workflow_status,
     w.operational_state AS workflow_operational_state,
     w.row_version AS workflow_row_version,
-    w.owner_principal_ref, w.controlling_feature_id, w.creator_automation_ref,
+    w.owner_principal_ref, w.controlling_pack_id, w.creator_automation_ref,
     w.workflow_command_policy_resource_id AS command_policy_resource_id,
     w.workflow_command_policy_resource_hash AS command_policy_resource_hash`;
   const runColumns = `r.id AS run_id, r.lifecycle AS run_lifecycle,
@@ -799,10 +799,10 @@ function isOwner(
 ) {
   if (actor.actorKind === 'human')
     return actor.actorRef === target.owner_principal_ref;
-  if (actor.actorKind === 'feature_service')
+  if (actor.actorKind === 'pack_service')
     return (
-      target.controlling_feature_id !== null &&
-      actor.actorRef === `feature_service:${target.controlling_feature_id}`
+      target.controlling_pack_id !== null &&
+      actor.actorRef === `pack_service:${target.controlling_pack_id}`
     );
   if (actor.actorKind === 'automation')
     return actor.actorRef === target.creator_automation_ref;
@@ -1157,7 +1157,7 @@ function finalizeAndInvoke(
   transaction.execute(
     `INSERT INTO workflow_runtime_command_invocations (
        id, command_id, invocation_no, submitted_request_hash, actor_ref,
-       actor_kind, auth_session_ref, entrypoint, source_feature_id,
+       actor_kind, auth_session_ref, entrypoint, source_pack_id,
        delegation_chain_ref, required_permission, command_policy_resource_id,
        command_policy_resource_hash, authorization_result, execution_result,
        target_before_hash, target_after_hash, resulting_event_seq,
@@ -1174,7 +1174,7 @@ function finalizeAndInvoke(
       input.actor.actorKind,
       input.actor.authSessionRef,
       input.actor.entrypoint,
-      input.actor.sourceFeatureId,
+      input.actor.sourcePackId,
       input.actor.delegationChainRef,
       required,
       target.command_policy_resource_id,
@@ -2422,8 +2422,8 @@ function gatewayTransaction(
   ).includes(input.actor.actorKind);
   const permissionAllowed = input.actor.permissions.has(required);
   const ceilingAllowed =
-    input.actor.featurePermissionCeiling === null ||
-    input.actor.featurePermissionCeiling.has(required);
+    input.actor.packPermissionCeiling === null ||
+    input.actor.packPermissionCeiling.has(required);
   const evidenceContent = { evidence_refs: [...input.command.evidence_refs] };
   const evidence = persistAuditValue(
     transaction,
@@ -2471,7 +2471,7 @@ function gatewayTransaction(
     denial = 'evidence_invalid';
   else if (!actorKindAllowed || !permissionAllowed)
     denial = 'permission_denied';
-  else if (!ceilingAllowed) denial = 'feature_ceiling_denied';
+  else if (!ceilingAllowed) denial = 'pack_ceiling_denied';
   else if (!policyAllows(entry, policy, input, target, transaction))
     denial = 'command_policy_denied';
   else if (target.target_row_version !== input.command.expected_row_version)
@@ -2591,10 +2591,10 @@ export function fireWorkflowDeadlineWatchdog(
         actorKind: 'system',
         authSessionRef: `system-session:deadline-watchdog:${input.nowMs}`,
         entrypoint: 'deadline_watchdog',
-        sourceFeatureId: null,
+        sourcePackId: null,
         delegationChainRef: null,
         permissions: new Set<RuntimePermissionCode>(['workflow.cancel.any']),
-        featurePermissionCeiling: null,
+        packPermissionCeiling: null,
       },
       auditSchema: input.auditSchema,
       fenceManifestSchema: input.fenceManifestSchema,

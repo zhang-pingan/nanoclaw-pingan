@@ -96,10 +96,10 @@ const ownerSchema: JsonObject = {
     {
       type: 'object',
       additionalProperties: false,
-      required: ['kind', 'feature_id'],
+      required: ['kind', 'pack_id'],
       properties: {
-        kind: { const: 'feature' },
-        feature_id: {
+        kind: { const: 'pack' },
+        pack_id: {
           type: 'string',
           minLength: 1,
           maxLength: 255,
@@ -469,7 +469,7 @@ export function g3RegistryExactResourceQueryFixturesForTest(): {
   return {
     positive: [
       {
-        case_id: 'positive.exact-staged-feature-resource',
+        case_id: 'positive.exact-staged-pack-resource',
         input,
         expected_result: expected,
       },

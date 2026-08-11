@@ -114,6 +114,7 @@ export interface CollaborationAllowedActionsProjection {
         >;
         readonly createTurn: CollaborationActionDecision;
         readonly configureCurrentState: CollaborationActionDecision;
+        readonly withdrawCurrentStateExecution: CollaborationActionDecision;
         readonly start: CollaborationActionDecision;
         readonly pause: CollaborationActionDecision;
         readonly resume: CollaborationActionDecision;
@@ -126,6 +127,22 @@ export interface CollaborationAllowedActionsProjection {
             }
           >
         >;
+      }
+    >
+  >;
+  readonly executors: Readonly<
+    Record<
+      string,
+      {
+        readonly revoke: CollaborationActionDecision;
+      }
+    >
+  >;
+  readonly actions: Readonly<
+    Record<
+      string,
+      {
+        readonly revise: CollaborationActionDecision;
       }
     >
   >;
@@ -711,6 +728,21 @@ export function projectCollaborationAllowedActionsV3(input: {
             ];
           }),
       );
+      const executionLifecycle = ['ready', 'running', 'paused'].includes(
+        instance.lifecycle,
+      );
+      const currentStateAuthority =
+        instance.resolved_assignments[instance.business_state] === principalId;
+      const configureCurrentState = !executionLifecycle
+        ? denied(
+            'RESOURCE_STATE_BLOCKED',
+            '只有 Ready、运行中或已暂停实例可以配置执行',
+          )
+        : authority(currentStateAuthority, '仅当前 State 负责人可配置执行');
+      const currentExecution =
+        projection.stateExecutions[instance.instance_id]?.[
+          instance.business_state
+        ];
       return [
         instance.instance_id,
         {
@@ -725,11 +757,10 @@ export function projectCollaborationAllowedActionsV3(input: {
             : instance.active_turn_id
               ? denied('RESOURCE_STATE_BLOCKED', '当前已有执行轮次')
               : manageDecision,
-          configureCurrentState: authority(
-            instance.resolved_assignments[instance.business_state] ===
-              principalId,
-            '仅当前 State 负责人可配置执行',
-          ),
+          configureCurrentState,
+          withdrawCurrentStateExecution: !currentExecution
+            ? denied('RESOURCE_STATE_BLOCKED', '当前 State 没有执行配置')
+            : configureCurrentState,
           start: !lifecycleDecision(
             ['ready'],
             '只有参与者已补齐的 Ready 实例可以启动',
@@ -799,6 +830,35 @@ export function projectCollaborationAllowedActionsV3(input: {
       Object.values(entry.createWorkItemInstances).some(
         (decision) => decision.allowed,
       ),
+  );
+
+  const executors = Object.fromEntries(
+    Object.values(projection.executors).flatMap((entries) =>
+      Object.values(entries).map((executor) => [
+        executor.executor_id,
+        {
+          revoke:
+            executor.status !== 'active'
+              ? denied('RESOURCE_STATE_BLOCKED', 'Executor 已撤销')
+              : authority(
+                  executor.principal_id === principalId,
+                  '只能撤销当前 Principal 自己的 Executor',
+                ),
+        },
+      ]),
+    ),
+  );
+
+  const actions = Object.fromEntries(
+    Object.entries(projection.actions).map(([key, action]) => [
+      key,
+      {
+        revise:
+          action.owner_principal_id !== principalId
+            ? authority(false, '只能修订当前 Principal 自己的 Action')
+            : permission('workspace:publish_owned'),
+      },
+    ]),
   );
 
   const clients = Object.fromEntries(
@@ -917,6 +977,8 @@ export function projectCollaborationAllowedActionsV3(input: {
       createWorkItem: permission('work_item:create'),
       createDiscussion: permission('discussion:create'),
       postOwnedWorkspace: permission('workspace:publish_owned'),
+      publishOwnedAction: permission('workspace:publish_owned'),
+      registerOwnExecutor: boundary,
       writeSharedWorkspace: permission('workspace:write_shared'),
       proposeWorkflowDefinition: permission('workflow_definition:propose'),
       createWorkflowInstance: can(
@@ -943,6 +1005,8 @@ export function projectCollaborationAllowedActionsV3(input: {
     discussions,
     workflowDefinitions,
     workflowInstances,
+    executors,
+    actions,
     members: Object.fromEntries(
       Object.keys(projection.members).map((memberId) => {
         const permissions = projection.permissionGrants[memberId]?.grants ?? [];

@@ -95,7 +95,7 @@ Icarus 当前主要支持两种任务执行方式：
 
 ### 1. 新增独立的 Collaboration Runtime
 
-Agent Group Collaboration Runtime 是 Icarus core 的新协调子系统，不是现有 Workflow Definition 的一种特殊写法，也不是某个 Feature Package 自己维护的业务状态机。
+Agent Group Collaboration Runtime 是 Icarus core 的新协调子系统，不是现有 Workflow Definition 的一种特殊写法，也不是某个 Workflow Pack 自己维护的业务状态机。
 
 ```text
 Icarus Host Core
@@ -1160,9 +1160,9 @@ Dynamic Workflow Runtime 当前行为见 [Dynamic Workflow Runtime](dynamic-work
 - 显式 workspace 必须先通过现有 mount allowlist；容器内固定挂载到 `/workspace/project`，按有效权限使用只读或读写 mount，并遮蔽 workspace `.env`。未授权路径在 claim 前 fail closed。
 - run-once 完成不等于群组已转换；仍需 `result_schema` 和 fencing 校验。
 
-### Feature Package Runtime
+### Workflow Pack 边界
 
-Agent Group Collaboration Runtime 属于 core 执行和协调能力。Feature 可以贡献角色模板、FSM 模板、Action 定义或 UI 扩展，但不能维护独立事实源或绕过 Collaboration Command Gateway。
+Agent Group Collaboration Runtime 属于 core 执行和协调能力。Workflow Pack 只能通过声明式 Workflow resources 引用 Core 允许的 Collaboration Capability/Action binding；它不能加载 Host 模块、贡献导航或 UI 扩展、维护独立事实源，或绕过 Collaboration Command Gateway。
 
 ### Host Core 和本地运行时
 

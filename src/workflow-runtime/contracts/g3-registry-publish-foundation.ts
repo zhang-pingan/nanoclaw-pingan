@@ -123,10 +123,10 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
     'operation',
     'target_registry',
     'fixture_scope',
-    'feature_manifest_ref',
-    'feature_manifest_hash',
-    'feature_release_ref',
-    'feature_release_hash',
+    'pack_manifest_ref',
+    'pack_manifest_hash',
+    'pack_release_ref',
+    'pack_release_hash',
     'resources',
     'expected_oracle',
     'production_compiler_actual_role',
@@ -141,10 +141,10 @@ export const G3_REGISTRY_PUBLISH_PREFLIGHT_SCHEMA: JsonObject = {
     operation: { const: 'validate_only' },
     target_registry: { enum: ['production', 'test_only'] },
     fixture_scope: { enum: ['none', 'test_only'] },
-    feature_manifest_ref: nullableRefSchema,
-    feature_manifest_hash: nullableHashSchema,
-    feature_release_ref: nullableRefSchema,
-    feature_release_hash: nullableHashSchema,
+    pack_manifest_ref: nullableRefSchema,
+    pack_manifest_hash: nullableHashSchema,
+    pack_release_ref: nullableRefSchema,
+    pack_release_hash: nullableHashSchema,
     resources: {
       type: 'array',
       items: { $ref: '#/$defs/resource_candidate' },
@@ -344,7 +344,7 @@ export const G3_REGISTRY_PUBLISH_FOUNDATION_SCHEMA: JsonObject = {
     'slice_status',
     'g3_status',
     'implemented_surface',
-    'feature_manifest_schema',
+    'pack_manifest_schema',
     'recipe_schema',
     'retention_policy',
     'production_registry_baseline',
@@ -364,7 +364,7 @@ export const G3_REGISTRY_PUBLISH_FOUNDATION_SCHEMA: JsonObject = {
     implemented_surface: {
       const: 'read_only_registry_publish_preflight_contract',
     },
-    feature_manifest_schema: { $ref: '#/$defs/exact_artifact' },
+    pack_manifest_schema: { $ref: '#/$defs/exact_artifact' },
     recipe_schema: { $ref: '#/$defs/exact_artifact' },
     retention_policy: { $ref: '#/$defs/exact_artifact' },
     production_registry_baseline: {
@@ -373,7 +373,7 @@ export const G3_REGISTRY_PUBLISH_FOUNDATION_SCHEMA: JsonObject = {
       required: [
         'published_recipe_count',
         'checked_in_published_resource_count',
-        'active_feature_release_count',
+        'active_pack_release_count',
         'synthetic_resource_count',
         'zero_recipe_allowed',
         'production_database_observation',
@@ -383,7 +383,7 @@ export const G3_REGISTRY_PUBLISH_FOUNDATION_SCHEMA: JsonObject = {
       properties: {
         published_recipe_count: { const: 0 },
         checked_in_published_resource_count: { const: 0 },
-        active_feature_release_count: { const: 0 },
+        active_pack_release_count: { const: 0 },
         synthetic_resource_count: { const: 0 },
         zero_recipe_allowed: { const: true },
         production_database_observation: { const: 'not_performed' },
@@ -651,12 +651,11 @@ export function evaluateG3RegistryPublishPreflight(
     return rejected('retention_identity_mismatch', value);
   }
   if (
-    (input.feature_manifest_ref === null) !==
-      (input.feature_manifest_hash === null) ||
-    (input.feature_release_ref === null) !==
-      (input.feature_release_hash === null)
+    (input.pack_manifest_ref === null) !==
+      (input.pack_manifest_hash === null) ||
+    (input.pack_release_ref === null) !== (input.pack_release_hash === null)
   ) {
-    return rejected('feature_identity_pair_mismatch', value);
+    return rejected('pack_identity_pair_mismatch', value);
   }
   const resources = input.resources;
   const keys = resources.map(resourceKey);
@@ -738,7 +737,7 @@ export function evaluateG3RegistryPublishPreflight(
     resources.some(
       (resource) =>
         (resource.resource_type === 'executor_implementation' ||
-          resource.resource_type === 'feature_execution_artifact') &&
+          resource.resource_type === 'pack_execution_artifact') &&
         resource.execution_artifact_pin === null,
     )
   ) {
@@ -806,10 +805,10 @@ type G3RegistryPublishPreflightWithoutHash = Pick<
   | 'operation'
   | 'target_registry'
   | 'fixture_scope'
-  | 'feature_manifest_ref'
-  | 'feature_manifest_hash'
-  | 'feature_release_ref'
-  | 'feature_release_hash'
+  | 'pack_manifest_ref'
+  | 'pack_manifest_hash'
+  | 'pack_release_ref'
+  | 'pack_release_hash'
   | 'resources'
   | 'expected_oracle'
   | 'production_compiler_actual_role'
@@ -845,10 +844,10 @@ function withPreflightHash(
     operation: input.operation,
     target_registry: input.target_registry,
     fixture_scope: input.fixture_scope,
-    feature_manifest_ref: input.feature_manifest_ref,
-    feature_manifest_hash: input.feature_manifest_hash,
-    feature_release_ref: input.feature_release_ref,
-    feature_release_hash: input.feature_release_hash,
+    pack_manifest_ref: input.pack_manifest_ref,
+    pack_manifest_hash: input.pack_manifest_hash,
+    pack_release_ref: input.pack_release_ref,
+    pack_release_hash: input.pack_release_hash,
     resources: input.resources,
     expected_oracle: input.expected_oracle,
     production_compiler_actual_role: input.production_compiler_actual_role,
@@ -870,10 +869,10 @@ function basePreflight(
     operation: 'validate_only',
     target_registry: 'production',
     fixture_scope: 'none',
-    feature_manifest_ref: null,
-    feature_manifest_hash: null,
-    feature_release_ref: null,
-    feature_release_hash: null,
+    pack_manifest_ref: null,
+    pack_manifest_hash: null,
+    pack_release_ref: null,
+    pack_release_hash: null,
     resources: [],
     expected_oracle: 'golden_corpus_expected',
     production_compiler_actual_role: 'comparison_only',
@@ -924,17 +923,17 @@ const EMPTY_PRODUCTION_PREFLIGHT = basePreflight();
 const TEST_ONLY_PREFLIGHT = basePreflight({
   target_registry: 'test_only',
   fixture_scope: 'test_only',
-  feature_manifest_ref: {
-    id: 'test-only.fixture.feature-manifest',
+  pack_manifest_ref: {
+    id: 'test-only.fixture.workflow-pack',
     version: '2.0.0',
   },
-  feature_manifest_hash:
+  pack_manifest_hash:
     'sha256:39f2af1a1ce0d9c02a07da3dbcc286406211d1f1f29c54ac01d457dd71b93f06',
-  feature_release_ref: {
-    id: 'test-only.fixture.feature-release',
+  pack_release_ref: {
+    id: 'test-only.fixture.pack-release',
     version: '1.0.0',
   },
-  feature_release_hash:
+  pack_release_hash:
     'sha256:053c39cbd9ee956b0235e858047aac0154d92ace618cb18aa20b619e70609e2f',
   resources: [testOnlyDefinition, testOnlyExecutor],
 });
@@ -1001,17 +1000,17 @@ const testOnlyCapability = withResourceHash({
 const TEST_ONLY_CAPABILITY_PREFLIGHT = basePreflight({
   target_registry: 'test_only',
   fixture_scope: 'test_only',
-  feature_manifest_ref: {
-    id: 'test-only.fixture.feature-manifest',
+  pack_manifest_ref: {
+    id: 'test-only.fixture.workflow-pack',
     version: '2.0.0',
   },
-  feature_manifest_hash:
+  pack_manifest_hash:
     'sha256:4444444444444444444444444444444444444444444444444444444444444444',
-  feature_release_ref: {
-    id: 'test-only.fixture.feature-release',
+  pack_release_ref: {
+    id: 'test-only.fixture.pack-release',
     version: '1.0.0',
   },
-  feature_release_hash:
+  pack_release_hash:
     'sha256:5555555555555555555555555555555555555555555555555555555555555555',
   resources: [testOnlyCapability, testOnlyAdapter, testOnlyPolicy],
 });
@@ -1231,15 +1230,15 @@ const NEGATIVE_CASES: NegativeCase[] = [
     expected_code: 'test_only_scope_mismatch',
   },
   {
-    case_id: 'negative.feature-manifest-ref-without-hash',
+    case_id: 'negative.workflow-pack-ref-without-hash',
     fixture_scope: 'test_only',
     base_case_id: 'positive.test-only-definition-and-executor',
     mutations: [
-      { operation: 'set', pointer: '/feature_manifest_hash', value: null },
+      { operation: 'set', pointer: '/pack_manifest_hash', value: null },
     ],
     rehash_resource_hashes: false,
     rehash_preflight_hash: true,
-    expected_code: 'feature_identity_pair_mismatch',
+    expected_code: 'pack_identity_pair_mismatch',
   },
   {
     case_id: 'negative.compiled-plan-pin-missing',
@@ -1463,18 +1462,18 @@ function foundationPayload(): JsonObject {
     slice_status: 'DONE',
     g3_status: 'IN_PROGRESS',
     implemented_surface: 'read_only_registry_publish_preflight_contract',
-    feature_manifest_schema: {
-      path: 'schemas/feature-manifest-v2-schema.json',
+    pack_manifest_schema: {
+      path: 'schemas/workflow-pack-manifest-schema.json',
       ref: {
-        id: 'icarus.workflow-feature-manifest-v2-schema',
+        id: 'icarus.workflow-pack-manifest-schema',
         version: '1.0.0',
       },
-      hash: 'sha256:e47344ea2f4bebde3688f76b3450d5143adfd99ab4cc30eb6fc48a9d5a398e2d',
+      hash: 'sha256:d03040daa8935ee06e000757656da8db929ebfdc160e01fda242fa31754904c9',
     },
     recipe_schema: {
       path: 'schemas/workflow-recipe-schema.json',
       ref: { id: 'icarus.workflow-recipe-schema', version: '1.0.0' },
-      hash: 'sha256:c2768894c7fe6aab492f11d2948a4c92ccefbadc44cb094e103df4a8cdca9bb2',
+      hash: 'sha256:b02fe6a0667b555d463c5ad69048eaf3840ebe5e865a0292fc5f55e1da9ff646',
     },
     retention_policy: {
       path: 'safety/local_single_user_retention@1.json',
@@ -1484,7 +1483,7 @@ function foundationPayload(): JsonObject {
     production_registry_baseline: {
       published_recipe_count: 0,
       checked_in_published_resource_count: 0,
-      active_feature_release_count: 0,
+      active_pack_release_count: 0,
       synthetic_resource_count: 0,
       zero_recipe_allowed: true,
       production_database_observation: 'not_performed',
@@ -1656,12 +1655,12 @@ function assertExactArtifact(
 
 function validateCurrentUpstream(): void {
   assertExactArtifact(
-    'schemas/feature-manifest-v2-schema.json',
-    'sha256:e47344ea2f4bebde3688f76b3450d5143adfd99ab4cc30eb6fc48a9d5a398e2d',
+    'schemas/workflow-pack-manifest-schema.json',
+    'sha256:d03040daa8935ee06e000757656da8db929ebfdc160e01fda242fa31754904c9',
   );
   assertExactArtifact(
     'schemas/workflow-recipe-schema.json',
-    'sha256:c2768894c7fe6aab492f11d2948a4c92ccefbadc44cb094e103df4a8cdca9bb2',
+    'sha256:b02fe6a0667b555d463c5ad69048eaf3840ebe5e865a0292fc5f55e1da9ff646',
   );
   assertExactArtifact(
     'safety/local_single_user_retention@1.json',

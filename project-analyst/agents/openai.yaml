@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Icarus Project Analyst'
+  short_description: 'Analyze frozen packages or Group repositories'
+  default_prompt: 'Use $project-analyst to perform a read-only analysis of this Icarus project.'

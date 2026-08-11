@@ -1,0 +1,318 @@
+{
+  "format": "icarus.workflow-pack-manifest-schema/1",
+  "ref": {
+    "id": "icarus.workflow-pack-manifest-schema",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-pack-manifest-schema:1\n",
+  "hash": "sha256:d03040daa8935ee06e000757656da8db929ebfdc160e01fda242fa31754904c9",
+  "payload": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://icarus.local/schemas/workflow-pack/1",
+    "title": "WorkflowPackManifestV1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "format",
+      "pack_ref",
+      "display_name",
+      "description",
+      "namespace",
+      "owner_principal_ref",
+      "dependencies",
+      "workflow_resources",
+      "execution_resources",
+      "permissions",
+      "manifest_hash"
+    ],
+    "properties": {
+      "format": {
+        "const": "icarus.workflow-pack/1"
+      },
+      "pack_ref": {
+        "$ref": "#/$defs/versioned_ref"
+      },
+      "display_name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255
+      },
+      "description": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "namespace": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+      },
+      "owner_principal_ref": {
+        "type": "string",
+        "minLength": 1
+      },
+      "dependencies": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pack_release_ref",
+            "pack_release_hash",
+            "required_resource_refs"
+          ],
+          "properties": {
+            "pack_release_ref": {
+              "$ref": "#/$defs/versioned_ref"
+            },
+            "pack_release_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "required_resource_refs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/versioned_ref"
+              },
+              "uniqueItems": true
+            }
+          }
+        }
+      },
+      "workflow_resources": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "ref",
+            "source_path",
+            "expected_source_hash"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "recipe",
+                "routing_scope",
+                "execution_policy",
+                "definition",
+                "command_policy",
+                "context_contract",
+                "schema",
+                "scope_interface",
+                "graph_template",
+                "graph_policy",
+                "card_presentation"
+              ]
+            },
+            "ref": {
+              "$ref": "#/$defs/versioned_ref"
+            },
+            "source_path": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+            },
+            "expected_source_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        }
+      },
+      "execution_resources": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "agents",
+          "skills",
+          "mcp",
+          "scripts",
+          "templates"
+        ],
+        "properties": {
+          "agents": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "skills": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mcp": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scripts": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "templates": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "permissions": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "host_actions",
+          "file_scopes",
+          "mcp_servers",
+          "effect_ceiling"
+        ],
+        "properties": {
+          "host_actions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+            },
+            "uniqueItems": true
+          },
+          "file_scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "mcp_servers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,254}$"
+            },
+            "uniqueItems": true
+          },
+          "effect_ceiling": {
+            "type": "string",
+            "enum": [
+              "read_only",
+              "workspace_write",
+              "external_write"
+            ]
+          }
+        }
+      },
+      "manifest_hash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "$defs": {
+      "versioned_ref": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$",
+            "not": {
+              "anyOf": [
+                {
+                  "pattern": "^(?:[Cc][Uu][Rr][Rr][Ee][Nn][Tt]|[Hh][Ee][Aa][Dd]|[Ll][Aa][Tt][Ee][Ss][Tt]|[Mm][Aa][Ii][Nn]|[Mm][Aa][Ss][Tt][Ee][Rr]|[Nn][Ee][Xx][Tt]|[Ss][Nn][Aa][Pp][Ss][Hh][Oo][Tt])$"
+                },
+                {
+                  "pattern": "(?:^|[._-])[xX](?:$|[._-])"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "json_value": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/json_value"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/json_value"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

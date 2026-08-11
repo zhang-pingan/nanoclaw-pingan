@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-registry-publish-foundation-schema:1\n",
-  "hash": "sha256:4a2dabb335bb5882bbc8607964f05a11f92adc07ab673f668fd0acbc9833257b",
+  "hash": "sha256:ba46310fc5bb25c807de1866b96ac3dd09f852923704d0524cd8760455b287c9",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/workflow-registry-publish-foundation/1",
@@ -20,7 +20,7 @@
       "slice_status",
       "g3_status",
       "implemented_surface",
-      "feature_manifest_schema",
+      "pack_manifest_schema",
       "recipe_schema",
       "retention_policy",
       "production_registry_baseline",
@@ -50,7 +50,7 @@
       "implemented_surface": {
         "const": "read_only_registry_publish_preflight_contract"
       },
-      "feature_manifest_schema": {
+      "pack_manifest_schema": {
         "$ref": "#/$defs/exact_artifact"
       },
       "recipe_schema": {
@@ -65,7 +65,7 @@
         "required": [
           "published_recipe_count",
           "checked_in_published_resource_count",
-          "active_feature_release_count",
+          "active_pack_release_count",
           "synthetic_resource_count",
           "zero_recipe_allowed",
           "production_database_observation",
@@ -79,7 +79,7 @@
           "checked_in_published_resource_count": {
             "const": 0
           },
-          "active_feature_release_count": {
+          "active_pack_release_count": {
             "const": 0
           },
           "synthetic_resource_count": {
@@ -191,7 +191,7 @@
             "const": "execution_artifact_pin_required"
           },
           {
-            "const": "feature_identity_pair_mismatch"
+            "const": "pack_identity_pair_mismatch"
           },
           {
             "const": "compiler_version_mismatch"

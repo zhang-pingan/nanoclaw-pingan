@@ -72,7 +72,7 @@ const transition: JsonObject = { target: 'done' };
 const workflowDefinition: JsonObject = {
   format: 'icarus.workflow-definition/1',
   ref: versionedRef('example.workflow'),
-  owner_feature_id: 'example-feature',
+  owner_pack_id: 'example-pack',
   name: 'Example workflow',
   context_contract_ref: versionedRef('example.context'),
   entry_points: { default: { state_key: 'start' } },
@@ -98,8 +98,12 @@ const workflowDefinition: JsonObject = {
 };
 
 const workflowRecipe: JsonObject = {
+  format: 'icarus.workflow-recipe/1',
   ref: versionedRef('example.recipe'),
-  owner_feature_id: 'example-feature',
+  owner_pack_id: 'example-pack',
+  catalog_visibility: 'selectable',
+  name: 'Example Recipe',
+  description: 'A selectable example Workflow',
   recipe_family: 'example',
   task_kinds: ['example_task'],
   workflow_definition_ref: versionedRef('example.workflow'),
@@ -109,8 +113,10 @@ const workflowRecipe: JsonObject = {
   workflow_command_policy_ref: versionedRef('example.command-policy'),
   input_schema_ref: versionedRef('example.input'),
   output_schema_ref: versionedRef('example.output'),
+  routing_scope_ref: versionedRef('example.routing'),
   launch_policy: 'confirm',
   effect_ceiling: 'read_only',
+  input_summary: {},
   derived_effect_summary: {
     max_impact: 'read_only',
     recovery_kinds: ['pure'],
@@ -133,25 +139,15 @@ const runtimeCommand: JsonObject = {
   target: { run_id: 'run-1' },
 };
 
-const featureManifest: JsonObject = {
-  format: 'icarus.feature-manifest/2',
-  feature_ref: versionedRef('example.feature'),
+const packManifest: JsonObject = {
+  format: 'icarus.workflow-pack/1',
+  pack_ref: versionedRef('example.pack'),
+  display_name: 'Example Pack',
+  description: 'Example workflows',
   namespace: 'example',
   owner_principal_ref: 'human:local-owner',
   dependencies: [],
-  package_resources: {
-    skills: [],
-    agents: [],
-    mcp: [],
-    scripts: [],
-    templates: [],
-  },
-  extension_surfaces: {
-    api_entry: null,
-    nav_entry: null,
-    renderer_entry: null,
-  },
-  dynamic_workflow_resources: [
+  workflow_resources: [
     {
       kind: 'definition',
       ref: versionedRef('example.workflow'),
@@ -159,16 +155,18 @@ const featureManifest: JsonObject = {
       expected_source_hash: HASH,
     },
   ],
-  ownership: {
-    feature_source_root: 'features/example',
-    workflow_source_root: 'features/example/workflow-src',
-    execution_bundle_owner: 'feature_release',
-    registry_namespace: 'example',
+  execution_resources: {
+    agents: null,
+    skills: null,
+    mcp: null,
+    scripts: null,
+    templates: null,
   },
-  lifecycle: {
-    draining_policy_ref: versionedRef('example.draining'),
-    retention_policy_ref: versionedRef('example.retention'),
-    deletion_policy_ref: versionedRef('example.deletion'),
+  permissions: {
+    host_actions: [],
+    file_scopes: [],
+    mcp_servers: [],
+    effect_ceiling: 'read_only',
   },
   manifest_hash: HASH,
 };
@@ -176,7 +174,7 @@ const featureManifest: JsonObject = {
 const cardPresentation: JsonObject = {
   format: 'icarus.card-presentation/1',
   ref: versionedRef('example.card'),
-  owner_feature_id: 'example-feature',
+  owner_pack_id: 'example-pack',
   template_ref: versionedRef('example.card-template'),
   template_hash: HASH,
   variable_schema_ref: versionedRef('example.card-variables'),
@@ -528,9 +526,9 @@ export const CLOSED_SCHEMA_POSITIVE_CASES: ClosedSchemaPositiveCase[] = [
     instance: transition,
   },
   {
-    case_id: 'feature_manifest_vnext',
-    schema_format: 'icarus.workflow-feature-manifest-v2-schema/1',
-    instance: featureManifest,
+    case_id: 'pack_manifest_vnext',
+    schema_format: 'icarus.workflow-pack-manifest-schema/1',
+    instance: packManifest,
   },
   {
     case_id: 'card_presentation_runtime_action',
@@ -721,20 +719,20 @@ export const CLOSED_SCHEMA_NEGATIVE_CASES: ClosedSchemaNegativeCase[] = [
     'workflowEvaluators',
   ].map(
     (removedKey): ClosedSchemaNegativeCase => ({
-      case_id: `feature_manifest_rejects_${removedKey}`,
-      schema_format: 'icarus.workflow-feature-manifest-v2-schema/1',
-      instance: { ...featureManifest, [removedKey]: [] },
+      case_id: `pack_manifest_rejects_${removedKey}`,
+      schema_format: 'icarus.workflow-pack-manifest-schema/1',
+      instance: { ...packManifest, [removedKey]: [] },
       expected_keyword: 'additionalProperties',
       expected_instance_pointer: '',
       expected_additional_property: removedKey,
     }),
   ),
   {
-    case_id: 'feature_manifest_rejects_parent_source_path',
-    schema_format: 'icarus.workflow-feature-manifest-v2-schema/1',
+    case_id: 'pack_manifest_rejects_parent_source_path',
+    schema_format: 'icarus.workflow-pack-manifest-schema/1',
     instance: {
-      ...featureManifest,
-      dynamic_workflow_resources: [
+      ...packManifest,
+      workflow_resources: [
         {
           kind: 'definition',
           ref: versionedRef('example.workflow'),
@@ -744,7 +742,7 @@ export const CLOSED_SCHEMA_NEGATIVE_CASES: ClosedSchemaNegativeCase[] = [
       ],
     },
     expected_keyword: 'pattern',
-    expected_instance_pointer: '/dynamic_workflow_resources/0/source_path',
+    expected_instance_pointer: '/workflow_resources/0/source_path',
     expected_additional_property: null,
   },
   {

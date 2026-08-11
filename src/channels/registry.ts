@@ -9,6 +9,7 @@ import {
 } from '../types.js';
 import type { CollaborationWebApi } from '../collaboration/web-api.js';
 import type { TaskWorkspaceWebApi } from '../task-workspace/web-api.js';
+import type { WorkflowPackWebApi } from '../workflow-packs/web-api.js';
 
 export interface ChannelOpts {
   onMessage: OnInboundMessage;
@@ -25,6 +26,7 @@ export interface ChannelOpts {
   registerAgent?: (jid: string, agent: RegisteredAgent) => void;
   collaborationApi?: CollaborationWebApi;
   taskWorkspaceApi?: TaskWorkspaceWebApi;
+  workflowPackApi?: WorkflowPackWebApi;
 }
 
 export type ChannelFactory = (opts: ChannelOpts) => Channel | null;

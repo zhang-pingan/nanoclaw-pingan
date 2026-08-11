@@ -302,32 +302,45 @@ Project Analyst 可以使用本地 Executor，但它本身不是共享 Workflow 
 ```text
 project-analyst/
 ├── SKILL.md
+├── agents/
+│   └── openai.yaml
 ├── references/
 │   ├── finding-taxonomy.md
 │   ├── evidence-rules.md
-│   └── action-policy.md
+│   ├── action-policy.md
+│   ├── package-mode.md
+│   ├── repository-mode.md
+│   └── trust-model.md
 ├── contracts/
 │   ├── analysis-input.schema.json
 │   ├── analysis-result.schema.json
-│   └── proposed-action.schema.json
+│   ├── proposed-action.schema.json
+│   ├── repository-analysis-input.schema.json
+│   ├── repository-analysis-result.schema.json
+│   └── repository-verification.schema.json
 └── scripts/
+    ├── repository-context.mjs
     ├── validate-result.mjs
-    └── verify-evidence.mjs
+    ├── verify-evidence.mjs
+    ├── check-runtime.mjs
+    └── install.mjs
 ```
 
 ### 6.2 文件职责
 
-| 文件 | 职责 |
-| --- | --- |
-| `SKILL.md` | 分析顺序、Context 使用、证据要求、事实和推断边界 |
-| `finding-taxonomy.md` | Finding 类别、严重程度和置信度标准 |
-| `evidence-rules.md` | 允许引用的证据类型和引用格式 |
-| `action-policy.md` | Agent 可以提出但不能直接执行的动作集合 |
-| `analysis-input.schema.json` | Project Snapshot 和分析请求格式 |
-| `analysis-result.schema.json` | Agent 输出格式 |
-| `proposed-action.schema.json` | 可接受的建议动作及参数 |
-| `validate-result.mjs` | Executor 侧结果结构自检 |
-| `verify-evidence.mjs` | Executor 侧证据引用自检 |
+| 文件                          | 职责                                                 |
+| ----------------------------- | ---------------------------------------------------- |
+| `SKILL.md`                    | 分析顺序、Context 使用、证据要求、事实和推断边界     |
+| `finding-taxonomy.md`         | Finding 类别、严重程度和置信度标准                   |
+| `evidence-rules.md`           | 允许引用的证据类型和引用格式                         |
+| `action-policy.md`            | Agent 可以提出但不能直接执行的动作集合               |
+| `analysis-input.schema.json`  | Project Snapshot 和分析请求格式                      |
+| `analysis-result.schema.json` | Agent 输出格式                                       |
+| `proposed-action.schema.json` | 可接受的建议动作及参数                               |
+| `repository-*.schema.json`    | 独立 repository Context、验证保证和报告格式          |
+| `repository-context.mjs`      | 只读解析 control ref、严格验证 v3 历史并构建 Context |
+| `validate-result.mjs`         | Executor 侧结果结构自检                              |
+| `verify-evidence.mjs`         | Executor 侧证据引用自检                              |
 
 Contract 必须由 Icarus 源码中的 current schema 生成或共同维护。脚本只是相同 Contract 的命令行包装，Host 仍要独立校验。
 
@@ -340,6 +353,28 @@ Contract 必须由 Icarus 源码中的 current schema 生成或共同维护。�
 | 只支持文本 Prompt | 将核心指令、压缩 Context 和输出 Contract 渲染为单一 Prompt |
 | Icarus 本地 Executor | 由 Icarus 管理能力包挂载、运行、超时和结果回收；已有通用 trace/logging 不参与 Analysis 工具行为判定 |
 | 外部第三方 Agent | 由用户复制或上传分析包，完成后粘贴或上传 JSON 结果 |
+
+### 6.4 Skill 双输入模式
+
+完整 Skill 支持两个边界清晰的输入模式：
+
+| 模式         | 输入                                                                      | 验证与结果边界                                                                                  |
+| ------------ | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `package`    | Icarus 冻结的 `context.json`、`manifest.json`、资源目录和 Result Contract | 保留现有 Analysis Run binding，可经 Host 校验回填                                               |
+| `repository` | 本地 Git 仓库路径或 Git URL、scope，`mine` 另需 `principal_id`            | Skill 自行只读解析 `icarus/control`，输出独立 repository Context 和 Result，不属于 Analysis Run |
+
+repository CLI 在构建时绑定 current v3 Schema、Git history validator、Reducer、Project Insight rules 和 scope 选择器，交付为无 npm 运行时依赖的单文件脚本。外部安装只需复制完整 `project-analyst/` 目录，并提供 Node.js 20+、Git 和 SSH commit signature 验证支持；不依赖 Icarus checkout。
+
+repository CLI 必须在受控 Git 环境中把输入复制为临时 mirror 后再验证：清除继承的 `GIT_*`，禁用 system/global config、system attributes 和 replacement objects，固定签名验证程序，禁用 hooks/fsmonitor，并拒绝 source/mirror 的 `refs/replace` 与本地 active graft。`--force` 只可 unlink 已确认的托管普通文件，遇到 output、`resources/` 或托管目标的符号链接/异常类型必须拒绝。
+
+验证保证分级如下：
+
+- `verified`：完整内部验证通过，且调用方显式提供的 trusted genesis/head 与解析结果匹配；真实性声明只相对于该 trusted 输入。
+- `self_consistent`：Git 线性历史、严格 JSON、事件 hash、Aggregate chain、SSH commit signature/Actor Credential、Reducer replay、Projection/materialization 和业务文件 hash 全部通过，但没有外部仓库身份锚点。
+- `projection_only`：严格验证失败后，用户显式允许只读取物化 Projection；不得声称事件、签名或 Projection 已验证。
+- `unverified`：无法构建可分析 Context，只输出诊断。
+
+任何级别都不能仅凭仓库内自声明的 genesis Credential 证明现实世界的仓库或成员身份。Git URL 中的 transport 账号也不属于业务身份保证。
 
 ## 7. 触发方式和执行渠道
 
@@ -577,6 +612,28 @@ Project Snapshot 是为分析准备的、受范围约束的结构化上下文，
   ]
 }
 ```
+
+repository 模式必须改用独立根合同：
+
+```json
+{
+  "format": "icarus.collaboration-repository-analysis-result/1",
+  "contract_version": 1,
+  "repository_head": "git_commit",
+  "context_hash": "sha256:...",
+  "resource_catalog_hash": "sha256:...",
+  "scope": { "type": "project" },
+  "verification_level": "self_consistent",
+  "summary": {
+    "health": "at_risk",
+    "headline": "发布计划存在风险",
+    "details": "..."
+  },
+  "findings": []
+}
+```
+
+该结果复用 Finding taxonomy、Evidence rules 和 Proposed Action Schema，但不包含 `analysis_id`、`prompt_hash` 或 `challenge`，不能进入既有 `external-result` API。`resource_catalog_hash` 同时进入 Context hash 闭包、manifest 和 Result，验证时必须对实际 `resources/catalog.json` 重新计算。建议动作只作为 standalone 报告内容，不获得 Icarus 用户确认、权限检查或 Host 写入能力。
 
 ### 12.2 Finding 分类
 
@@ -983,6 +1040,17 @@ Discussion、Handoff、Prompt、成员进展和业务文件均是项目数据，
 - 本地路径、Credential、token 和 Provider 信息不进入分析包或共享报告；
 - 项目内容中的 Prompt injection 不能改变 Result Contract、Host 校验、action allowlist 或用户确认要求；
 - 所有 accepted action 都能关联到本地 analysis/finding 审计记录。
+
+### 20.5 Repository Skill
+
+- 完整 Skill 目录复制到外部平台后，不安装 Icarus 或 npm 依赖即可运行 repository CLI；
+- 本地路径和 Git URL 均可解析 control ref，错误 ref fail closed；
+- 正常 v3 仓库完成签名、事件链、Reducer 和 materialization 验证；
+- 事件或 Projection 篡改被检测，默认不生成 Context；
+- `mine` 强制要求有效 `principal_id`，Work Item、Workflow 和 delta scope 受限导出；
+- trusted genesis/head 不匹配时 fail closed，没有 trusted input 时不得使用 `verified`；
+- repository Result 通过独立 Contract 和 context hash 校验，不能伪装成 Analysis Run 回填结果；
+- checked-in Skill、Host 动态 capability 和生成合同由构建检查保持逐字对齐。
 
 ## 21. 当前方案结论
 

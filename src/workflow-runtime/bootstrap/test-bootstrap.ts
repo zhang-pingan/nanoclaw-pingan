@@ -417,7 +417,7 @@ function buildReceipt(
     ['icarus.local-capacity-defaults'],
   )!;
   const activePointers = store.queryOne<{ count: number }>(
-    'SELECT count(*) AS count FROM workflow_feature_active_releases',
+    'SELECT count(*) AS count FROM workflow_pack_active_releases',
     [],
   )!;
   if (activeRegistry.count !== 0 || activePointers.count !== 0) {
@@ -442,9 +442,9 @@ function buildReceipt(
     root_inode: String(rootStat.ino),
     database_device: String(databaseStat.dev),
     database_inode: String(databaseStat.ino),
-    database_schema_version: CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION as 13,
+    database_schema_version: CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION,
     production_ingress_reachable: false as const,
-    feature_ingress_reachable: false as const,
+    pack_ingress_reachable: false as const,
     api_ingress_reachable: false as const,
     automation_ingress_reachable: false as const,
     active_registry_rows_observed: 0 as const,
@@ -453,7 +453,7 @@ function buildReceipt(
     real_adapter_invoked: false as const,
     user_data_touched: false as const,
     authority: 'test_only_bootstrap' as const,
-  };
+  } as const;
   return {
     ...receiptWithoutHash,
     receipt_hash: domainSeparatedSha256(receiptDomain, receiptWithoutHash),

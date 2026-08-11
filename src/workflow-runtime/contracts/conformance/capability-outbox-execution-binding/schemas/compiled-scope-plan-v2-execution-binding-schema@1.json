@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-compiled-scope-plan-v2-execution-binding-schema:1\n",
-  "hash": "sha256:79719788af197243e5172a7d495a172f3746720fe5fa41b681e454e6defc62ed",
+  "hash": "sha256:514db4e961db3eb10937c0f1cbbb34a7b3008ebc728a14fcc475ca66407bc930",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/compiled-scope-plan-v2-execution-binding",
@@ -105,6 +105,9 @@
       "complexity_summary": {
         "$ref": "#/$defs/complexity_summary"
       },
+      "static_child_plan_closure": {
+        "$ref": "#/$defs/static_child_plan_closure"
+      },
       "effective_limits": {
         "$ref": "#/$defs/nullable_graph_limits"
       },
@@ -117,9 +120,6 @@
       "runtime_safety_hash": {
         "type": "string",
         "pattern": "^sha256:[0-9a-f]{64}$"
-      },
-      "static_child_plan_closure": {
-        "$ref": "#/$defs/static_child_plan_closure"
       }
     },
     "$defs": {
@@ -3684,6 +3684,30 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
+              "type",
+              "cancel_action_ref",
+              "ack_required_before_close",
+              "safe_if_cancel_lost"
+            ],
+            "properties": {
+              "type": {
+                "const": "cooperative"
+              },
+              "cancel_action_ref": {
+                "$ref": "#/$defs/versioned_ref"
+              },
+              "ack_required_before_close": {
+                "const": true
+              },
+              "safe_if_cancel_lost": {
+                "const": false
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
               "type"
             ],
             "properties": {
@@ -5384,15 +5408,6 @@
               }
             }
           },
-          "max_steps": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 9007199254740991
-          },
-          "program_hash": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
           "operand_types": {
             "type": "array",
             "items": {
@@ -5407,6 +5422,15 @@
               ]
             },
             "minItems": 1
+          },
+          "max_steps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "program_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
           }
         }
       },
@@ -6449,13 +6473,13 @@
         "properties": {
           "closure_key": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,510}$"
+            "minLength": 1
           },
           "parent_closure_key": {
             "anyOf": [
               {
                 "type": "string",
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,510}$"
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -6488,26 +6512,7 @@
           "source_ref": {
             "anyOf": [
               {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "id",
-                  "version"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 255,
-                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._:/-]{0,253}[A-Za-z0-9])?$"
-                  },
-                  "version": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
-                  }
-                }
+                "$ref": "#/$defs/versioned_ref"
               },
               {
                 "type": "null"

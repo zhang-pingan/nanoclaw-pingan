@@ -33,6 +33,7 @@ import {
   scanRunOnceOutputFiles,
 } from './files.js';
 import { createRunOnceTraceWriter } from './trace-writer.js';
+import type { WorkflowPackExecutionResourcePin } from '../workflow-packs/execution-resources.js';
 
 export class RunOnceInputError extends Error {
   status = 400;
@@ -213,6 +214,9 @@ export class InternalAgentRunOnceService {
   async runOnce(
     input: RunOnceRequestInput,
     lifecycle?: RunOnceLifecycle,
+    internal?: {
+      readonly workflowPackExecutionResources?: WorkflowPackExecutionResourcePin;
+    },
   ): Promise<RunOnceResponse> {
     const request = parseRunOnceRequest(input);
     const agent = this.opts.registeredAgents()[request.chat_jid];
@@ -448,6 +452,8 @@ export class InternalAgentRunOnceService {
               selectedModel: selectedModel.selectedModel,
               isOneShot: true,
               workspace,
+              workflowPackExecutionResources:
+                internal?.workflowPackExecutionResources,
             },
             (proc, containerName) => {
               this.opts.onProcess(

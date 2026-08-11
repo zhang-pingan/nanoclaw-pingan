@@ -43,9 +43,9 @@ import type {
 } from './analysis-contracts.js';
 import { assertCollaborationAnalysisTransition } from './analysis-contracts.js';
 
-export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 9;
+export const CURRENT_COLLABORATION_PROJECT_SPACE_SCHEMA_VERSION = 11;
 export const COLLABORATION_PROJECT_SPACE_STORE_FORMAT =
-  'icarus.collaboration-local-store/9';
+  'icarus.collaboration-local-store/11';
 
 export function deterministicCollaborationPollDelay(
   groupId: string,
@@ -80,10 +80,25 @@ export class CollaborationProjectSpaceStoreError extends Error {
   }
 }
 
-const SCHEMA_V9 = `
+const SCHEMA_V11 = `
 CREATE TABLE collaboration_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+CREATE TABLE collaboration_local_group_bindings (
+  group_id TEXT PRIMARY KEY,
+  remote_url TEXT NOT NULL,
+  principal_id TEXT,
+  credential_id TEXT,
+  recovery_credential_id TEXT,
+  binding_state TEXT NOT NULL CHECK (binding_state IN ('attached', 'retained', 'cleanup_pending')),
+  detach_reason TEXT CHECK (detach_reason IN ('local_remove', 'member_left', 'group_dissolved')),
+  terminal_head TEXT,
+  cleanup_paths_json TEXT,
+  cleanup_error TEXT,
+  updated_at_ms INTEGER NOT NULL,
+  CHECK ((principal_id IS NULL) = (credential_id IS NULL)),
+  CHECK ((binding_state = 'cleanup_pending') = (cleanup_paths_json IS NOT NULL))
 );
 CREATE TABLE collaboration_subscriptions (
   group_id TEXT PRIMARY KEY,
@@ -313,6 +328,21 @@ CREATE TABLE collaboration_turns (
   updated_at_ms INTEGER NOT NULL,
   PRIMARY KEY (group_id, turn_id)
 );
+CREATE TABLE collaboration_local_executors (
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
+  principal_id TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  executor_id TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  executor_kind TEXT NOT NULL,
+  workspace_path TEXT NOT NULL,
+  filesystem_access TEXT NOT NULL,
+  approval_policy TEXT NOT NULL,
+  config_json TEXT NOT NULL,
+  enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+  updated_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (group_id, principal_id, client_id, executor_id)
+);
 CREATE TABLE collaboration_executor_bindings (
   group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
   instance_id TEXT NOT NULL,
@@ -333,7 +363,7 @@ CREATE TABLE collaboration_executor_bindings (
 );
 CREATE TABLE collaboration_action_executions (
   execution_id TEXT PRIMARY KEY,
-  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE RESTRICT,
+  group_id TEXT NOT NULL REFERENCES collaboration_groups(group_id) ON DELETE CASCADE,
   instance_id TEXT NOT NULL,
   turn_id TEXT NOT NULL,
   epoch INTEGER NOT NULL,
@@ -582,6 +612,15 @@ CREATE INDEX collaboration_analysis_finding_dedupe_idx
 
 const REQUIRED_TABLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   collaboration_meta: ['key', 'value'],
+  collaboration_local_group_bindings: [
+    'group_id',
+    'remote_url',
+    'principal_id',
+    'credential_id',
+    'binding_state',
+    'detach_reason',
+    'cleanup_paths_json',
+  ],
   collaboration_subscriptions: [
     'group_id',
     'remote_url',
@@ -659,6 +698,12 @@ const REQUIRED_TABLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   collaboration_workflow_instances: ['group_id', 'instance_id', 'revision'],
   collaboration_state_executions: ['group_id', 'instance_id', 'state_id'],
   collaboration_turns: ['group_id', 'instance_id', 'turn_id', 'attempt'],
+  collaboration_local_executors: [
+    'group_id',
+    'principal_id',
+    'client_id',
+    'executor_id',
+  ],
   collaboration_executor_bindings: [
     'group_id',
     'instance_id',
@@ -751,7 +796,7 @@ function initialize(database: Database.Database): void {
     );
   if (version === 0)
     database.transaction(() => {
-      database.exec(SCHEMA_V9);
+      database.exec(SCHEMA_V11);
       database
         .prepare('INSERT INTO collaboration_meta (key, value) VALUES (?, ?)')
         .run('format', COLLABORATION_PROJECT_SPACE_STORE_FORMAT);
@@ -821,6 +866,30 @@ export interface CollaborationProjectSpaceGroupRecord {
   readonly backoffAttempt: number;
 }
 
+export interface CollaborationLocalGroupBinding {
+  readonly groupId: string;
+  readonly remoteUrl: string;
+  readonly principalId: string | null;
+  readonly credentialId: string | null;
+  readonly recoveryCredentialId: string | null;
+  readonly bindingState: 'attached' | 'retained' | 'cleanup_pending';
+  readonly detachReason:
+    | 'local_remove'
+    | 'member_left'
+    | 'group_dissolved'
+    | null;
+  readonly terminalHead: string | null;
+  readonly cleanupPaths: readonly string[];
+  readonly cleanupError: string | null;
+  readonly updatedAtMs: number;
+}
+
+export interface CollaborationLocalDetachPlan {
+  readonly detached: boolean;
+  readonly binding: CollaborationLocalGroupBinding | null;
+  readonly cleanupPaths: readonly string[];
+}
+
 export interface CollaborationProjectSpaceEventRecord {
   readonly event: CollaborationEventV3;
   readonly commitHash: string;
@@ -832,6 +901,21 @@ export interface CollaborationActionSnapshotRecord {
   readonly eventId: string;
   readonly commitHash: string;
   readonly commitOrder: number;
+}
+
+export interface CollaborationLocalExecutorV3 {
+  readonly groupId: string;
+  readonly principalId: string;
+  readonly clientId: string;
+  readonly executorId: string;
+  readonly displayName: string;
+  readonly executorKind: 'run_once' | 'workflow' | 'external' | 'codex';
+  readonly workspacePath: string;
+  readonly filesystemAccess: 'read_only' | 'workspace_write';
+  readonly approvalPolicy: 'untrusted' | 'on-request' | 'never';
+  readonly config: Record<string, unknown>;
+  readonly enabled: boolean;
+  readonly updatedAtMs: number;
 }
 
 export interface CollaborationExecutorBindingV3 {
@@ -1095,6 +1179,44 @@ function groupFromRow(
   };
 }
 
+function localGroupBindingFromRow(
+  row: Record<string, unknown>,
+): CollaborationLocalGroupBinding {
+  const cleanupPaths = parseJson<unknown>(row.cleanup_paths_json);
+  if (
+    cleanupPaths !== null &&
+    (!Array.isArray(cleanupPaths) ||
+      cleanupPaths.some((value) => typeof value !== 'string'))
+  )
+    throw new CollaborationProjectSpaceStoreError(
+      'SCHEMA_STRUCTURE_INVALID',
+      `Local cleanup paths are invalid for ${String(row.group_id)}`,
+    );
+  return {
+    groupId: String(row.group_id),
+    remoteUrl: String(row.remote_url),
+    principalId: row.principal_id == null ? null : String(row.principal_id),
+    credentialId: row.credential_id == null ? null : String(row.credential_id),
+    recoveryCredentialId:
+      row.recovery_credential_id == null
+        ? null
+        : String(row.recovery_credential_id),
+    bindingState: String(
+      row.binding_state,
+    ) as CollaborationLocalGroupBinding['bindingState'],
+    detachReason:
+      row.detach_reason == null
+        ? null
+        : (String(
+            row.detach_reason,
+          ) as CollaborationLocalGroupBinding['detachReason']),
+    terminalHead: row.terminal_head == null ? null : String(row.terminal_head),
+    cleanupPaths: (cleanupPaths ?? []) as string[],
+    cleanupError: row.cleanup_error == null ? null : String(row.cleanup_error),
+    updatedAtMs: Number(row.updated_at_ms),
+  };
+}
+
 export class CollaborationProjectSpaceStore {
   private readonly database: Database.Database;
   private closed = false;
@@ -1214,6 +1336,33 @@ export class CollaborationProjectSpaceStore {
           nowMs,
           nowMs,
         );
+      this.database
+        .prepare(
+          `INSERT INTO collaboration_local_group_bindings (
+             group_id, remote_url, principal_id, credential_id,
+             recovery_credential_id, binding_state, detach_reason,
+             terminal_head, cleanup_paths_json, cleanup_error, updated_at_ms
+           ) VALUES (?, ?, ?, ?, ?, 'attached', NULL, NULL, NULL, NULL, ?)
+           ON CONFLICT(group_id) DO UPDATE SET
+             remote_url = excluded.remote_url,
+             principal_id = COALESCE(excluded.principal_id, principal_id),
+             credential_id = COALESCE(excluded.credential_id, credential_id),
+             recovery_credential_id = COALESCE(
+               excluded.recovery_credential_id,
+               recovery_credential_id
+             ),
+             binding_state = 'attached', detach_reason = NULL,
+             terminal_head = NULL, cleanup_paths_json = NULL,
+             cleanup_error = NULL, updated_at_ms = excluded.updated_at_ms`,
+        )
+        .run(
+          subscription.group_id,
+          subscription.remote_url,
+          input.localPrincipalId ?? null,
+          input.localCredentialId ?? null,
+          input.recoveryCredentialId ?? null,
+          nowMs,
+        );
     })();
   }
 
@@ -1267,6 +1416,23 @@ export class CollaborationProjectSpaceStore {
           Date.now(),
           input.groupId,
         );
+      this.database
+        .prepare(
+          `UPDATE collaboration_local_group_bindings
+              SET principal_id = ?, credential_id = ?,
+                  recovery_credential_id = COALESCE(?, recovery_credential_id),
+                  binding_state = 'attached', detach_reason = NULL,
+                  terminal_head = NULL, cleanup_paths_json = NULL,
+                  cleanup_error = NULL, updated_at_ms = ?
+            WHERE group_id = ?`,
+        )
+        .run(
+          input.localPrincipalId,
+          input.localCredentialId,
+          input.recoveryCredentialId ?? null,
+          Date.now(),
+          input.groupId,
+        );
     })();
   }
 
@@ -1282,13 +1448,179 @@ export class CollaborationProjectSpaceStore {
       throw new Error(`Collaboration Group not found: ${groupId}`);
   }
 
-  deleteSubscription(groupId: string): boolean {
+  updateGroupLocator(input: {
+    readonly groupId: string;
+    readonly remoteUrl: string;
+    readonly repositoryPath: string;
+    readonly gitSshKeyPath: string;
+    readonly nowMs?: number;
+  }): void {
     this.assertOpen();
-    return (
+    const nowMs = input.nowMs ?? Date.now();
+    this.database.transaction(() => {
+      const subscription = this.database
+        .prepare(
+          `UPDATE collaboration_subscriptions SET remote_url = ?
+            WHERE group_id = ?`,
+        )
+        .run(input.remoteUrl, input.groupId);
+      if (subscription.changes !== 1)
+        throw new Error(`Collaboration Group not found: ${input.groupId}`);
       this.database
+        .prepare(
+          `UPDATE collaboration_groups
+              SET repository_path = ?, git_ssh_key_path = ?, updated_at_ms = ?
+            WHERE group_id = ?`,
+        )
+        .run(input.repositoryPath, input.gitSshKeyPath, nowMs, input.groupId);
+      this.database
+        .prepare(
+          `UPDATE collaboration_local_group_bindings
+              SET remote_url = ?, updated_at_ms = ? WHERE group_id = ?`,
+        )
+        .run(input.remoteUrl, nowMs, input.groupId);
+    })();
+  }
+
+  getLocalGroupBinding(groupId: string): CollaborationLocalGroupBinding | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT * FROM collaboration_local_group_bindings WHERE group_id = ?`,
+      )
+      .get(groupId) as Record<string, unknown> | undefined;
+    return row ? localGroupBindingFromRow(row) : null;
+  }
+
+  listLocalGroupBindings(input?: {
+    readonly bindingState?: CollaborationLocalGroupBinding['bindingState'];
+  }): CollaborationLocalGroupBinding[] {
+    this.assertOpen();
+    const rows = input?.bindingState
+      ? this.database
+          .prepare(
+            `SELECT * FROM collaboration_local_group_bindings
+              WHERE binding_state = ? ORDER BY updated_at_ms, group_id`,
+          )
+          .all(input.bindingState)
+      : this.database
+          .prepare(
+            `SELECT * FROM collaboration_local_group_bindings
+              ORDER BY updated_at_ms, group_id`,
+          )
+          .all();
+    return (rows as Record<string, unknown>[]).map(localGroupBindingFromRow);
+  }
+
+  detachLocalGroup(input: {
+    readonly groupId: string;
+    readonly reason: NonNullable<
+      CollaborationLocalGroupBinding['detachReason']
+    >;
+    readonly terminalHead?: string | null;
+    readonly nowMs?: number;
+  }): CollaborationLocalDetachPlan {
+    this.assertOpen();
+    const group = this.getGroup(input.groupId);
+    if (!group)
+      return {
+        detached: false,
+        binding: this.getLocalGroupBinding(input.groupId),
+        cleanupPaths:
+          this.getLocalGroupBinding(input.groupId)?.cleanupPaths ?? [],
+      };
+    const cleanupPaths = [
+      ...new Set([
+        group.repositoryPath,
+        ...this.listStagedArtifacts({ groupId: input.groupId }).map(
+          (artifact) => path.dirname(artifact.stagedPath),
+        ),
+      ]),
+    ];
+    const nowMs = input.nowMs ?? Date.now();
+    this.database.transaction(() => {
+      this.database
+        .prepare(
+          `INSERT INTO collaboration_local_group_bindings (
+             group_id, remote_url, principal_id, credential_id,
+             recovery_credential_id, binding_state, detach_reason,
+             terminal_head, cleanup_paths_json, cleanup_error, updated_at_ms
+           ) VALUES (?, ?, ?, ?, ?, 'cleanup_pending', ?, ?, ?, NULL, ?)
+           ON CONFLICT(group_id) DO UPDATE SET
+             remote_url = excluded.remote_url,
+             principal_id = COALESCE(excluded.principal_id, principal_id),
+             credential_id = COALESCE(excluded.credential_id, credential_id),
+             recovery_credential_id = COALESCE(
+               excluded.recovery_credential_id,
+               recovery_credential_id
+             ),
+             binding_state = 'cleanup_pending',
+             detach_reason = excluded.detach_reason,
+             terminal_head = excluded.terminal_head,
+             cleanup_paths_json = excluded.cleanup_paths_json,
+             cleanup_error = NULL,
+             updated_at_ms = excluded.updated_at_ms`,
+        )
+        .run(
+          input.groupId,
+          group.remoteUrl,
+          group.localPrincipalId,
+          group.localCredentialId,
+          group.recoveryCredentialId,
+          input.reason,
+          input.terminalHead ?? group.lastVerifiedHead,
+          JSON.stringify(cleanupPaths),
+          nowMs,
+        );
+      const deleted = this.database
         .prepare('DELETE FROM collaboration_subscriptions WHERE group_id = ?')
-        .run(groupId).changes === 1
-    );
+        .run(input.groupId);
+      if (deleted.changes !== 1)
+        throw new Error(`Collaboration Group detach raced: ${input.groupId}`);
+    })();
+    return {
+      detached: true,
+      binding: this.getLocalGroupBinding(input.groupId),
+      cleanupPaths,
+    };
+  }
+
+  completeLocalGroupCleanup(groupId: string, nowMs = Date.now()): void {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_local_group_bindings
+            SET binding_state = 'retained', cleanup_paths_json = NULL,
+                cleanup_error = NULL, updated_at_ms = ?
+          WHERE group_id = ? AND binding_state = 'cleanup_pending'`,
+      )
+      .run(nowMs, groupId);
+    if (result.changes !== 1)
+      throw new Error(`Local Group cleanup is not pending: ${groupId}`);
+  }
+
+  failLocalGroupCleanup(
+    groupId: string,
+    error: string,
+    nowMs = Date.now(),
+  ): void {
+    this.assertOpen();
+    const result = this.database
+      .prepare(
+        `UPDATE collaboration_local_group_bindings
+            SET cleanup_error = ?, updated_at_ms = ?
+          WHERE group_id = ? AND binding_state = 'cleanup_pending'`,
+      )
+      .run(error, nowMs, groupId);
+    if (result.changes !== 1)
+      throw new Error(`Local Group cleanup is not pending: ${groupId}`);
+  }
+
+  deleteSubscription(groupId: string): boolean {
+    return this.detachLocalGroup({
+      groupId,
+      reason: 'local_remove',
+    }).detached;
   }
 
   listGroups(): CollaborationProjectSpaceGroupRecord[] {
@@ -1964,6 +2296,127 @@ export class CollaborationProjectSpaceStore {
     ).map((row) => this.notificationFromRow(row));
   }
 
+  saveLocalExecutor(
+    input: Omit<CollaborationLocalExecutorV3, 'updatedAtMs'> & {
+      readonly updatedAtMs?: number;
+    },
+  ): void {
+    this.assertOpen();
+    this.database
+      .prepare(
+        `INSERT INTO collaboration_local_executors (
+           group_id, principal_id, client_id, executor_id, display_name,
+           executor_kind, workspace_path, filesystem_access, approval_policy,
+           config_json, enabled, updated_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(group_id, principal_id, client_id, executor_id) DO UPDATE SET
+           display_name = excluded.display_name,
+           executor_kind = excluded.executor_kind,
+           workspace_path = excluded.workspace_path,
+           filesystem_access = excluded.filesystem_access,
+           approval_policy = excluded.approval_policy,
+           config_json = excluded.config_json,
+           enabled = excluded.enabled,
+           updated_at_ms = excluded.updated_at_ms`,
+      )
+      .run(
+        input.groupId,
+        input.principalId,
+        input.clientId,
+        input.executorId,
+        input.displayName,
+        input.executorKind,
+        input.workspacePath,
+        input.filesystemAccess,
+        input.approvalPolicy,
+        JSON.stringify(input.config),
+        input.enabled ? 1 : 0,
+        input.updatedAtMs ?? Date.now(),
+      );
+  }
+
+  getLocalExecutor(input: {
+    readonly groupId: string;
+    readonly principalId: string;
+    readonly clientId: string;
+    readonly executorId: string;
+  }): CollaborationLocalExecutorV3 | null {
+    this.assertOpen();
+    const row = this.database
+      .prepare(
+        `SELECT * FROM collaboration_local_executors
+          WHERE group_id = ? AND principal_id = ? AND client_id = ?
+            AND executor_id = ?`,
+      )
+      .get(
+        input.groupId,
+        input.principalId,
+        input.clientId,
+        input.executorId,
+      ) as Record<string, unknown> | undefined;
+    return row ? this.localExecutorFromRow(row) : null;
+  }
+
+  listLocalExecutors(input: {
+    readonly groupId: string;
+    readonly principalId?: string;
+    readonly clientId?: string;
+  }): CollaborationLocalExecutorV3[] {
+    this.assertOpen();
+    const clauses = ['group_id = ?'];
+    const parameters: string[] = [input.groupId];
+    if (input.principalId) {
+      clauses.push('principal_id = ?');
+      parameters.push(input.principalId);
+    }
+    if (input.clientId) {
+      clauses.push('client_id = ?');
+      parameters.push(input.clientId);
+    }
+    return (
+      this.database
+        .prepare(
+          `SELECT * FROM collaboration_local_executors
+            WHERE ${clauses.join(' AND ')}
+            ORDER BY display_name, executor_id`,
+        )
+        .all(...parameters) as Record<string, unknown>[]
+    ).map((row) => this.localExecutorFromRow(row));
+  }
+
+  disableLocalExecutor(input: {
+    readonly groupId: string;
+    readonly principalId: string;
+    readonly executorId: string;
+    readonly updatedAtMs?: number;
+  }): void {
+    this.assertOpen();
+    this.database
+      .prepare(
+        `UPDATE collaboration_local_executors
+          SET enabled = 0, updated_at_ms = ?
+          WHERE group_id = ? AND principal_id = ? AND executor_id = ?`,
+      )
+      .run(
+        input.updatedAtMs ?? Date.now(),
+        input.groupId,
+        input.principalId,
+        input.executorId,
+      );
+    this.database
+      .prepare(
+        `UPDATE collaboration_executor_bindings
+          SET enabled = 0, updated_at_ms = ?
+          WHERE group_id = ? AND principal_id = ? AND executor_id = ?`,
+      )
+      .run(
+        input.updatedAtMs ?? Date.now(),
+        input.groupId,
+        input.principalId,
+        input.executorId,
+      );
+  }
+
   saveExecutorBinding(
     input: Omit<CollaborationExecutorBindingV3, 'updatedAtMs'> & {
       readonly updatedAtMs?: number;
@@ -2047,6 +2500,22 @@ export class CollaborationProjectSpaceStore {
         )
         .all(groupId) as Record<string, unknown>[]
     ).map((row) => this.bindingFromRow(row));
+  }
+
+  deleteExecutorBindingsForState(input: {
+    readonly groupId: string;
+    readonly instanceId: string;
+    readonly stateId: string;
+    readonly principalId: string;
+  }): void {
+    this.assertOpen();
+    this.database
+      .prepare(
+        `DELETE FROM collaboration_executor_bindings
+          WHERE group_id = ? AND instance_id = ? AND state_id = ?
+            AND principal_id = ?`,
+      )
+      .run(input.groupId, input.instanceId, input.stateId, input.principalId);
   }
 
   stageArtifact(input: {
@@ -2240,6 +2709,31 @@ export class CollaborationProjectSpaceStore {
         force: true,
       });
     return expired.length;
+  }
+
+  private localExecutorFromRow(
+    row: Record<string, unknown>,
+  ): CollaborationLocalExecutorV3 {
+    return {
+      groupId: String(row.group_id),
+      principalId: String(row.principal_id),
+      clientId: String(row.client_id),
+      executorId: String(row.executor_id),
+      displayName: String(row.display_name),
+      executorKind: String(
+        row.executor_kind,
+      ) as CollaborationLocalExecutorV3['executorKind'],
+      workspacePath: String(row.workspace_path),
+      filesystemAccess: String(
+        row.filesystem_access,
+      ) as CollaborationLocalExecutorV3['filesystemAccess'],
+      approvalPolicy: String(
+        row.approval_policy,
+      ) as CollaborationLocalExecutorV3['approvalPolicy'],
+      config: JSON.parse(String(row.config_json)) as Record<string, unknown>,
+      enabled: Number(row.enabled) === 1,
+      updatedAtMs: Number(row.updated_at_ms),
+    };
   }
 
   private bindingFromRow(

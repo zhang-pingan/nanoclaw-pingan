@@ -57,7 +57,7 @@ export function collaborationCanMutate(group) {
     collaborationLocalMembershipStatus(group) === 'active' &&
     (!group?.icarusIdentity?.credentialId ||
       localCredential?.status === 'active') &&
-    group.lifecycle !== 'archived',
+    group.lifecycle === 'active',
   );
 }
 
@@ -78,6 +78,10 @@ export function collaborationActionAccess(
     decision = allowed?.workflowDefinitions?.[resourceId]?.[action];
   else if (resourceType === 'workflow_instance')
     decision = allowed?.workflowInstances?.[resourceId]?.[action];
+  else if (resourceType === 'executor')
+    decision = allowed?.executors?.[resourceId]?.[action];
+  else if (resourceType === 'action')
+    decision = allowed?.actions?.[resourceId]?.[action];
   else if (resourceType === 'client')
     decision = allowed?.clients?.[resourceId]?.[action];
   else if (resourceType === 'credential')
@@ -192,12 +196,112 @@ export function collaborationWorkflowStateActionAccess(
     action === 'reassign'
       ? group?.allowedActions?.workflowInstances?.[instanceId]
           ?.reassignStates?.[stateId]
+      : action === 'withdrawExecution'
+        ? group?.projection?.workflowInstances?.[instanceId]?.business_state ===
+          stateId
+          ? group?.allowedActions?.workflowInstances?.[instanceId]
+              ?.withdrawCurrentStateExecution
+          : null
       : null;
   if (decision && typeof decision.allowed === 'boolean') return decision;
   return {
     allowed: false,
     code: 'ACTION_NOT_PROJECTED',
     reason: '当前 Workflow State 未提供此操作能力',
+  };
+}
+
+export function collaborationOwnedActions(group) {
+  return Object.values(group?.projection?.actions || {})
+    .filter(
+      (action) => action.owner_principal_id === group?.localPrincipalId,
+    )
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export function collaborationActionType(action) {
+  return action?.kind === 'external' && action?.adapter === 'codex-task'
+    ? 'codex'
+    : action?.kind;
+}
+
+export function collaborationAvailableLocalExecutors(
+  group,
+  localExecutors,
+  action = null,
+) {
+  const requiredKind = action ? collaborationActionType(action) : null;
+  const descriptors = group?.projection?.executors?.[group?.localPrincipalId] ||
+    {};
+  return (localExecutors || []).filter(
+    (executor) =>
+      executor.principalId === group?.localPrincipalId &&
+      executor.clientId === group?.localClientId &&
+      executor.enabled &&
+      descriptors[executor.executorId]?.status === 'active' &&
+      (!requiredKind || executor.executorKind === requiredKind),
+  );
+}
+
+export function buildCollaborationExecutorRegistrationRequest(input) {
+  const displayName = String(input.displayName || '').trim();
+  const workspacePath = String(input.workspacePath || '').trim();
+  const kind = String(input.kind || 'codex');
+  if (!displayName) throw new Error('请输入 Executor 显示名称');
+  if (!workspacePath) throw new Error('请选择本地工作目录');
+  if (!['codex', 'workflow', 'run_once', 'external'].includes(kind))
+    throw new Error('Executor 类型无效');
+  return {
+    expectedRevision: Number(input.expectedRevision),
+    displayName,
+    kind,
+    workspacePath,
+    filesystemAccess: String(input.filesystemAccess || 'read_only'),
+    approvalPolicy: String(input.approvalPolicy || 'on-request'),
+    ...(String(input.model || '').trim()
+      ? { model: String(input.model).trim() }
+      : {}),
+  };
+}
+
+export function buildCollaborationActionMutationRequest(input) {
+  const name = String(input.name || '').trim();
+  const prompt = String(input.prompt || '').trim();
+  const actionType = String(input.actionType || 'codex');
+  if (!name) throw new Error('请输入 Action 名称');
+  if (!prompt) throw new Error('请输入 Action Prompt');
+  if (!['run_once', 'codex'].includes(actionType))
+    throw new Error('Action 类型无效');
+  return {
+    expectedRevision: Number(input.expectedRevision),
+    name,
+    actionType,
+    prompt,
+    filesystemAccess: String(input.filesystemAccess || 'read_only'),
+    resultFormat: 'collaboration_state_result',
+  };
+}
+
+export function buildCollaborationStateExecutionRequest(input) {
+  const mode = String(input.mode || 'manual');
+  if (!['manual', 'assisted', 'automatic'].includes(mode))
+    throw new Error('执行模式无效');
+  if (mode === 'manual')
+    return {
+      expectedRevision: Number(input.expectedRevision),
+      mode,
+      actionId: null,
+      executorId: null,
+    };
+  const actionId = String(input.actionId || '').trim();
+  const executorId = String(input.executorId || '').trim();
+  if (!actionId) throw new Error('请选择 Action');
+  if (!executorId) throw new Error('请选择本机可用 Executor');
+  return {
+    expectedRevision: Number(input.expectedRevision),
+    mode,
+    actionId,
+    executorId,
   };
 }
 
@@ -247,6 +351,71 @@ export function collaborationWorkflowTurnActionAllowed(
   ).allowed;
 }
 
+function collaborationHasActiveLocalIdentity(group) {
+  const localCredential = collaborationLocalCredential(group);
+  return Boolean(
+    group?.subscriptionMode === 'member' &&
+    group.localPrincipalId &&
+    group.localClientId &&
+    collaborationLocalMembershipStatus(group) === 'active' &&
+    (!group?.icarusIdentity?.credentialId ||
+      localCredential?.status === 'active'),
+  );
+}
+
+export function collaborationCanDissolve(group) {
+  return Boolean(
+    collaborationHasActiveLocalIdentity(group) &&
+    group.localPrincipalId === group.ownerPrincipalId &&
+    ['active', 'archived'].includes(group.lifecycle),
+  );
+}
+
+export function collaborationCanLeave(group) {
+  return Boolean(
+    collaborationHasActiveLocalIdentity(group) &&
+    group.localPrincipalId !== group.ownerPrincipalId &&
+    ['active', 'archived'].includes(group.lifecycle),
+  );
+}
+
+export function collaborationCanRemoveLocal(group) {
+  return Boolean(group?.groupId);
+}
+
+export function buildCollaborationLifecycleRequest(input) {
+  const operation = String(input?.operation || '');
+  const groupId = String(input?.group?.groupId || '');
+  const confirmation = String(input?.confirmation || '').trim();
+  if (!groupId) throw new Error('群组 ID 缺失');
+  if (confirmation !== groupId) throw new Error('输入的群组 ID 不匹配');
+  if (operation === 'remove-local')
+    return {
+      endpoint: `/subscriptions/${encodeURIComponent(groupId)}`,
+      method: 'DELETE',
+      body: { confirmation },
+    };
+  if (!['dissolve', 'leave'].includes(operation))
+    throw new Error('不支持的群组生命周期操作');
+  const aggregateType = operation === 'leave' ? 'membership' : 'group';
+  const aggregateId =
+    operation === 'leave' ? input.group.localPrincipalId : groupId;
+  const expectedRevision =
+    input.group.projection?.aggregateHeads?.[`${aggregateType}:${aggregateId}`]
+      ?.revision ?? 0;
+  return {
+    endpoint: `/groups/${encodeURIComponent(groupId)}/${
+      operation === 'dissolve' ? 'dissolve' : 'leave'
+    }`,
+    method: 'POST',
+    body: {
+      confirmation,
+      expectedRevision,
+      reason:
+        operation === 'dissolve' ? '群主确认解散群组' : '成员确认退出群组',
+    },
+  };
+}
 export function collaborationCanApproveMembers(group) {
   if (group?.allowedActions)
     return collaborationActionAllowed(group, 'approveMembers');
@@ -706,6 +875,8 @@ export function collaborationCanCreateTurn(group, instance, definition) {
 
 export function collaborationEligibleTurnExecutors(group, turn, bindings) {
   if (!group || !turn || turn.execution_mode === 'manual') return [];
+  const principalExecutors =
+    group.projection?.executors?.[group.localPrincipalId] || {};
   return [
     ...new Set(
       (bindings || [])
@@ -718,7 +889,8 @@ export function collaborationEligibleTurnExecutors(group, turn, bindings) {
             binding.principalId === group.localPrincipalId &&
             binding.clientId === group.localClientId &&
             binding.actionHash === turn.action_hash &&
-            binding.promptHash === turn.prompt_hash,
+            binding.promptHash === turn.prompt_hash &&
+            principalExecutors[binding.executorId]?.status === 'active',
         )
         .map((binding) => binding.executorId),
     ),
@@ -744,11 +916,28 @@ export function buildCollaborationRecoverTurnRequest(input) {
   const reason = String(input.reason || '').trim();
   if (!reason) throw new Error('恢复原因不能为空');
   if (reason.length > 4000) throw new Error('恢复原因最多 4000 个字符');
+  const assigneePrincipalId = String(input.assigneePrincipalId || '').trim();
+  if (!assigneePrincipalId) throw new Error('必须选择新的负责人');
   return {
     expectedRevision: collaborationExpectedRevision(input.expectedRevision),
     previousAttempt,
+    assigneePrincipalId,
     reason,
   };
+}
+
+export function collaborationActiveMemberOptions(group) {
+  return Object.values(group?.projection?.members || {})
+    .filter((member) => member?.status === 'active' && member.principal_id)
+    .sort((left, right) =>
+      String(left.display_name || left.principal_id).localeCompare(
+        String(right.display_name || right.principal_id),
+      ),
+    )
+    .map((member) => [
+      member.principal_id,
+      `${member.display_name || member.principal_id} · ${collaborationShortId(member.principal_id)}`,
+    ]);
 }
 
 export function collaborationWorkflowInstanceCommand(instance) {

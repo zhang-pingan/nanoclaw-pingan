@@ -31,19 +31,28 @@ import {
   buildCollaborationCompleteTurnRequest,
   buildCollaborationDiscussionMessageRequest,
   buildCollaborationReasonRequest,
+  buildCollaborationActionMutationRequest,
+  buildCollaborationExecutorRegistrationRequest,
+  buildCollaborationStateExecutionRequest,
   buildCollaborationWorkItemAssignmentRequest,
   buildCollaborationWorkItemDetailsRequest,
   buildCollaborationWorkItemRelationsRequest,
   buildCollaborationExternalResultRequest,
   buildCollaborationFindingDecisionRequest,
+  buildCollaborationLifecycleRequest,
   buildCollaborationRecoverTurnRequest,
   buildCollaborationStartTurnRequest,
   buildCollaborationTurnCancellationRequest,
   buildCollaborationWorkflowReassignmentRequest,
+  collaborationActiveMemberOptions,
   collaborationAnalysisRunAccess,
   collaborationActionAllowed,
+  collaborationActionType,
+  collaborationAvailableLocalExecutors,
   collaborationCanApproveMembers,
   collaborationCanAnswerWorkItemAssignment,
+  collaborationCanDissolve,
+  collaborationCanLeave,
   collaborationCanRecoverTurn,
   collaborationCanDecideRecovery,
   collaborationCanCreateTurn,
@@ -59,6 +68,7 @@ import {
   collaborationLocalMembershipStatus,
   collaborationLocalCredential,
   collaborationOutcomeRoutes,
+  collaborationOwnedActions,
   collaborationPrincipalName,
   collaborationResourceTarget,
   collaborationShortId,
@@ -262,6 +272,7 @@ export function createCollaborationWorkspace(options) {
     dialogBody: document.getElementById('collaboration-dialog-body'),
     dialogError: document.getElementById('collaboration-dialog-error'),
     dialogSubmit: document.getElementById('collaboration-dialog-submit'),
+    contextMenu: document.getElementById('collaboration-group-context-menu'),
     tabs: [...document.querySelectorAll('[data-collaboration-tab]')],
   };
   let workflowEditor = null;
@@ -358,6 +369,46 @@ export function createCollaborationWorkspace(options) {
           .join('')
       : empty(state.loading ? '正在加载' : '暂无群组');
   };
+
+  const closeGroupContextMenu = () => {
+    elements.contextMenu?.classList.add('hidden');
+    state.contextGroupId = '';
+  };
+
+  elements.list?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-collaboration-group-id]');
+    if (!(button instanceof HTMLButtonElement)) return;
+    closeGroupContextMenu();
+    void selectGroup(button.dataset.collaborationGroupId);
+  });
+
+  elements.list?.addEventListener('contextmenu', (event) => {
+    const button = event.target.closest('[data-collaboration-group-id]');
+    if (!(button instanceof HTMLButtonElement) || !elements.contextMenu) return;
+    event.preventDefault();
+    state.contextGroupId = button.dataset.collaborationGroupId || '';
+    elements.contextMenu.style.left = `${Math.max(
+      8,
+      Math.min(event.clientX, window.innerWidth - 190),
+    )}px`;
+    elements.contextMenu.style.top = `${Math.max(
+      8,
+      Math.min(event.clientY, window.innerHeight - 56),
+    )}px`;
+    elements.contextMenu.classList.remove('hidden');
+  });
+
+  elements.contextMenu?.addEventListener('click', () => {
+    const group = state.groups.find(
+      (candidate) => candidate.groupId === state.contextGroupId,
+    );
+    closeGroupContextMenu();
+    if (group) openLifecycleConfirmation('remove-local', group);
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!elements.contextMenu?.contains(event.target)) closeGroupContextMenu();
+  });
 
   const renderShell = () => {
     const group = selectedGroup();
@@ -709,6 +760,12 @@ export function createCollaborationWorkspace(options) {
       instance.instance_id,
       'configureCurrentState',
     );
+    const canWithdrawExecution = collaborationWorkflowStateActionAccess(
+      group,
+      instance.instance_id,
+      instance.business_state,
+      'withdrawExecution',
+    ).allowed;
     const canRunCommand = Boolean(
       instanceCommand &&
       resourceAction(
@@ -749,8 +806,8 @@ export function createCollaborationWorkspace(options) {
         });
     });
     const currentTurn = turn
-      ? `<dl class="collaboration-definition-list"><div><dt>状态</dt><dd>${html(workflowStateLabel(definition, turn.state_id))}</dd></div><div><dt>负责人</dt><dd>${html(collaborationPrincipalName(projection, turn.assignee_principal_id))}</dd></div><div><dt>客户端</dt><dd>${html(turn.claimant_client_id || '-')}</dd></div><div><dt>执行模式</dt><dd>${html(collaborationLabel(turn.execution_mode))}</dd></div><div><dt>尝试次数</dt><dd>${html(turn.attempt)}</dd></div><div><dt>截止时间</dt><dd>${html(collaborationTurnDeadline(turn)?.deadlineAt || '-')}</dd></div>${turn.recovery_reason ? `<div><dt>恢复原因</dt><dd>${html(turn.recovery_reason)}</dd></div>` : ''}</dl><div class="collaboration-record-actions">${canRecoverTurn ? '<button type="button" class="btn-primary" data-collaboration-action="recover-turn">恢复执行轮次</button>' : ''}${access.canStart ? '<button type="button" class="btn-primary" data-collaboration-action="start-turn">开始执行</button>' : ''}${access.canComplete ? '<button type="button" class="btn-primary" data-collaboration-action="complete-turn">完成</button>' : ''}${canCancelTurn ? '<button type="button" class="btn-danger-soft" data-collaboration-action="cancel-turn">取消 Turn</button>' : ''}${canConfigure && turn.state !== 'recovery_required' ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">执行配置</button>' : ''}</div><div class="collaboration-outcome-preview">${routes.map((route) => `<span><strong>${html(collaborationLabel(route.label || route.outcome))}</strong> → ${html(workflowStateLabel(definition, route.target_state))}</span>`).join('')}</div>`
-      : `<div class="collaboration-section-empty">${instance.lifecycle === 'running' ? `可以开始：${html(workflowStateLabel(definition, instance.business_state))}` : '当前没有执行轮次'}</div><div class="collaboration-record-actions">${canConfigure ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">执行配置</button>' : ''}${canCreateTurn ? `<button type="button" class="btn-primary" data-collaboration-action="create-turn">${turns.length ? '继续执行' : '创建执行轮次'}</button>` : ''}</div>`;
+      ? `<dl class="collaboration-definition-list"><div><dt>状态</dt><dd>${html(workflowStateLabel(definition, turn.state_id))}</dd></div><div><dt>负责人</dt><dd>${html(collaborationPrincipalName(projection, turn.assignee_principal_id))}</dd></div><div><dt>客户端</dt><dd>${html(turn.claimant_client_id || '-')}</dd></div><div><dt>执行模式</dt><dd>${html(collaborationLabel(turn.execution_mode))}</dd></div><div><dt>尝试次数</dt><dd>${html(turn.attempt)}</dd></div><div><dt>截止时间</dt><dd>${html(collaborationTurnDeadline(turn)?.deadlineAt || '-')}</dd></div>${turn.recovery_reason ? `<div><dt>恢复原因</dt><dd>${html(turn.recovery_reason)}</dd></div>` : ''}</dl><div class="collaboration-record-actions">${canRecoverTurn ? '<button type="button" class="btn-primary" data-collaboration-action="recover-turn">恢复执行轮次</button>' : ''}${access.canStart ? '<button type="button" class="btn-primary" data-collaboration-action="start-turn">开始执行</button>' : ''}${access.canComplete ? '<button type="button" class="btn-primary" data-collaboration-action="complete-turn">完成</button>' : ''}${canCancelTurn ? '<button type="button" class="btn-danger-soft" data-collaboration-action="cancel-turn">取消 Turn</button>' : ''}${canConfigure && turn.state !== 'recovery_required' ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">执行配置</button>' : ''}${canWithdrawExecution ? '<button type="button" class="btn-danger-soft" data-collaboration-action="withdraw-execution">清除执行配置</button>' : ''}</div><div class="collaboration-outcome-preview">${routes.map((route) => `<span><strong>${html(collaborationLabel(route.label || route.outcome))}</strong> → ${html(workflowStateLabel(definition, route.target_state))}</span>`).join('')}</div>`
+      : `<div class="collaboration-section-empty">${instance.lifecycle === 'running' ? `可以开始：${html(workflowStateLabel(definition, instance.business_state))}` : '当前没有执行轮次'}</div><div class="collaboration-record-actions">${canConfigure ? '<button type="button" class="btn-ghost" data-collaboration-action="configure-execution">执行配置</button>' : ''}${canWithdrawExecution ? '<button type="button" class="btn-danger-soft" data-collaboration-action="withdraw-execution">清除执行配置</button>' : ''}${canCreateTurn ? `<button type="button" class="btn-primary" data-collaboration-action="create-turn">${turns.length ? '继续执行' : '创建执行轮次'}</button>` : ''}</div>`;
     return `<section class="collaboration-detail-toolbar"><button type="button" class="btn-ghost" data-collaboration-action="close-instance">返回</button><div class="collaboration-record-actions">${canReassign ? '<button type="button" class="btn-ghost" data-collaboration-action="reassign-instance">补齐参与者 / 重新分配</button>' : ''}${canRunCommand ? `<button type="button" class="btn-primary" data-collaboration-action="instance-command" data-command="${instanceCommand.command}">${instanceCommand.label}</button>` : ''}${canClose ? '<button type="button" class="btn-danger-soft" data-collaboration-action="close-workflow-instance">关闭实例</button>' : ''}</div></section><section class="collaboration-metrics">${metric('生命周期', collaborationStatusLabel(instance.lifecycle))}${metric('当前状态', workflowStateLabel(definition, instance.business_state))}${metric('周期', instance.epoch)}${metric('执行轮次', turns.length)}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>${html(collaborationLabel(definition?.definition?.name || instance.definition_id))} · ${html(instance.instance_id)}</h3>${status(instance.lifecycle)}</div><div id="collaboration-instance-graph"></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>当前执行轮次</h3>${turn ? status(turn.state) : ''}</div>${currentTurn}</section><section class="collaboration-section"><div class="collaboration-section-head"><h3>执行历史</h3><span>${turns.length}</span></div>${turns.map((item) => `<article class="collaboration-record"><div><strong>${html(workflowStateLabel(definition, item.state_id))}</strong><small>${html(timestamp(item.created_at))}${item.outcome ? ` · ${html(collaborationLabel(item.outcome))}` : ''}</small>${renderArtifactRefs(projection, item.artifact_refs)}</div>${status(item.state)}</article>`).join('') || empty('暂无执行记录')}</section>`;
   };
 
@@ -762,7 +819,29 @@ export function createCollaborationWorkspace(options) {
     );
     if (selectedInstance) return renderInstanceDetail(selectedInstance);
     const definitions = workflowDefinitionEntries();
-    return `<section class="collaboration-section"><div class="collaboration-section-head"><h3>工作流定义</h3>${groupAction('proposeWorkflowDefinition') ? '<button type="button" class="btn-primary" data-collaboration-action="new-workflow">新建</button>' : ''}</div><div class="collaboration-record-list">${
+    const ownedActions = collaborationOwnedActions(group);
+    const localExecutors = state.detail?.localExecutors || [];
+    const executionResources = `<section class="collaboration-section"><div class="collaboration-section-head"><h3>执行资源</h3><div class="collaboration-record-actions">${groupAction('registerOwnExecutor') ? '<button type="button" class="btn-ghost" data-collaboration-action="new-executor">添加 Executor</button>' : ''}${groupAction('publishOwnedAction') ? '<button type="button" class="btn-primary" data-collaboration-action="new-action">创建 Action</button>' : ''}</div></div><div class="collaboration-resource-columns"><div><h4>本机 Executor</h4><div class="collaboration-record-list">${
+      localExecutors
+        .map((executor) => {
+          const canRevoke = resourceAction(
+            'executor',
+            executor.executorId,
+            'revoke',
+          );
+          return `<article class="collaboration-record"><div><strong>${html(executor.displayName)}</strong><small>${html(collaborationLabel(executor.executorKind))} · ${html(collaborationShortId(executor.executorId))}</small></div>${status(executor.enabled ? 'active' : 'revoked')}${canRevoke ? `<button type="button" class="btn-danger-soft" data-collaboration-action="revoke-executor" data-executor-id="${attr(executor.executorId)}">撤销</button>` : ''}</article>`;
+        })
+        .join('') || empty('暂无本机 Executor')
+    }</div></div><div><h4>我的 Action</h4><div class="collaboration-record-list">${
+      ownedActions
+        .map((action) => {
+          const key = `${action.owner_principal_id}:${action.action_id}`;
+          const canRevise = resourceAction('action', key, 'revise');
+          return `<article class="collaboration-record"><div><strong>${html(action.name)}</strong><small>${html(collaborationLabel(collaborationActionType(action)))} · v${html(action.version)} · ${html(collaborationShortId(action.action_id))}</small></div>${canRevise ? `<button type="button" class="btn-ghost" data-collaboration-action="revise-action" data-action-id="${attr(action.action_id)}">修订</button>` : ''}</article>`;
+        })
+        .join('') || empty('暂无 Action')
+    }</div></div></div></section>`;
+    return `${executionResources}<section class="collaboration-section"><div class="collaboration-section-head"><h3>工作流定义</h3>${groupAction('proposeWorkflowDefinition') ? '<button type="button" class="btn-primary" data-collaboration-action="new-workflow">新建</button>' : ''}</div><div class="collaboration-record-list">${
       definitions
         .map((entry) => {
           const key = `${entry.definition.definition_id}@${entry.definition.version}`;
@@ -908,7 +987,21 @@ export function createCollaborationWorkspace(options) {
         (group.projection?.group?.default_permission_template_id ||
           group.allowedActions?.catalogs?.defaultTemplateId),
     );
-    return `${renderObserverBand(group)}<section class="collaboration-section"><div class="collaboration-section-head"><h3>Git Remote Access</h3><button type="button" class="btn-ghost" data-collaboration-action="edit-git-ssh-key">修改 SSH Key</button></div><dl class="collaboration-definition-list"><div><dt>Remote</dt><dd>${html(group.remoteUrl)}</dd></div><div><dt>本地 SSH Key</dt><dd>${html(group.gitRemoteAccess?.sshKeyPath || '-')}</dd></div><div><dt>权限边界</dt><dd>clone / fetch / push</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="clear-git-ssh-key">使用默认路径</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Icarus Group Permission 与身份</h3></div><dl class="collaboration-definition-list"><div><dt>业务身份</dt><dd title="${attr(identity.principalId || '')}">${html(identity.principalId ? collaborationShortId(identity.principalId) : '-')}</dd></div><div><dt>当前 Client</dt><dd title="${attr(identity.clientId || '')}">${html(identity.clientId ? collaborationShortId(identity.clientId) : '-')}</dd></div><div><dt>当前 Credential</dt><dd title="${attr(identity.credentialId || '')}">${html(identity.credentialId ? collaborationShortId(identity.credentialId) : '-')}</dd></div><div><dt>签名状态</dt><dd>${html(collaborationStatusLabel(localCredential?.status || (identity.credentialId ? 'unknown' : 'not_configured')))}</dd></div><div><dt>离线 Group recovery</dt><dd>${identity.recoveryCredentialAvailable ? '本机可用' : '本机未导入'}</dd></div><div><dt>权限边界</dt><dd>Host API / 协议验证 / Reducer</dd></div></dl><div class="collaboration-record-actions">${groupAction('rotateOwnCredential') ? '<button type="button" class="btn-ghost" data-collaboration-action="rotate-credential">轮换 Credential</button>' : ''}${identity.recoveryCredentialAvailable ? '<button type="button" class="btn-ghost" data-collaboration-action="export-recovery-credential">导出离线恢复凭据</button>' : ''}<button type="button" class="btn-ghost" data-collaboration-action="import-recovery-credential">导入离线恢复凭据</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>群组与本地数据</h3></div><dl class="collaboration-definition-list"><div><dt>群组 ID</dt><dd>${html(group.groupId)}</dd></div><div><dt>订阅模式</dt><dd>${html(collaborationLabel(group.subscriptionMode))}</dd></div><div><dt>默认权限模板</dt><dd>${html(defaultTemplate ? `${defaultTemplate.nameZh} · ${defaultTemplate.summaryZh}` : '-')}</dd></div><div><dt>协议状态</dt><dd>${html(collaborationStatusLabel(group.protocolStatus))}</dd></div><div><dt>已验证版本</dt><dd>${html(group.lastVerifiedHead || '-')}</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="backup">创建备份</button><button type="button" class="btn-ghost" data-collaboration-action="restore">恢复备份</button>${groupAction('updateSettings') ? '<button type="button" class="btn-ghost" data-collaboration-action="edit-default-template">修改新成员默认模板</button>' : ''}${groupAction('archive') ? '<button type="button" class="btn-danger-soft" data-collaboration-action="archive-group">归档群组</button>' : ''}${groupAction('reopen') ? '<button type="button" class="btn-primary" data-collaboration-action="reopen-group">恢复群组</button>' : ''}</div></section>`;
+    const lifecycleActions = [
+      groupAction('archive')
+        ? '<button type="button" class="btn-danger-soft" data-collaboration-action="archive-group">归档群组</button>'
+        : '',
+      groupAction('reopen')
+        ? '<button type="button" class="btn-primary" data-collaboration-action="reopen-group">恢复群组</button>'
+        : '',
+      collaborationCanLeave(group)
+        ? '<button type="button" class="btn-danger-soft" data-collaboration-action="leave-group">退出群组</button>'
+        : '',
+      collaborationCanDissolve(group)
+        ? '<button type="button" class="btn-danger-soft" data-collaboration-action="dissolve-group">解散群组</button>'
+        : '',
+    ].join('');
+    return `${renderObserverBand(group)}<section class="collaboration-section"><div class="collaboration-section-head"><h3>Git Remote Access</h3><button type="button" class="btn-ghost" data-collaboration-action="edit-git-ssh-key">修改 SSH Key</button></div><dl class="collaboration-definition-list"><div><dt>Remote</dt><dd>${html(group.remoteUrl)}</dd></div><div><dt>本地 SSH Key</dt><dd>${html(group.gitRemoteAccess?.sshKeyPath || '-')}</dd></div><div><dt>权限边界</dt><dd>clone / fetch / push</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="clear-git-ssh-key">使用默认路径</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>Icarus Group Permission 与身份</h3></div><dl class="collaboration-definition-list"><div><dt>业务身份</dt><dd title="${attr(identity.principalId || '')}">${html(identity.principalId ? collaborationShortId(identity.principalId) : '-')}</dd></div><div><dt>当前 Client</dt><dd title="${attr(identity.clientId || '')}">${html(identity.clientId ? collaborationShortId(identity.clientId) : '-')}</dd></div><div><dt>当前 Credential</dt><dd title="${attr(identity.credentialId || '')}">${html(identity.credentialId ? collaborationShortId(identity.credentialId) : '-')}</dd></div><div><dt>签名状态</dt><dd>${html(collaborationStatusLabel(localCredential?.status || (identity.credentialId ? 'unknown' : 'not_configured')))}</dd></div><div><dt>离线 Group recovery</dt><dd>${identity.recoveryCredentialAvailable ? '本机可用' : '本机未导入'}</dd></div><div><dt>权限边界</dt><dd>Host API / 协议验证 / Reducer</dd></div></dl><div class="collaboration-record-actions">${groupAction('rotateOwnCredential') ? '<button type="button" class="btn-ghost" data-collaboration-action="rotate-credential">轮换 Credential</button>' : ''}${identity.recoveryCredentialAvailable ? '<button type="button" class="btn-ghost" data-collaboration-action="export-recovery-credential">导出离线恢复凭据</button>' : ''}<button type="button" class="btn-ghost" data-collaboration-action="import-recovery-credential">导入离线恢复凭据</button></div></section><section class="collaboration-section"><div class="collaboration-section-head"><h3>群组与本地数据</h3></div><dl class="collaboration-definition-list"><div><dt>群组 ID</dt><dd>${html(group.groupId)}</dd></div><div><dt>订阅模式</dt><dd>${html(collaborationLabel(group.subscriptionMode))}</dd></div><div><dt>默认权限模板</dt><dd>${html(defaultTemplate ? `${defaultTemplate.nameZh} · ${defaultTemplate.summaryZh}` : '-')}</dd></div><div><dt>协议状态</dt><dd>${html(collaborationStatusLabel(group.protocolStatus))}</dd></div><div><dt>已验证版本</dt><dd>${html(group.lastVerifiedHead || '-')}</dd></div></dl><div class="collaboration-record-actions"><button type="button" class="btn-ghost" data-collaboration-action="backup">创建备份</button><button type="button" class="btn-ghost" data-collaboration-action="restore">恢复备份</button>${groupAction('updateSettings') ? '<button type="button" class="btn-ghost" data-collaboration-action="edit-default-template">修改新成员默认模板</button>' : ''}${lifecycleActions}</div></section>`;
   };
 
   const renderDiagnostics = () => {
@@ -1063,14 +1156,20 @@ export function createCollaborationWorkspace(options) {
 
   const syncSelected = async () => {
     if (!state.selectedGroupId) return;
-    await options.request(
+    const groupId = state.selectedGroupId;
+    const result = await options.request(
       `/groups/${encodeURIComponent(state.selectedGroupId)}/sync`,
       {
         method: 'POST',
         body: '{}',
       },
     );
-    await loadDetail(state.selectedGroupId, false);
+    if (!result.group) {
+      forgetLocalGroup(groupId);
+      options.showToast('远端生命周期已同步，群组已从本机列表移除');
+      return;
+    }
+    await loadDetail(groupId, false);
     options.showToast('群组同步完成');
   };
 
@@ -2249,6 +2348,7 @@ export function createCollaborationWorkspace(options) {
     const activeMembers = Object.values(group.projection?.members || {}).filter(
       (member) => member.status === 'active',
     );
+    const activeMemberOptions = collaborationActiveMemberOptions(group);
     const workItems = Object.values(group.projection?.workItems || {}).filter(
       (item) => !item.archived,
     );
@@ -2337,7 +2437,7 @@ export function createCollaborationWorkspace(options) {
             ['work_item', '指定工作项'],
           ],
         },
-      )}<label class="collaboration-field ${draft.scopeType === 'work_item' ? '' : 'hidden'}"><span>工作项</span><select name="workItemId"><option value="">请选择工作项</option>${workItems.map((item) => `<option value="${attr(item.work_item_id)}" ${item.work_item_id === draft.workItemId ? 'selected' : ''}>${html(item.title)} · ${html(collaborationStatusLabel(item.status))}</option>`).join('')}</select></label></div></section><section><header><span>2</span><div><strong>参与者</strong><small>只显示 Active Principal；同一成员可承担多个槽位</small></div></header><div class="collaboration-slot-list">${slots.map((slot) => `<label class="collaboration-slot-field"><span><strong>${html(slot.label)}</strong><small>${html(slot.description || '负责流程中的指定 State')}</small><em>${slot.states.map((state) => html(state.label)).join('、')}</em></span><input list="active-member-options" data-participant-slot="${attr(slot.id)}" value="${attr(draft.participantBindings[slot.id] || '')}" placeholder="搜索成员名称或 Principal ID" required></label>`).join('') || empty('此 Definition 没有参与者槽位')}<datalist id="active-member-options">${activeMembers.map((member) => `<option value="${attr(member.principal_id)}">${html(member.display_name)} · ${html(collaborationShortId(member.principal_id))}</option>`).join('')}</datalist></div></section><section class="${draft.scopeType === 'work_item' ? '' : 'hidden'}"><header><span>3</span><div><strong>终态映射</strong><small>每个终止 State 必须映射工作项状态</small></div></header><div class="collaboration-terminal-map">${terminalStates.map(([stateId, state]) => field(collaborationLabel(state.label || stateId), `terminal:${stateId}`, draft.workItemStatusMapping[stateId] || '', { options: [['', '请选择状态'], ...COLLABORATION_WORK_ITEM_STATUSES.map((value) => [value, collaborationStatusLabel(value)])] }).replace('<select ', `<select data-terminal-state="${attr(stateId)}" `)).join('')}</div></section><section><header><span>${draft.scopeType === 'work_item' ? '4' : '3'}</span><div><strong>解析预览</strong><small>提交时服务端会重新校验权限与成员状态</small></div></header><div class="collaboration-resolution-preview">${resolvedPreview.join('') || empty('没有可执行 State')}</div><div class="collaboration-rule-summary"><span>${html(definition?.definition?.launch_policy?.work_item_owner ? '工作项负责人可启动' : '按直接权限或指定 Principal 启动')}</span><span class="${launchAccess.allowed ? 'ok' : 'danger'}">${html(launchAccess.reason || '当前身份满足创建规则')}</span></div></section></div>`;
+      )}<label class="collaboration-field ${draft.scopeType === 'work_item' ? '' : 'hidden'}"><span>工作项</span><select name="workItemId"><option value="">请选择工作项</option>${workItems.map((item) => `<option value="${attr(item.work_item_id)}" ${item.work_item_id === draft.workItemId ? 'selected' : ''}>${html(item.title)} · ${html(collaborationStatusLabel(item.status))}</option>`).join('')}</select></label></div></section><section><header><span>2</span><div><strong>参与者</strong><small>只显示 Active Principal；同一成员可承担多个槽位</small></div></header><div class="collaboration-slot-list">${slots.map((slot) => `<label class="collaboration-slot-field"><span><strong>${html(slot.label)}</strong><small>${html(slot.description || '负责流程中的指定 State')}</small><em>${slot.states.map((state) => html(state.label)).join('、')}</em></span><select data-participant-slot="${attr(slot.id)}" required><option value="">请选择 Active Principal</option>${activeMemberOptions.map(([principalId, label]) => `<option value="${attr(principalId)}" ${principalId === draft.participantBindings[slot.id] ? 'selected' : ''}>${html(label)}</option>`).join('')}</select></label>`).join('') || empty('此 Definition 没有参与者槽位')}</div></section><section class="${draft.scopeType === 'work_item' ? '' : 'hidden'}"><header><span>3</span><div><strong>终态映射</strong><small>每个终止 State 必须映射工作项状态</small></div></header><div class="collaboration-terminal-map">${terminalStates.map(([stateId, state]) => field(collaborationLabel(state.label || stateId), `terminal:${stateId}`, draft.workItemStatusMapping[stateId] || '', { options: [['', '请选择状态'], ...COLLABORATION_WORK_ITEM_STATUSES.map((value) => [value, collaborationStatusLabel(value)])] }).replace('<select ', `<select data-terminal-state="${attr(stateId)}" `)).join('')}</div></section><section><header><span>${draft.scopeType === 'work_item' ? '4' : '3'}</span><div><strong>解析预览</strong><small>提交时服务端会重新校验权限与成员状态</small></div></header><div class="collaboration-resolution-preview">${resolvedPreview.join('') || empty('没有可执行 State')}</div><div class="collaboration-rule-summary"><span>${html(definition?.definition?.launch_policy?.work_item_owner ? '工作项负责人可启动' : '按直接权限或指定 Principal 启动')}</span><span class="${launchAccess.allowed ? 'ok' : 'danger'}">${html(launchAccess.reason || '当前身份满足创建规则')}</span></div></section></div>`;
       elements.dialogSubmit.disabled = !launchAccess.allowed;
       if (launchAccess.reason)
         elements.dialogSubmit.title = launchAccess.reason;
@@ -2356,16 +2456,6 @@ export function createCollaborationWorkspace(options) {
             event.target.name === 'definition' &&
               previousDefinition !== draft.definitionKey,
           );
-        });
-        elements.dialogBody.addEventListener('input', (event) => {
-          if (!event.target.matches('[data-participant-slot]')) return;
-          capture();
-          renderWizard();
-          elements.dialogBody
-            .querySelector(
-              `[data-participant-slot="${CSS.escape(event.target.dataset.participantSlot)}"]`,
-            )
-            ?.focus();
         });
       },
       onSubmit: async (formData) => {
@@ -2692,10 +2782,22 @@ export function createCollaborationWorkspace(options) {
     );
     if (!collaborationCanRecoverTurn(group, instance, turn))
       throw new Error('当前身份无权恢复该执行轮次');
+    const assigneeOptions = collaborationActiveMemberOptions(group);
+    if (!assigneeOptions.length)
+      throw new Error('当前没有可接管执行轮次的 active 成员');
+    const defaultAssignee = assigneeOptions.some(
+      ([principalId]) => principalId === turn.assignee_principal_id,
+    )
+      ? turn.assignee_principal_id
+      : assigneeOptions.some(
+            ([principalId]) => principalId === group.localPrincipalId,
+          )
+        ? group.localPrincipalId
+        : assigneeOptions[0][0];
     openDialog({
-      title: '恢复执行轮次',
-      submitText: '确认恢复',
-      body: `<div class="collaboration-transfer-warning"><strong>创建新的执行尝试</strong><span>Host 将校验当前 attempt、实例 revision 与 Git CAS；原执行结果不会被直接采用。</span></div>${field('恢复原因', 'reason', turn.recovery_reason || '', { multiline: true })}`,
+      title: '重新分配并恢复执行轮次',
+      submitText: '确认重新分配',
+      body: `<div class="collaboration-transfer-warning"><strong>创建新的执行尝试</strong><span>负责人、当前状态分配与 Turn 将原子更新；原执行结果不会被直接采用。</span></div><div class="collaboration-form-grid">${field('新的负责人', 'assigneePrincipalId', defaultAssignee, { options: assigneeOptions })}${field('恢复原因', 'reason', turn.recovery_reason || '', { multiline: true })}</div>`,
       onSubmit: async (formData) => {
         await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/turns/${encodeURIComponent(turn.turn_id)}/recover`,
@@ -2709,6 +2811,7 @@ export function createCollaborationWorkspace(options) {
                   instance.instance_id,
                 ),
                 previousAttempt: turn.attempt,
+                assigneePrincipalId: formData.get('assigneePrincipalId'),
                 reason: formData.get('reason'),
               }),
             ),
@@ -2735,15 +2838,24 @@ export function createCollaborationWorkspace(options) {
     const executors = collaborationEligibleTurnExecutors(
       group,
       turn,
-      state.detail.bindings,
+      state.detail?.bindings || [],
     );
     if (!executors.length)
       throw new Error('没有匹配当前辅助执行轮次的本地执行器绑定');
+    const localExecutorNames = Object.fromEntries(
+      (state.detail?.localExecutors || []).map((executor) => [
+        executor.executorId,
+        executor.displayName,
+      ]),
+    );
     openDialog({
       title: `开始：${workflowStateLabel(definition, turn.state_id)}`,
       submitText: '开始执行',
       body: field('执行器', 'executorId', executors[0], {
-        options: executors.map((executorId) => [executorId, executorId]),
+        options: executors.map((executorId) => [
+          executorId,
+          localExecutorNames[executorId] || collaborationShortId(executorId),
+        ]),
       }),
       onSubmit: async (formData) => {
         await startCurrentTurn(formData.get('executorId'));
@@ -2752,40 +2864,12 @@ export function createCollaborationWorkspace(options) {
     });
   };
 
-  const configureExecution = () => {
+  const addExecutor = () => {
     const group = selectedGroup();
-    const instance = selectedInstance();
-    const turn = collaborationCurrentTurn(
-      group.projection,
-      instance.instance_id,
-    );
-    const stateId = turn?.state_id ?? instance.business_state;
     openDialog({
-      title: `执行配置 · ${stateId}`,
-      body: `<div class="collaboration-form-grid">${field(
-        '执行模式',
-        'mode',
-        'manual',
-        {
-          options: [
-            ['manual', '手动'],
-            ['assisted', '辅助执行'],
-            ['automatic', '自动执行'],
-          ],
-        },
-      )}${field('操作 ID', 'actionId', '', { required: false })}${field('执行器 ID', 'executorId', '', { required: false })}${field(
-        '执行器类型',
-        'executorKind',
-        'run_once',
-        {
-          options: [
-            ['run_once', '单次运行'],
-            ['workflow', '工作流'],
-            ['external', '外部执行器'],
-            ['codex', 'Codex'],
-          ],
-        },
-      )}${field('工作区路径', 'workspacePath', '', { required: false })}${field(
+      title: '添加 Executor',
+      submitText: '注册',
+      body: `<div class="collaboration-form-grid">${field('显示名称', 'displayName', 'Codex Desktop')}${field('平台', 'kind', 'codex', { options: [['codex', 'Codex Desktop']] })}${field('本地工作目录', 'workspacePath', '')}${field(
         '文件系统权限',
         'filesystemAccess',
         'read_only',
@@ -2801,36 +2885,246 @@ export function createCollaborationWorkspace(options) {
           ['on-request', '按需询问'],
           ['never', '从不询问'],
         ],
-      })}${field('配置 JSON', 'config', '{}', { multiline: true })}</div>`,
+      })}${field('模型', 'model', '', { required: false })}</div>`,
       onSubmit: async (formData) => {
-        const values = Object.fromEntries(formData.entries());
-        const manual = values.mode === 'manual';
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/executors`,
+          {
+            method: 'POST',
+            body: JSON.stringify(
+              buildCollaborationExecutorRegistrationRequest({
+                ...Object.fromEntries(formData.entries()),
+                expectedRevision: aggregateRevision(
+                  group.projection,
+                  'membership',
+                  group.localPrincipalId,
+                ),
+              }),
+            ),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
+  const revokeExecutor = (executorId) => {
+    const group = selectedGroup();
+    const executor = (state.detail?.localExecutors || []).find(
+      (entry) => entry.executorId === executorId,
+    );
+    openDialog({
+      title: '撤销 Executor',
+      submitText: '确认撤销',
+      danger: true,
+      body: `<div class="collaboration-transfer-warning"><strong>${html(executor?.displayName || collaborationShortId(executorId))}</strong><span>撤销后，使用此 Executor 的后续 Turn 将无法启动。</span></div>${field('原因', 'reason', '', { multiline: true })}`,
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/executors/${encodeURIComponent(executorId)}`,
+          {
+            method: 'DELETE',
+            body: JSON.stringify({
+              expectedRevision: aggregateRevision(
+                group.projection,
+                'membership',
+                group.localPrincipalId,
+              ),
+              reason: String(formData.get('reason') || ''),
+            }),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
+  const editAction = async (actionId = null) => {
+    const group = selectedGroup();
+    const detail = actionId
+      ? await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/workspace/me/actions/${encodeURIComponent(actionId)}`,
+        )
+      : null;
+    const action = detail?.action || null;
+    openDialog({
+      title: action ? '修订 Action' : '创建 Action',
+      submitText: action ? '发布修订' : '创建',
+      body: `<div class="collaboration-form-grid">${field('名称', 'name', action?.name || '')}${field(
+        '类型',
+        'actionType',
+        action ? collaborationActionType(action) : 'codex',
+        {
+          options: [
+            ['codex', 'Codex'],
+            ['run_once', 'Icarus Agent'],
+          ],
+        },
+      )}${field('Prompt', 'prompt', detail?.prompt || '', { multiline: true })}${field(
+        '执行权限',
+        'filesystemAccess',
+        action?.filesystem_access || 'read_only',
+        {
+          options: [
+            ['read_only', '只读'],
+            ['workspace_write', '工作区可写'],
+          ],
+        },
+      )}${field('结果格式', 'resultFormat', 'collaboration_state_result', { options: [['collaboration_state_result', 'Workflow State 结果']] })}</div>`,
+      onSubmit: async (formData) => {
+        const endpoint = `/groups/${encodeURIComponent(group.groupId)}/workspace/me/actions${action ? `/${encodeURIComponent(action.action_id)}` : ''}`;
+        await options.request(endpoint, {
+          method: action ? 'PUT' : 'POST',
+          body: JSON.stringify(
+            buildCollaborationActionMutationRequest({
+              ...Object.fromEntries(formData.entries()),
+              expectedRevision: aggregateRevision(
+                group.projection,
+                'workspace',
+                group.localPrincipalId,
+              ),
+            }),
+          ),
+        });
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
+  const withdrawExecution = () => {
+    const group = selectedGroup();
+    const instance = selectedInstance();
+    const stateId = instance.business_state;
+    const access = collaborationWorkflowStateActionAccess(
+      group,
+      instance.instance_id,
+      stateId,
+      'withdrawExecution',
+    );
+    if (!access.allowed)
+      throw new Error(access.reason || '当前身份不能清除执行配置');
+    openDialog({
+      title: '清除执行配置',
+      submitText: '确认清除',
+      danger: true,
+      body: '<div class="collaboration-transfer-warning"><strong>恢复默认手动执行</strong><span>清除后，此 State 不再绑定 Action，后续 Turn 默认使用手动模式。</span></div>',
+      onSubmit: async () => {
         await options.request(
           `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/states/${encodeURIComponent(stateId)}/execution`,
           {
-            method: 'PUT',
+            method: 'DELETE',
             body: JSON.stringify({
               expectedRevision: aggregateRevision(
                 group.projection,
                 'workflow_instance',
                 instance.instance_id,
               ),
-              mode: values.mode,
-              actionId: manual ? null : values.actionId,
-              ...(manual
-                ? {}
-                : {
-                    binding: {
-                      executorId: values.executorId,
-                      executorKind: values.executorKind,
-                      workspacePath: values.workspacePath,
-                      filesystemAccess: values.filesystemAccess,
-                      approvalPolicy: values.approvalPolicy,
-                      config: JSON.parse(String(values.config || '{}')),
-                      enabled: true,
-                    },
-                  }),
             }),
+          },
+        );
+        closeDialog();
+        await loadDetail(group.groupId, false);
+      },
+    });
+  };
+
+  const configureExecution = () => {
+    const group = selectedGroup();
+    const instance = selectedInstance();
+    const turn = collaborationCurrentTurn(
+      group.projection,
+      instance.instance_id,
+    );
+    const stateId = turn?.state_id ?? instance.business_state;
+    const current =
+      group.projection?.stateExecutions?.[instance.instance_id]?.[stateId] ||
+      null;
+    const ownedActions = collaborationOwnedActions(group);
+    const currentActionId = current?.action_ref
+      ?.split('/')
+      .at(-1)
+      ?.replace(/\.json$/u, '');
+    const currentBinding = (state.detail?.bindings || []).find(
+      (binding) =>
+        binding.instanceId === instance.instance_id &&
+        binding.stateId === stateId &&
+        binding.actionHash === current?.action_hash &&
+        binding.promptHash === current?.prompt_hash,
+    );
+    const actionOptions = ownedActions.map((action) => [
+      action.action_id,
+      `${action.name} · v${String(action.version)} · ${collaborationLabel(collaborationActionType(action))}`,
+    ]);
+    openDialog({
+      title: `执行配置 · ${stateId}`,
+      body: `<div class="collaboration-form-grid">${field(
+        '执行模式',
+        'mode',
+        current?.mode || 'manual',
+        {
+          options: [
+            ['manual', '手动'],
+            ['assisted', '辅助执行'],
+            ['automatic', '自动执行'],
+          ],
+        },
+      )}<div data-execution-resources>${field('Action', 'actionId', currentActionId || '', { required: false, options: [['', '请选择 Action'], ...actionOptions] })}<div data-executor-select></div></div></div>`,
+      onOpen: () => {
+        const form = elements.dialogForm;
+        const resources = form.querySelector('[data-execution-resources]');
+        const executorHost = form.querySelector('[data-executor-select]');
+        const refresh = () => {
+          const manual = form.elements.mode.value === 'manual';
+          resources.classList.toggle('hidden', manual);
+          const action = ownedActions.find(
+            (entry) => entry.action_id === form.elements.actionId.value,
+          );
+          const executors = collaborationAvailableLocalExecutors(
+            group,
+            state.detail?.localExecutors || [],
+            action,
+          );
+          executorHost.innerHTML = field(
+            'Executor',
+            'executorId',
+            executors.some(
+              (executor) => executor.executorId === currentBinding?.executorId,
+            )
+              ? currentBinding.executorId
+              : executors[0]?.executorId || '',
+            {
+              required: false,
+              options: [
+                ['', '请选择本机 Executor'],
+                ...executors.map((executor) => [
+                  executor.executorId,
+                  `${executor.displayName} · ${collaborationLabel(executor.executorKind)}`,
+                ]),
+              ],
+            },
+          );
+        };
+        form.elements.mode.addEventListener('change', refresh);
+        form.elements.actionId.addEventListener('change', refresh);
+        refresh();
+      },
+      onSubmit: async (formData) => {
+        await options.request(
+          `/groups/${encodeURIComponent(group.groupId)}/workflow-instances/${encodeURIComponent(instance.instance_id)}/states/${encodeURIComponent(stateId)}/execution`,
+          {
+            method: 'PUT',
+            body: JSON.stringify(
+              buildCollaborationStateExecutionRequest({
+                ...Object.fromEntries(formData.entries()),
+                expectedRevision: aggregateRevision(
+                  group.projection,
+                  'workflow_instance',
+                  instance.instance_id,
+                ),
+              }),
+            ),
           },
         );
         closeDialog();
@@ -2860,6 +3154,75 @@ export function createCollaborationWorkspace(options) {
         await loadGroups();
       },
     });
+
+  const forgetLocalGroup = (groupId) => {
+    state.groups = state.groups.filter((group) => group.groupId !== groupId);
+    if (state.selectedGroupId === groupId) {
+      clearAnalysisPoll();
+      state.selectedGroupId = '';
+      state.detail = null;
+      state.tabData = {};
+      state.activeTab = 'overview';
+      updateRoute(true);
+    }
+    renderList();
+    renderShell();
+  };
+
+  const openLifecycleConfirmation = (
+    operation,
+    targetGroup = selectedGroup(),
+  ) => {
+    if (!targetGroup) return;
+    const configurations = {
+      dissolve: {
+        title: '解散群组',
+        submitText: '永久解散',
+        copy: '<strong>解散不可恢复。</strong><span>远端将记录正式解散事件并保留审计历史；同步成功后，本机群组数据会被移除。</span>',
+      },
+      leave: {
+        title: '退出群组',
+        submitText: '确认退出',
+        copy: '<strong>退出会立即失效当前身份的 Client、Credential 与 Executor。</strong><span>再次加入时仍使用原 principal，并重新按当前加入策略审批。</span>',
+      },
+      'remove-local': {
+        title: '从本机移除',
+        submitText: '从本机移除',
+        copy: '<strong>此操作只影响当前设备。</strong><span>不会退出或解散群组；本机 Credential、私钥、备份和身份恢复绑定会保留。</span>',
+      },
+    };
+    const configuration = configurations[operation];
+    if (!configuration) return;
+    openDialog({
+      title: configuration.title,
+      submitText: configuration.submitText,
+      danger: true,
+      body: `<div class="collaboration-confirmation-copy">${configuration.copy}</div>${field('输入群组 ID 以确认', 'confirmation')}`,
+      onSubmit: async (formData) => {
+        const confirmation = String(formData.get('confirmation') || '').trim();
+        const request = buildCollaborationLifecycleRequest({
+          operation,
+          group: targetGroup,
+          confirmation,
+        });
+        const result = await options.request(request.endpoint, {
+          method: request.method,
+          body: JSON.stringify(request.body),
+        });
+        closeDialog();
+        forgetLocalGroup(targetGroup.groupId);
+        options.showToast(
+          result.cleanupPending
+            ? `群组已隐藏，本地清理将在重试后完成：${result.cleanupError || '清理失败'}`
+            : operation === 'dissolve'
+              ? '群组已解散'
+              : operation === 'leave'
+                ? '已退出群组'
+                : '已从本机移除',
+        );
+      },
+    });
+  };
 
   const updateGitSshKey = (useDefault = false) => {
     const group = selectedGroup();
@@ -3583,6 +3946,11 @@ export function createCollaborationWorkspace(options) {
       return renderContent();
     }
     if (action === 'new-workflow') return openWorkflowEditor();
+    if (action === 'new-executor') return addExecutor();
+    if (action === 'revoke-executor')
+      return revokeExecutor(button.dataset.executorId);
+    if (action === 'new-action') return editAction();
+    if (action === 'revise-action') return editAction(button.dataset.actionId);
     if (action === 'view-workflow') {
       const entry = workflowDefinitionEntries().find(
         (candidate) =>
@@ -3680,6 +4048,7 @@ export function createCollaborationWorkspace(options) {
     if (action === 'complete-turn') return completeTurn();
     if (action === 'cancel-turn') return cancelCurrentTurn();
     if (action === 'configure-execution') return configureExecution();
+    if (action === 'withdraw-execution') return withdrawExecution();
     if (action === 'reassign-instance') return reassignInstance();
     if (action === 'edit-permissions') {
       return openPermissionEditor(button.dataset.principalId, false);
@@ -3689,6 +4058,10 @@ export function createCollaborationWorkspace(options) {
       return backupDialog(action === 'restore');
     if (action === 'archive-group') return changeGroupLifecycle(false);
     if (action === 'reopen-group') return changeGroupLifecycle(true);
+    if (action === 'dissolve-group')
+      return openLifecycleConfirmation('dissolve', group);
+    if (action === 'leave-group')
+      return openLifecycleConfirmation('leave', group);
     if (action === 'export-audit') {
       const blob = new Blob(
         [`${JSON.stringify(state.tabData.audit, null, 2)}\n`],

@@ -61,6 +61,7 @@ function projection(): CollaborationProjectionV3 {
         DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID,
       created_at: '2026-08-10T00:00:00.000Z',
       archived_at: null,
+      dissolved_at: null,
     },
     aggregateHeads: {},
     invites: {},
@@ -261,9 +262,8 @@ describe('collaboration authorization projection', () => {
       assignee.workflowInstances.instance_delivery.createTurn,
     ).toMatchObject({ allowed: false, code: 'RESOURCE_STATE_BLOCKED' });
     expect(
-      assignee.workflowInstances.instance_delivery.configureCurrentState
-        .allowed,
-    ).toBe(true);
+      assignee.workflowInstances.instance_delivery.configureCurrentState,
+    ).toMatchObject({ allowed: false, code: 'RESOURCE_STATE_BLOCKED' });
     expect(
       assignee.workflowDefinitions['delivery@1']!.createGroupInstance.allowed,
     ).toBe(false);
@@ -437,5 +437,82 @@ describe('collaboration authorization projection', () => {
     expect(member.credentials.credential_member_secondary?.revoke.allowed).toBe(
       true,
     );
+  });
+
+  it('projects Executor, owned Action, and current State Execution decisions exactly', () => {
+    const value = projection();
+    value.permissionGrants[memberId]!.grants = ['workspace:publish_owned'];
+    value.executors[memberId] = {
+      executor_member: {
+        executor_id: 'executor_member',
+        principal_id: memberId,
+        status: 'active',
+      },
+    } as unknown as CollaborationProjectionV3['executors'][string];
+    value.actions[`${memberId}:action_member`] = {
+      action_id: 'action_member',
+      owner_principal_id: memberId,
+      name: 'Member action',
+      version: 1,
+    } as unknown as CollaborationProjectionV3['actions'][string];
+    value.workflowInstances.instance_member = {
+      instance_id: 'instance_member',
+      definition_id: 'delivery',
+      definition_version: 1,
+      scope: { type: 'group' },
+      created_by_principal_id: ownerId,
+      business_state: 'build',
+      resolved_assignments: { build: memberId },
+      lifecycle: 'running',
+      active_turn_id: null,
+    } as unknown as CollaborationProjectionV3['workflowInstances'][string];
+    value.stateExecutions.instance_member = {
+      build: { instance_id: 'instance_member', state_id: 'build' },
+    } as unknown as CollaborationProjectionV3['stateExecutions'][string];
+
+    const member = actions(value, memberId);
+    expect(member.group.registerOwnExecutor.allowed).toBe(true);
+    expect(member.group.publishOwnedAction.allowed).toBe(true);
+    expect(member.executors.executor_member?.revoke.allowed).toBe(true);
+    expect(member.actions[`${memberId}:action_member`]?.revise.allowed).toBe(
+      true,
+    );
+    expect(
+      member.workflowInstances.instance_member.withdrawCurrentStateExecution
+        .allowed,
+    ).toBe(true);
+
+    value.permissionGrants[memberId]!.grants = [];
+    expect(actions(value, memberId).group.publishOwnedAction).toMatchObject({
+      allowed: false,
+      code: 'PERMISSION_REQUIRED',
+    });
+    expect(
+      actions(value, memberId).actions[`${memberId}:action_member`]?.revise,
+    ).toMatchObject({ allowed: false, code: 'PERMISSION_REQUIRED' });
+    expect(
+      actions(value, contributorId).actions[`${memberId}:action_member`]
+        ?.revise,
+    ).toMatchObject({
+      allowed: false,
+      code: 'RESOURCE_AUTHORITY_REQUIRED',
+    });
+    expect(
+      actions(value, contributorId).executors.executor_member?.revoke,
+    ).toMatchObject({
+      allowed: false,
+      code: 'RESOURCE_AUTHORITY_REQUIRED',
+    });
+
+    delete value.stateExecutions.instance_member!.build;
+    expect(
+      actions(value, memberId).workflowInstances.instance_member
+        .withdrawCurrentStateExecution,
+    ).toMatchObject({ allowed: false, code: 'RESOURCE_STATE_BLOCKED' });
+    value.workflowInstances.instance_member!.lifecycle = 'closed';
+    expect(
+      actions(value, memberId).workflowInstances.instance_member
+        .configureCurrentState,
+    ).toMatchObject({ allowed: false, code: 'RESOURCE_STATE_BLOCKED' });
   });
 });

@@ -18,7 +18,7 @@ export type RuntimeCenterSort =
   | 'severity_desc';
 
 export interface RuntimeCenterFilters {
-  readonly feature_id?: string;
+  readonly pack_id?: string;
   readonly workflow_status?: string;
   readonly operational_state?: string;
   readonly source_kind?: string;
@@ -79,9 +79,9 @@ export type RuntimeCenterDeepLink =
     }
   | {
       readonly format: 'icarus.runtime-link/1';
-      readonly target: 'feature';
-      readonly feature_id: string;
-      readonly feature_route_id: string;
+      readonly target: 'pack';
+      readonly pack_id: string;
+      readonly pack_route_id: string;
       readonly subject_ref: string;
     };
 
@@ -100,7 +100,7 @@ const views = new Set<RuntimeCenterView>([
   'trace',
 ]);
 const filterKeys = new Set([
-  'feature_id',
+  'pack_id',
   'workflow_status',
   'operational_state',
   'source_kind',
@@ -111,7 +111,7 @@ const filterKeys = new Set([
 ]);
 const viewFilters: Record<RuntimeCenterView, ReadonlySet<string>> = {
   workflows: new Set([
-    'feature_id',
+    'pack_id',
     'workflow_status',
     'operational_state',
     'source_kind',
@@ -119,13 +119,13 @@ const viewFilters: Record<RuntimeCenterView, ReadonlySet<string>> = {
     'started_to_at_ms',
   ]),
   agent_executions: new Set([
-    'feature_id',
+    'pack_id',
     'source_kind',
     'started_from_at_ms',
     'started_to_at_ms',
   ]),
   pending: new Set([
-    'feature_id',
+    'pack_id',
     'operational_state',
     'source_kind',
     'pending_kind',
@@ -133,7 +133,7 @@ const viewFilters: Record<RuntimeCenterView, ReadonlySet<string>> = {
     'started_to_at_ms',
   ]),
   trace: new Set([
-    'feature_id',
+    'pack_id',
     'source_kind',
     'trace_root_kind',
     'started_from_at_ms',
@@ -256,8 +256,7 @@ function matches(
   filters: RuntimeCenterFilters,
 ): boolean {
   return (
-    (filters.feature_id === undefined ||
-      row.feature_id === filters.feature_id) &&
+    (filters.pack_id === undefined || row.pack_id === filters.pack_id) &&
     (filters.workflow_status === undefined ||
       row.workflow_status === filters.workflow_status) &&
     (filters.operational_state === undefined ||

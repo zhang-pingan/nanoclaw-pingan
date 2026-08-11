@@ -69,7 +69,7 @@ export interface CapacityAdminInvocationLifecycleCandidate {
 
 export const CAPACITY_ADMIN_ACTOR_KINDS = [
   'human',
-  'feature_service',
+  'pack_service',
   'automation',
   'system',
 ] as const;

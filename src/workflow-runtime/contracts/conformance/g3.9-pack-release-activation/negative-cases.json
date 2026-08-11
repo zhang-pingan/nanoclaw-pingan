@@ -1,0 +1,275 @@
+{
+  "format": "icarus.workflow-g3-pack-release-activation-negative-cases/1",
+  "ref": {
+    "id": "icarus.workflow-g3-pack-release-activation-negative-cases",
+    "version": "1.0.0"
+  },
+  "version": 1,
+  "domain_separator": "icarus:workflow-g3-pack-release-activation-negative-cases:1\n",
+  "payload": {
+    "fixture_scope": "test_only",
+    "cases": [
+      {
+        "case_id": "negative.strict.invalid-utf8",
+        "layer": "request_bytes",
+        "mutation": "invalid_utf8",
+        "expected_code": "activation_request_strict_parse_invalid"
+      },
+      {
+        "case_id": "negative.strict.duplicate-key",
+        "layer": "request_bytes",
+        "mutation": "duplicate_top_level_key",
+        "expected_code": "activation_request_strict_parse_invalid"
+      },
+      {
+        "case_id": "negative.removed.current-release",
+        "layer": "request",
+        "mutation": "add_removed_current_release",
+        "expected_code": "activation_request_removed_field"
+      },
+      {
+        "case_id": "negative.unknown.active-release",
+        "layer": "request",
+        "mutation": "add_unknown_active_release",
+        "expected_code": "activation_request_unknown_field"
+      },
+      {
+        "case_id": "negative.schema.previous-with-absent-pointer",
+        "layer": "request",
+        "mutation": "previous_claim_without_present_pointer",
+        "expected_code": "activation_request_schema_invalid"
+      },
+      {
+        "case_id": "negative.hash.request-drift",
+        "layer": "request",
+        "mutation": "request_hash_drift",
+        "expected_code": "activation_request_hash_mismatch"
+      },
+      {
+        "case_id": "negative.precedence.activation_request_strict_parse_invalid",
+        "layer": "runtime_precedence",
+        "precedence_rank": 1,
+        "expected_code": "activation_request_strict_parse_invalid",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.activation_request_removed_field",
+        "layer": "runtime_precedence",
+        "precedence_rank": 2,
+        "expected_code": "activation_request_removed_field",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.activation_request_unknown_field",
+        "layer": "runtime_precedence",
+        "precedence_rank": 3,
+        "expected_code": "activation_request_unknown_field",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.activation_request_schema_invalid",
+        "layer": "runtime_precedence",
+        "precedence_rank": 4,
+        "expected_code": "activation_request_schema_invalid",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.activation_request_hash_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 5,
+        "expected_code": "activation_request_hash_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.activation_authentication_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 6,
+        "expected_code": "activation_authentication_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.idempotency_conflict",
+        "layer": "runtime_precedence",
+        "precedence_rank": 7,
+        "expected_code": "idempotency_conflict",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.terminal_integrity_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 8,
+        "expected_code": "terminal_integrity_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.target_release_missing",
+        "layer": "runtime_precedence",
+        "precedence_rank": 9,
+        "expected_code": "target_release_missing",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.target_release_identity_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 10,
+        "expected_code": "target_release_identity_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.target_release_owner_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 11,
+        "expected_code": "target_release_owner_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.target_release_resource_set_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 12,
+        "expected_code": "target_release_resource_set_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.runtime_abi_incompatible",
+        "layer": "runtime_precedence",
+        "precedence_rank": 13,
+        "expected_code": "runtime_abi_incompatible",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.target_release_lifecycle_invalid",
+        "layer": "runtime_precedence",
+        "precedence_rank": 14,
+        "expected_code": "target_release_lifecycle_invalid",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.previous_release_missing",
+        "layer": "runtime_precedence",
+        "precedence_rank": 15,
+        "expected_code": "previous_release_missing",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.previous_release_identity_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 16,
+        "expected_code": "previous_release_identity_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.previous_release_owner_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 17,
+        "expected_code": "previous_release_owner_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.previous_release_lifecycle_invalid",
+        "layer": "runtime_precedence",
+        "precedence_rank": 18,
+        "expected_code": "previous_release_lifecycle_invalid",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.target_retention_missing",
+        "layer": "runtime_precedence",
+        "precedence_rank": 19,
+        "expected_code": "target_retention_missing",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.target_retention_identity_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 20,
+        "expected_code": "target_retention_identity_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.target_retention_status_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 21,
+        "expected_code": "target_retention_status_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.target_retention_row_version_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 22,
+        "expected_code": "target_retention_row_version_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.previous_retention_missing",
+        "layer": "runtime_precedence",
+        "precedence_rank": 23,
+        "expected_code": "previous_retention_missing",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.previous_retention_identity_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 24,
+        "expected_code": "previous_retention_identity_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.previous_retention_status_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 25,
+        "expected_code": "previous_retention_status_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.previous_retention_row_version_mismatch",
+        "layer": "runtime_precedence",
+        "precedence_rank": 26,
+        "expected_code": "previous_retention_row_version_mismatch",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.pointer_cas_conflict",
+        "layer": "runtime_precedence",
+        "precedence_rank": 27,
+        "expected_code": "pointer_cas_conflict",
+        "receipt": null,
+        "pointer_transition_count": 0
+      },
+      {
+        "case_id": "negative.precedence.activation_persistence_identity_collision",
+        "layer": "runtime_precedence",
+        "precedence_rank": 28,
+        "expected_code": "activation_persistence_identity_collision",
+        "receipt": null,
+        "pointer_transition_count": 0
+      }
+    ]
+  },
+  "hash": "sha256:31e63dcfadb81f83c4c0096a002015a2c62f750c6f8806af3e063a2f12e1e0cc"
+}

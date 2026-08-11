@@ -29,8 +29,8 @@ export { VersionedRefError, parseVersionedRef } from './versioned-ref.js';
 export type {
   CardPresentationDocument,
   CompiledScopePlanDocument,
-  FeatureManifestVNextDocument,
-  FeatureWorkflowResourceKind,
+  WorkflowPackManifestDocument,
+  PackWorkflowResourceKind,
   GraphNodeType,
   GraphScopeSourceDocument,
   WorkflowCommandReasonCode,

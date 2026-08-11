@@ -31,7 +31,7 @@ export const G3_WORKFLOW_PUBLISHER_FAILURE_CODES = [
   'publish_foundation_preflight_failed',
   'registry_resource_preflight_failed',
   'runtime_abi_incompatible',
-  'feature_release_identity_collision',
+  'pack_release_identity_collision',
   'registry_publication_collision',
   'retention_root_identity_collision',
   'idempotency_conflict',
@@ -63,8 +63,8 @@ export interface G3WorkflowPublisherApprovedReview extends JsonObject {
   execution_artifact_hash: Sha256Hash;
   closure_ref: VersionedRef;
   closure_hash: Sha256Hash;
-  feature_release_ref: VersionedRef;
-  feature_release_hash: Sha256Hash;
+  pack_release_ref: VersionedRef;
+  pack_release_hash: Sha256Hash;
 }
 
 export interface G3WorkflowPublisherCanonicalValue extends JsonObject {
@@ -87,7 +87,7 @@ export interface G3WorkflowPublisherReleaseResource extends JsonObject {
 }
 
 export interface G3WorkflowPublisherTargetRelease extends JsonObject {
-  feature_id: string;
+  pack_id: string;
   release_ref: VersionedRef;
   release_hash: Sha256Hash;
   execution_artifact: {
@@ -118,8 +118,8 @@ export interface G3WorkflowPublisherReceipt extends JsonObject {
   command_id: string;
   outcome: 'applied' | 'failed';
   domain_request_hash: Sha256Hash;
-  feature_release_ref: VersionedRef;
-  feature_release_hash: Sha256Hash;
+  pack_release_ref: VersionedRef;
+  pack_release_hash: Sha256Hash;
   closure_ref: VersionedRef;
   closure_hash: Sha256Hash;
   execution_artifact_ref: VersionedRef;

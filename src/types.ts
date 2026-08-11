@@ -332,6 +332,10 @@ export interface DesktopCaptureOptions {
   includeImage?: boolean;
   includeWindows?: boolean;
   waitMs?: number;
+  /** Host-only output root; never sent to the desktop capture client. */
+  outputDirectory?: string;
+  /** Host-only writer used by an exact Run file-scope authority. */
+  writeImage?: (filename: string, bytes: Buffer) => string | Promise<string>;
 }
 
 export interface DesktopCaptureResult {

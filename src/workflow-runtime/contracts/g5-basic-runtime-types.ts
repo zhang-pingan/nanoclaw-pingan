@@ -50,9 +50,9 @@ export interface TaskRecord {
   readonly creationKey: string;
   readonly source:
     | 'global_assistant'
-    | 'feature_ui'
     | 'schedule'
     | 'api'
+    | 'task_workspace'
     | 'workflow_transition';
   readonly principalRef: string;
   readonly routingScope: RuntimeRegistryRef;

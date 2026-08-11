@@ -11,6 +11,7 @@ import {
   collaborationAnalysisResultSchema,
   collaborationAnalysisRunStatusSchema,
   collaborationProposedActionSchema,
+  collaborationRepositoryVerificationSchema,
 } from './analysis-contracts.js';
 
 const SHA = `sha256:${'a'.repeat(64)}`;
@@ -218,6 +219,85 @@ describe('Collaboration Analysis contracts', () => {
     ).toBe(false);
   });
 
+  it('enforces repository verification and identity guarantee boundaries', () => {
+    const checks = {
+      git_repository: 'passed',
+      ref_resolution: 'passed',
+      complete_history_validation: 'passed',
+      linear_commit_history: 'passed',
+      strict_protocol_json: 'passed',
+      event_schema_and_payload_hash: 'passed',
+      aggregate_revision_and_previous_hash: 'passed',
+      commit_order: 'passed',
+      commit_signatures_and_actor_credentials: 'passed',
+      reducer_replay: 'passed',
+      materialized_projection: 'passed',
+      projection_json_readable: 'passed',
+      business_file_hashes: 'passed',
+    } as const;
+    const base = {
+      format: 'icarus.collaboration-repository-verification/1',
+      level: 'self_consistent',
+      repository_identity: 'not_externally_anchored',
+      requested_ref: 'icarus/control',
+      resolved_ref: 'refs/heads/icarus/control',
+      repository_head: HEAD,
+      genesis_commit: 'c'.repeat(40),
+      trusted_genesis: null,
+      trusted_head: null,
+      event_count: 2,
+      checks,
+      failure: null,
+    } as const;
+    expect(
+      collaborationRepositoryVerificationSchema.safeParse(base).success,
+    ).toBe(true);
+    expect(
+      collaborationRepositoryVerificationSchema.safeParse({
+        ...base,
+        level: 'verified',
+        repository_identity: 'trusted_input_match',
+      }).success,
+    ).toBe(false);
+    expect(
+      collaborationRepositoryVerificationSchema.safeParse({
+        ...base,
+        level: 'verified',
+        repository_identity: 'trusted_input_match',
+        trusted_head: HEAD,
+      }).success,
+    ).toBe(true);
+    expect(
+      collaborationRepositoryVerificationSchema.safeParse({
+        ...base,
+        level: 'verified',
+        repository_identity: 'trusted_input_match',
+        trusted_head: 'd'.repeat(40),
+      }).success,
+    ).toBe(false);
+    expect(
+      collaborationRepositoryVerificationSchema.safeParse({
+        ...base,
+        trusted_head: HEAD,
+      }).success,
+    ).toBe(false);
+    expect(
+      collaborationRepositoryVerificationSchema.safeParse({
+        ...base,
+        level: 'projection_only',
+        repository_identity: 'not_established',
+        checks: {
+          ...checks,
+          complete_history_validation: 'failed',
+        },
+        failure: {
+          code: 'repository_verification_failed',
+          message: 'strict validation failed',
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it('keeps checked-in capability schemas aligned with the Host contract', () => {
     const generated = collaborationAnalysisJsonSchemas();
     const directory = path.resolve(process.cwd(), 'project-analyst/contracts');
@@ -225,6 +305,9 @@ describe('Collaboration Analysis contracts', () => {
       ['analysis-input.schema.json', generated.input],
       ['analysis-result.schema.json', generated.result],
       ['proposed-action.schema.json', generated.action],
+      ['repository-analysis-input.schema.json', generated.repositoryInput],
+      ['repository-analysis-result.schema.json', generated.repositoryResult],
+      ['repository-verification.schema.json', generated.repositoryVerification],
     ] as const)
       expect(
         JSON.parse(readFileSync(path.join(directory, file), 'utf8')),

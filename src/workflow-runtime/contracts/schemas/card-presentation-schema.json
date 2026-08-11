@@ -6,7 +6,7 @@
   },
   "version": 1,
   "domain_separator": "icarus:workflow-card-presentation-schema:1\n",
-  "hash": "sha256:866cdf382a1cd70cfcd52c2b0173f66ce9aebeecd8b8f79c200ecd5202cde829",
+  "hash": "sha256:5d4ebb255e5589b203c06f36dc8f01f137ab3c0909c01f58e5e75e3b83728e9d",
   "payload": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://icarus.local/schemas/card-presentation/1",
@@ -16,7 +16,7 @@
     "required": [
       "format",
       "ref",
-      "owner_feature_id",
+      "owner_pack_id",
       "template_ref",
       "template_hash",
       "variable_schema_ref",
@@ -37,7 +37,7 @@
       "ref": {
         "$ref": "#/$defs/versioned_ref"
       },
-      "owner_feature_id": {
+      "owner_pack_id": {
         "anyOf": [
           {
             "type": "string",

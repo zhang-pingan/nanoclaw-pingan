@@ -62,8 +62,8 @@
           "execution_artifact_hash",
           "closure_ref",
           "closure_hash",
-          "feature_release_ref",
-          "feature_release_hash"
+          "pack_release_ref",
+          "pack_release_hash"
         ],
         "properties": {
           "format": {
@@ -119,10 +119,10 @@
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
-          "feature_release_ref": {
+          "pack_release_ref": {
             "$ref": "#/$defs/ref"
           },
-          "feature_release_hash": {
+          "pack_release_hash": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           }
@@ -169,14 +169,14 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "feature_id",
+          "pack_id",
           "release_ref",
           "release_hash",
           "execution_artifact",
           "resources"
         ],
         "properties": {
-          "feature_id": {
+          "pack_id": {
             "type": "string",
             "minLength": 1,
             "maxLength": 255
@@ -326,5 +326,5 @@
       }
     }
   },
-  "hash": "sha256:5a99990b15afb993fd8222361de64af991a94d6776230a8e1ebf06dccc8cdadb"
+  "hash": "sha256:fdfaea5a3b521141567c7e3107c532a4b1bf6e057dd4f80299b3eab9498c5e70"
 }

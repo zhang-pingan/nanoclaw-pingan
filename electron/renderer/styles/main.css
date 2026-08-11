@@ -5384,7 +5384,7 @@ body {
   gap: 18px;
 }
 
-.configuration-feature-detail {
+.configuration-workflow-pack-detail {
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -5447,7 +5447,7 @@ body {
   align-items: start;
 }
 
-.configuration-feature-grid {
+.configuration-workflow-pack-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -5523,14 +5523,14 @@ body {
   -webkit-line-clamp: 1;
 }
 
-.configuration-feature-summary-grid {
+.configuration-workflow-pack-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   padding-top: 14px;
 }
 
-.configuration-feature-metric {
+.configuration-workflow-pack-metric {
   min-width: 0;
   border: 1px solid var(--minimal-line, rgba(148, 163, 184, 0.16));
   border-radius: 8px;
@@ -5538,14 +5538,14 @@ body {
   background: #fbfbfc;
 }
 
-.configuration-feature-metric span {
+.configuration-workflow-pack-metric span {
   display: block;
   color: var(--minimal-text-muted, #667085);
   font-size: 11px;
   font-weight: 650;
 }
 
-.configuration-feature-metric strong {
+.configuration-workflow-pack-metric strong {
   display: block;
   margin-top: 4px;
   color: var(--minimal-text, #202327);
@@ -5553,14 +5553,14 @@ body {
   font-weight: 720;
 }
 
-.configuration-feature-resource-list {
+.configuration-workflow-pack-resource-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   padding-top: 14px;
 }
 
-.configuration-feature-resource-list .management-pill {
+.configuration-workflow-pack-resource-list .management-pill {
   max-width: 100%;
 }
 
@@ -5575,17 +5575,6 @@ body {
 }
 
 #trace-monitor-screen.active {
-  display: flex;
-}
-
-#feature-runtime-screen {
-  flex: 1;
-  min-width: 0;
-  display: none;
-  background: var(--bg-primary);
-}
-
-#feature-runtime-screen.active {
   display: flex;
 }
 
@@ -7691,22 +7680,6 @@ body {
     min-width: 42px;
     padding-inline: 8px;
   }
-}
-
-.feature-runtime-outlet {
-  flex: 1;
-  min-width: 0;
-  overflow: auto;
-  background: var(--bg-primary);
-}
-
-.feature-runtime-status {
-  width: 100%;
-  min-height: 100%;
-  display: grid;
-  place-items: center;
-  color: var(--text-muted);
-  font-size: 13px;
 }
 
 .trace-monitor-sidebar {
@@ -15549,8 +15522,7 @@ body::after,
 #memory-management-screen.active,
 #knowledge-management-screen.active,
 #configuration-screen.active,
-#trace-monitor-screen.active,
-#feature-runtime-screen.active {
+#trace-monitor-screen.active {
   background: var(--minimal-bg);
 }
 
@@ -18356,6 +18328,48 @@ textarea.workflow-wizard-input {
   box-shadow: inset 3px 0 0 var(--minimal-accent, #575f6a);
 }
 
+.collaboration-context-menu {
+  position: fixed;
+  z-index: 2200;
+  width: 176px;
+  padding: 5px;
+  border: 1px solid var(--minimal-line, #dfe2e7);
+  border-radius: 8px;
+  background: var(--minimal-surface, #fff);
+  box-shadow: var(--minimal-shadow, 0 12px 32px rgba(16, 24, 40, 0.16));
+}
+
+.collaboration-context-menu button {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--minimal-text, #202327);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-align: left;
+}
+
+.collaboration-context-menu button:hover {
+  background: var(--minimal-nav-strong, #e7e9ec);
+}
+
+.collaboration-confirmation-copy {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 16px;
+  color: var(--minimal-text-soft, #575f6a);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.collaboration-confirmation-copy strong {
+  color: var(--minimal-danger, #b42318);
+}
+
 .collaboration-list-item-head,
 .collaboration-list-meta,
 .collaboration-title-row,
@@ -18621,6 +18635,26 @@ textarea.workflow-wizard-input {
   display: grid;
   align-content: start;
   gap: 12px;
+}
+
+.collaboration-resource-columns {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.collaboration-resource-columns > div {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.collaboration-resource-columns h4 {
+  margin: 0;
+  color: var(--minimal-text-soft, #575f6a);
+  font-size: 12px;
 }
 
 .collaboration-definition-list {
@@ -20322,7 +20356,8 @@ textarea.workflow-wizard-input {
   font-style: normal;
 }
 
-.collaboration-slot-field input {
+.collaboration-slot-field input,
+.collaboration-slot-field select {
   width: 100%;
   min-width: 0;
   min-height: 38px;
@@ -20487,6 +20522,7 @@ textarea.workflow-wizard-input {
 
   .collaboration-metrics,
   .collaboration-two-column,
+  .collaboration-resource-columns,
   .collaboration-form-grid,
   .collaboration-permission-grid {
     grid-template-columns: 1fr;

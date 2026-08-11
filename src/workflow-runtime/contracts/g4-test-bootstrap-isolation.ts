@@ -20,7 +20,7 @@ const SOURCE_ROOTS = [
   'src',
   'electron',
   'assistant',
-  'features',
+  'packs',
   'setup',
   'scripts',
 ] as const;
@@ -105,7 +105,7 @@ const KNOWN_HOST_ENTRYPOINTS = [
 ] as const;
 
 const INGRESS_RULES = {
-  feature: ['src/features/**', 'features/**'],
+  pack: ['src/packs/**', 'packs/**'],
   api: ['**/*api.{ts,tsx,js,mjs,cjs}', 'src/channels/web.ts'],
   automation: ['**/*automation*.{ts,tsx,js,mjs,cjs}', '**/task-scheduler.ts'],
   host: [
@@ -117,12 +117,7 @@ const INGRESS_RULES = {
   ],
 } as const;
 
-type G4IngressSurface =
-  | 'production'
-  | 'feature'
-  | 'api'
-  | 'automation'
-  | 'host';
+type G4IngressSurface = 'production' | 'pack' | 'api' | 'automation' | 'host';
 
 export interface G4IsolationViolation {
   readonly kind:
@@ -352,10 +347,10 @@ function forbiddenReference(value: string): string | null {
 
 function ingressSurface(relativePath: string): G4IngressSurface {
   if (
-    relativePath.startsWith('src/features/') ||
-    relativePath.startsWith('features/')
+    relativePath.startsWith('src/packs/') ||
+    relativePath.startsWith('packs/')
   ) {
-    return 'feature';
+    return 'pack';
   }
   if (
     /(?:^|\/)[^/]*api\.[cm]?[jt]sx?$/.test(relativePath) ||
@@ -489,8 +484,8 @@ function hostConfigurationViolations(
       ? [
           {
             kind: 'authority_reference_selected' as const,
-            surface: relativePath.startsWith('features/')
-              ? ('feature' as const)
+            surface: relativePath.startsWith('packs/')
+              ? ('pack' as const)
               : ('host' as const),
             source: relativePath,
             detail: marker,
@@ -734,7 +729,7 @@ export function g4IsolationBoundaryPayload(repoRoot: string): JsonObject {
       package_fields: [...PRODUCTION_PACKAGE_FIELDS],
       production_script_names: [...PRODUCTION_SCRIPT_NAMES],
       known_host_entrypoints: [...KNOWN_HOST_ENTRYPOINTS],
-      feature_ingress_rules: [...INGRESS_RULES.feature],
+      pack_ingress_rules: [...INGRESS_RULES.pack],
       api_ingress_rules: [...INGRESS_RULES.api],
       automation_ingress_rules: [...INGRESS_RULES.automation],
       host_bootstrap_rules: [...INGRESS_RULES.host],
@@ -743,7 +738,7 @@ export function g4IsolationBoundaryPayload(repoRoot: string): JsonObject {
       host_configuration_extensions: [...HOST_CONFIGURATION_EXTENSIONS],
       package_default_reference: 'absent',
       host_configuration_reference: 'absent',
-      feature_ingress_reachability: 'unreachable',
+      pack_ingress_reachability: 'unreachable',
       api_ingress_reachability: 'unreachable',
       automation_ingress_reachability: 'unreachable',
       host_bootstrap_reachability: 'unreachable',

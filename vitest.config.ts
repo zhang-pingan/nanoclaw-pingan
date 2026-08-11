@@ -6,6 +6,7 @@ export default defineConfig({
       'src/**/*.test.ts',
       'setup/**/*.test.ts',
       'electron/**/*.test.ts',
+      'container/**/*.test.ts',
     ],
   },
 });

@@ -137,7 +137,7 @@ export const groupDefinitionV3Schema = z
       .strict(),
     owner_principal_id: principalIdSchema,
     control_branch: z.literal(COLLABORATION_CONTROL_BRANCH),
-    lifecycle: z.enum(['active', 'archived']),
+    lifecycle: z.enum(['active', 'archived', 'dissolved']),
     membership_policy: membershipPolicySchema,
     visibility_policy: visibilityPolicySchema,
     default_permission_template_id: z
@@ -148,11 +148,38 @@ export const groupDefinitionV3Schema = z
       .default(DEFAULT_COLLABORATION_PERMISSION_TEMPLATE_ID),
     created_at: collaborationIsoTimeSchema,
     archived_at: collaborationIsoTimeSchema.nullable().default(null),
+    dissolved_at: collaborationIsoTimeSchema.nullable().default(null),
     extensions: extensionsSchema,
   })
   .strict()
   .refine((group) => group.creator.principal_id === group.owner_principal_id, {
     message: 'creator must be the initial owner',
+  })
+  .superRefine((group, context) => {
+    if (group.lifecycle === 'active' && group.archived_at !== null)
+      context.addIssue({
+        code: 'custom',
+        path: ['archived_at'],
+        message: 'Active Groups cannot have an archive timestamp',
+      });
+    if (group.lifecycle === 'archived' && group.archived_at === null)
+      context.addIssue({
+        code: 'custom',
+        path: ['archived_at'],
+        message: 'Archived Groups require an archive timestamp',
+      });
+    if (group.lifecycle === 'dissolved' && group.archived_at !== null)
+      context.addIssue({
+        code: 'custom',
+        path: ['archived_at'],
+        message: 'Dissolved Groups cannot remain archived',
+      });
+    if ((group.lifecycle === 'dissolved') !== (group.dissolved_at !== null))
+      context.addIssue({
+        code: 'custom',
+        path: ['dissolved_at'],
+        message: 'Group dissolution lifecycle and timestamp must agree',
+      });
   });
 export type GroupDefinitionV3 = z.infer<typeof groupDefinitionV3Schema>;
 
@@ -161,7 +188,14 @@ export const memberDefinitionV3Schema = z
     format: z.literal('icarus.collaboration-member/3'),
     principal_id: principalIdSchema,
     display_name: z.string().min(1).max(160),
-    status: z.enum(['requested', 'active', 'rejected', 'suspended', 'removed']),
+    status: z.enum([
+      'requested',
+      'active',
+      'rejected',
+      'suspended',
+      'removed',
+      'left',
+    ]),
     joined_at_event: collaborationIdentifierSchema.nullable(),
     extensions: extensionsSchema,
   })
@@ -330,10 +364,17 @@ export const executorDescriptorSchema = z
     display_name: z.string().min(1).max(160),
     kind: z.enum(['codex', 'workflow', 'run_once', 'external']),
     capabilities: z.array(collaborationIdentifierSchema).max(100),
+    status: z.enum(['active', 'revoked']).default('active'),
     registered_at_event: collaborationIdentifierSchema,
+    revoked_at_event: collaborationIdentifierSchema.nullable().default(null),
     extensions: extensionsSchema,
   })
-  .strict();
+  .strict()
+  .refine(
+    (executor) =>
+      (executor.status === 'active') === (executor.revoked_at_event === null),
+    { message: 'Executor status and revocation event are inconsistent' },
+  );
 export type ExecutorDescriptor = z.infer<typeof executorDescriptorSchema>;
 
 export const collaborationPermissionSchema = z.enum(COLLABORATION_PERMISSIONS);
@@ -1140,6 +1181,7 @@ export const collaborationEventTypesV3 = [
   'group_settings_updated',
   'group_archived',
   'group_reopened',
+  'group_dissolved',
   'invite_issued',
   'invite_revoked',
   'membership_requested',
@@ -1148,6 +1190,7 @@ export const collaborationEventTypesV3 = [
   'member_suspended',
   'member_reactivated',
   'member_removed',
+  'member_left',
   'client_revoked',
   'credential_rotated',
   'credential_revoked',

@@ -511,6 +511,16 @@ describe('CollaborationAnalysisService result boundary', () => {
         'resources/catalog.json',
       ]),
     );
+    const catalogFile = bundle.files.find(
+      (file) => file.path === 'resources/catalog.json',
+    )!;
+    const catalog = JSON.parse(catalogFile.content) as Record<string, any>;
+    expect(catalog[`group:${GROUP_ID}`]).toMatchObject({
+      format: 'icarus.collaboration-group/3',
+      group_id: GROUP_ID,
+    });
+    expect(catalog[`group:${GROUP_ID}`]).not.toHaveProperty('group');
+    expect(catalog['work_item:wi_delivery']).toHaveProperty('item');
     const transferred = JSON.stringify(bundle.files);
     expect(transferred).not.toContain('abcdefgh12345678');
     expect(transferred).not.toContain('/Users/alice/private');

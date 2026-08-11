@@ -10,5 +10,11 @@ for (const [name, schema] of [
   ['analysis-input.schema.json', schemas.input],
   ['analysis-result.schema.json', schemas.result],
   ['proposed-action.schema.json', schemas.action],
+  ['repository-analysis-input.schema.json', schemas.repositoryInput],
+  ['repository-analysis-result.schema.json', schemas.repositoryResult],
+  ['repository-verification.schema.json', schemas.repositoryVerification],
 ] as const)
-  writeFileSync(path.join(output, name), `${JSON.stringify(schema, null, 2)}\n`);
+  writeFileSync(
+    path.join(output, name),
+    `${JSON.stringify(schema, null, 2)}\n`,
+  );

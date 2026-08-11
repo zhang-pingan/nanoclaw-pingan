@@ -22,9 +22,9 @@ export interface G3RegistryResourceOwnerCore extends JsonObject {
   ref: VersionedRef;
 }
 
-export interface G3RegistryResourceOwnerFeature extends JsonObject {
-  kind: 'feature';
-  feature_id: string;
+export interface G3RegistryResourceOwnerPack extends JsonObject {
+  kind: 'pack';
+  pack_id: string;
 }
 
 export interface G3RegistryResourceOwnerPrincipal extends JsonObject {
@@ -34,7 +34,7 @@ export interface G3RegistryResourceOwnerPrincipal extends JsonObject {
 
 export type G3RegistryResourceOwner =
   | G3RegistryResourceOwnerCore
-  | G3RegistryResourceOwnerFeature
+  | G3RegistryResourceOwnerPack
   | G3RegistryResourceOwnerPrincipal;
 
 export interface G3RegistryResourceDependency extends JsonObject {

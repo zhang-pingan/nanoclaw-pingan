@@ -142,8 +142,8 @@
           "command_id",
           "outcome",
           "domain_request_hash",
-          "feature_release_ref",
-          "feature_release_hash",
+          "pack_release_ref",
+          "pack_release_hash",
           "closure_ref",
           "closure_hash",
           "execution_artifact_ref",
@@ -173,10 +173,10 @@
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
-          "feature_release_ref": {
+          "pack_release_ref": {
             "$ref": "#/$defs/ref"
           },
-          "feature_release_hash": {
+          "pack_release_hash": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
@@ -231,7 +231,7 @@
                   "publish_foundation_preflight_failed",
                   "registry_resource_preflight_failed",
                   "runtime_abi_incompatible",
-                  "feature_release_identity_collision",
+                  "pack_release_identity_collision",
                   "registry_publication_collision",
                   "retention_root_identity_collision",
                   "idempotency_conflict",
@@ -254,5 +254,5 @@
       }
     }
   },
-  "hash": "sha256:be8898f9e7d6c275a2c0072a91b5306928379ef76206d36842d5282d258bb238"
+  "hash": "sha256:e587d31e072de65ca8f2b8d321dc0b397b89f4351faba16ff9578df7b4f0ce67"
 }

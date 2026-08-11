@@ -15,6 +15,7 @@ import {
   validateG4TestBootstrapProfile,
 } from '../contracts/g4-test-bootstrap-contract.js';
 import { canonicalJson, domainSeparatedSha256 } from '../contracts/hash.js';
+import { CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION } from '../store/runtime-store/config.js';
 import { G4FakeAdapter, G4FakeAdapterError } from './fake-adapter.js';
 import {
   createG4TestBootstrap,
@@ -105,7 +106,7 @@ describe('G4 Test Bootstrap', () => {
         'SELECT user_version AS version FROM pragma_user_version',
         [],
       ),
-    ).toEqual({ version: 16 });
+    ).toEqual({ version: CURRENT_WORKFLOW_RUNTIME_SCHEMA_VERSION });
 
     const tables = instance.store.queryAll<{ name: string }>(
       "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
@@ -133,7 +134,7 @@ describe('G4 Test Bootstrap', () => {
     );
     expect(instance.receipt).toMatchObject({
       production_ingress_reachable: false,
-      feature_ingress_reachable: false,
+      pack_ingress_reachable: false,
       api_ingress_reachable: false,
       automation_ingress_reachable: false,
       active_registry_rows_observed: 0,
@@ -375,7 +376,7 @@ describe('G4 Test Bootstrap', () => {
     expectBootstrapCode(() => instance.reopenStore(), 'isolation_proof_failed');
   });
 
-  it('rejects replacement of the exact Schema 11 database file', () => {
+  it('rejects replacement of the exact current-Schema database file', () => {
     const instance = track(
       createG4TestBootstrap(options('database-replacement')),
     );

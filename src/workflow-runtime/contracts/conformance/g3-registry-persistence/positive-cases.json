@@ -21,8 +21,8 @@
                 "version": "1.0.0"
               },
               "owner": {
-                "kind": "feature",
-                "feature_id": "fixture.feature"
+                "kind": "pack",
+                "pack_id": "fixture.pack"
               },
               "schema_ref": {
                 "id": "fixture.registry.schema",
@@ -53,8 +53,8 @@
                 "version": "1.0.0"
               },
               "owner": {
-                "kind": "feature",
-                "feature_id": "fixture.feature"
+                "kind": "pack",
+                "pack_id": "fixture.pack"
               },
               "schema_ref": {
                 "id": "fixture.registry.schema",
@@ -144,5 +144,5 @@
       }
     ]
   },
-  "hash": "sha256:4fe63e253f547fd4dc99cb5bad360c27452f3291cdb5d1ea09038110f742cd4d"
+  "hash": "sha256:e4edf1de529764a7a079bc4934bd808dddadd354dfb4185ef1e2f10e0efde7f5"
 }

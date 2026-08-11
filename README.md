@@ -99,6 +99,7 @@ Active Member 只表示成员身份有效。业务写入还取决于直接权限
 - Principal 是 Group 内的稳定成员与权限主体，使用系统生成的 `principal_<uuid>`，不从 SSH key 或 Credential fingerprint 派生。每个 Icarus 安装持久化一个 `client_<uuid>`，同一 Principal 可通过批准的身份恢复绑定多个 Client。
 - 每个 Client 的 Icarus event-signing Credential 由 Host 自动生成；共享 Git 只保存 `credential_id`、Principal/Client 绑定、公钥、系统校验的 fingerprint、purpose、status 和生命周期事件，私钥仅保存在本机安全目录。Credential 可以轮换或单独撤销而不改变 Principal。
 - Git Remote 账号/SSH 只控制 clone、fetch、push。Git SSH Key 路径是可选本地 transport 设置，优先使用显式值或 `SSH_KEY_PATH`，否则使用 `~/.ssh/id_rsa`，并支持后续修改或清除；它不参与 Principal 或 event Credential 的生成。
+- `group_id` 是稳定群组身份，Git Remote URL 只是可迁移的 locator；重新发现同一 `group_id` 时会更新 locator，而不会创建第二个群组或 Principal。
 - Observer 是不进入 Group Membership 的 Icarus 业务只读订阅，可以 fetch、验签、浏览 verified virtual file tree 和审计。即使拥有 Git push 权限，也只能提交 schema 严格限制的新成员申请、身份恢复申请及申请取消；Work Item、Workflow、Discussion、Permission 等业务事件会在 replay 时被拒绝并 quarantine，界面继续保留最后 verified head。
 - 身份恢复通过同一 Git Remote 异步传输。新 Client 使用新 Credential 提交 pending 请求；旧 Client 或 Owner 核对请求 hash 派生的相同验证码后批准或拒绝。Owner recovery 默认撤销目标 Principal 的旧 event Credentials；Owner 全部在线 Credential 丢失时只能使用预先生成并显式备份的 offline Group recovery Credential，否则 fail closed。
 - 每个 Principal 拥有可发布进度、文件、Prompt 和 Action 的 Workspace；Group 还提供 Shared Workspace、Work Item、Discussion 和直接权限。
@@ -108,7 +109,9 @@ Active Member 只表示成员身份有效。业务写入还取决于直接权限
 - Work Item progress 与 Turn completion 可先暂存原始业务文件，再在同一个签名事件和 Git commit 中物化 Artifact 原文件与 `metadata.json` sidecar；命令冲突不会自动重传已暂存文件。
 - Completion 只提交合法 Outcome，Reducer 根据固定 Workflow snapshot 路由；Handoff 和 Group 内容始终是不可信上下文，不能覆盖系统指令、权限或 FSM。
 - start/execution deadline 固定在 Turn snapshot 中，超时只产生幂等通知和审计 observation，不依据本地时钟自动推进状态。
-- 协议当前唯一版本为 v3，本地 SQLite 唯一版本为 v9；旧版本、旧备份和旧事件均 fail closed，不提供迁移、双写或兼容回放。
+- Archive 是 owner 可逆的远端群组状态；Dissolve 是 owner-only、不可恢复的远端终态；Leave 是非 owner 正式成员退出并撤销其 Client/Credential/Executor；“从本机移除”只清除当前设备的订阅和可重建数据，不写 Git 事件，也不改变远端成员身份。
+- Dissolve/Leave 只有在远端事件提交成功后才从本机隐藏；本地文件清理失败会保留可重试的 pending 计划。Local remove 同样保留 Credential/私钥、备份以及 `group_id`、`remote_url`、`principal_id`、`credential_id` 最小恢复绑定。
+- 协议当前唯一版本为 v3，本地 SQLite 唯一版本为 v11；旧版本、旧备份和旧事件均 fail closed，不提供迁移、双写或兼容回放。
 
 功能入口为 Web/Electron 工作台的“群组”导航或 `/groups`；当前协议和领域模型见 [`docs/collaboration-project-space-v3-plan.md`](docs/collaboration-project-space-v3-plan.md)。
 

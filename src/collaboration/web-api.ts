@@ -13,6 +13,7 @@ import type { CollaborationAnalysisRunDetail } from './analysis-service.js';
 import type {
   CollaborationActionExecutionV3,
   CollaborationExecutorBindingV3,
+  CollaborationLocalExecutorV3,
 } from './project-space-store.js';
 import { CollaborationProjectSpaceGitConflictError } from './project-space-git.js';
 import type { CollaborationRuntime } from './runtime.js';
@@ -112,6 +113,23 @@ function publicBinding(binding: CollaborationExecutorBindingV3) {
     config: redactLocalSecrets(binding.config),
     enabled: binding.enabled,
     updatedAtMs: binding.updatedAtMs,
+  };
+}
+
+function publicLocalExecutor(executor: CollaborationLocalExecutorV3) {
+  return {
+    groupId: executor.groupId,
+    principalId: executor.principalId,
+    clientId: executor.clientId,
+    executorId: executor.executorId,
+    displayName: executor.displayName,
+    executorKind: executor.executorKind,
+    workspacePath: executor.workspacePath,
+    filesystemAccess: executor.filesystemAccess,
+    approvalPolicy: executor.approvalPolicy,
+    config: redactLocalSecrets(executor.config),
+    enabled: executor.enabled,
+    updatedAtMs: executor.updatedAtMs,
   };
 }
 
@@ -491,8 +509,14 @@ export class CollaborationWebApi {
       new RegExp(`^${API_PREFIX}/subscriptions/([^/]+)$`, 'u'),
     );
     if (found && method === 'DELETE') {
+      const body = await jsonBody(
+        req,
+        z.object({ confirmation: identifier }).strict(),
+      );
+      if (body.confirmation !== found[1])
+        throw new Error('Local removal confirmation must match the Group id');
       send(res, 200, {
-        removed: this.runtime.store.deleteSubscription(found[1]!),
+        ...(await this.runtime.groups.removeLocalGroup(found[1]!)),
       });
       return;
     }
@@ -542,6 +566,16 @@ export class CollaborationWebApi {
         bindings: this.runtime.store
           .listExecutorBindings(group.groupId)
           .map(publicBinding),
+        localExecutors:
+          group.localPrincipalId && group.localClientId
+            ? this.runtime.store
+                .listLocalExecutors({
+                  groupId: group.groupId,
+                  principalId: group.localPrincipalId,
+                  clientId: group.localClientId,
+                })
+                .map(publicLocalExecutor)
+            : [],
         executions: this.runtime.store
           .listActionExecutions(group.groupId)
           .map(publicExecution),
@@ -558,6 +592,77 @@ export class CollaborationWebApi {
     }
     found = match(
       pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/executors$`, 'u'),
+    );
+    if (found && method === 'GET') {
+      const group = this.runtime.store.getGroup(found[1]!);
+      if (!group?.localPrincipalId || !group.localClientId)
+        throw new Error('Current Group member identity is unavailable');
+      send(res, 200, {
+        executors: this.runtime.store
+          .listLocalExecutors({
+            groupId: found[1]!,
+            principalId: group.localPrincipalId,
+            clientId: group.localClientId,
+          })
+          .map(publicLocalExecutor),
+      });
+      return;
+    }
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            displayName: z.string().min(1).max(160),
+            kind: z.enum(['codex', 'workflow', 'run_once', 'external']),
+            workspacePath: z.string().min(1).max(4096),
+            filesystemAccess: z.enum(['read_only', 'workspace_write']),
+            approvalPolicy: z.enum(['untrusted', 'on-request', 'never']),
+            agentJid: z.string().min(1).max(512).optional(),
+            model: z.string().min(1).max(160).optional(),
+          })
+          .strict(),
+      );
+      const result = await this.runtime.groups.registerExecutor({
+        groupId: found[1]!,
+        ...body,
+      });
+      send(res, 201, {
+        group: publicGroup(result.group),
+        executor: result.executor,
+        localExecutor: publicLocalExecutor(result.localExecutor),
+      });
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/executors/([^/]+)$`, 'u'),
+    );
+    if (found && method === 'DELETE') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            reason: z.string().min(1).max(4000),
+          })
+          .strict(),
+      );
+      send(res, 200, {
+        group: publicGroup(
+          await this.runtime.groups.revokeExecutor({
+            groupId: found[1]!,
+            executorId: found[2]!,
+            ...body,
+          }),
+        ),
+      });
+      return;
+    }
+    found = match(
+      pathname,
       new RegExp(`^${API_PREFIX}/groups/([^/]+)/sync$`, 'u'),
     );
     if (found && method === 'POST') {
@@ -566,6 +671,76 @@ export class CollaborationWebApi {
         group: publicGroup(this.runtime.store.getGroup(found[1]!)),
         verifiedHead: history.head,
       });
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/dissolve$`, 'u'),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            reason: z.string().min(1).max(4000),
+            confirmation: identifier,
+          })
+          .strict(),
+      );
+      if (body.confirmation !== found[1])
+        throw new Error('Dissolution confirmation must match the Group id');
+      send(
+        res,
+        200,
+        await this.runtime.groups.dissolveGroup(
+          found[1]!,
+          body.reason,
+          body.expectedRevision,
+        ),
+      );
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(`^${API_PREFIX}/groups/([^/]+)/leave$`, 'u'),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            reason: z.string().min(1).max(4000),
+            confirmation: identifier,
+          })
+          .strict(),
+      );
+      if (body.confirmation !== found[1])
+        throw new Error('Member exit confirmation must match the Group id');
+      send(
+        res,
+        200,
+        await this.runtime.groups.leaveGroup(
+          found[1]!,
+          body.reason,
+          body.expectedRevision,
+        ),
+      );
+      return;
+    }
+    found = match(
+      pathname,
+      new RegExp(`^${API_PREFIX}/local-bindings/([^/]+)/cleanup/retry$`, 'u'),
+    );
+    if (found && method === 'POST') {
+      const body = await jsonBody(
+        req,
+        z.object({ confirmation: identifier }).strict(),
+      );
+      if (body.confirmation !== found[1])
+        throw new Error('Cleanup retry confirmation must match the Group id');
+      send(res, 200, await this.runtime.groups.retryLocalCleanup(found[1]!));
       return;
     }
     found = match(
@@ -1510,31 +1685,70 @@ export class CollaborationWebApi {
         z
           .object({
             expectedRevision,
-            actionId: identifier,
-            name: z.string().min(1),
-            version: z.number().int().positive(),
-            kind: z.enum(['run_once', 'workflow', 'external']),
-            adapter: identifier.nullable().optional(),
-            workflowRef: identifier.nullable().optional(),
-            prompt: z.string(),
+            name: z.string().min(1).max(240),
+            actionType: z.enum(['run_once', 'codex']),
+            prompt: z.string().min(1).max(64_000),
             filesystemAccess: z.enum(['read_only', 'workspace_write']),
-            resultSchema: z
-              .object({
-                ref: identifier,
-                schema: z.record(z.string(), z.unknown()).nullable(),
-              })
-              .strict()
-              .optional(),
+            resultFormat: z.literal('collaboration_state_result').optional(),
           })
           .strict(),
       );
+      const result = await this.runtime.groups.createAction({
+        groupId: found[1]!,
+        ...body,
+      });
       send(res, 201, {
-        group: publicGroup(
-          await this.runtime.groups.publishAction({
-            groupId: found[1]!,
-            ...body,
-          }),
-        ),
+        group: publicGroup(result.group),
+        action: result.action,
+      });
+      return true;
+    }
+    found = match(
+      url.pathname,
+      new RegExp(
+        `^${API_PREFIX}/groups/([^/]+)/workspace/me/actions/([^/]+)$`,
+        'u',
+      ),
+    );
+    if (found && method === 'GET') {
+      const projection = this.requireProjection(found[1]!);
+      const group = this.runtime.store.getGroup(found[1]!);
+      const action = group?.localPrincipalId
+        ? projection.actions[`${group.localPrincipalId}:${found[2]!}`]
+        : null;
+      if (!action)
+        throw new Error(
+          'Action does not exist in the current Principal library',
+        );
+      const prompt = await this.runtime.groups.readVerifiedFile({
+        groupId: found[1]!,
+        repositoryFile: action.prompt_ref,
+      });
+      send(res, 200, { action, prompt: prompt.toString('utf8') });
+      return true;
+    }
+    if (found && method === 'PUT') {
+      const body = await jsonBody(
+        req,
+        z
+          .object({
+            expectedRevision,
+            name: z.string().min(1).max(240),
+            actionType: z.enum(['run_once', 'codex']),
+            prompt: z.string().min(1).max(64_000),
+            filesystemAccess: z.enum(['read_only', 'workspace_write']),
+            resultFormat: z.literal('collaboration_state_result').optional(),
+          })
+          .strict(),
+      );
+      const result = await this.runtime.groups.reviseAction({
+        groupId: found[1]!,
+        actionId: found[2]!,
+        ...body,
+      });
+      send(res, 200, {
+        group: publicGroup(result.group),
+        action: result.action,
       });
       return true;
     }
@@ -2224,11 +2438,11 @@ export class CollaborationWebApi {
     found = match(
       url.pathname,
       new RegExp(
-        `^${API_PREFIX}/groups/([^/]+)/workflow-instances/([^/]+)/states/([^/]+)/execution/withdraw$`,
+        `^${API_PREFIX}/groups/([^/]+)/workflow-instances/([^/]+)/states/([^/]+)/execution$`,
         'u',
       ),
     );
-    if (found && method === 'POST') {
+    if (found && method === 'DELETE') {
       const body = await jsonBody(req, z.object({ expectedRevision }).strict());
       send(res, 200, {
         group: publicGroup(
@@ -2314,31 +2528,16 @@ export class CollaborationWebApi {
             expectedRevision,
             mode: z.enum(['manual', 'assisted', 'automatic']),
             actionId: identifier.nullable().optional(),
-            binding: z
-              .object({
-                executorId: identifier,
-                executorKind: z.enum([
-                  'run_once',
-                  'workflow',
-                  'external',
-                  'codex',
-                ]),
-                workspacePath: z.string().min(1),
-                filesystemAccess: z.enum(['read_only', 'workspace_write']),
-                approvalPolicy: z.enum(['untrusted', 'on-request', 'never']),
-                config: z.record(z.string(), z.unknown()),
-                enabled: z.boolean(),
-              })
-              .strict()
-              .optional(),
+            executorId: identifier.nullable().optional(),
           })
           .strict(),
       );
-      const binding = body.binding;
-      if (body.mode !== 'manual' && !binding)
-        throw new Error('Non-manual execution requires a local Binding');
-      if (body.mode === 'manual' && binding)
-        throw new Error('Manual execution cannot configure a local Binding');
+      if (body.mode !== 'manual' && (!body.actionId || !body.executorId))
+        throw new Error(
+          'Non-manual execution requires selected Action and Executor',
+        );
+      if (body.mode === 'manual' && (body.actionId || body.executorId))
+        throw new Error('Manual execution cannot reference Action or Executor');
       const group = await this.runtime.groups.publishStateExecution({
         groupId: found[1]!,
         instanceId: found[2]!,
@@ -2346,23 +2545,8 @@ export class CollaborationWebApi {
         expectedRevision: body.expectedRevision,
         mode: body.mode,
         actionId: body.actionId,
+        executorId: body.executorId,
       });
-      if (body.mode !== 'manual') {
-        const execution =
-          group.projection?.stateExecutions[found[2]!]?.[found[3]!];
-        if (!execution?.action_hash || !execution.prompt_hash)
-          throw new Error('Non-manual execution requires a local Binding');
-        this.runtime.store.saveExecutorBinding({
-          groupId: found[1]!,
-          instanceId: found[2]!,
-          stateId: found[3]!,
-          principalId: group.localPrincipalId!,
-          clientId: group.localClientId!,
-          actionHash: execution.action_hash,
-          promptHash: execution.prompt_hash,
-          ...binding!,
-        });
-      }
       send(res, 200, { group: publicGroup(group) });
       return true;
     }
@@ -2509,6 +2693,7 @@ export class CollaborationWebApi {
             .object({
               expectedRevision,
               previousAttempt: z.number().int().positive(),
+              assigneePrincipalId: identifier,
               reason: z.string().min(1),
             })
             .strict(),

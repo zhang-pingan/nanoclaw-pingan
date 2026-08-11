@@ -72,7 +72,7 @@ function insertPublishedResource(
     transaction.execute(
       `INSERT INTO workflow_registry_resources (
          id, resource_type, resource_id, resource_version, owner_core_ref,
-         owner_feature_id, canonical_value_id, content_hash, publication_state,
+         owner_pack_id, canonical_value_id, content_hash, publication_state,
          created_at_ms, published_at_ms, retired_at_ms, row_version
        ) VALUES (?, ?, ?, ?, 'icarus.core@1.0.0', NULL, ?, ?, 'published',
          20, 20, NULL, 1)`,
@@ -176,10 +176,10 @@ export function createG7Fixture(
       actorKind: 'human',
       authSessionRef: `session:g7:${key}`,
       entrypoint: 'runtime_center',
-      sourceFeatureId: null,
+      sourcePackId: null,
       delegationChainRef: null,
       permissions: G7_ALL_PERMISSIONS,
-      featurePermissionCeiling: null,
+      packPermissionCeiling: null,
     },
     capacityWatcher: { current: () => publication },
   };

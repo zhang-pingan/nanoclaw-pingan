@@ -16,6 +16,7 @@ import { CollaborationProjectSpaceIdentityService } from './project-space-identi
 import {
   CollaborationProjectSpaceService,
   type CollaborationProjectSpaceAppendEvent,
+  type CollaborationLocalGroupCleanup,
   type CollaborationProjectSpaceTransport,
   type ValidatedProjectSpaceHistory,
 } from './project-space-service.js';
@@ -26,6 +27,7 @@ import { CollaborationWebApi } from './web-api.js';
 import {
   buildCollaborationEventV3,
   collaborationCanonicalHashV3,
+  collaborationDeadlineSnapshotHashV3,
   reduceCollaborationEventV3,
 } from './protocol/v3-reducer.js';
 import { collaborationCredentialFingerprintV3 } from './protocol/v3-schema.js';
@@ -123,6 +125,7 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
   concurrentEventBeforeBuild:
     | ValidatedProjectSpaceHistory['eventRecords'][number]['event']
     | null = null;
+  failNextAppend: Error | null = null;
 
   async inspect(input: {
     remoteUrl: string;
@@ -159,6 +162,11 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
       | CollaborationProjectSpaceAppendEvent
       | readonly CollaborationProjectSpaceAppendEvent[];
   }): Promise<ValidatedProjectSpaceHistory> {
+    if (this.failNextAppend) {
+      const error = this.failNextAppend;
+      this.failNextAppend = null;
+      throw error;
+    }
     let current = await this.inspect({ remoteUrl: input.remoteUrl });
     if (this.concurrentEventBeforeBuild) {
       const event = this.concurrentEventBeforeBuild;
@@ -258,21 +266,46 @@ function service(
   transport: MemoryTransport,
   identity: CollaborationEventSigningIdentity,
   now: () => number = () => Date.parse('2026-08-06T12:00:00.000Z'),
+  options?: {
+    cleanupLocalPaths?: CollaborationLocalGroupCleanup;
+    createCredentialIdentity?: (input: {
+      principalId: string;
+      purpose?: 'event_signing' | 'group_recovery';
+      clientId?: string;
+    }) => Promise<CollaborationEventSigningIdentity>;
+    loadCredentialIdentity?: (
+      credentialId: string,
+    ) => Promise<CollaborationEventSigningIdentity>;
+  },
 ) {
   const store = new CollaborationProjectSpaceStore(path.join(root, 'store.db'));
   const identities = {
     createPrincipalIdentity: async () => identity,
-    createCredentialIdentity: async (input: { purpose?: string }) => ({
-      ...identity,
-      credentialId:
-        input.purpose === 'group_recovery'
-          ? `${identity.credentialId}_recovery`
-          : identity.credentialId,
-      purpose:
-        input.purpose === 'group_recovery'
-          ? ('group_recovery' as const)
-          : ('event_signing' as const),
-    }),
+    createCredentialIdentity:
+      options?.createCredentialIdentity ??
+      (async (input: { purpose?: string }) => ({
+        ...identity,
+        credentialId:
+          input.purpose === 'group_recovery'
+            ? `${identity.credentialId}_recovery`
+            : identity.credentialId,
+        purpose:
+          input.purpose === 'group_recovery'
+            ? ('group_recovery' as const)
+            : ('event_signing' as const),
+      })),
+    loadCredentialIdentity:
+      options?.loadCredentialIdentity ??
+      (async (credentialId: string) => {
+        if (credentialId === identity.credentialId) return identity;
+        if (credentialId === `${identity.credentialId}_recovery`)
+          return {
+            ...identity,
+            credentialId,
+            purpose: 'group_recovery' as const,
+          };
+        throw new Error(`Credential not found: ${credentialId}`);
+      }),
     resolveGitSshKeyPath: (value?: string) => value || '/tmp/git-transport',
     resolveGitSshKeyCandidates: (value?: string) => [
       value || '/tmp/git-transport',
@@ -286,6 +319,7 @@ function service(
       path.join(root, 'repos'),
       identities,
       now,
+      options?.cleanupLocalPaths,
     ),
   };
 }
@@ -853,6 +887,579 @@ describe('Collaboration project space v3 Group and identity service', () => {
     local.store.close();
   });
 
+  it('keeps local state on remote dissolution failure and hides it before cleanup retry', async () => {
+    const transport = new MemoryTransport();
+    const cleanup = vi
+      .fn<CollaborationLocalGroupCleanup>()
+      .mockRejectedValueOnce(new Error('repository cache is busy'))
+      .mockResolvedValue(undefined);
+    const local = service(tempDirectory(), transport, ALICE, undefined, {
+      cleanupLocalPaths: cleanup,
+    });
+    await local.service.createGroup({
+      remoteUrl: '/tmp/lifecycle.git',
+      name: 'Lifecycle project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_lifecycle',
+    });
+    await expect(
+      local.service.leaveGroup('group_lifecycle', 'Owner cannot leave', 0),
+    ).rejects.toThrow(/Owner cannot leave/u);
+
+    transport.failNextAppend = new Error('remote push rejected');
+    await expect(
+      local.service.dissolveGroup('group_lifecycle', 'Project complete', 1),
+    ).rejects.toThrow(/remote push rejected/u);
+    expect(local.store.getGroup('group_lifecycle')).not.toBeNull();
+    expect(local.store.getLocalGroupBinding('group_lifecycle')).toMatchObject({
+      bindingState: 'attached',
+    });
+    expect(
+      transport.histories.get('/tmp/lifecycle.git')?.projection.group.lifecycle,
+    ).toBe('active');
+    expect(cleanup).not.toHaveBeenCalled();
+
+    const dissolved = await local.service.dissolveGroup(
+      'group_lifecycle',
+      'Project complete',
+      1,
+    );
+    expect(dissolved).toMatchObject({
+      groupId: 'group_lifecycle',
+      removed: true,
+      cleanupPending: true,
+      cleanupError: 'repository cache is busy',
+    });
+    expect(local.store.getGroup('group_lifecycle')).toBeNull();
+    expect(local.store.listGroups()).toEqual([]);
+    expect(local.store.getLocalGroupBinding('group_lifecycle')).toMatchObject({
+      principalId: ALICE.principalId,
+      credentialId: ALICE.credentialId,
+      bindingState: 'cleanup_pending',
+      detachReason: 'group_dissolved',
+      terminalHead: transport.histories.get('/tmp/lifecycle.git')?.head,
+    });
+    expect(
+      transport.histories.get('/tmp/lifecycle.git')?.projection.group.lifecycle,
+    ).toBe('dissolved');
+
+    await expect(
+      local.service.retryLocalCleanup('group_lifecycle'),
+    ).resolves.toMatchObject({
+      cleanupPending: false,
+    });
+    expect(local.store.getLocalGroupBinding('group_lifecycle')).toMatchObject({
+      bindingState: 'retained',
+      cleanupPaths: [],
+      cleanupError: null,
+    });
+    expect(cleanup).toHaveBeenCalledTimes(2);
+    local.store.close();
+  });
+
+  it('persists a remote terminal projection when the detach transaction must retry', async () => {
+    const transport = new MemoryTransport();
+    const local = service(tempDirectory(), transport, ALICE);
+    await local.service.createGroup({
+      remoteUrl: '/tmp/detach-retry.git',
+      name: 'Detach retry project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_detach_retry',
+    });
+    const detach = vi.spyOn(local.store, 'detachLocalGroup');
+    detach.mockImplementationOnce(() => {
+      throw new Error('database detach transaction is busy');
+    });
+
+    await expect(
+      local.service.dissolveGroup(
+        'group_detach_retry',
+        'Terminal remote event',
+        1,
+      ),
+    ).resolves.toMatchObject({
+      removed: false,
+      cleanupPending: true,
+      cleanupError: 'database detach transaction is busy',
+    });
+    expect(local.store.getGroup('group_detach_retry')).toMatchObject({
+      lifecycle: 'dissolved',
+    });
+    expect(
+      local.store.getGroup('group_detach_retry')?.projection?.group.lifecycle,
+    ).toBe('dissolved');
+    expect(
+      local.store.getLocalGroupBinding('group_detach_retry'),
+    ).toMatchObject({
+      bindingState: 'attached',
+    });
+
+    await expect(local.service.retryPendingLocalCleanups()).resolves.toEqual([
+      expect.objectContaining({
+        groupId: 'group_detach_retry',
+        removed: true,
+        cleanupPending: false,
+      }),
+    ]);
+    expect(local.store.getGroup('group_detach_retry')).toBeNull();
+    expect(
+      local.store.getLocalGroupBinding('group_detach_retry'),
+    ).toMatchObject({
+      bindingState: 'retained',
+      detachReason: 'group_dissolved',
+    });
+    expect(transport.appendCount).toBe(1);
+    local.store.close();
+  });
+
+  it('removes an Observer locally without appending a business event', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/local-remove.git',
+      name: 'Local remove project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_local_remove',
+    });
+    const observerCleanup = vi.fn<CollaborationLocalGroupCleanup>();
+    const observer = service(tempDirectory(), transport, BOB, undefined, {
+      cleanupLocalPaths: observerCleanup,
+    });
+    await observer.service.observeGroup({
+      remoteUrl: '/tmp/local-remove.git',
+      gitSshKeyPath: BOB.privateKeyPath,
+    });
+    const appendCount = transport.appendCount;
+    const remoteHead = transport.histories.get('/tmp/local-remove.git')?.head;
+
+    await expect(
+      observer.service.removeLocalGroup('group_local_remove'),
+    ).resolves.toMatchObject({ removed: true, cleanupPending: false });
+    expect(transport.appendCount).toBe(appendCount);
+    expect(transport.histories.get('/tmp/local-remove.git')?.head).toBe(
+      remoteHead,
+    );
+    expect(
+      transport.histories.get('/tmp/local-remove.git')?.projection.group
+        .lifecycle,
+    ).toBe('active');
+    expect(observer.store.getGroup('group_local_remove')).toBeNull();
+    expect(
+      observer.store.getLocalGroupBinding('group_local_remove'),
+    ).toMatchObject({
+      principalId: null,
+      credentialId: null,
+      bindingState: 'retained',
+      detachReason: 'local_remove',
+    });
+    expect(observerCleanup).toHaveBeenCalledTimes(1);
+
+    const ownerHead = transport.histories.get('/tmp/local-remove.git')?.head;
+    await owner.service.removeLocalGroup('group_local_remove');
+    const restoredOwner = await owner.service.observeGroup({
+      remoteUrl: '/tmp/local-remove.git',
+      gitSshKeyPath: ALICE.privateKeyPath,
+    });
+    expect(restoredOwner).toMatchObject({
+      subscriptionMode: 'member',
+      localPrincipalId: ALICE.principalId,
+      localCredentialId: ALICE.credentialId,
+      recoveryCredentialId: `${ALICE.credentialId}_recovery`,
+    });
+    expect(transport.histories.get('/tmp/local-remove.git')?.head).toBe(
+      ownerHead,
+    );
+    expect(transport.appendCount).toBe(appendCount);
+    owner.store.close();
+    observer.store.close();
+  });
+
+  it('rejoins through a migrated locator with the retained Principal and current policy', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/rejoin-original.git',
+      name: 'Rejoin project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'approval',
+      observerAccess: 'allowed',
+      groupId: 'group_rejoin',
+    });
+    const rejoinedIdentity: CollaborationEventSigningIdentity = {
+      ...BOB,
+      clientId: 'client_bob_rejoined',
+      credentialId: 'credential_bob_rejoined',
+      privateKeyPath: '/tmp/bob-rejoined',
+    };
+    const bob = service(tempDirectory(), transport, BOB, undefined, {
+      createCredentialIdentity: async () => rejoinedIdentity,
+    });
+    await bob.service.joinGroup({
+      remoteUrl: '/tmp/rejoin-original.git',
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    await owner.service.approveMembership('group_rejoin', BOB.principalId, 1);
+    await bob.service.sync('group_rejoin');
+    await expect(
+      bob.service.dissolveGroup('group_rejoin', 'Not the Owner', 1),
+    ).rejects.toThrow(/Only the Group Owner/u);
+    await bob.service.leaveGroup(
+      'group_rejoin',
+      'Leaving for now',
+      bob.store.getGroup('group_rejoin')!.projection!.aggregateHeads[
+        `membership:${BOB.principalId}`
+      ]!.revision,
+    );
+    expect(bob.store.getLocalGroupBinding('group_rejoin')).toMatchObject({
+      principalId: BOB.principalId,
+      credentialId: BOB.credentialId,
+      bindingState: 'retained',
+      detachReason: 'member_left',
+    });
+
+    const migratedHistory = transport.histories.get(
+      '/tmp/rejoin-original.git',
+    )!;
+    transport.histories.set('/tmp/rejoin-migrated.git', migratedHistory);
+    const requested = await bob.service.joinGroup({
+      remoteUrl: '/tmp/rejoin-migrated.git',
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob Rejoined Device',
+    });
+    expect(requested).toMatchObject({
+      groupId: 'group_rejoin',
+      remoteUrl: '/tmp/rejoin-migrated.git',
+      subscriptionMode: 'observer',
+      localPrincipalId: BOB.principalId,
+      localCredentialId: rejoinedIdentity.credentialId,
+    });
+    expect(requested.projection?.members[BOB.principalId]).toMatchObject({
+      principal_id: BOB.principalId,
+      status: 'requested',
+    });
+    expect(
+      requested.projection?.credentials[BOB.principalId]?.[BOB.credentialId]
+        ?.status,
+    ).toBe('revoked');
+    expect(
+      requested.projection?.credentials[BOB.principalId]?.[
+        rejoinedIdentity.credentialId
+      ]?.status,
+    ).toBe('active');
+    expect(Object.keys(requested.projection?.members ?? {})).toHaveLength(2);
+    expect(bob.store.getLocalGroupBinding('group_rejoin')).toMatchObject({
+      remoteUrl: '/tmp/rejoin-migrated.git',
+      principalId: BOB.principalId,
+      credentialId: rejoinedIdentity.credentialId,
+      bindingState: 'attached',
+    });
+    owner.store.close();
+    bob.store.close();
+  });
+
+  it('marks a leaving member Workflow Turn for recovery and notifies the Owner', async () => {
+    const transport = new MemoryTransport();
+    let nowMs = Date.parse('2026-08-06T12:00:00.000Z');
+    const advancingNow = () => nowMs++;
+    const owner = service(tempDirectory(), transport, ALICE, advancingNow);
+    const bob = service(tempDirectory(), transport, BOB, advancingNow);
+    await owner.service.createGroup({
+      remoteUrl: '/tmp/member-left-workflow.git',
+      name: 'Workflow recovery project',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_member_left_workflow',
+    });
+    await bob.service.joinGroup({
+      remoteUrl: '/tmp/member-left-workflow.git',
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    await owner.service.sync('group_member_left_workflow');
+    await owner.service.proposeWorkflowDefinition({
+      groupId: 'group_member_left_workflow',
+      definitionId: 'delivery',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Delivery',
+      machine: DELIVERY_MACHINE,
+      layout: DELIVERY_LAYOUT,
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId: 'group_member_left_workflow',
+      definitionId: 'delivery',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkflowInstance({
+      groupId: 'group_member_left_workflow',
+      definitionId: 'delivery',
+      definitionVersion: 1,
+      instanceId: 'instance_member_left',
+      scope: { type: 'group' },
+      participantBindings: { implementer: BOB.principalId },
+    });
+    await owner.service.startWorkflowInstance({
+      groupId: 'group_member_left_workflow',
+      instanceId: 'instance_member_left',
+      expectedRevision: 1,
+    });
+    await owner.service.createTurn({
+      groupId: 'group_member_left_workflow',
+      instanceId: 'instance_member_left',
+      expectedRevision: 2,
+      turnId: 'turn_member_left',
+    });
+
+    await bob.service.leaveGroup(
+      'group_member_left_workflow',
+      'Leaving during assigned work',
+      bob.store.getGroup('group_member_left_workflow')!.projection!
+        .aggregateHeads[`membership:${BOB.principalId}`]!.revision,
+    );
+    const synced = await owner.service.sync('group_member_left_workflow');
+    expect(synced.projection.turns.turn_member_left).toMatchObject({
+      state: 'recovery_required',
+      recovery_reason: `member_left:${BOB.principalId}`,
+    });
+    expect(
+      synced.projection.workflowInstances.instance_member_left?.lifecycle,
+    ).toBe('recovery_required');
+    expect(
+      owner.store.listPendingNotifications({
+        principalId: ALICE.principalId,
+        clientId: ALICE.clientId,
+        groupId: 'group_member_left_workflow',
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        kind: 'member_left_workflow_recovery',
+        resourceType: 'turn',
+        resourceId: 'turn_member_left',
+        severity: 'critical',
+      }),
+    ]);
+    await withServiceApi(owner, async (baseUrl) => {
+      const prefix = `${baseUrl}/api/collaboration/groups/group_member_left_workflow`;
+      const notifications = await fetch(`${prefix}/notifications`);
+      expect(notifications.status).toBe(200);
+      expect(await notifications.json()).toMatchObject({
+        notifications: [
+          {
+            kind: 'member_left_workflow_recovery',
+            resourceType: 'turn',
+            resourceId: 'turn_member_left',
+          },
+        ],
+      });
+      const recovered = await fetch(
+        `${prefix}/workflow-instances/instance_member_left/turns/turn_member_left/recover`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 3,
+            previousAttempt: 1,
+            assigneePrincipalId: ALICE.principalId,
+            reason: 'Owner reassigned work after Bob left',
+          }),
+        },
+      );
+      expect(recovered.status).toBe(200);
+      const started = await fetch(
+        `${prefix}/workflow-instances/instance_member_left/turns/turn_member_left/start`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ expectedRevision: 4, executorId: null }),
+        },
+      );
+      expect(started.status).toBe(200);
+    });
+    expect(
+      owner.store.getGroup('group_member_left_workflow')?.projection?.turns
+        .turn_member_left,
+    ).toMatchObject({
+      state: 'running',
+      attempt: 2,
+      assignee_principal_id: ALICE.principalId,
+      claimant_principal_id: ALICE.principalId,
+    });
+    expect(
+      owner.store.getGroup('group_member_left_workflow')?.projection
+        ?.workflowInstances.instance_member_left,
+    ).toMatchObject({
+      lifecycle: 'running',
+      resolved_assignments: { implementation: ALICE.principalId },
+    });
+    owner.store.close();
+    bob.store.close();
+  });
+
+  it('binds a batched member-left notification to event-time affected Turns', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const bob = service(tempDirectory(), transport, BOB);
+    const groupId = 'group_member_left_batch';
+    const remoteUrl = '/tmp/member-left-batch.git';
+    await owner.service.createGroup({
+      remoteUrl,
+      name: 'Batched workflow recovery',
+      gitSshKeyPath: ALICE.privateKeyPath,
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId,
+    });
+    await bob.service.joinGroup({
+      remoteUrl,
+      gitSshKeyPath: BOB.privateKeyPath,
+      displayName: 'Bob',
+      clientDisplayName: 'Bob MacBook',
+    });
+    await owner.service.sync(groupId);
+    await owner.service.proposeWorkflowDefinition({
+      groupId,
+      definitionId: 'delivery',
+      expectedRevision: 0,
+      version: 1,
+      name: 'Delivery',
+      machine: DELIVERY_MACHINE,
+      layout: DELIVERY_LAYOUT,
+    });
+    await owner.service.publishWorkflowDefinition({
+      groupId,
+      definitionId: 'delivery',
+      version: 1,
+      expectedRevision: 1,
+    });
+    await owner.service.createWorkflowInstance({
+      groupId,
+      definitionId: 'delivery',
+      definitionVersion: 1,
+      instanceId: 'instance_batch',
+      scope: { type: 'group' },
+      participantBindings: { implementer: BOB.principalId },
+    });
+    await owner.service.startWorkflowInstance({
+      groupId,
+      instanceId: 'instance_batch',
+      expectedRevision: 1,
+    });
+    await owner.service.createTurn({
+      groupId,
+      instanceId: 'instance_batch',
+      expectedRevision: 2,
+      turnId: 'turn_batch',
+    });
+
+    await bob.service.leaveGroup(
+      groupId,
+      'Leaving before batched sync',
+      bob.store.getGroup(groupId)!.projection!.aggregateHeads[
+        `membership:${BOB.principalId}`
+      ]!.revision,
+    );
+    await transport.append({
+      remoteUrl,
+      buildEvent: (current) => {
+        const head =
+          current.projection.aggregateHeads[
+            'workflow_instance:instance_batch'
+          ]!;
+        return buildCollaborationEventV3({
+          groupId,
+          eventId: 'evt_batch_recovered',
+          aggregateType: 'workflow_instance',
+          aggregateId: 'instance_batch',
+          aggregateRevision: head.revision + 1,
+          previousEventHash: head.eventHash,
+          eventType: 'turn_recovered',
+          actor: {
+            principal_id: ALICE.principalId,
+            client_id: ALICE.clientId,
+            credential_id: ALICE.credentialId,
+            executor_id: null,
+          },
+          occurredAt: '2026-08-06T12:01:00.000Z',
+          payload: {
+            turn_id: 'turn_batch',
+            assignee_principal_id: ALICE.principalId,
+            previous_attempt: 1,
+            next_attempt: 2,
+            reason: 'Recovered before Owner batch sync',
+            start_deadline_at: '2026-08-06T12:02:00.000Z',
+            deadline_snapshot_hash: collaborationDeadlineSnapshotHashV3({
+              turnId: 'turn_batch',
+              attempt: 2,
+              timeoutPolicy:
+                current.projection.turns.turn_batch!.timeout_policy_snapshot,
+              startDeadlineAt: '2026-08-06T12:02:00.000Z',
+              startedAt: null,
+              executionDeadlineAt: null,
+            }),
+          },
+        });
+      },
+    });
+
+    const synced = await owner.service.sync(groupId);
+    expect(synced.projection.turns.turn_batch).toMatchObject({
+      state: 'pending',
+      assignee_principal_id: ALICE.principalId,
+      recovery_reason: null,
+    });
+    const notifications = owner.store.listPendingNotifications({
+      principalId: ALICE.principalId,
+      clientId: ALICE.clientId,
+      groupId,
+    });
+    expect(notifications).toEqual([
+      expect.objectContaining({
+        kind: 'member_left_workflow_recovery',
+        resourceType: 'turn',
+        resourceId: 'turn_batch',
+        severity: 'critical',
+        payload: {
+          principal_id: BOB.principalId,
+          turn_id: 'turn_batch',
+        },
+      }),
+    ]);
+    await owner.service.sync(groupId);
+    expect(
+      owner.store.listPendingNotifications({
+        principalId: ALICE.principalId,
+        clientId: ALICE.clientId,
+        groupId,
+      }),
+    ).toHaveLength(1);
+    owner.store.close();
+    bob.store.close();
+  });
+
   it('serializes background sync with a command for the same repository', async () => {
     const transport = new OverlapDetectingMemoryTransport();
     const local = service(tempDirectory(), transport, ALICE);
@@ -1278,18 +1885,16 @@ describe('Collaboration project space v3 Group and identity service', () => {
     const actionRevision =
       shared.projection?.aggregateHeads[`workspace:${ALICE.principalId}`]
         ?.revision ?? 0;
-    const action = await owner.service.publishAction({
+    const action = await owner.service.createAction({
       groupId: 'group_project',
       expectedRevision: actionRevision,
-      actionId: 'draft_contract',
       name: 'Draft contract',
-      version: 1,
-      kind: 'run_once',
+      actionType: 'run_once',
       prompt: '# Draft contract\n\nUse the approved requirements.\n',
       filesystemAccess: 'workspace_write',
     });
-    const definition =
-      action.projection?.actions[`${ALICE.principalId}:draft_contract`];
+    const definition = action.action;
+    expect(definition.action_id).toMatch(/^action_[0-9a-f-]+$/u);
     expect(definition?.prompt_hash).toMatch(/^sha256:[0-9a-f]{64}$/u);
     await expect(
       owner.service.readVerifiedFile({
@@ -1302,6 +1907,25 @@ describe('Collaboration project space v3 Group and identity service', () => {
         'utf8',
       ),
     );
+    const revised = await owner.service.reviseAction({
+      groupId: 'group_project',
+      actionId: definition.action_id,
+      expectedRevision:
+        action.group.projection!.aggregateHeads[
+          `workspace:${ALICE.principalId}`
+        ]!.revision,
+      name: 'Draft signed contract',
+      actionType: 'run_once',
+      prompt: '# Draft contract\n\nUse only signed requirements.\n',
+      filesystemAccess: 'read_only',
+    });
+    expect(revised.action).toMatchObject({
+      action_id: definition.action_id,
+      version: 2,
+      name: 'Draft signed contract',
+      filesystem_access: 'read_only',
+    });
+    expect(revised.action.prompt_hash).not.toBe(definition.prompt_hash);
     owner.store.close();
   });
 
@@ -1505,17 +2129,24 @@ describe('Collaboration project space v3 Group and identity service', () => {
     await owner.service.registerExecutor({
       groupId: 'group_project',
       expectedRevision: 0,
-      executorId: 'executor_codex',
       displayName: 'Codex',
       kind: 'codex',
+      workspacePath: '/tmp/project-workspace',
+      filesystemAccess: 'workspace_write',
+      approvalPolicy: 'on-request',
     });
+    const executorId = Object.keys(
+      owner.store.getGroup('group_project')!.projection!.executors[
+        ALICE.principalId
+      ]!,
+    )[0]!;
     const created = await owner.service.createWorkItem({
       groupId: 'group_project',
       workItemId: 'wi_found',
       type: 'issue',
       title: 'Discovered failure',
       status: 'open',
-      executorId: 'executor_codex',
+      executorId,
     });
     expect(created.projection?.workItems.wi_found).toMatchObject({
       status: 'proposed',
@@ -2174,23 +2805,26 @@ describe('Collaboration project space v3 Group and identity service', () => {
       observerAccess: 'allowed',
       groupId: 'group_project',
     });
-    await owner.service.registerExecutor({
+    const executorRegistration = await owner.service.registerExecutor({
       groupId: 'group_project',
       expectedRevision: 0,
-      executorId: 'executor_codex',
-      displayName: 'Codex',
-      kind: 'codex',
-    });
-    await owner.service.publishAction({
-      groupId: 'group_project',
-      expectedRevision: 0,
-      actionId: 'implement',
-      name: 'Implement',
-      version: 1,
+      displayName: 'Icarus Agent',
       kind: 'run_once',
+      workspacePath: '/tmp/project-workspace',
+      filesystemAccess: 'workspace_write',
+      approvalPolicy: 'on-request',
+      agentJid: 'web:main',
+    });
+    const executorId = executorRegistration.executor.executor_id;
+    const actionRegistration = await owner.service.createAction({
+      groupId: 'group_project',
+      expectedRevision: 0,
+      name: 'Implement',
+      actionType: 'run_once',
       prompt: 'Implement the current State.\n',
       filesystemAccess: 'workspace_write',
     });
+    const actionId = actionRegistration.action.action_id;
     await owner.service.proposeWorkflowDefinition({
       groupId: 'group_project',
       definitionId: 'delivery',
@@ -2225,51 +2859,53 @@ describe('Collaboration project space v3 Group and identity service', () => {
       stateId: 'implementation',
       expectedRevision: 2,
       mode: 'assisted',
-      actionId: 'implement',
+      actionId,
+      executorId,
+    });
+    expect(
+      owner.store.listLocalExecutors({ groupId: 'group_project' }),
+    ).toEqual([
+      expect.objectContaining({
+        executorId,
+        displayName: 'Icarus Agent',
+        enabled: true,
+      }),
+    ]);
+    expect(owner.store.listExecutorBindings('group_project')).toHaveLength(1);
+    await owner.service.withdrawStateExecution({
+      groupId: 'group_project',
+      instanceId: 'wfi_assisted',
+      stateId: 'implementation',
+      expectedRevision: 3,
+    });
+    expect(owner.store.listExecutorBindings('group_project')).toHaveLength(0);
+    await owner.service.publishStateExecution({
+      groupId: 'group_project',
+      instanceId: 'wfi_assisted',
+      stateId: 'implementation',
+      expectedRevision: 4,
+      mode: 'assisted',
+      actionId,
+      executorId,
     });
     const pending = await owner.service.createTurn({
       groupId: 'group_project',
       instanceId: 'wfi_assisted',
-      expectedRevision: 3,
+      expectedRevision: 5,
       turnId: 'turn_assisted',
     });
     const turn = pending.projection?.turns.turn_assisted;
     expect(turn?.execution_mode).toBe('assisted');
-    await expect(
-      owner.service.startTurn({
-        groupId: 'group_project',
-        instanceId: 'wfi_assisted',
-        turnId: 'turn_assisted',
-        expectedRevision: 4,
-        executorId: 'executor_codex',
-      }),
-    ).rejects.toThrow(/local Executor Binding/u);
-    owner.store.saveExecutorBinding({
-      groupId: 'group_project',
-      instanceId: 'wfi_assisted',
-      stateId: 'implementation',
-      principalId: ALICE.principalId,
-      clientId: ALICE.clientId,
-      actionHash: turn!.action_hash!,
-      promptHash: turn!.prompt_hash!,
-      executorId: 'executor_codex',
-      executorKind: 'codex',
-      workspacePath: '/tmp/project-workspace',
-      filesystemAccess: 'workspace_write',
-      approvalPolicy: 'on-request',
-      config: {},
-      enabled: true,
-    });
     const started = await owner.service.startTurn({
       groupId: 'group_project',
       instanceId: 'wfi_assisted',
       turnId: 'turn_assisted',
-      expectedRevision: 4,
-      executorId: 'executor_codex',
+      expectedRevision: 6,
+      executorId,
     });
     expect(started.projection?.turns.turn_assisted).toMatchObject({
       state: 'running',
-      executor_id: 'executor_codex',
+      executor_id: executorId,
     });
     const actionResult = {
       format: 'icarus.collaboration-action-result/3' as const,
@@ -2285,13 +2921,13 @@ describe('Collaboration project space v3 Group and identity service', () => {
       groupId: 'group_project',
       instanceId: 'wfi_assisted',
       turnId: 'turn_assisted',
-      expectedRevision: 5,
+      expectedRevision: 7,
       attempt: 1,
       fencingToken: started.projection!.turns.turn_assisted.fencing_token!,
       state: 'completed',
       result: actionResult,
       resultHash: collaborationCanonicalHashV3(actionResult),
-      executorId: 'executor_codex',
+      executorId,
     });
     expect(awaiting.projection?.turns.turn_assisted).toMatchObject({
       state: 'awaiting_confirmation',
@@ -2319,7 +2955,7 @@ describe('Collaboration project space v3 Group and identity service', () => {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            expectedRevision: 6,
+            expectedRevision: 8,
             attempt: 1,
             fencingToken:
               started.projection!.turns.turn_assisted.fencing_token!,
@@ -2367,23 +3003,26 @@ describe('Collaboration project space v3 Group and identity service', () => {
       observerAccess: 'allowed',
       groupId: 'group_automatic',
     });
-    await owner.service.registerExecutor({
+    const executorRegistration = await owner.service.registerExecutor({
       groupId: 'group_automatic',
       expectedRevision: 0,
-      executorId: 'executor_run_once',
       displayName: 'Run Once',
       kind: 'run_once',
+      workspacePath: '/tmp/project-workspace',
+      filesystemAccess: 'read_only',
+      approvalPolicy: 'never',
+      agentJid: 'web:main',
     });
-    await owner.service.publishAction({
+    const executorId = executorRegistration.executor.executor_id;
+    const actionRegistration = await owner.service.createAction({
       groupId: 'group_automatic',
       expectedRevision: 0,
-      actionId: 'verify',
       name: 'Verify',
-      version: 1,
-      kind: 'run_once',
+      actionType: 'run_once',
       prompt: 'Verify the frozen implementation.\n',
       filesystemAccess: 'read_only',
     });
+    const actionId = actionRegistration.action.action_id;
     const automaticMachine = {
       format: 'icarus.collaboration-machine/3' as const,
       initial_state: 'verification',
@@ -2454,7 +3093,8 @@ describe('Collaboration project space v3 Group and identity service', () => {
       stateId: 'verification',
       expectedRevision: 2,
       mode: 'automatic',
-      actionId: 'verify',
+      actionId,
+      executorId,
     });
     const pending = await owner.service.createTurn({
       groupId: 'group_automatic',
@@ -2463,22 +3103,6 @@ describe('Collaboration project space v3 Group and identity service', () => {
       turnId: 'turn_automatic',
     });
     const turn = pending.projection!.turns.turn_automatic;
-    owner.store.saveExecutorBinding({
-      groupId: 'group_automatic',
-      instanceId: 'wfi_automatic',
-      stateId: 'verification',
-      principalId: ALICE.principalId,
-      clientId: ALICE.clientId,
-      actionHash: turn.action_hash!,
-      promptHash: turn.prompt_hash!,
-      executorId: 'executor_run_once',
-      executorKind: 'run_once',
-      workspacePath: '/tmp/project-workspace',
-      filesystemAccess: 'read_only',
-      approvalPolicy: 'never',
-      config: { agent_jid: 'web:main' },
-      enabled: true,
-    });
     const runOnce = vi.fn<RunOnceService['runOnce']>(
       async (input, lifecycle) => {
         lifecycle?.onAccepted({
@@ -2593,23 +3217,26 @@ describe('Collaboration project space v3 Group and identity service', () => {
       observerAccess: 'allowed',
       groupId: 'group_handoff',
     });
-    await owner.service.registerExecutor({
+    const executorRegistration = await owner.service.registerExecutor({
       groupId: 'group_handoff',
       expectedRevision: 0,
-      executorId: 'executor_handoff',
       displayName: 'Handoff Executor',
       kind: 'run_once',
+      workspacePath: '/tmp/handoff-workspace',
+      filesystemAccess: 'read_only',
+      approvalPolicy: 'never',
+      agentJid: 'web:main',
     });
-    await owner.service.publishAction({
+    const executorId = executorRegistration.executor.executor_id;
+    const actionRegistration = await owner.service.createAction({
       groupId: 'group_handoff',
       expectedRevision: 0,
-      actionId: 'review_handoff',
       name: 'Review Handoff',
-      version: 1,
-      kind: 'run_once',
+      actionType: 'run_once',
       prompt: 'Review the incoming release context.\n',
       filesystemAccess: 'read_only',
     });
+    const actionId = actionRegistration.action.action_id;
     const twoNodeMachine = {
       format: 'icarus.collaboration-machine/3' as const,
       initial_state: 'prepare',
@@ -2682,32 +3309,24 @@ describe('Collaboration project space v3 Group and identity service', () => {
       instanceId: 'wfi_handoff',
       expectedRevision: 1,
     });
-    await owner.service.publishStateExecution({
-      groupId: 'group_handoff',
-      instanceId: 'wfi_handoff',
-      stateId: 'review',
-      expectedRevision: 2,
-      mode: 'automatic',
-      actionId: 'review_handoff',
-    });
     await owner.service.createTurn({
       groupId: 'group_handoff',
       instanceId: 'wfi_handoff',
-      expectedRevision: 3,
+      expectedRevision: 2,
       turnId: 'turn_prepare',
     });
     const started = await owner.service.startTurn({
       groupId: 'group_handoff',
       instanceId: 'wfi_handoff',
       turnId: 'turn_prepare',
-      expectedRevision: 4,
+      expectedRevision: 3,
     });
     const fence = started.projection!.turns.turn_prepare.fencing_token!;
     const completed = await owner.service.completeTurn({
       groupId: 'group_handoff',
       instanceId: 'wfi_handoff',
       turnId: 'turn_prepare',
-      expectedRevision: 5,
+      expectedRevision: 4,
       attempt: 1,
       fencingToken: fence,
       outcome: 'review',
@@ -2724,6 +3343,15 @@ describe('Collaboration project space v3 Group and identity service', () => {
       business_state: 'review',
       last_completed_turn_id: 'turn_prepare',
       last_handoff_hash: expect.stringMatching(/^sha256:/u),
+    });
+    await owner.service.publishStateExecution({
+      groupId: 'group_handoff',
+      instanceId: 'wfi_handoff',
+      stateId: 'review',
+      expectedRevision: 5,
+      mode: 'automatic',
+      actionId,
+      executorId,
     });
     const beforeNext = transport.histories.get('/tmp/handoff-project.git')!;
     const next = await owner.service.createTurn({
@@ -2782,22 +3410,6 @@ describe('Collaboration project space v3 Group and identity service', () => {
       ).toThrow(/incoming Handoff/u);
     }
 
-    owner.store.saveExecutorBinding({
-      groupId: 'group_handoff',
-      instanceId: 'wfi_handoff',
-      stateId: 'review',
-      principalId: ALICE.principalId,
-      clientId: ALICE.clientId,
-      actionHash: nextTurn.action_hash!,
-      promptHash: nextTurn.prompt_hash!,
-      executorId: 'executor_handoff',
-      executorKind: 'run_once',
-      workspacePath: '/tmp/handoff-workspace',
-      filesystemAccess: 'read_only',
-      approvalPolicy: 'never',
-      config: { agent_jid: 'web:main' },
-      enabled: true,
-    });
     const handoffRunOnce = vi.fn<RunOnceService['runOnce']>(
       async (input, lifecycle) => {
         lifecycle?.onAccepted({

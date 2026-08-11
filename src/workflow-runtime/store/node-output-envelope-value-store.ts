@@ -119,7 +119,7 @@ interface OwnershipRow extends Record<string, unknown> {
   owner_workflow_id: string | null;
   owner_graph_run_id: string | null;
   owner_registry_resource_id: string | null;
-  owner_feature_release_id: string | null;
+  owner_pack_release_id: string | null;
   system_owner_ref: string | null;
 }
 
@@ -428,7 +428,7 @@ function validateMemberValues(
     );
     const ownership = authority.queryAll<OwnershipRow>(
       `SELECT value_id, owner_workflow_id, owner_graph_run_id,
-              owner_registry_resource_id, owner_feature_release_id,
+              owner_registry_resource_id, owner_pack_release_id,
               system_owner_ref
          FROM workflow_value_ownerships WHERE value_id = ?`,
       [valueRef],
@@ -462,7 +462,7 @@ function validateMemberValues(
       ownership[0]!.owner_graph_run_id !== context.graphRunId ||
       ownership[0]!.owner_workflow_id !== null ||
       ownership[0]!.owner_registry_resource_id !== null ||
-      ownership[0]!.owner_feature_release_id !== null ||
+      ownership[0]!.owner_pack_release_id !== null ||
       ownership[0]!.system_owner_ref !== null
     ) {
       throw new NodeOutputEnvelopeAuthorityError(
@@ -590,7 +590,7 @@ function verifyStoredEnvelope(
   }
   const ownership = authority.queryAll<OwnershipRow>(
     `SELECT value_id, owner_workflow_id, owner_graph_run_id,
-            owner_registry_resource_id, owner_feature_release_id,
+            owner_registry_resource_id, owner_pack_release_id,
             system_owner_ref
        FROM workflow_value_ownerships WHERE value_id = ?`,
     [row.id],
@@ -600,7 +600,7 @@ function verifyStoredEnvelope(
     ownership[0]!.owner_graph_run_id !== input.graphRunId ||
     ownership[0]!.owner_workflow_id !== null ||
     ownership[0]!.owner_registry_resource_id !== null ||
-    ownership[0]!.owner_feature_release_id !== null ||
+    ownership[0]!.owner_pack_release_id !== null ||
     ownership[0]!.system_owner_ref !== null
   ) {
     throw new NodeOutputEnvelopeAuthorityError(
@@ -758,7 +758,7 @@ export class NodeOutputEnvelopeValueStore {
       transaction.execute(
         `INSERT OR IGNORE INTO workflow_value_ownerships (
            value_id, owner_workflow_id, owner_graph_run_id,
-           owner_registry_resource_id, owner_feature_release_id,
+           owner_registry_resource_id, owner_pack_release_id,
            system_owner_ref, created_at_ms
          ) VALUES (?, NULL, ?, NULL, NULL, NULL, ?)`,
         [input.valueId, input.graphRunId, input.createdAtMs],

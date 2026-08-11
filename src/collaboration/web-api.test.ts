@@ -293,6 +293,7 @@ function runtime(
       getGroup: vi.fn(() => selectedGroup),
       listGroups: vi.fn(() => [selectedGroup]),
       listExecutorBindings: vi.fn(() => []),
+      listLocalExecutors: vi.fn(() => []),
       listActionExecutions: vi.fn(() => []),
       listPendingNotifications: vi.fn(() => []),
       ...input.store,
@@ -466,6 +467,116 @@ describe('Collaboration project-space v3 Web API', () => {
           error: expect.stringMatching(/duplicate/i),
         });
         expect(createGroup).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  it('routes lifecycle removals only with an exact Group confirmation', async () => {
+    const dissolveGroup = vi.fn(async () => ({
+      groupId: 'group_test',
+      removed: true,
+      cleanupPending: false,
+      cleanupError: null,
+    }));
+    const leaveGroup = vi.fn(async () => ({
+      groupId: 'group_test',
+      removed: true,
+      cleanupPending: true,
+      cleanupError: 'filesystem busy',
+    }));
+    const removeLocalGroup = vi.fn(async () => ({
+      groupId: 'group_test',
+      removed: true,
+      cleanupPending: false,
+      cleanupError: null,
+    }));
+    const retryLocalCleanup = vi.fn(async () => ({
+      groupId: 'group_test',
+      removed: false,
+      cleanupPending: false,
+      cleanupError: null,
+    }));
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({
+          groups: {
+            dissolveGroup,
+            leaveGroup,
+            removeLocalGroup,
+            retryLocalCleanup,
+          },
+        }),
+      ),
+      async (baseUrl) => {
+        const headers = { 'content-type': 'application/json' };
+        const requests = [
+          {
+            path: '/groups/group_test/dissolve',
+            method: 'POST',
+            body: {
+              expectedRevision: 3,
+              reason: 'Project complete',
+              confirmation: 'group_test',
+            },
+          },
+          {
+            path: '/groups/group_test/leave',
+            method: 'POST',
+            body: {
+              expectedRevision: 4,
+              reason: 'Leaving',
+              confirmation: 'group_test',
+            },
+          },
+          {
+            path: '/subscriptions/group_test',
+            method: 'DELETE',
+            body: { confirmation: 'group_test' },
+          },
+          {
+            path: '/local-bindings/group_test/cleanup/retry',
+            method: 'POST',
+            body: { confirmation: 'group_test' },
+          },
+        ] as const;
+        for (const request of requests) {
+          const mismatch = await fetch(
+            `${baseUrl}/api/collaboration${request.path}`,
+            {
+              method: request.method,
+              headers,
+              body: JSON.stringify({
+                ...request.body,
+                confirmation: 'group_other',
+              }),
+            },
+          );
+          expect(mismatch.status, request.path).toBe(400);
+        }
+        expect(dissolveGroup).not.toHaveBeenCalled();
+        expect(leaveGroup).not.toHaveBeenCalled();
+        expect(removeLocalGroup).not.toHaveBeenCalled();
+        expect(retryLocalCleanup).not.toHaveBeenCalled();
+
+        for (const request of requests) {
+          const response = await fetch(
+            `${baseUrl}/api/collaboration${request.path}`,
+            {
+              method: request.method,
+              headers,
+              body: JSON.stringify(request.body),
+            },
+          );
+          expect(response.status, request.path).toBe(200);
+        }
+        expect(dissolveGroup).toHaveBeenCalledWith(
+          'group_test',
+          'Project complete',
+          3,
+        );
+        expect(leaveGroup).toHaveBeenCalledWith('group_test', 'Leaving', 4);
+        expect(removeLocalGroup).toHaveBeenCalledWith('group_test');
+        expect(retryLocalCleanup).toHaveBeenCalledWith('group_test');
       },
     );
   });
@@ -752,6 +863,7 @@ describe('Collaboration project-space v3 Web API', () => {
     const rejectMembership = vi.fn(async () => group());
     const createTurn = vi.fn(async () => group());
     const startTurn = vi.fn(async () => group());
+    const recoverTurn = vi.fn(async () => group());
     await withApiServer(
       new CollaborationWebApi(
         runtime({
@@ -760,6 +872,7 @@ describe('Collaboration project-space v3 Web API', () => {
             rejectMembership,
             createTurn,
             startTurn,
+            recoverTurn,
           },
         }),
       ),
@@ -831,6 +944,28 @@ describe('Collaboration project-space v3 Web API', () => {
           turnId: 'turn_1',
           expectedRevision: 4,
           executorId: 'executor_codex',
+        });
+        expect(
+          (
+            await post(
+              '/groups/group_test/workflow-instances/instance_1/turns/turn_1/recover',
+              {
+                expectedRevision: 5,
+                previousAttempt: 1,
+                assigneePrincipalId: 'principal_alice',
+                reason: 'Reassign after member exit',
+              },
+            )
+          ).status,
+        ).toBe(200);
+        expect(recoverTurn).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          instanceId: 'instance_1',
+          turnId: 'turn_1',
+          expectedRevision: 5,
+          previousAttempt: 1,
+          assigneePrincipalId: 'principal_alice',
+          reason: 'Reassign after member exit',
         });
       },
     );
@@ -1071,7 +1206,7 @@ describe('Collaboration project-space v3 Web API', () => {
             },
           ],
           [
-            '/groups/group_test/workflow-instances/instance_1/states/implementation/execution/withdraw',
+            '/groups/group_test/workflow-instances/instance_1/states/implementation/execution',
             { expectedRevision: 3 },
           ],
           [
@@ -1086,7 +1221,7 @@ describe('Collaboration project-space v3 Web API', () => {
         ] as const;
         for (const [route, body] of commands) {
           const response = await fetch(`${baseUrl}/api/collaboration${route}`, {
-            method: 'POST',
+            method: route.endsWith('/execution') ? 'DELETE' : 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(body),
           });
@@ -1111,6 +1246,168 @@ describe('Collaboration project-space v3 Web API', () => {
             ],
           }),
         );
+      },
+    );
+  });
+
+  it('creates machine-owned Executor and Action identities and revises by resource path', async () => {
+    const generatedExecutorId = 'executor_00000000-0000-4000-8000-000000000010';
+    const generatedActionId = 'action_00000000-0000-4000-8000-000000000020';
+    const registerExecutor = vi.fn(async () => ({
+      group: group(),
+      executor: {
+        executor_id: generatedExecutorId,
+        principal_id: 'principal_alice',
+        display_name: 'Codex Desktop',
+        kind: 'codex',
+        status: 'active',
+      },
+      localExecutor: {
+        groupId: 'group_test',
+        principalId: 'principal_alice',
+        clientId: 'client_alice',
+        executorId: generatedExecutorId,
+        displayName: 'Codex Desktop',
+        executorKind: 'codex',
+        workspacePath: '/workspace/project',
+        filesystemAccess: 'workspace_write',
+        approvalPolicy: 'on-request',
+        config: { adapter: 'codex-task', token: 'secret' },
+        enabled: true,
+        updatedAtMs: 1,
+      },
+    }));
+    const revokeExecutor = vi.fn(async () => group());
+    const createAction = vi.fn(async (_input: Record<string, unknown>) => ({
+      group: group(),
+      action: {
+        action_id: generatedActionId,
+        name: 'Implement',
+        version: 1,
+      },
+    }));
+    const reviseAction = vi.fn(async (_input: Record<string, unknown>) => ({
+      group: group(),
+      action: {
+        action_id: generatedActionId,
+        name: 'Implement safely',
+        version: 2,
+      },
+    }));
+    await withApiServer(
+      new CollaborationWebApi(
+        runtime({
+          groups: {
+            registerExecutor,
+            revokeExecutor,
+            createAction,
+            reviseAction,
+          },
+        }),
+      ),
+      async (baseUrl) => {
+        const prefix = `${baseUrl}/api/collaboration/groups/group_test`;
+        const executor = await fetch(`${prefix}/executors`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 2,
+            displayName: 'Codex Desktop',
+            kind: 'codex',
+            workspacePath: '/workspace/project',
+            filesystemAccess: 'workspace_write',
+            approvalPolicy: 'on-request',
+          }),
+        });
+        expect(executor.status).toBe(201);
+        expect(await executor.json()).toMatchObject({
+          executor: { executor_id: generatedExecutorId },
+          localExecutor: {
+            executorId: generatedExecutorId,
+            displayName: 'Codex Desktop',
+            config: { adapter: 'codex-task', token: 'redacted' },
+          },
+        });
+        expect(registerExecutor).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          expectedRevision: 2,
+          displayName: 'Codex Desktop',
+          kind: 'codex',
+          workspacePath: '/workspace/project',
+          filesystemAccess: 'workspace_write',
+          approvalPolicy: 'on-request',
+        });
+
+        const created = await fetch(`${prefix}/workspace/me/actions`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 0,
+            name: 'Implement',
+            actionType: 'codex',
+            prompt: 'Implement the current State.',
+            filesystemAccess: 'workspace_write',
+            resultFormat: 'collaboration_state_result',
+          }),
+        });
+        expect(created.status).toBe(201);
+        expect(await created.json()).toMatchObject({
+          action: { action_id: generatedActionId, version: 1 },
+        });
+        expect(createAction.mock.calls[0]?.[0]).not.toHaveProperty('actionId');
+        expect(createAction.mock.calls[0]?.[0]).not.toHaveProperty('version');
+
+        const revised = await fetch(
+          `${prefix}/workspace/me/actions/${generatedActionId}`,
+          {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              expectedRevision: 1,
+              name: 'Implement safely',
+              actionType: 'codex',
+              prompt: 'Implement and verify the current State.',
+              filesystemAccess: 'read_only',
+              resultFormat: 'collaboration_state_result',
+            }),
+          },
+        );
+        expect(revised.status).toBe(200);
+        expect(reviseAction).toHaveBeenCalledWith(
+          expect.objectContaining({ actionId: generatedActionId }),
+        );
+
+        const revoked = await fetch(
+          `${prefix}/executors/${generatedExecutorId}`,
+          {
+            method: 'DELETE',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ expectedRevision: 3, reason: 'retired' }),
+          },
+        );
+        expect(revoked.status).toBe(200);
+        expect(revokeExecutor).toHaveBeenCalledWith({
+          groupId: 'group_test',
+          executorId: generatedExecutorId,
+          expectedRevision: 3,
+          reason: 'retired',
+        });
+
+        const rawIds = await fetch(`${prefix}/workspace/me/actions`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            expectedRevision: 2,
+            actionId: 'caller_selected',
+            version: 99,
+            name: 'Invalid',
+            actionType: 'codex',
+            prompt: 'Invalid request.',
+            filesystemAccess: 'read_only',
+          }),
+        });
+        expect(rawIds.status).toBe(400);
+        expect(createAction).toHaveBeenCalledOnce();
       },
     );
   });
