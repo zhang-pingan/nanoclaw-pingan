@@ -14,6 +14,11 @@ import {
 import type { CollaborationEventSigningIdentity } from './project-space-identity.js';
 import { CollaborationProjectSpaceIdentityService } from './project-space-identity.js';
 import {
+  CollaborationProjectSpaceGitOperationError,
+  CollaborationProjectSpaceHistoryRewrittenError,
+  CollaborationProjectSpaceValidationError,
+} from './project-space-errors.js';
+import {
   CollaborationProjectSpaceService,
   type CollaborationProjectSpaceAppendEvent,
   type CollaborationLocalGroupCleanup,
@@ -132,11 +137,17 @@ class MemoryTransport implements CollaborationProjectSpaceTransport {
   rejectReinitialize = false;
   failRefreshAfterReinitialize = false;
   failNextAppend: Error | null = null;
+  failNextInspect: Error | null = null;
   readonly refreshAfterReinitializeErrors = new Map<string, Error>();
 
   async inspect(input: {
     remoteUrl: string;
   }): Promise<ValidatedProjectSpaceHistory> {
+    if (this.failNextInspect) {
+      const error = this.failNextInspect;
+      this.failNextInspect = null;
+      throw error;
+    }
     const history = this.histories.get(input.remoteUrl);
     if (!history) throw new Error('Remote does not exist');
     return history;
@@ -1264,6 +1275,152 @@ describe('Collaboration project space v3 Group and identity service', () => {
     owner.store.close();
   });
 
+  it('uses the last verified active Owner snapshot when protocol validation quarantines the remote', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-quarantined.git',
+      name: 'Quarantined project',
+      displayName: 'Alice Owner',
+      clientDisplayName: 'Alice trusted client',
+      membershipPolicy: 'invite_only',
+      observerAccess: 'members_only',
+      defaultPermissionTemplateId: 'workflow_manager.v1',
+      groupId: 'group_initialize_quarantined',
+    });
+    await owner.service.createWorkItem({
+      groupId: old.groupId,
+      workItemId: 'old_quarantined_work',
+      type: 'task',
+      title: 'Old quarantined work',
+    });
+    transport.failNextInspect = new CollaborationProjectSpaceValidationError(
+      'PROTOCOL_QUARANTINED',
+      'Remote materialized content does not match verified replay',
+    );
+
+    const initialized = await owner.service.initializeGroup(old.groupId);
+    const remote = transport.histories.get(old.remoteUrl)!;
+
+    expect(transport.reinitializeCount).toBe(1);
+    expect(owner.store.getGroup(old.groupId)).toBeNull();
+    expect(initialized.projection).toMatchObject({
+      group: {
+        name: 'Quarantined project',
+        membership_policy: { join: 'invite_only' },
+        visibility_policy: { observer_access: 'members_only' },
+        default_permission_template_id: 'workflow_manager.v1',
+      },
+      workItems: {},
+      members: {
+        [initialized.localPrincipalId!]: {
+          display_name: 'Alice Owner',
+          status: 'active',
+        },
+      },
+      clients: {
+        [initialized.localPrincipalId!]: {
+          [initialized.localClientId!]: {
+            display_name: 'Alice trusted client',
+            status: 'active',
+          },
+        },
+      },
+    });
+    expect(remote).toMatchObject({
+      head: initialized.lastVerifiedHead,
+      projection: {
+        groupId: initialized.groupId,
+        workItems: {},
+      },
+      eventRecords: [
+        expect.objectContaining({
+          commitOrder: 1,
+          event: expect.objectContaining({ event_type: 'group_initialized' }),
+        }),
+      ],
+    });
+    owner.store.close();
+  });
+
+  it('does not initialize or force push when normal transport sync fails', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-offline.git',
+      name: 'Offline project',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_offline',
+    });
+    const transportError = new Error('Network is unreachable');
+    transport.failNextInspect = transportError;
+
+    await expect(owner.service.initializeGroup(old.groupId)).rejects.toBe(
+      transportError,
+    );
+    expect(transport.reinitializeCount).toBe(0);
+    expect(owner.store.getGroup(old.groupId)?.groupId).toBe(old.groupId);
+    owner.store.close();
+  });
+
+  it('does not initialize or force push when a Git operation fails', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-git-operation-failure.git',
+      name: 'Git operation failure project',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_git_operation_failure',
+    });
+    const gitError = new CollaborationProjectSpaceGitOperationError(
+      'Git protocol operation failed: git rev-parse',
+    );
+    transport.failNextInspect = gitError;
+
+    await expect(owner.service.initializeGroup(old.groupId)).rejects.toBe(
+      gitError,
+    );
+    expect(transport.reinitializeCount).toBe(0);
+    expect(owner.store.getGroup(old.groupId)?.groupId).toBe(old.groupId);
+    owner.store.close();
+  });
+
+  it('does not initialize or force push after a typed history rewrite', async () => {
+    const transport = new MemoryTransport();
+    const owner = service(tempDirectory(), transport, ALICE);
+    const old = await owner.service.createGroup({
+      remoteUrl: '/tmp/initialize-rewritten.git',
+      name: 'Rewritten project',
+      displayName: 'Alice',
+      clientDisplayName: 'Alice MacBook',
+      membershipPolicy: 'open',
+      observerAccess: 'allowed',
+      groupId: 'group_initialize_rewritten',
+    });
+    const rewrite = new CollaborationProjectSpaceHistoryRewrittenError(
+      'Remote control history was replaced',
+      'group_replacement',
+    );
+    transport.failNextInspect = rewrite;
+
+    await expect(owner.service.initializeGroup(old.groupId)).rejects.toBe(
+      rewrite,
+    );
+    expect(transport.reinitializeCount).toBe(0);
+    expect(owner.store.getGroup(old.groupId)).toMatchObject({
+      subscriptionMode: 'observer',
+      localCredentialId: null,
+      protocolStatus: 'PROTOCOL_QUARANTINED',
+    });
+    owner.store.close();
+  });
+
   it('syncs authorization and rejects an Owner device revoked by remote recovery without force push', async () => {
     const transport = new MemoryTransport();
     const staleOwner = service(tempDirectory(), transport, ALICE);
@@ -1761,10 +1918,10 @@ describe('Collaboration project space v3 Group and identity service', () => {
       observerAccess: 'allowed',
       groupId: 'group_other_device',
     });
-    const rewrite = new Error(
+    const rewrite = new CollaborationProjectSpaceHistoryRewrittenError(
       'The remote control history now belongs to a new Group; observe or join it',
+      'group_replacement',
     );
-    rewrite.name = 'CollaborationProjectSpaceHistoryRewrittenError';
     vi.spyOn(transport, 'inspect').mockRejectedValue(rewrite);
 
     await expect(owner.service.sync('group_other_device')).rejects.toBe(

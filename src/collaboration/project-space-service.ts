@@ -8,6 +8,10 @@ import {
   type CollaborationEventSigningIdentity,
 } from './project-space-identity.js';
 import {
+  CollaborationProjectSpaceHistoryRewrittenError,
+  CollaborationProjectSpaceValidationError,
+} from './project-space-errors.js';
+import {
   CollaborationProjectSpaceStore,
   type CollaborationLocalGroupBinding,
   type CollaborationLocalExecutorV3,
@@ -531,51 +535,31 @@ export class CollaborationProjectSpaceService {
   async initializeGroup(
     groupId: string,
   ): Promise<CollaborationProjectSpaceGroupRecord> {
-    const current = this.store.getGroup(groupId);
-    const projection = current?.projection;
-    if (
-      !current ||
-      !projection ||
-      current.subscriptionMode !== 'member' ||
-      !current.localPrincipalId ||
-      current.localPrincipalId !== projection.group.owner_principal_id ||
-      current.localPrincipalId !== current.ownerPrincipalId ||
-      !current.localClientId ||
-      !current.localCredentialId ||
-      projection.members[current.localPrincipalId]?.status !== 'active' ||
-      projection.clients[current.localPrincipalId]?.[current.localClientId]
-        ?.status !== 'active' ||
-      projection.credentials[current.localPrincipalId]?.[
-        current.localCredentialId
-      ]?.status !== 'active'
-    )
-      throw new Error('Only the current Group Owner may initialize the Group');
-    if (!['active', 'archived'].includes(current.lifecycle))
-      throw new Error('Only an active or archived Group may be initialized');
+    const initialSource = this.requireGroupInitializationSource(
+      this.store.getGroup(groupId),
+    );
 
-    return this.withRepositoryOperation(current.repositoryPath, async () => {
-      await this.syncUnlocked(groupId);
-      const group = this.store.getGroup(groupId);
-      const latest = group?.projection;
-      if (
-        !group ||
-        !latest ||
-        group.subscriptionMode !== 'member' ||
-        !['active', 'archived'].includes(group.lifecycle) ||
-        !group.localPrincipalId ||
-        group.localPrincipalId !== latest.group.owner_principal_id ||
-        group.localPrincipalId !== group.ownerPrincipalId ||
-        !group.localClientId ||
-        !group.localCredentialId ||
-        latest.members[group.localPrincipalId]?.status !== 'active' ||
-        latest.clients[group.localPrincipalId]?.[group.localClientId]
-          ?.status !== 'active' ||
-        latest.credentials[group.localPrincipalId]?.[group.localCredentialId]
-          ?.status !== 'active'
-      )
-        throw new Error(
-          'Only the current Group Owner may initialize the Group',
+    const repositoryPath = initialSource.group.repositoryPath;
+    return this.withRepositoryOperation(repositoryPath, async () => {
+      const verifiedSource = this.requireGroupInitializationSource(
+        this.store.getGroup(groupId),
+      );
+      let source = verifiedSource;
+      try {
+        await this.syncUnlocked(groupId);
+        source = this.requireGroupInitializationSource(
+          this.store.getGroup(groupId),
         );
+      } catch (error) {
+        if (!(error instanceof CollaborationProjectSpaceValidationError))
+          throw error;
+      }
+      const {
+        group,
+        projection: latest,
+        owner: oldOwner,
+        client: oldClient,
+      } = source;
       if (
         this.store
           .listGroupInitializations()
@@ -584,12 +568,6 @@ export class CollaborationProjectSpaceService {
         throw new Error(
           'This Group already has an initialization pending local recovery',
         );
-      const oldOwner = latest.members[group.localPrincipalId];
-      const oldClient =
-        latest.clients[group.localPrincipalId]?.[group.localClientId!];
-      if (!oldOwner || !oldClient)
-        throw new Error('The current Owner identity is incomplete');
-
       const operationId = newId('initialization');
       const newGroupId = newId('group');
       const principalId = newId('principal');
@@ -684,6 +662,61 @@ export class CollaborationProjectSpaceService {
         );
       }
     });
+  }
+
+  private requireGroupInitializationSource(
+    group: CollaborationProjectSpaceGroupRecord | null,
+  ): {
+    readonly group: CollaborationProjectSpaceGroupRecord;
+    readonly projection: CollaborationProjectionV3;
+    readonly owner: MemberDefinitionV3;
+    readonly client: NonNullable<
+      CollaborationProjectionV3['clients'][string]
+    >[string];
+  } {
+    const projection = group?.projection;
+    const principalId = group?.localPrincipalId;
+    const clientId = group?.localClientId;
+    const credentialId = group?.localCredentialId;
+    const owner = principalId ? projection?.members[principalId] : undefined;
+    const client =
+      principalId && clientId
+        ? projection?.clients[principalId]?.[clientId]
+        : undefined;
+    const credential =
+      principalId && credentialId
+        ? projection?.credentials[principalId]?.[credentialId]
+        : undefined;
+    if (
+      !group ||
+      !projection ||
+      !group.lastVerifiedHead ||
+      group.subscriptionMode !== 'member' ||
+      !principalId ||
+      principalId !== projection.group.owner_principal_id ||
+      principalId !== group.ownerPrincipalId ||
+      !clientId ||
+      !credentialId ||
+      !owner ||
+      owner.status !== 'active' ||
+      !client ||
+      client.status !== 'active' ||
+      client.principal_id !== principalId ||
+      client.client_id !== clientId ||
+      !credential ||
+      credential.status !== 'active' ||
+      credential.purpose !== 'event_signing' ||
+      credential.principal_id !== principalId ||
+      credential.client_id !== clientId ||
+      credential.credential_id !== credentialId ||
+      !group.eventPrivateKeyPath ||
+      group.eventPublicKey !== credential.public_key ||
+      group.eventFingerprint !== credential.fingerprint
+    )
+      throw new Error('Only the current Group Owner may initialize the Group');
+    if (!['active', 'archived'].includes(group.lifecycle))
+      throw new Error('Only an active or archived Group may be initialized');
+    return { group, projection, owner, client };
   }
 
   async recoverInterruptedInitializations(): Promise<
@@ -3684,10 +3717,7 @@ export class CollaborationProjectSpaceService {
         await this.detachAndCleanup(groupId, detachReason, history.head);
       return history;
     } catch (error) {
-      if (
-        error instanceof Error &&
-        error.name === 'CollaborationProjectSpaceHistoryRewrittenError'
-      )
+      if (error instanceof CollaborationProjectSpaceHistoryRewrittenError)
         this.store.stopWritesAfterHistoryRewrite(groupId, error.message);
       this.store.finishSyncAttempt({
         id: attemptId,

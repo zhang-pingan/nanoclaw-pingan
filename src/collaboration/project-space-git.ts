@@ -12,6 +12,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
+import { ZodError } from 'zod';
+
+import { StrictJsonError } from '../workflow-runtime/contracts/strict-json.js';
 import type {
   CollaborationProjectSpaceAppendEvent,
   CollaborationProjectSpaceTransport,
@@ -53,6 +56,18 @@ import {
   CollaborationProtocolError,
 } from './protocol/version.js';
 import type { CollaborationEventSigningIdentity } from './project-space-identity.js';
+import {
+  CollaborationProjectSpaceGitOperationError,
+  CollaborationProjectSpaceHistoryNotDescendantError,
+  CollaborationProjectSpaceHistoryRewrittenError,
+  CollaborationProjectSpaceValidationError,
+} from './project-space-errors.js';
+
+export {
+  CollaborationProjectSpaceGitOperationError,
+  CollaborationProjectSpaceHistoryRewrittenError,
+  CollaborationProjectSpaceValidationError,
+} from './project-space-errors.js';
 
 const execFileAsync = promisify(execFile);
 const CONTROL_REMOTE_REF = 'refs/remotes/origin/icarus/control';
@@ -89,16 +104,6 @@ export class CollaborationProjectSpaceGitConflictError extends Error {
   }
 }
 
-export class CollaborationProjectSpaceHistoryRewrittenError extends Error {
-  constructor(
-    message: string,
-    readonly replacementGroupId: string | null,
-  ) {
-    super(message);
-    this.name = 'CollaborationProjectSpaceHistoryRewrittenError';
-  }
-}
-
 async function execute(
   cwd: string,
   binary: string,
@@ -123,17 +128,17 @@ async function execute(
     const value = error as Error & {
       stdout?: string;
       stderr?: string;
-      code?: number;
+      code?: number | string;
     };
-    if (allowFailure)
+    if (allowFailure && typeof value.code === 'number')
       return {
         stdout: value.stdout ?? '',
         stderr: value.stderr ?? value.message,
         exitCode: typeof value.code === 'number' ? value.code : 1,
       };
-    throw new CollaborationProtocolError(
-      'PROTOCOL_QUARANTINED',
+    throw new CollaborationProjectSpaceGitOperationError(
       `Git protocol operation failed: ${binary} ${args.join(' ')}: ${value.stderr ?? value.message}`,
+      { cause: error },
     );
   }
 }
@@ -205,9 +210,16 @@ async function showBytes(
     )) as unknown as { stdout: Buffer };
     return result.stdout;
   } catch (error) {
-    throw new CollaborationProtocolError(
+    const message = `Cannot read verified repository file ${repositoryFile}: ${error instanceof Error ? error.message : String(error)}`;
+    const value = error as { code?: number | string };
+    if (typeof value.code !== 'number')
+      throw new CollaborationProjectSpaceGitOperationError(message, {
+        cause: error,
+      });
+    throw new CollaborationProjectSpaceValidationError(
       'PROTOCOL_QUARANTINED',
-      `Cannot read verified repository file ${repositoryFile}: ${error instanceof Error ? error.message : String(error)}`,
+      message,
+      { cause: error },
     );
   }
 }
@@ -228,12 +240,15 @@ function normalizedRepositoryPath(value: string): string {
     value.length > 768 ||
     value.startsWith('/') ||
     value.includes('\\') ||
-    value.includes('\0') ||
+    /[\u0000-\u001f\u007f]/u.test(value) ||
     value
       .split('/')
       .some((segment) => segment === '' || segment === '.' || segment === '..')
   )
-    throw new Error(`Unsafe collaboration repository path: ${value}`);
+    throw new CollaborationProtocolError(
+      'PROTOCOL_QUARANTINED',
+      `Unsafe collaboration repository path: ${value}`,
+    );
   return value;
 }
 
@@ -841,7 +856,10 @@ function automaticMaterialization(
           workflowDefinitionVersionKey(event.aggregate_id, version)
         ];
       if (!value)
-        throw new Error('Workflow Definition materialization missing');
+        throw new CollaborationProtocolError(
+          'PROTOCOL_QUARANTINED',
+          'Workflow Definition materialization missing',
+        );
       const root = `workflows/definitions/${event.aggregate_id}`;
       files.set(
         `${root}/workflow.json`,
@@ -1196,16 +1214,37 @@ async function changedFilesForCommit(
     ...(root ? ['--root'] : []),
     '--no-commit-id',
     '--name-status',
+    '-z',
     '-r',
     commit,
   ]);
-  return output.stdout
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      const [status, ...parts] = line.split('\t');
-      return { status: status ?? '', file: parts.at(-1) ?? '' };
-    });
+  const fields = output.stdout.split('\0');
+  if (fields.at(-1) === '') fields.pop();
+  const changes: Array<{ status: string; file: string }> = [];
+  for (let index = 0; index < fields.length; ) {
+    const status = fields[index++] ?? '';
+    const sourceFile = fields[index++];
+    if (!/^[A-Z][0-9]*$/u.test(status) || sourceFile === undefined)
+      throw new CollaborationProtocolError(
+        'PROTOCOL_QUARANTINED',
+        `Commit ${commit} has malformed NUL-delimited name-status output`,
+      );
+    if (status.startsWith('R') || status.startsWith('C')) {
+      const destinationFile = fields[index++];
+      if (destinationFile === undefined)
+        throw new CollaborationProtocolError(
+          'PROTOCOL_QUARANTINED',
+          `Commit ${commit} has incomplete rename or copy status output`,
+        );
+      changes.push(
+        { status, file: normalizedRepositoryPath(sourceFile) },
+        { status, file: normalizedRepositoryPath(destinationFile) },
+      );
+      continue;
+    }
+    changes.push({ status, file: normalizedRepositoryPath(sourceFile) });
+  }
+  return changes;
 }
 
 async function eventFilesFromChanges(
@@ -1379,7 +1418,7 @@ async function assertSafeTree(
   repositoryPath: string,
   head: string,
 ): Promise<void> {
-  const tree = await git(repositoryPath, ['ls-tree', '-r', head]);
+  const tree = await git(repositoryPath, ['ls-tree', '-r', '-z', head]);
   const allowedRoots = [
     COLLABORATION_GROUP_README_PATH,
     'group.json',
@@ -1397,14 +1436,18 @@ async function assertSafeTree(
     'projections/',
     `${COLLABORATION_PROJECT_ANALYST_ROOT}/`,
   ];
-  for (const row of tree.stdout.split('\n').filter(Boolean)) {
-    const match = /^(\d+)\s+blob\s+[0-9a-f]+\t(.+)$/u.exec(row);
-    if (!match || (match[1] !== '100644' && match[1] !== '100755'))
+  const rows = tree.stdout.split('\0');
+  if (rows.at(-1) === '') rows.pop();
+  for (const row of rows) {
+    const separator = row.indexOf('\t');
+    const metadata = separator === -1 ? row : row.slice(0, separator);
+    const file = separator === -1 ? '' : row.slice(separator + 1);
+    const match = /^(\d+)\s+blob\s+[0-9a-f]+$/u.exec(metadata);
+    if (!match || !file || (match[1] !== '100644' && match[1] !== '100755'))
       throw new CollaborationProtocolError(
         'PROTOCOL_QUARANTINED',
         `Collaboration tree contains a non-regular entry: ${row}`,
       );
-    const file = match[2]!;
     normalizedRepositoryPath(file);
     if (
       !allowedRoots.some((root) =>
@@ -1549,7 +1592,7 @@ async function verifyMaterializedCommit(
   }
 }
 
-export async function validateCollaborationProjectSpaceHistory(input: {
+async function validateCollaborationProjectSpaceHistoryUnchecked(input: {
   readonly repositoryPath: string;
   readonly head: string;
   readonly previousHead?: string | null;
@@ -1561,10 +1604,13 @@ export async function validateCollaborationProjectSpaceHistory(input: {
       ['merge-base', '--is-ancestor', input.previousHead, input.head],
       true,
     );
-    if (ancestry.exitCode !== 0)
-      throw new CollaborationProtocolError(
-        'PROTOCOL_QUARANTINED',
+    if (ancestry.exitCode === 1)
+      throw new CollaborationProjectSpaceHistoryNotDescendantError(
         'The remote collaboration control history was rewritten',
+      );
+    if (ancestry.exitCode !== 0)
+      throw new CollaborationProjectSpaceGitOperationError(
+        `Git protocol operation failed: git merge-base --is-ancestor: ${ancestry.stderr.trim()}`,
       );
   }
   await assertSafeTree(input.repositoryPath, input.head);
@@ -1634,6 +1680,36 @@ export async function validateCollaborationProjectSpaceHistory(input: {
       'Materialized group.json does not match verified replay',
     );
   return { head: input.head, projection, eventRecords };
+}
+
+export async function validateCollaborationProjectSpaceHistory(input: {
+  readonly repositoryPath: string;
+  readonly head: string;
+  readonly previousHead?: string | null;
+  readonly canonicalGenesisSelfDescription: CollaborationCanonicalGenesisSelfDescriptionProvider;
+}): Promise<ValidatedProjectSpaceHistory> {
+  try {
+    return await validateCollaborationProjectSpaceHistoryUnchecked(input);
+  } catch (error) {
+    if (
+      error instanceof CollaborationProjectSpaceValidationError ||
+      error instanceof CollaborationProjectSpaceGitOperationError
+    )
+      throw error;
+    if (
+      !(error instanceof CollaborationProtocolError) &&
+      !(error instanceof StrictJsonError) &&
+      !(error instanceof ZodError)
+    )
+      throw error;
+    throw new CollaborationProjectSpaceValidationError(
+      error instanceof CollaborationProtocolError
+        ? error.code
+        : 'PROTOCOL_QUARANTINED',
+      error instanceof Error ? error.message : String(error),
+      { cause: error },
+    );
+  }
 }
 
 export interface CollaborationVirtualTreeNode {
@@ -1817,8 +1893,7 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
     } catch (error) {
       if (
         input.previousHead &&
-        error instanceof CollaborationProtocolError &&
-        /history was rewritten/iu.test(error.message)
+        error instanceof CollaborationProjectSpaceHistoryNotDescendantError
       ) {
         const replacement = await validateCollaborationProjectSpaceHistory({
           repositoryPath: input.repositoryPath,
@@ -2238,7 +2313,11 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
       ['rev-parse', '--is-bare-repository'],
       true,
     );
-    if (bare.exitCode !== 0 || bare.stdout.trim() !== 'true')
+    if (bare.exitCode !== 0)
+      throw new CollaborationProjectSpaceGitOperationError(
+        `Git protocol operation failed: ${this.gitBinary} rev-parse --is-bare-repository: ${bare.stderr.trim()}`,
+      );
+    if (bare.stdout.trim() !== 'true')
       throw new Error('Collaboration cache is not a bare Git repository');
     const configured = (
       await execute(repositoryPath, this.gitBinary, [

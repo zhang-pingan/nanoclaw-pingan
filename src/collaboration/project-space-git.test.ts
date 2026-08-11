@@ -26,6 +26,8 @@ import {
   collaborationProjectSpaceEventPath,
   collaborationProjectSpaceGitTestables,
   CollaborationProjectSpaceGitTransport as BaseCollaborationProjectSpaceGitTransport,
+  CollaborationProjectSpaceGitOperationError,
+  CollaborationProjectSpaceValidationError,
 } from './project-space-git.js';
 import {
   CollaborationProjectSpaceIdentityService,
@@ -113,6 +115,18 @@ function fixture() {
     cache: path.join(root, 'cache.git'),
     identity,
   };
+}
+
+function cloneControlBranch(
+  test: ReturnType<typeof fixture>,
+  name: string,
+): string {
+  const checkout = path.join(test.root, name);
+  run(test.root, ['git', 'clone', '-q', test.remote, checkout]);
+  run(checkout, ['git', 'checkout', '-q', '-b', name, 'origin/icarus/control']);
+  run(checkout, ['git', 'config', 'user.name', 'Validation test']);
+  run(checkout, ['git', 'config', 'user.email', 'validation@example.invalid']);
+  return checkout;
 }
 
 function identityService(
@@ -358,6 +372,421 @@ process.exit(128);
     expect(attempts).toHaveLength(1);
     expect(attempts[0]!.ssh).toContain(primaryKey);
   });
+
+  it('appends and replays a Unicode business file with core.quotePath enabled', async () => {
+    const test = fixture();
+    const store = new CollaborationProjectSpaceStore(
+      path.join(test.root, 'unicode.db'),
+    );
+    const transport = new CollaborationProjectSpaceGitTransport();
+    const service = new CollaborationProjectSpaceService(
+      store,
+      transport,
+      path.join(test.root, 'unicode-repositories'),
+      identityService(test.identity),
+      () => Date.parse(NOW),
+    );
+    try {
+      const created = await service.createGroup({
+        remoteUrl: test.remote,
+        name: 'Unicode project',
+        gitSshKeyPath: test.identity.privateKeyPath,
+        displayName: 'Alice',
+        clientDisplayName: 'Alice MacBook',
+        membershipPolicy: 'open',
+        observerAccess: 'allowed',
+        groupId: 'group_signed',
+      });
+      run(created.repositoryPath, ['git', 'config', 'core.quotePath', 'true']);
+      const contents = Buffer.from('# 方案实施中控自动化规则\n', 'utf8');
+      const published = await service.publishSharedFile({
+        groupId: created.groupId,
+        expectedRevision: 0,
+        fileId: 'file_automation_rules',
+        fileName: '方案实施中控自动化规则',
+        mediaType: 'text/plain',
+        contents,
+      });
+      const repositoryFile =
+        'workspace/shared/documents/file_automation_rules/方案实施中控自动化规则';
+
+      await expect(
+        service.readVerifiedFile({
+          groupId: published.groupId,
+          repositoryFile,
+        }),
+      ).resolves.toEqual(contents);
+      const replayed = await transport.inspect({
+        remoteUrl: test.remote,
+        repositoryPath: published.repositoryPath,
+        previousHead: created.lastVerifiedHead,
+        gitSshKeyPath: test.identity.privateKeyPath,
+      });
+      expect(replayed.head).toBe(published.lastVerifiedHead);
+      expect(replayed.projection.files.file_automation_rules).toMatchObject({
+        original_filename: '方案实施中控自动化规则',
+        content_ref: '方案实施中控自动化规则',
+      });
+      expect(
+        replayed.eventRecords.map((record) => record.event.event_type),
+      ).toEqual(['group_initialized', 'shared_file_published']);
+    } finally {
+      store.close();
+    }
+  }, 30_000);
+
+  it.each([
+    ['Tab', '\t'],
+    ['newline', '\n'],
+  ])(
+    'rejects a repository path containing a %s control character',
+    async (_label, controlCharacter) => {
+      const test = fixture();
+      const transport = new CollaborationProjectSpaceGitTransport();
+      const initial = genesis(test.identity);
+      const history = await transport.create({
+        remoteUrl: test.remote,
+        repositoryPath: test.cache,
+        identity: test.identity,
+        genesisEvent: initial.event,
+        genesisProjection: initial.projection,
+        genesisMaterializedFiles: initial.materializedFiles,
+      });
+      const checkout = cloneControlBranch(test, 'unsafe-control-path');
+      const repositoryFile = `workspace/shared/documents/file_bad/control${controlCharacter}name.txt`;
+      mkdirSync(path.join(checkout, path.dirname(repositoryFile)), {
+        recursive: true,
+      });
+      writeFileSync(path.join(checkout, repositoryFile), 'unsafe path\n');
+      run(checkout, ['git', 'add', '--', repositoryFile]);
+      run(checkout, [
+        'git',
+        'commit',
+        '-q',
+        '--no-gpg-sign',
+        '-m',
+        'add unsafe control path',
+      ]);
+      run(checkout, [
+        'git',
+        'push',
+        '-q',
+        'origin',
+        'HEAD:refs/heads/icarus/control',
+      ]);
+      run(test.cache, ['git', 'config', 'core.quotePath', 'true']);
+
+      const error = await transport
+        .inspect({
+          remoteUrl: test.remote,
+          repositoryPath: test.cache,
+          previousHead: history.head,
+        })
+        .catch((value: unknown) => value);
+      expect(error).toBeInstanceOf(CollaborationProjectSpaceValidationError);
+      expect((error as Error).message).toMatch(
+        /Unsafe collaboration repository path/u,
+      );
+    },
+    30_000,
+  );
+
+  it.each([
+    ['malformed strict JSON', '{\n'],
+    ['schema-invalid JSON', '{}\n'],
+  ])(
+    'classifies %s as repository validation failure',
+    async (_label, body) => {
+      const test = fixture();
+      const transport = new CollaborationProjectSpaceGitTransport();
+      const initial = genesis(test.identity);
+      const history = await transport.create({
+        remoteUrl: test.remote,
+        repositoryPath: test.cache,
+        identity: test.identity,
+        genesisEvent: initial.event,
+        genesisProjection: initial.projection,
+        genesisMaterializedFiles: initial.materializedFiles,
+      });
+      const checkout = cloneControlBranch(test, 'invalid-event-json');
+      const eventPath =
+        'events/work-items/item_invalid/00000001-evt_invalid.json';
+      mkdirSync(path.join(checkout, path.dirname(eventPath)), {
+        recursive: true,
+      });
+      writeFileSync(path.join(checkout, eventPath), body);
+      run(checkout, ['git', 'add', '--', eventPath]);
+      run(checkout, [
+        'git',
+        'commit',
+        '-q',
+        '--no-gpg-sign',
+        '-m',
+        'add invalid event JSON',
+      ]);
+      run(checkout, [
+        'git',
+        'push',
+        '-q',
+        'origin',
+        'HEAD:refs/heads/icarus/control',
+      ]);
+
+      const error = await transport
+        .inspect({
+          remoteUrl: test.remote,
+          repositoryPath: test.cache,
+          previousHead: history.head,
+        })
+        .catch((value: unknown) => value);
+      expect(error).toBeInstanceOf(CollaborationProjectSpaceValidationError);
+      expect((error as Error).message.length).toBeGreaterThan(0);
+    },
+    30_000,
+  );
+
+  it('keeps a merge-base execution failure outside repository validation errors', async () => {
+    const test = fixture();
+    const transport = new CollaborationProjectSpaceGitTransport();
+    const initial = genesis(test.identity);
+    await transport.create({
+      remoteUrl: test.remote,
+      repositoryPath: test.cache,
+      identity: test.identity,
+      genesisEvent: initial.event,
+      genesisProjection: initial.projection,
+      genesisMaterializedFiles: initial.materializedFiles,
+    });
+
+    const error = await transport
+      .inspect({
+        remoteUrl: test.remote,
+        repositoryPath: test.cache,
+        previousHead: '0'.repeat(40),
+      })
+      .catch((value: unknown) => value);
+
+    expect(error).toBeInstanceOf(CollaborationProjectSpaceGitOperationError);
+    expect(error).not.toBeInstanceOf(CollaborationProjectSpaceValidationError);
+    expect((error as Error).message).toMatch(/merge-base --is-ancestor/u);
+  }, 30_000);
+
+  it('quarantines a real unsafe remote tree and initializes from the last verified Owner snapshot', async () => {
+    const test = fixture();
+    const storeDirectory = path.join(test.root, 'quarantined-store');
+    const store = new CollaborationProjectSpaceStore(
+      path.join(storeDirectory, 'collaboration.db'),
+    );
+    const identities = new CollaborationProjectSpaceIdentityService(
+      storeDirectory,
+      test.identity.privateKeyPath,
+    );
+    const transport = new CollaborationProjectSpaceGitTransport();
+    const service = new CollaborationProjectSpaceService(
+      store,
+      transport,
+      path.join(storeDirectory, 'repositories'),
+      identities,
+      () => Date.parse(NOW),
+    );
+    try {
+      const old = await service.createGroup({
+        remoteUrl: test.remote,
+        name: 'Recover quarantined project',
+        gitSshKeyPath: test.identity.privateKeyPath,
+        displayName: 'Alice Owner',
+        clientDisplayName: 'Alice trusted client',
+        membershipPolicy: 'invite_only',
+        observerAccess: 'members_only',
+        defaultPermissionTemplateId: 'workflow_manager.v1',
+        groupId: 'group_quarantined_real_git',
+      });
+      const withOldWork = await service.createWorkItem({
+        groupId: old.groupId,
+        workItemId: 'old_quarantined_work',
+        type: 'task',
+        title: 'Old quarantined work',
+      });
+      const verifiedHead = withOldWork.lastVerifiedHead!;
+      const checkout = cloneControlBranch(test, 'quarantined-unsafe-path');
+      const unsafePath =
+        'workspace/shared/documents/file_bad/control\nname.txt';
+      mkdirSync(path.join(checkout, path.dirname(unsafePath)), {
+        recursive: true,
+      });
+      writeFileSync(path.join(checkout, unsafePath), 'unsafe remote path\n');
+      run(checkout, ['git', 'add', '--', unsafePath]);
+      run(checkout, [
+        'git',
+        'commit',
+        '-q',
+        '--no-gpg-sign',
+        '-m',
+        'add unsafe remote path',
+      ]);
+      run(checkout, [
+        'git',
+        'push',
+        '-q',
+        'origin',
+        'HEAD:refs/heads/icarus/control',
+      ]);
+      const quarantinedHead = run(test.remote, [
+        'git',
+        'rev-parse',
+        'refs/heads/icarus/control',
+      ]);
+
+      const syncError = await service
+        .sync(old.groupId)
+        .catch((value: unknown) => value);
+      expect(syncError).toBeInstanceOf(
+        CollaborationProjectSpaceValidationError,
+      );
+      expect((syncError as Error).message).toMatch(
+        /Unsafe collaboration repository path/u,
+      );
+      expect(store.getGroup(old.groupId)).toMatchObject({
+        lastVerifiedHead: verifiedHead,
+        protocolStatus: 'PROTOCOL_QUARANTINED',
+        projection: {
+          workItems: { old_quarantined_work: expect.any(Object) },
+        },
+      });
+
+      const initialized = await service.initializeGroup(old.groupId);
+      const newHead = run(test.remote, [
+        'git',
+        'rev-parse',
+        'refs/heads/icarus/control',
+      ]);
+      const remoteHistory = await transport.inspect({
+        remoteUrl: test.remote,
+        repositoryPath: initialized.repositoryPath,
+        gitSshKeyPath: test.identity.privateKeyPath,
+      });
+
+      expect(newHead).not.toBe(quarantinedHead);
+      expect(run(test.remote, ['git', 'rev-list', '--count', newHead])).toBe(
+        '1',
+      );
+      expect(store.getGroup(old.groupId)).toBeNull();
+      expect(remoteHistory).toMatchObject({
+        head: newHead,
+        projection: {
+          groupId: initialized.groupId,
+          group: {
+            name: 'Recover quarantined project',
+            membership_policy: { join: 'invite_only' },
+            visibility_policy: { observer_access: 'members_only' },
+            default_permission_template_id: 'workflow_manager.v1',
+          },
+          workItems: {},
+        },
+        eventRecords: [
+          expect.objectContaining({
+            commitHash: newHead,
+            commitOrder: 1,
+            event: expect.objectContaining({ event_type: 'group_initialized' }),
+          }),
+        ],
+      });
+    } finally {
+      store.close();
+    }
+  }, 30_000);
+
+  it('blocks initialization on real fetch and Git execution failures without force push', async () => {
+    const test = fixture();
+    const modePath = path.join(test.root, 'git-failure-mode');
+    const logPath = path.join(test.root, 'git-failure-commands.jsonl');
+    const wrapperPath = path.join(test.root, 'git-failure-wrapper.cjs');
+    const realGit = run(test.root, ['which', 'git']);
+    writeFileSync(
+      wrapperPath,
+      `#!/usr/bin/env node
+const { appendFileSync, existsSync, readFileSync } = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(args) + '\\n');
+const mode = existsSync(${JSON.stringify(modePath)})
+  ? readFileSync(${JSON.stringify(modePath)}, 'utf8').trim()
+  : '';
+if (args[0] === mode) {
+  process.stderr.write('simulated ' + mode + ' failure\\n');
+  process.exit(128);
+}
+const result = spawnSync(${JSON.stringify(realGit)}, args, {
+  env: process.env,
+  stdio: 'inherit',
+});
+if (result.error) throw result.error;
+process.exit(result.status === null ? 1 : result.status);
+`,
+      { mode: 0o700 },
+    );
+    chmodSync(wrapperPath, 0o700);
+    const storeDirectory = path.join(test.root, 'git-failure-store');
+    const store = new CollaborationProjectSpaceStore(
+      path.join(storeDirectory, 'collaboration.db'),
+    );
+    const identities = new CollaborationProjectSpaceIdentityService(
+      storeDirectory,
+      test.identity.privateKeyPath,
+    );
+    const transport = new CollaborationProjectSpaceGitTransport(wrapperPath);
+    const service = new CollaborationProjectSpaceService(
+      store,
+      transport,
+      path.join(storeDirectory, 'repositories'),
+      identities,
+      () => Date.parse(NOW),
+    );
+    try {
+      const old = await service.createGroup({
+        remoteUrl: test.remote,
+        name: 'Git failure project',
+        gitSshKeyPath: test.identity.privateKeyPath,
+        displayName: 'Alice',
+        clientDisplayName: 'Alice trusted client',
+        membershipPolicy: 'open',
+        observerAccess: 'allowed',
+        groupId: 'group_git_failure',
+      });
+      const remoteHead = old.lastVerifiedHead!;
+
+      writeFileSync(modePath, 'fetch\n');
+      await expect(service.initializeGroup(old.groupId)).rejects.toThrow(
+        /simulated fetch failure/u,
+      );
+
+      writeFileSync(modePath, 'rev-parse\n');
+      const gitError = await service
+        .initializeGroup(old.groupId)
+        .catch((value: unknown) => value);
+      expect(gitError).toBeInstanceOf(
+        CollaborationProjectSpaceGitOperationError,
+      );
+      expect((gitError as Error).message).toMatch(
+        /simulated rev-parse failure/u,
+      );
+
+      expect(
+        run(test.remote, ['git', 'rev-parse', 'refs/heads/icarus/control']),
+      ).toBe(remoteHead);
+      const commands = readFileSync(logPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as string[]);
+      expect(commands).not.toContainEqual([
+        'push',
+        'origin',
+        '+HEAD:refs/heads/icarus/control',
+      ]);
+    } finally {
+      store.close();
+    }
+  }, 30_000);
 
   it('materializes and replays unbound Invite issuance and consumption', async () => {
     const test = fixture();
