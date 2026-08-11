@@ -1713,12 +1713,23 @@ export function reduceCollaborationEventV3(
     }
     case 'executor_registered': {
       const { executor } = executorPayloadSchema.parse(payload);
+      if (
+        event.aggregate_type !== 'membership' ||
+        event.aggregate_id !== event.actor.principal_id
+      )
+        conflict(
+          'Executor registration must use the actor membership Aggregate',
+        );
       if (executor.principal_id !== event.actor.principal_id)
         unauthorized(
           'A Principal may only register its own Executor descriptor',
         );
       if (executor.status !== 'active' || executor.revoked_at_event !== null)
         conflict('A registered Executor must start active');
+      if (executor.registered_at_event !== event.event_id)
+        conflict('Executor registration must reference the current event');
+      if (next.executors[executor.principal_id]?.[executor.executor_id])
+        conflict('Executor id is already registered for this Principal');
       (next.executors[executor.principal_id] ??= {})[executor.executor_id] =
         executor;
       break;
@@ -1726,6 +1737,11 @@ export function reduceCollaborationEventV3(
     case 'executor_revoked': {
       const { executor_id: executorId } =
         executorIdPayloadSchema.parse(payload);
+      if (
+        event.aggregate_type !== 'membership' ||
+        event.aggregate_id !== event.actor.principal_id
+      )
+        conflict('Executor revocation must use the actor membership Aggregate');
       const executor = next.executors[event.actor.principal_id]?.[executorId];
       if (
         !executor &&

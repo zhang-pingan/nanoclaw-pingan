@@ -632,6 +632,103 @@ describe('Collaboration v3 reducer invariants', () => {
     ).toThrow(/Dissolved/iu);
   });
 
+  it('binds Executor lifecycle to one Principal membership Aggregate and event lineage', () => {
+    let projection = withBob();
+    const executor = (registeredAtEvent: string) => ({
+      format: 'icarus.collaboration-executor/1' as const,
+      principal_id: BOB,
+      executor_id: 'executor_bob',
+      display_name: 'Bob Executor',
+      kind: 'run_once' as const,
+      capabilities: [],
+      status: 'active' as const,
+      registered_at_event: registeredAtEvent,
+      revoked_at_event: null,
+    });
+
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'workspace',
+        aggregateId: BOB,
+        eventType: 'executor_registered',
+        actor: BOB,
+        id: 'evt_executor_wrong_type',
+        payload: { executor: executor('evt_executor_wrong_type') },
+      }),
+    ).toThrow(/membership Aggregate/iu);
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'membership',
+        aggregateId: ALICE,
+        eventType: 'executor_registered',
+        actor: BOB,
+        id: 'evt_executor_wrong_principal',
+        payload: { executor: executor('evt_executor_wrong_principal') },
+      }),
+    ).toThrow(/membership Aggregate/iu);
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'membership',
+        aggregateId: BOB,
+        eventType: 'executor_registered',
+        actor: BOB,
+        id: 'evt_executor_wrong_reference',
+        payload: { executor: executor('evt_other') },
+      }),
+    ).toThrow(/current event/iu);
+
+    projection = apply(projection, {
+      aggregateType: 'membership',
+      aggregateId: BOB,
+      eventType: 'executor_registered',
+      actor: BOB,
+      id: 'evt_executor_registered',
+      payload: { executor: executor('evt_executor_registered') },
+    });
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'membership',
+        aggregateId: BOB,
+        eventType: 'executor_registered',
+        actor: BOB,
+        id: 'evt_executor_duplicate',
+        payload: { executor: executor('evt_executor_duplicate') },
+      }),
+    ).toThrow(/already registered/iu);
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'workspace',
+        aggregateId: BOB,
+        eventType: 'executor_revoked',
+        actor: BOB,
+        payload: { executor_id: 'executor_bob', reason: 'Wrong chain' },
+      }),
+    ).toThrow(/membership Aggregate/iu);
+
+    projection = apply(projection, {
+      aggregateType: 'membership',
+      aggregateId: BOB,
+      eventType: 'executor_revoked',
+      actor: BOB,
+      id: 'evt_executor_revoked',
+      payload: { executor_id: 'executor_bob', reason: 'Retired locally' },
+    });
+    expect(projection.executors[BOB]?.executor_bob).toMatchObject({
+      status: 'revoked',
+      revoked_at_event: 'evt_executor_revoked',
+    });
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'membership',
+        aggregateId: BOB,
+        eventType: 'executor_registered',
+        actor: BOB,
+        id: 'evt_executor_resurrection',
+        payload: { executor: executor('evt_executor_resurrection') },
+      }),
+    ).toThrow(/already registered/iu);
+  });
+
   it('revokes a leaving member and recovers active Workflow work before rejoin', () => {
     let projection = workflowFixture({
       startTurn: true,
@@ -1801,6 +1898,115 @@ describe('Collaboration v3 reducer invariants', () => {
           },
         }),
       ).toThrow(/relation|itself|unique|does not exist/u);
+  });
+
+  it('requires manage_owned for an ordinary member to manage an owned Work Item', () => {
+    let projection = withBob();
+    projection = apply(projection, {
+      aggregateType: 'work_item',
+      aggregateId: 'item_bob',
+      eventType: 'work_item_created',
+      payload: {
+        item: {
+          ...workItem('item_bob'),
+          owner_principal_id: BOB,
+        },
+      },
+    });
+    projection = apply(projection, {
+      aggregateType: 'membership',
+      aggregateId: BOB,
+      eventType: 'permission_granted',
+      id: 'evt_bob_manage_owned_granted',
+      payload: {
+        grant: {
+          format: 'icarus.collaboration-permission-grant/1',
+          principal_id: BOB,
+          grants: ['work_item:manage_owned'],
+          revision: 1,
+          updated_at_event: 'evt_bob_manage_owned_granted',
+        },
+      },
+    });
+    projection = apply(projection, {
+      aggregateType: 'work_item',
+      aggregateId: 'item_bob',
+      eventType: 'work_item_details_updated',
+      actor: BOB,
+      payload: {
+        item: {
+          ...projection.workItems.item_bob!,
+          title: 'Bob may update this item',
+          revision: 2,
+          updated_at: '2026-08-06T12:01:00.000Z',
+        },
+      },
+    });
+
+    projection = apply(projection, {
+      aggregateType: 'membership',
+      aggregateId: BOB,
+      eventType: 'permission_revoked',
+      id: 'evt_bob_manage_owned_revoked',
+      payload: {
+        grant: {
+          format: 'icarus.collaboration-permission-grant/1',
+          principal_id: BOB,
+          grants: [],
+          revision: 2,
+          updated_at_event: 'evt_bob_manage_owned_revoked',
+        },
+      },
+    });
+    expect(() =>
+      apply(projection, {
+        aggregateType: 'work_item',
+        aggregateId: 'item_bob',
+        eventType: 'work_item_details_updated',
+        actor: BOB,
+        payload: {
+          item: {
+            ...projection.workItems.item_bob!,
+            title: 'Bob must not update after revocation',
+            revision: 3,
+            updated_at: '2026-08-06T12:02:00.000Z',
+          },
+        },
+      }),
+    ).toThrow(/cannot update/iu);
+
+    projection = apply(projection, {
+      aggregateType: 'membership',
+      aggregateId: BOB,
+      eventType: 'permission_granted',
+      id: 'evt_bob_manage_owned_restored',
+      payload: {
+        grant: {
+          format: 'icarus.collaboration-permission-grant/1',
+          principal_id: BOB,
+          grants: ['work_item:manage_owned'],
+          revision: 3,
+          updated_at_event: 'evt_bob_manage_owned_restored',
+        },
+      },
+    });
+    projection = apply(projection, {
+      aggregateType: 'work_item',
+      aggregateId: 'item_bob',
+      eventType: 'work_item_details_updated',
+      actor: BOB,
+      payload: {
+        item: {
+          ...projection.workItems.item_bob!,
+          title: 'Bob may update after restoration',
+          revision: 3,
+          updated_at: '2026-08-06T12:03:00.000Z',
+        },
+      },
+    });
+    expect(projection.workItems.item_bob?.title).toBe(
+      'Bob may update after restoration',
+    );
   });
 
   it('requires an authorized issuer and consumes an unbound Invite once', () => {

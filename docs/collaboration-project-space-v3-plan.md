@@ -7,7 +7,7 @@
 - 实施完成：2026-08-08
 - 当前协议：`icarus.collaboration-group/3`
 - 实施前代码基线：`main@3eff5302`（历史）
-- 当前实现：Collaboration Project Space v3、SQLite v7
+- 当前实现：Collaboration Project Space v3、SQLite v11
 - 适用范围：Group、Principal、Client、Executor、Observer、Workspace、Work Item、Discussion、Workflow Definition、Workflow Instance、图形化 FSM、Git 协议、权限、同步和审计
 - 前提：方案仍处于开发迭代期，没有真实群组、不可丢弃业务数据或旧签名历史；每次迭代发布的新协议直接成为唯一 current version，不实现旧版本迁移、双写、兼容读取或兼容回放
 - 相关文档：
@@ -89,7 +89,7 @@ Workflow Instance State
 v3 已按本文的 current-only 边界端到端落地：
 
 - Git 控制分支只接受 v3 Group/Event/Projection 和 JSON materialization，按 canonical JSON hash、active Credential signature、Credential/Principal/Client actor mapping、aggregate revision、previous hash、commit order、路径、sidecar 和文件 hash/size 完整校验；
-- 本地 SQLite v11 保存 retained Group binding、Observer/Member subscription、Principal/Client/Credential、身份恢复请求、直接权限、投影、file index、精确 Action revision/commit 索引、本机 Executor profile、State Executor Binding、execution receipt/observation、notification、analysis、audit evidence 和 staged Artifact，非 v11 store 启动时 fail closed；
+- 本地 SQLite v11 保存 retained Group binding、Observer/Member subscription、Principal/Client/Credential、身份恢复请求、直接权限、投影、file index、精确 Action revision/commit 索引、本机 Executor profile、State Executor Binding、execution receipt/observation、notification、analysis、audit evidence、staged Artifact 和临时初始化恢复记录，非 v11 store 启动时 fail closed；
 - Group、Credential rotation/revocation、Client revocation、identity/owner/offline recovery、Workspace、Work Item、Discussion、Workflow Definition/Instance、State Execution、Turn、timeout、Artifact、审计、备份/恢复和 verified virtual file tree 已进入 service 与 Web API；
 - Work Item progress 与 Turn completion 通过 staged upload 在一个签名事件和 Git commit 中物化原始业务文件及 `metadata.json`，同时验证 scope、Principal/Client、attempt 和 fence；`/3` 备份联合保护 DB 与尚未提交的 staged bytes；
 - Web/Electron `/groups` 已提供项目空间页面、Observer 受限申请状态、Work Item board/list、Discussion、文件树、Principal/Client/Credential/权限、恢复请求审批、Git Remote SSH 设置、offline recovery Credential 备份/导入、Workflow Definition/Instance、Outcome-first 编辑器、Turn、Artifact、审计和诊断；
@@ -550,7 +550,7 @@ Group 权限直接授予 Principal：
 }
 ```
 
-文档和 UI 中的 Owner/Admin/Member/Workflow Designer 是常用权限集合的显示名称，不是重新引入 Group Role。协议授权只校验 Principal、直接 grant 和资源所有权；除唯一 Owner 身份外，不依赖可认领的角色对象。
+文档和 UI 中的 Owner/Admin/Member/Workflow Designer 是常用权限集合的显示名称，不是重新引入 Group Role。协议授权只校验 Principal、直接 grant 和资源所有权；除唯一 Owner 身份外，不依赖可认领的角色对象。普通成员管理自己负责的 Work Item 时，资源 owner 身份与 `work_item:manage_owned` 直接权限必须同时成立；撤销该权限会立即关闭 allowed action 并由 Reducer 拒绝写入。Owner、`group:admin` 或 `work_item:manage_all` 的全局管理能力不受此限制。
 
 ### 6.2 建议权限集合
 
@@ -579,16 +579,16 @@ workflow_instance:manage_all
 
 ### 6.3 默认策略
 
-| 操作                     |          Owner/Admin |           Member | Work Item Owner | Workflow Assignee |
-| ------------------------ | -------------------: | ---------------: | --------------: | ----------------: |
-| 创建 Work Item           |                   是 |           按策略 |              是 |                是 |
-| 发布个人进度             |                   是 |               是 |              是 |                是 |
-| 写共享空间               |                   是 |         按 grant |        按 grant |          按 grant |
-| 修改任意 Work Item       |                   是 |               否 |        仅负责项 |                否 |
-| 提议 Workflow Definition |                   是 |         按 grant |        按 grant |          按 grant |
-| 发布 Workflow Definition |                   是 |               否 |              否 |                否 |
-| 启动已允许 Workflow      |                   是 | 按 launch policy |        通常允许 |                否 |
-| 修改 State Execution     | 仅自己被指派的 State |             同左 |            同左 |                是 |
+| 操作                     |          Owner/Admin |           Member |  Work Item Owner | Workflow Assignee |
+| ------------------------ | -------------------: | ---------------: | ---------------: | ----------------: |
+| 创建 Work Item           |                   是 |           按策略 |               是 |                是 |
+| 发布个人进度             |                   是 |               是 |               是 |                是 |
+| 写共享空间               |                   是 |         按 grant |         按 grant |          按 grant |
+| 修改任意 Work Item       |                   是 |               否 | 负责项且有 grant |                否 |
+| 提议 Workflow Definition |                   是 |         按 grant |         按 grant |          按 grant |
+| 发布 Workflow Definition |                   是 |               否 |               否 |                否 |
+| 启动已允许 Workflow      |                   是 | 按 launch policy |         通常允许 |                否 |
+| 修改 State Execution     | 仅自己被指派的 State |             同左 |             同左 |                是 |
 
 Executor 始终继承 Principal 权限，不能因为运行在本地就绕过 Git 事件授权。
 
@@ -1183,7 +1183,7 @@ Action 可以被同一 Principal 在多个 Definition/Instance State 中复用�
 
 业务创建合同不接受 `executor_id`、`action_id`、Action version、Prompt ref/hash 或 State Execution revision。Host 使用 UUID 生成 Group scoped `executor_<uuid>` 和 `action_<uuid>`；新 Action 固定从 v1 开始，修订沿路径中的 Action ID 从当前 Projection 自动计算 vN+1，Prompt ref/hash 从生成 ID 与 Markdown 内容推导。Renderer 只编辑显示名称、平台/类型、Prompt、执行权限、结果格式、本地工作目录和审批策略。机器 ID 仅在详情和审计中只读展示，不从显示名称派生。
 
-Executor 注册同时写入两类边界清晰的数据：Git 只保存当前 Principal 的公共 descriptor；本机 SQLite profile 保存 Client、工作目录、权限上限和 Provider 配置。同一底层本机平台注册到不同 Group 时生成不同 executor ID，State Execution 配置再从 profile 派生精确的 Instance/State/Action-hash Binding。
+Executor 注册同时写入两类边界清晰的数据：Git 只保存当前 Principal 的公共 descriptor；本机 SQLite profile 保存 Client、工作目录、权限上限和 Provider 配置。同一底层本机平台注册到不同 Group 时生成不同 executor ID，State Execution 配置再从 profile 派生精确的 Instance/State/Action-hash Binding。`executor_registered` / `executor_revoked` 必须进入 actor Principal 自己的 membership Aggregate；descriptor 的 `registered_at_event` 必须引用当前注册事件。同一 Principal 下的 executor ID 一经使用即永久保留，撤销后不得重注册或复活。
 
 ```json
 {
@@ -1546,6 +1546,7 @@ events/workflow-instances/wfi_201/000014-evt_xxx.json
 - 同一 Aggregate 必须满足 expected revision 和 previous hash；
 - 不同 Aggregate 可以独立生成 revision；
 - control branch 继续要求 fast-forward 线性 Git ancestry；
+- “初始化群组”是唯一例外：它不追加事件，不使用 expected old head、CAS 或 force-with-lease，而是把一个已完整验证的孤立 Genesis 通过无条件 force refspec 覆盖到同名 control branch；
 - 并发 push 失败方 fetch/revalidate，只重建自己的 commit；
 - 同一 Work Item 的冲突不能无脑自动重放字段覆盖；
 - 不同 Work Item/Discussion 的追加事件可以在验证后自动重试；
@@ -1826,6 +1827,25 @@ READY 条件：
 
 State Execution/Action/Executor 不是 READY 必需项，因为默认 manual/notify-only。
 
+### 18.5 Archive、Dissolve、Local Remove 与 Initialize
+
+四个操作的语义不能互换：
+
+| 操作         | Remote 与历史                                                                                                         | 当前设备                                        | 可恢复性            |
+| ------------ | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------- |
+| Archive      | 保留同一 Group 和完整历史                                                                                             | 保留订阅、投影与身份                            | 可以 reopen         |
+| Dissolve     | 终止原 Group 业务，但保留历史和终止事实                                                                               | 保留可审计只读状态                              | 不恢复为原业务群组  |
+| Local remove | 不修改 Remote                                                                                                         | 仅删除当前设备的订阅、投影、缓存和本地身份绑定  | 可重新 Observe/Join |
+| 初始化群组   | 保留 Remote locator 与 `refs/heads/icarus/control` 名称，但以无条件 force push 改写为新 `group_id` 的单一孤立 Genesis | 删除旧 Group 的全部本地数据，注册新 Owner Group | 不可恢复旧 Group    |
+
+初始化仅允许当前 Owner 执行。Host Service/API 在生成新身份和 Genesis 前必须先同步并完整验证 Remote current history，再确认最新 Projection 中的本地 Principal、Client 和 Credential 仍是 active Owner 身份；UI 隐藏入口不构成授权。授权完成后的 push 仍不使用 lease，之后到达 Remote 的提交也可以被覆盖。初始化默认沿用名称、membership policy、visibility policy 和本机 Git Remote SSH 配置，但创建新的 Group、Owner Principal、Client、event-signing Credential 与 recovery Credential。它不是 `group_reinitialized` 事件，不创建 reset/recovery/cancel 事实，不保留 generation/epoch，也不把旧成员身份迁移到新群组。
+
+新 Genesis 先在隔离临时仓库中签名并通过 current v3 history、reducer 与 materialization 全量验证，然后使用 `+HEAD:refs/heads/icarus/control` 推送。该 push 不使用 lease：确认后其他成员刚写入的提交仍会被覆盖；多个 Owner 设备并发时最后一次成功 push 生效。Git 服务端 branch protection 或 hook 可以拒绝 force push，Icarus 权限不能绕过 transport 限制。远端成功前不替换本地旧状态；远端成功后若本地中断，SQLite 临时操作记录会在下次启动重新读取 Remote 并完成替换，清理成功后删除该记录。
+
+其他设备发现 control history 非 fast-forward 且 `group_id` 改变时，必须隔离旧订阅、停止旧身份写入，并要求用户按新群组重新 Observe/Join；系统不能伪造旧事件链对重写的授权。并发初始化失败方仅在新群组 `observer_access=allowed` 时注册 Observer；`members_only` 时删除旧展示状态和仓库缓存，不注册新订阅，只能显式 Join 或恢复身份。初始化只更新 Icarus control ref，不删除无关 branch 或 tag。
+
+初始化会让旧提交从 Icarus 可见 refs 和 `git log icarus/control` 中消失，并删除执行设备持有的旧订阅、Projection、事件、审计、通知、分析、staged Artifact、专属 Credential 和仓库对象缓存。仅包含旧群组的 Icarus 默认备份整体删除；包含多个群组的有效 managed backup 在隔离目录中重建并净化旧群组的全部级联数据和 staged bytes，经 `secure_delete`、`VACUUM`、Artifact 校验及新 manifest size/checksum 后替换原备份，其他群组仍可恢复。Git Remote SSH 私钥、安装级 Client 文件和被其他群组引用的 Credential 不得删除。Icarus 只能使 Git 服务端旧对象不可达；在服务端 GC 或备份过期前不能保证物理擦除，也不能删除其他用户的离线 clone。
+
 ## 19. 通知
 
 ### 19.1 通知类型
@@ -1916,6 +1936,7 @@ POST /api/collaboration/groups
 GET  /api/collaboration/groups/{groupId}
 POST /api/collaboration/groups/{groupId}/sync
 POST /api/collaboration/groups/{groupId}/archive
+POST /api/collaboration/groups/{groupId}/initialize
 POST /api/collaboration/groups/{groupId}/reopen
 POST /api/collaboration/groups/{groupId}/dissolve
 POST /api/collaboration/groups/{groupId}/leave

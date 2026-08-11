@@ -2,6 +2,7 @@ import {
   copyFileSync,
   existsSync,
   lstatSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -60,6 +61,41 @@ describe('Collaboration project-space identity', () => {
       0o700,
     );
     expect(statSync(identity.privateKeyPath).mode & 0o777).toBe(0o600);
+  });
+
+  it('materializes reserved identity ids and removes incomplete Credential directories', async () => {
+    const root = temporaryDirectory();
+    const service = new CollaborationProjectSpaceIdentityService(
+      path.join(root, 'store'),
+    );
+    const credentialId = 'credential_00000000-0000-4000-8000-000000000301';
+    const identity = await service.createPrincipalIdentity({
+      freshClient: true,
+      principalId: 'principal_00000000-0000-4000-8000-000000000301',
+      clientId: 'client_00000000-0000-4000-8000-000000000301',
+      credentialId,
+    });
+    expect(identity).toMatchObject({
+      principalId: 'principal_00000000-0000-4000-8000-000000000301',
+      clientId: 'client_00000000-0000-4000-8000-000000000301',
+      credentialId,
+    });
+
+    const incompleteCredentialId =
+      'credential_00000000-0000-4000-8000-000000000302';
+    const incompleteDirectory = path.join(
+      service.credentialDirectory,
+      incompleteCredentialId,
+    );
+    mkdirSync(incompleteDirectory, { recursive: true, mode: 0o700 });
+    writeFileSync(path.join(incompleteDirectory, 'credential'), 'partial', {
+      mode: 0o600,
+    });
+
+    await expect(
+      service.deleteCredentialIdentity(incompleteCredentialId),
+    ).resolves.toBe(true);
+    expect(existsSync(incompleteDirectory)).toBe(false);
   });
 
   it('resolves the independent Git transport SSH key and expands home paths', () => {

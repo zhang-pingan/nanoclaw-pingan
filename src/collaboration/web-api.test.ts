@@ -439,6 +439,43 @@ describe('Collaboration project-space v3 Web API', () => {
     );
   });
 
+  it('routes initialization without accepting caller-controlled replacement fields', async () => {
+    const initializeGroup = vi.fn(async () => ({
+      ...group(),
+      groupId: 'group_initialized',
+    }));
+    await withApiServer(
+      new CollaborationWebApi(runtime({ groups: { initializeGroup } })),
+      async (baseUrl) => {
+        const response = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/initialize`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: '{}',
+          },
+        );
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+          previousGroupId: 'group_test',
+          group: { groupId: 'group_initialized' },
+        });
+        expect(initializeGroup).toHaveBeenCalledWith('group_test');
+
+        const override = await fetch(
+          `${baseUrl}/api/collaboration/groups/group_test/initialize`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ force: true, groupId: 'attacker' }),
+          },
+        );
+        expect(override.status).toBe(400);
+        expect(initializeGroup).toHaveBeenCalledTimes(1);
+      },
+    );
+  });
+
   it('rejects Host-derived identity fields and duplicate JSON keys', async () => {
     const createGroup = vi.fn();
     await withApiServer(

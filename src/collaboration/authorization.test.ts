@@ -86,7 +86,7 @@ function projection(): CollaborationProjectionV3 {
       [memberId]: {
         format: 'icarus.collaboration-permission-grant/1',
         principal_id: memberId,
-        grants: ['discussion:post'],
+        grants: ['discussion:post', 'work_item:manage_owned'],
         revision: 1,
         updated_at_event: 'evt_permission',
       },
@@ -214,7 +214,10 @@ describe('collaboration authorization projection', () => {
     const direct = actions(value, memberId);
     expect(direct.group.createDiscussion.allowed).toBe(false);
     expect(direct.group.managePermissions.allowed).toBe(false);
-    expect(direct.principal.directPermissions).toEqual(['discussion:post']);
+    expect(direct.principal.directPermissions).toEqual([
+      'discussion:post',
+      'work_item:manage_owned',
+    ]);
 
     const owner = actions(value, ownerId);
     expect(owner.group.managePermissions.allowed).toBe(true);
@@ -416,6 +419,43 @@ describe('collaboration authorization projection', () => {
     expect(resolved.reopen.allowed).toBe(true);
     expect(resolved.messages.message_1?.revise.code).toBe(
       'RESOURCE_STATE_BLOCKED',
+    );
+  });
+
+  it('requires manage_owned in addition to Work Item ownership', () => {
+    const value = projection();
+    expect(actions(value, memberId).workItems.work_owner.manage.allowed).toBe(
+      true,
+    );
+
+    value.permissionGrants[memberId]!.grants = ['discussion:post'];
+    const revoked = actions(value, memberId).workItems.work_owner;
+    expect(revoked.manage).toMatchObject({
+      allowed: false,
+      code: 'RESOURCE_AUTHORITY_REQUIRED',
+    });
+    expect(revoked.editDetails.allowed).toBe(false);
+    expect(revoked.changeAssignment.allowed).toBe(false);
+    expect(revoked.changeRelations.allowed).toBe(false);
+    expect(revoked.archive.allowed).toBe(false);
+    expect(actions(value, ownerId).workItems.work_owner.manage.allowed).toBe(
+      true,
+    );
+
+    value.permissionGrants[contributorId] = {
+      format: 'icarus.collaboration-permission-grant/1',
+      principal_id: contributorId,
+      grants: ['work_item:manage_all'],
+      revision: 1,
+      updated_at_event: 'evt_contributor_manager',
+    };
+    expect(
+      actions(value, contributorId).workItems.work_owner.manage.allowed,
+    ).toBe(true);
+
+    value.permissionGrants[memberId]!.grants.push('work_item:manage_owned');
+    expect(actions(value, memberId).workItems.work_owner.manage.allowed).toBe(
+      true,
     );
   });
 

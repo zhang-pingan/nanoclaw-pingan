@@ -218,12 +218,17 @@ export function canManageCollaborationWorkItemV3(
   item: WorkItem,
 ): boolean {
   return (
-    item.owner_principal_id === principalId ||
     hasCollaborationPermissionV3(
       projection,
       principalId,
       'work_item:manage_all',
-    )
+    ) ||
+    (item.owner_principal_id === principalId &&
+      hasCollaborationPermissionV3(
+        projection,
+        principalId,
+        'work_item:manage_owned',
+      ))
   );
 }
 
@@ -406,7 +411,7 @@ export function projectCollaborationAllowedActionsV3(input: {
       );
       const manageDecision = authority(
         manage,
-        '仅工作项负责人或项目管理员可管理此工作项',
+        '仅持有负责项管理权限的负责人或项目管理员可管理此工作项',
       );
       const mutableDecision = item.archived
         ? denied('RESOURCE_STATE_BLOCKED', '已归档工作项不能再修改')

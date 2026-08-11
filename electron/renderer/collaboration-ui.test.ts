@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  collaborationInitializeConfirmation,
   collaborationRoute,
   parseCollaborationRoute,
 } from './collaboration-workspace.js';
@@ -22,6 +23,7 @@ import {
   collaborationCanRecoverTurn,
   collaborationCanDecideRecovery,
   collaborationCanCreateTurn,
+  collaborationCanInitializeGroup,
   collaborationCanMutate,
   collaborationCurrentTurn,
   collaborationDuration,
@@ -494,9 +496,7 @@ describe('Collaboration project-space v3 UI helpers', () => {
       ],
       owned[0],
     );
-    expect(local.map((entry) => entry.executorId)).toEqual([
-      'executor_codex',
-    ]);
+    expect(local.map((entry) => entry.executorId)).toEqual(['executor_codex']);
   });
 
   it('uses Definition and Work Item launch decisions in the instance wizard', () => {
@@ -546,6 +546,44 @@ describe('Collaboration project-space v3 UI helpers', () => {
     expect(
       collaborationWorkflowLaunchAccess(group, 'delivery@1', 'work_item', ''),
     ).toMatchObject({ allowed: false, code: 'RESOURCE_REQUIRED' });
+  });
+
+  it('shows initialization only to the current Owner with one concise confirmation', () => {
+    const owner = {
+      subscriptionMode: 'member',
+      lifecycle: 'active',
+      localPrincipalId: 'principal_owner',
+      localClientId: 'client_owner',
+      ownerPrincipalId: 'principal_owner',
+      projection: {
+        members: { principal_owner: { status: 'active' } },
+      },
+    };
+    expect(collaborationCanInitializeGroup(owner)).toBe(true);
+    expect(
+      collaborationCanInitializeGroup({ ...owner, lifecycle: 'archived' }),
+    ).toBe(true);
+    expect(
+      collaborationCanInitializeGroup({ ...owner, lifecycle: 'dissolved' }),
+    ).toBe(false);
+    expect(
+      collaborationCanInitializeGroup({
+        ...owner,
+        localPrincipalId: 'principal_member',
+        projection: {
+          members: { principal_member: { status: 'active' } },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      collaborationCanInitializeGroup({
+        ...owner,
+        subscriptionMode: 'observer',
+      }),
+    ).toBe(false);
+    expect(collaborationInitializeConfirmation).toBe(
+      '初始化会清除全部成员、任务、文件、Workflow、事件、审计和 Git 历史，无法恢复。',
+    );
   });
 
   it('separates Group dissolution, member exit, and local removal access', () => {

@@ -72,6 +72,16 @@ export class CollaborationProjectSpaceGitConflictError extends Error {
   }
 }
 
+export class CollaborationProjectSpaceHistoryRewrittenError extends Error {
+  constructor(
+    message: string,
+    readonly replacementGroupId: string | null,
+  ) {
+    super(message);
+    this.name = 'CollaborationProjectSpaceHistoryRewrittenError';
+  }
+}
+
 async function execute(
   cwd: string,
   binary: string,
@@ -1617,15 +1627,118 @@ export class CollaborationProjectSpaceGitTransport implements CollaborationProje
         CONTROL_REMOTE_REF,
       ])
     ).stdout.trim();
-    const history = await validateCollaborationProjectSpaceHistory({
-      repositoryPath: input.repositoryPath,
-      head,
-      previousHead: input.previousHead,
-    });
+    let history: ValidatedProjectSpaceHistory;
+    try {
+      history = await validateCollaborationProjectSpaceHistory({
+        repositoryPath: input.repositoryPath,
+        head,
+        previousHead: input.previousHead,
+      });
+    } catch (error) {
+      if (
+        input.previousHead &&
+        error instanceof CollaborationProtocolError &&
+        /history was rewritten/iu.test(error.message)
+      ) {
+        const replacement = await validateCollaborationProjectSpaceHistory({
+          repositoryPath: input.repositoryPath,
+          head,
+        }).catch(() => null);
+        throw new CollaborationProjectSpaceHistoryRewrittenError(
+          replacement
+            ? `The remote control history now belongs to Group ${replacement.projection.groupId}; the old identity was not migrated and must observe or join the new Group`
+            : 'The remote collaboration control history was rewritten; the old identity was not migrated',
+          replacement?.projection.groupId ?? null,
+        );
+      }
+      throw error;
+    }
     return {
       ...history,
       transportGitSshKeyPath: fetch.gitSshKeyPath,
     };
+  }
+
+  async reinitialize(input: {
+    readonly remoteUrl: string;
+    readonly repositoryPath: string;
+    readonly gitSshKeyPath: string;
+    readonly identity: CollaborationEventSigningIdentity;
+    readonly genesisEvent: CollaborationEventV3;
+    readonly genesisProjection: CollaborationProjectionV3;
+  }): Promise<ValidatedProjectSpaceHistory> {
+    const checkoutPath = await this.temporaryCheckout('initialize');
+    try {
+      await execute(checkoutPath, this.gitBinary, ['init', '-q']);
+      await execute(checkoutPath, this.gitBinary, [
+        'checkout',
+        '-q',
+        '--orphan',
+        'icarus/control',
+      ]);
+      await execute(checkoutPath, this.gitBinary, [
+        'remote',
+        'add',
+        'origin',
+        input.remoteUrl,
+      ]);
+      await this.configureSigner(checkoutPath, input.identity);
+      this.materialize(
+        checkoutPath,
+        input.genesisEvent,
+        input.genesisProjection,
+        [],
+      );
+      await this.commit(checkoutPath, input.genesisEvent);
+      const head = (
+        await execute(checkoutPath, this.gitBinary, ['rev-parse', 'HEAD'])
+      ).stdout.trim();
+      const history = await validateCollaborationProjectSpaceHistory({
+        repositoryPath: checkoutPath,
+        head,
+      });
+      const push = await execute(
+        checkoutPath,
+        this.gitBinary,
+        ['push', 'origin', `+HEAD:${COLLABORATION_CONTROL_BRANCH}`],
+        true,
+        input.gitSshKeyPath,
+      );
+      if (push.exitCode !== 0)
+        throw new Error(
+          `Collaboration initialization force push was rejected by the Git server: ${push.stderr.trim()}`,
+        );
+      return {
+        ...history,
+        transportGitSshKeyPath: input.gitSshKeyPath,
+      };
+    } finally {
+      rmSync(checkoutPath, { recursive: true, force: true });
+    }
+  }
+
+  async refreshAfterReinitialize(input: {
+    readonly remoteUrl: string;
+    readonly repositoryPath: string;
+    readonly gitSshKeyPath: string;
+  }): Promise<ValidatedProjectSpaceHistory> {
+    const history = await this.inspect({
+      ...input,
+      previousHead: null,
+    });
+    await execute(input.repositoryPath, this.gitBinary, [
+      'update-ref',
+      COLLABORATION_CONTROL_BRANCH,
+      history.head,
+    ]);
+    await execute(input.repositoryPath, this.gitBinary, [
+      'reflog',
+      'expire',
+      '--expire=now',
+      '--all',
+    ]);
+    await execute(input.repositoryPath, this.gitBinary, ['gc', '--prune=now']);
+    return history;
   }
 
   async create(input: {

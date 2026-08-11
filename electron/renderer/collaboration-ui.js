@@ -202,7 +202,7 @@ export function collaborationWorkflowStateActionAccess(
           ? group?.allowedActions?.workflowInstances?.[instanceId]
               ?.withdrawCurrentStateExecution
           : null
-      : null;
+        : null;
   if (decision && typeof decision.allowed === 'boolean') return decision;
   return {
     allowed: false,
@@ -213,9 +213,7 @@ export function collaborationWorkflowStateActionAccess(
 
 export function collaborationOwnedActions(group) {
   return Object.values(group?.projection?.actions || {})
-    .filter(
-      (action) => action.owner_principal_id === group?.localPrincipalId,
-    )
+    .filter((action) => action.owner_principal_id === group?.localPrincipalId)
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
@@ -231,8 +229,8 @@ export function collaborationAvailableLocalExecutors(
   action = null,
 ) {
   const requiredKind = action ? collaborationActionType(action) : null;
-  const descriptors = group?.projection?.executors?.[group?.localPrincipalId] ||
-    {};
+  const descriptors =
+    group?.projection?.executors?.[group?.localPrincipalId] || {};
   return (localExecutors || []).filter(
     (executor) =>
       executor.principalId === group?.localPrincipalId &&
@@ -349,6 +347,15 @@ export function collaborationWorkflowTurnActionAllowed(
     turnId,
     action,
   ).allowed;
+}
+
+export function collaborationCanInitializeGroup(group) {
+  return Boolean(
+    collaborationHasActiveLocalIdentity(group) &&
+    group.localPrincipalId &&
+    group.localPrincipalId === group.ownerPrincipalId &&
+    ['active', 'archived'].includes(group.lifecycle),
+  );
 }
 
 function collaborationHasActiveLocalIdentity(group) {
